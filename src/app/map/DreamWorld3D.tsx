@@ -913,5 +913,12 @@ export default function DreamWorld3D({
     }
   }, [graphKey])
 
-  return <div ref={hostRef} className={styles.webglShell} aria-hidden="true" />
+  return (
+    <div
+      ref={hostRef}
+      className={styles.webglShell}
+      role="application"
+      aria-label="Interactive 3D dream map"
+    />
+  )
 }
