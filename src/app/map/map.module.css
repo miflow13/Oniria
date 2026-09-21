@@ -2908,3 +2908,23 @@
     animation: none !important;
   }
 }
+
+
+.noteBody {
+  white-space: pre-wrap;
+}
+
+.nodeCircle {
+  paint-order: stroke fill;
+}
+
+.nodeGroup:hover .nodeCircle,
+.nodeGroup:focus .nodeCircle {
+  stroke-width: 3px;
+}
+
+.nodeGroup:hover .nodeLabel,
+.nodeGroup:focus .nodeLabel {
+  fill: #f0f5ff;
+  letter-spacing: .04em;
+}
