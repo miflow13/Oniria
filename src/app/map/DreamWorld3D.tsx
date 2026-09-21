@@ -8,6 +8,18 @@ import {UnrealBloomPass} from 'three/examples/jsm/postprocessing/UnrealBloomPass
 import {OutputPass} from 'three/examples/jsm/postprocessing/OutputPass.js'
 import type {SymbolCategory} from '@/types/dream'
 import styles from './map.module.css'
+import {
+  getQualitySettings,
+  type DreamQuality,
+} from './dreamworld/quality'
+import {
+  createLivingOrbMaterial,
+  type LivingOrbMaterial,
+} from './dreamworld/materials/orbShader'
+import {
+  createMiniWorld,
+  type MiniWorld,
+} from './dreamworld/builders/createMiniWorld'
 
 export type DreamWorldNode = {
   _id: string
@@ -48,6 +60,7 @@ type Props = {
   relatedEdgeIds: Set<string>
   zoom: number
   pan: Pan
+  quality: DreamQuality
   onZoomChange: (zoom: number) => void
   onPanChange: (pan: Pan) => void
   onNodeHover: (node: DreamWorldNode | null) => void
@@ -59,6 +72,8 @@ type Props = {
 type NodeVisual = {
   group: THREE.Group
   shell: THREE.Mesh
+  shellMaterial: LivingOrbMaterial
+  miniWorld: MiniWorld
   glow: THREE.Mesh
   core: THREE.Mesh
   orbit: THREE.Mesh
@@ -224,6 +239,7 @@ export default function DreamWorld3D({
   relatedEdgeIds,
   zoom,
   pan,
+  quality,
   onZoomChange,
   onPanChange,
   onNodeHover,
@@ -246,6 +262,7 @@ export default function DreamWorld3D({
   const onNodeSelectRef = useRef(onNodeSelect)
   const onBackgroundClickRef = useRef(onBackgroundClick)
   const onProjectionChangeRef = useRef(onProjectionChange)
+  const qualityRef = useRef(quality)
 
   nodeRef.current = nodes
   positionsRef.current = positions
@@ -261,22 +278,25 @@ export default function DreamWorld3D({
   onNodeSelectRef.current = onNodeSelect
   onBackgroundClickRef.current = onBackgroundClick
   onProjectionChangeRef.current = onProjectionChange
+  qualityRef.current = quality
 
   const graphKey = useMemo(
     () =>
-      `${nodes.map((node) => node._id).join('|')}::${edges
+      `${quality}::${nodes.map((node) => node._id).join('|')}::${edges
         .map((edge) => `${edge.id}:${edge.weight}`)
         .join('|')}`,
-    [edges, nodes],
+    [edges, nodes, quality],
   )
 
   useEffect(() => {
     const host = hostRef.current
     if (!host) return
 
+    const settings = getQualitySettings(qualityRef.current)
+
     const scene = new THREE.Scene()
     scene.background = new THREE.Color(0x030611)
-    scene.fog = new THREE.FogExp2(0x07101f, 0.047)
+    scene.fog = new THREE.FogExp2(0x07101f, settings.fogDensity)
 
     const camera = new THREE.PerspectiveCamera(43, 1, 0.05, 80)
     camera.position.set(0, 0, 10.8)
@@ -286,7 +306,9 @@ export default function DreamWorld3D({
       alpha: false,
       powerPreference: 'high-performance',
     })
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.7))
+    renderer.setPixelRatio(
+      Math.min(window.devicePixelRatio, settings.pixelRatio),
+    )
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.toneMapping = THREE.ACESFilmicToneMapping
     renderer.toneMappingExposure = 1.12
@@ -296,7 +318,12 @@ export default function DreamWorld3D({
 
     const composer = new EffectComposer(renderer)
     composer.addPass(new RenderPass(scene, camera))
-    const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 1.12, .72, .32)
+    const bloom = new UnrealBloomPass(
+      new THREE.Vector2(1, 1),
+      settings.bloomStrength,
+      settings.bloomRadius,
+      settings.bloomThreshold,
+    )
     composer.addPass(bloom)
     composer.addPass(new OutputPass())
 
@@ -320,7 +347,7 @@ export default function DreamWorld3D({
     const farWorld = new THREE.Group()
     scene.add(farWorld)
 
-    const starCount = 1250
+    const starCount = settings.starCount
     const starPositions = new Float32Array(starCount * 3)
     const starSizes = new Float32Array(starCount)
     for (let index = 0; index < starCount; index += 1) {
@@ -380,7 +407,7 @@ export default function DreamWorld3D({
     })
 
     const fragments: THREE.Mesh[] = []
-    for (let index = 0; index < 28; index += 1) {
+    for (let index = 0; index < settings.debrisCount; index += 1) {
       const geometry =
         index % 2 === 0
           ? new THREE.IcosahedronGeometry(.12 + Math.random() * .22, 0)
@@ -407,24 +434,20 @@ export default function DreamWorld3D({
       const group = new THREE.Group()
       group.userData.nodeId = node._id
 
-      const shellMaterial = new THREE.MeshPhysicalMaterial({
-        color,
-        roughness: .12,
-        metalness: .02,
-        transparent: true,
-        opacity: .88,
-        transmission: .68,
-        thickness: 1.35,
-        ior: 1.34,
-        clearcoat: 1,
-        clearcoatRoughness: .08,
-        emissive: color.clone().multiplyScalar(.12),
-        emissiveIntensity: .72,
-      })
+      const shellMaterial = createLivingOrbMaterial(color, node.category)
       const shell = new THREE.Mesh(nodeGeometry(node.category), shellMaterial)
       shell.userData.nodeId = node._id
       group.add(shell)
       interactive.push(shell)
+
+      const miniWorld = createMiniWorld(
+        node.category,
+        color,
+        settings,
+        seed,
+      )
+      miniWorld.group.position.z = 0.02
+      group.add(miniWorld.group)
 
       const glowMaterial = new THREE.MeshBasicMaterial({
         color,
@@ -490,6 +513,8 @@ export default function DreamWorld3D({
       nodeVisuals.set(node._id, {
         group,
         shell,
+        shellMaterial,
+        miniWorld,
         glow,
         core,
         orbit,
@@ -719,13 +744,26 @@ export default function DreamWorld3D({
         visual.group.rotation.x =
           Math.sin(elapsed * .22 + visual.phase) * .045
 
-        const shellMaterial = visual.shell.material as THREE.MeshPhysicalMaterial
+        const shellMaterial = visual.shellMaterial
         const glowMaterial = visual.glow.material as THREE.MeshBasicMaterial
         const coreMaterial = visual.core.material as THREE.MeshStandardMaterial
         const orbitMaterial = visual.orbit.material as THREE.MeshBasicMaterial
         const labelMaterial = visual.label.material as THREE.SpriteMaterial
 
-        shellMaterial.opacity += ((visible ? .9 : .18) - shellMaterial.opacity) * .08
+        shellMaterial.uniforms.uTime.value = elapsed
+        shellMaterial.uniforms.uPulse.value =
+          0.5 + 0.5 * Math.sin(elapsed * 1.15 + visual.phase)
+        shellMaterial.uniforms.uFocus.value +=
+          ((selected ? 1 : hoveredId === node._id ? 0.55 : 0) -
+            shellMaterial.uniforms.uFocus.value) *
+          0.08
+        shellMaterial.uniforms.uOpacity.value +=
+          ((visible ? 0.94 : 0.18) - shellMaterial.uniforms.uOpacity.value) *
+          0.08
+        visual.miniWorld.update(
+          elapsed,
+          selected ? 1 : hoveredId === node._id ? 0.55 : 0,
+        )
         glowMaterial.opacity +=
           ((selected ? .32 : hoveredId === node._id ? .22 : visible ? .1 : .015) -
             glowMaterial.opacity) *
@@ -803,6 +841,27 @@ export default function DreamWorld3D({
         ? nodeVisuals.get(selectedRef.current)
         : null
 
+      bloom.strength +=
+        ((selectedVisual
+          ? settings.bloomStrength * 1.28
+          : settings.bloomStrength) -
+          bloom.strength) *
+        0.035
+
+      if (scene.fog instanceof THREE.FogExp2) {
+        scene.fog.density +=
+          ((selectedVisual
+            ? settings.fogDensity * 1.18
+            : settings.fogDensity) -
+            scene.fog.density) *
+          0.025
+      }
+
+      violetLight.intensity +=
+        ((selectedVisual ? 24 : 18) - violetLight.intensity) * 0.025
+      cyanLight.intensity +=
+        ((selectedVisual ? 22 : 16) - cyanLight.intensity) * 0.025
+
       if (selectedVisual) {
         const position = selectedVisual.group.position
         const side = position.x > 0 ? -1 : 1
@@ -878,7 +937,8 @@ export default function DreamWorld3D({
         ;(visual.glow.geometry as THREE.BufferGeometry).dispose()
         ;(visual.core.geometry as THREE.BufferGeometry).dispose()
         ;(visual.orbit.geometry as THREE.BufferGeometry).dispose()
-        ;(visual.shell.material as THREE.Material).dispose()
+        visual.shellMaterial.dispose()
+        visual.miniWorld.dispose()
         ;(visual.glow.material as THREE.Material).dispose()
         ;(visual.core.material as THREE.Material).dispose()
         ;(visual.orbit.material as THREE.Material).dispose()
