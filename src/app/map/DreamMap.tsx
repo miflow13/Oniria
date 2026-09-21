@@ -5,6 +5,7 @@ import {useCallback, useEffect, useMemo, useRef, useState, type CSSProperties} f
 import type {Dream, DreamSymbol, SymbolCategory} from '@/types/dream'
 import styles from './map.module.css'
 import DreamWorld3D from './DreamWorld3D'
+import type {DreamQuality} from './dreamworld/quality'
 
 const STORAGE_KEY = 'oniria-demo-dreams'
 
@@ -242,6 +243,7 @@ export default function DreamMap({
   const [pan, setPan] = useState<Pan>({x: 0, y: 0})
   const [isDragging, setIsDragging] = useState(false)
   const [soundEnabled, setSoundEnabled] = useState(false)
+  const [quality, setQuality] = useState<DreamQuality>('high')
   const [motionPositions, setMotionPositions] = useState<Record<string, {x: number; y: number}>>({})
   const [enteringNodeId, setEnteringNodeId] = useState<string | null>(null)
   const [enteringDreamTitle, setEnteringDreamTitle] = useState<string | null>(null)
@@ -615,7 +617,29 @@ export default function DreamMap({
 
   useEffect(() => {
     if (demoMode) setLocalDreams(readLocalDreams())
+
+    try {
+      const stored = window.localStorage.getItem('oniria-dream-quality')
+      if (
+        stored === 'low' ||
+        stored === 'medium' ||
+        stored === 'high' ||
+        stored === 'cinematic'
+      ) {
+        setQuality(stored)
+      }
+    } catch {
+      // Ignore storage failures.
+    }
   }, [demoMode])
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('oniria-dream-quality', quality)
+    } catch {
+      // Ignore storage failures.
+    }
+  }, [quality])
 
   useEffect(() => {
     return () => {
@@ -1129,6 +1153,22 @@ export default function DreamMap({
                 {soundEnabled ? 'Soundscape' : 'Sound off'}
               </button>
 
+              <label className={styles.qualityControl}>
+                <span>Dream quality</span>
+                <select
+                  value={quality}
+                  onChange={(event) =>
+                    setQuality(event.target.value as DreamQuality)
+                  }
+                  aria-label="Dream graphics quality"
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                  <option value="cinematic">Cinematic</option>
+                </select>
+              </label>
+
               <div className={styles.zoomControls} aria-label="Map zoom controls">
                 <button
                   type="button"
@@ -1206,6 +1246,7 @@ export default function DreamMap({
                 relatedEdgeIds={relatedEdgeIds}
                 zoom={zoom}
                 pan={pan}
+                quality={quality}
                 onZoomChange={changeZoom}
                 onPanChange={setPan}
                 onNodeHover={(node) => {
