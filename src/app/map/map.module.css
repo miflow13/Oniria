@@ -802,3 +802,38 @@
     max-width: none;
   }
 }
+
+
+.focusActions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.focusActions a,
+.focusActions button {
+  padding: 7px 9px;
+  border-radius: 999px;
+  font-size: .65rem;
+}
+
+.focusActions a {
+  color: #b5c7dd;
+  text-decoration: none;
+  background: rgba(130, 118, 176, .06);
+  border: 1px solid rgba(188, 180, 224, .1);
+}
+
+.focusActions a:hover {
+  color: #ece9f7;
+  background: rgba(130, 118, 176, .11);
+  border-color: rgba(188, 180, 224, .18);
+}
+
+@media (max-width: 560px) {
+  .focusBanner {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
