@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import {useRouter} from 'next/navigation'
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react'
 import type {Dream, DreamSymbol, SymbolCategory} from '@/types/dream'
 import styles from './map.module.css'
@@ -38,6 +39,15 @@ type AmbientAudio = {
   gain: GainNode
   oscillators: OscillatorNode[]
   lfo: OscillatorNode
+}
+
+type MotionPoint = {
+  x: number
+  y: number
+  vx: number
+  vy: number
+  anchorX: number
+  anchorY: number
 }
 
 const CATEGORY_META: Record<SymbolCategory, {label: string; color: string; glow: string}> = {
@@ -209,6 +219,7 @@ export default function DreamMap({
   demoMode: boolean
   initialDreamId: string | null
 }) {
+  const router = useRouter()
   const [localDreams, setLocalDreams] = useState<Dream[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [hoveredId, setHoveredId] = useState<string | null>(null)
@@ -219,12 +230,18 @@ export default function DreamMap({
   const [pan, setPan] = useState<Pan>({x: 0, y: 0})
   const [isDragging, setIsDragging] = useState(false)
   const [soundEnabled, setSoundEnabled] = useState(false)
+  const [motionPositions, setMotionPositions] = useState<Record<string, {x: number; y: number}>>({})
+  const [enteringNodeId, setEnteringNodeId] = useState<string | null>(null)
+  const [enteringDreamTitle, setEnteringDreamTitle] = useState<string | null>(null)
 
   const dragRef = useRef<DragState | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
   const audioMasterRef = useRef<GainNode | null>(null)
   const ambientRef = useRef<AmbientAudio | null>(null)
   const lastHoverToneRef = useRef<{id: string; time: number} | null>(null)
+  const physicsRef = useRef<Map<string, MotionPoint>>(new Map())
+  const cameraFrameRef = useRef<number | null>(null)
+  const enterTimerRef = useRef<number | null>(null)
 
   const stopAmbient = useCallback(() => {
     const ambient = ambientRef.current
@@ -469,6 +486,38 @@ export default function DreamMap({
     setZoom(Math.min(2.6, Math.max(0.72, nextZoom)))
   }, [])
 
+  const animateCameraTo = useCallback(
+    (targetZoom: number, targetPan: Pan, duration = 820) => {
+      if (cameraFrameRef.current !== null) {
+        cancelAnimationFrame(cameraFrameRef.current)
+      }
+
+      const startZoom = zoom
+      const startPan = pan
+      const start = performance.now()
+
+      const tick = (now: number) => {
+        const raw = Math.min(1, (now - start) / duration)
+        const eased = 1 - Math.pow(1 - raw, 3)
+
+        setZoom(startZoom + (targetZoom - startZoom) * eased)
+        setPan({
+          x: startPan.x + (targetPan.x - startPan.x) * eased,
+          y: startPan.y + (targetPan.y - startPan.y) * eased,
+        })
+
+        if (raw < 1) {
+          cameraFrameRef.current = requestAnimationFrame(tick)
+        } else {
+          cameraFrameRef.current = null
+        }
+      }
+
+      cameraFrameRef.current = requestAnimationFrame(tick)
+    },
+    [pan, zoom],
+  )
+
   function beginPan(event: React.PointerEvent<SVGSVGElement>) {
     const target = event.target as SVGElement
     if (target.closest('[data-node="true"]')) return
@@ -520,6 +569,12 @@ export default function DreamMap({
       const context = audioContextRef.current
       if (context && context.state !== 'closed') {
         void context.close()
+      }
+      if (cameraFrameRef.current !== null) {
+        cancelAnimationFrame(cameraFrameRef.current)
+      }
+      if (enterTimerRef.current !== null) {
+        window.clearTimeout(enterTimerRef.current)
       }
     }
   }, [stopAmbient])
@@ -609,6 +664,149 @@ export default function DreamMap({
     [visibleDreams],
   )
 
+  useEffect(() => {
+    const liveIds = new Set(nodes.map((node) => node._id))
+
+    for (const node of nodes) {
+      const anchorX = node.x * 10
+      const anchorY = node.y * 7
+      const existing = physicsRef.current.get(node._id)
+
+      if (existing) {
+        existing.anchorX = anchorX
+        existing.anchorY = anchorY
+      } else {
+        physicsRef.current.set(node._id, {
+          x: anchorX,
+          y: anchorY,
+          vx: 0,
+          vy: 0,
+          anchorX,
+          anchorY,
+        })
+      }
+    }
+
+    for (const id of Array.from(physicsRef.current.keys())) {
+      if (!liveIds.has(id)) physicsRef.current.delete(id)
+    }
+
+    setMotionPositions(
+      Object.fromEntries(
+        Array.from(physicsRef.current.entries()).map(([id, point]) => [
+          id,
+          {x: point.x, y: point.y},
+        ]),
+      ),
+    )
+  }, [nodes])
+
+  useEffect(() => {
+    if (nodes.length === 0) return
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+
+    let frame = 0
+    let last = performance.now()
+
+    const step = (now: number) => {
+      frame = requestAnimationFrame(step)
+      if (now - last < 34) return
+      last = now
+
+      const points = physicsRef.current
+      const activeNodes = nodes.slice(0, 70)
+
+      for (let i = 0; i < activeNodes.length; i += 1) {
+        const a = points.get(activeNodes[i]._id)
+        if (!a) continue
+
+        for (let j = i + 1; j < activeNodes.length; j += 1) {
+          const b = points.get(activeNodes[j]._id)
+          if (!b) continue
+
+          const dx = b.x - a.x
+          const dy = b.y - a.y
+          const distanceSq = Math.max(900, dx * dx + dy * dy)
+          const distance = Math.sqrt(distanceSq)
+          const force = Math.min(0.055, 48 / distanceSq)
+          const fx = (dx / distance) * force
+          const fy = (dy / distance) * force
+
+          a.vx -= fx
+          a.vy -= fy
+          b.vx += fx
+          b.vy += fy
+        }
+      }
+
+      for (const edge of edges) {
+        const a = points.get(edge.source)
+        const b = points.get(edge.target)
+        if (!a || !b) continue
+
+        const dx = b.x - a.x
+        const dy = b.y - a.y
+        const distance = Math.max(1, Math.sqrt(dx * dx + dy * dy))
+        const target = Math.max(112, 178 - edge.weight * 14)
+        const stretch = (distance - target) * 0.0005
+        const fx = (dx / distance) * stretch
+        const fy = (dy / distance) * stretch
+
+        a.vx += fx
+        a.vy += fy
+        b.vx -= fx
+        b.vy -= fy
+      }
+
+      for (const node of activeNodes) {
+        const point = points.get(node._id)
+        if (!point) continue
+
+        const seed = hashString(node._id)
+        const driftX = Math.sin(now / 7200 + seed * 0.00011) * 0.006
+        const driftY = Math.cos(now / 8600 + seed * 0.00017) * 0.006
+
+        point.vx += (point.anchorX - point.x) * 0.00016 + driftX
+        point.vy += (point.anchorY - point.y) * 0.00016 + driftY
+
+        point.vx *= 0.945
+        point.vy *= 0.945
+
+        const speed = Math.sqrt(point.vx * point.vx + point.vy * point.vy)
+        if (speed > 0.36) {
+          point.vx = (point.vx / speed) * 0.36
+          point.vy = (point.vy / speed) * 0.36
+        }
+
+        point.x = Math.max(72, Math.min(928, point.x + point.vx))
+        point.y = Math.max(72, Math.min(612, point.y + point.vy))
+      }
+
+      setMotionPositions(
+        Object.fromEntries(
+          activeNodes.map((node) => {
+            const point = points.get(node._id)
+            return [
+              node._id,
+              point
+                ? {x: point.x, y: point.y}
+                : {x: node.x * 10, y: node.y * 7},
+            ]
+          }),
+        ),
+      )
+    }
+
+    frame = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(frame)
+  }, [edges, nodes])
+
+  const nodePosition = useCallback(
+    (node: PositionedSymbol) =>
+      motionPositions[node._id] ?? {x: node.x * 10, y: node.y * 7},
+    [motionPositions],
+  )
+
   const nodeById = useMemo(() => new Map(nodes.map((node) => [node._id, node])), [nodes])
   const activeId = hoveredId ?? selectedId
   const selectedNode = selectedId ? nodeById.get(selectedId) ?? null : null
@@ -669,6 +867,40 @@ export default function DreamMap({
       .sort((a, b) => b.weight - a.weight || b.node.frequency - a.node.frequency)
       .slice(0, 4)
   }, [edges, nodeById, selectedNode])
+
+  function enterNode(node: PositionedSymbol) {
+    const matchingDreams = visibleDreams.filter((dream) =>
+      node.dreamIds.includes(dream._id),
+    )
+    const targetDream = matchingDreams.at(-1)
+
+    if (!targetDream) {
+      setSelectedId(node._id)
+      return
+    }
+
+    const position = nodePosition(node)
+    const targetZoom = 2.18
+    const targetPan = {
+      x: (500 - position.x) * targetZoom,
+      y: (350 - position.y) * targetZoom,
+    }
+
+    setSelectedId(node._id)
+    setHoveredId(null)
+    setEnteringNodeId(node._id)
+    setEnteringDreamTitle(targetDream.title?.trim() || 'Untitled dream')
+    setIsPlaying(false)
+    animateCameraTo(targetZoom, targetPan)
+
+    if (enterTimerRef.current !== null) {
+      window.clearTimeout(enterTimerRef.current)
+    }
+
+    enterTimerRef.current = window.setTimeout(() => {
+      router.push(`/dream/${encodeURIComponent(targetDream._id)}`)
+    }, 980)
+  }
 
   function focusDream(dreamId: string | null) {
     setFocusedDreamId(dreamId)
@@ -814,6 +1046,14 @@ export default function DreamMap({
               </div>
             </div>
 
+            {enteringNodeId && (
+              <div className={styles.enterDreamOverlay} aria-live="polite">
+                <div className={styles.enterDreamPulse} />
+                <span>Entering dream</span>
+                <strong>{enteringDreamTitle}</strong>
+              </div>
+            )}
+
             {focusedDream && (
               <div className={styles.focusBanner}>
                 <div>
@@ -885,6 +1125,8 @@ export default function DreamMap({
                     const source = nodeById.get(edge.source)
                     const target = nodeById.get(edge.target)
                     if (!source || !target) return null
+                    const sourcePosition = nodePosition(source)
+                    const targetPosition = nodePosition(target)
 
                     const inFocusedDream =
                       !focusedDream || focusedEdgeIds.has(edge.id)
@@ -895,10 +1137,10 @@ export default function DreamMap({
                     return (
                       <line
                         key={edge.id}
-                        x1={source.x * 10}
-                        y1={source.y * 7}
-                        x2={target.x * 10}
-                        y2={target.y * 7}
+                        x1={sourcePosition.x}
+                        y1={sourcePosition.y}
+                        x2={targetPosition.x}
+                        y2={targetPosition.y}
                         className={highlighted ? styles.edgeActive : styles.edgeMuted}
                         strokeWidth={Math.min(3.4, 0.7 + edge.weight * 0.62)}
                         opacity={
@@ -930,19 +1172,23 @@ export default function DreamMap({
                       !focusedDream || focusedSymbolIds.has(node._id)
                     const connected = connectedToActiveSymbol && inFocusedDream
                     const radius = 29 + Math.min(node.frequency - 1, 4) * 5
+                    const position = nodePosition(node)
+                    const entering = enteringNodeId === node._id
 
                     return (
                       <g
                         key={node._id}
                         data-node="true"
-                        className={connected ? styles.nodeGroup : styles.nodeGroupMuted}
-                        transform={`translate(${node.x * 10} ${node.y * 7})`}
+                        className={`${connected ? styles.nodeGroup : styles.nodeGroupMuted} ${
+                          entering ? styles.nodeEntering : ''
+                        }`}
+                        transform={`translate(${position.x} ${position.y})`}
                         tabIndex={0}
                         role="button"
                         aria-label={`${node.name}, ${node.frequency} dream${node.frequency === 1 ? '' : 's'}`}
                         onClick={(event) => {
                           event.stopPropagation()
-                          setSelectedId((current) => (current === node._id ? null : node._id))
+                          enterNode(node)
                         }}
                         onMouseEnter={() => {
                           setHoveredId(node._id)
