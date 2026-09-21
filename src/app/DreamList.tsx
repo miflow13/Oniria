@@ -114,12 +114,20 @@ export default function DreamList({initialDreams, demoMode}: {initialDreams: Dre
 
                 <div className={styles.cardFooter}>
                   <Mood value={dream.mood} />
-                  <Link
-                    href={`/map?dream=${encodeURIComponent(dream._id)}`}
-                    className={styles.viewInMap}
-                  >
-                    View in Dream Map <span aria-hidden="true">→</span>
-                  </Link>
+                  <div className={styles.cardActions}>
+                    <Link
+                      href={`/dream/${encodeURIComponent(dream._id)}`}
+                      className={styles.readDream}
+                    >
+                      Read dream
+                    </Link>
+                    <Link
+                      href={`/map?dream=${encodeURIComponent(dream._id)}`}
+                      className={styles.viewInMap}
+                    >
+                      View in Dream Map <span aria-hidden="true">→</span>
+                    </Link>
+                  </div>
                 </div>
               </article>
             ))}
