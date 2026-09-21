@@ -238,3 +238,49 @@
   border-radius: 999px;
   font-size: 0.72rem;
 }
+
+
+.cardFooter {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 18px;
+  margin-top: 22px;
+}
+
+.cardFooter .mood {
+  margin-top: 0;
+}
+
+.viewInMap {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 11px;
+  color: #9fcfce;
+  text-decoration: none;
+  background: rgba(77, 163, 166, 0.055);
+  border: 1px solid rgba(112, 207, 204, 0.12);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  transition:
+    color 160ms ease,
+    background 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease;
+}
+
+.viewInMap:hover {
+  color: #ddfbfa;
+  background: rgba(77, 163, 166, 0.11);
+  border-color: rgba(112, 207, 204, 0.24);
+  transform: translateY(-1px);
+}
+
+@media (max-width: 560px) {
+  .cardFooter {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
