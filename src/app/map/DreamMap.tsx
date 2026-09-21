@@ -477,6 +477,42 @@ export default function DreamMap({
     [ensureAudio, soundEnabled],
   )
 
+  const playEnterSound = useCallback(async () => {
+    if (!soundEnabled) return
+
+    const {context, master} = await ensureAudio()
+    const now = context.currentTime
+    const gain = context.createGain()
+    const low = context.createOscillator()
+    const high = context.createOscillator()
+    const filter = context.createBiquadFilter()
+
+    low.type = 'sine'
+    high.type = 'triangle'
+    low.frequency.setValueAtTime(92, now)
+    low.frequency.exponentialRampToValueAtTime(210, now + 0.9)
+    high.frequency.setValueAtTime(360, now)
+    high.frequency.exponentialRampToValueAtTime(920, now + 0.82)
+
+    filter.type = 'lowpass'
+    filter.frequency.setValueAtTime(900, now)
+    filter.frequency.exponentialRampToValueAtTime(3600, now + 0.72)
+
+    gain.gain.setValueAtTime(0.0001, now)
+    gain.gain.exponentialRampToValueAtTime(0.075, now + 0.08)
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.02)
+
+    low.connect(filter)
+    high.connect(filter)
+    filter.connect(gain)
+    gain.connect(master)
+
+    low.start(now)
+    high.start(now)
+    low.stop(now + 1.05)
+    high.stop(now + 1.05)
+  }, [ensureAudio, soundEnabled])
+
   const resetCamera = useCallback(() => {
     setZoom(1)
     setPan({x: 0, y: 0})
@@ -703,6 +739,7 @@ export default function DreamMap({
 
   useEffect(() => {
     if (nodes.length === 0) return
+    if (enteringNodeId) return
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
 
     let frame = 0
@@ -799,7 +836,7 @@ export default function DreamMap({
 
     frame = requestAnimationFrame(step)
     return () => cancelAnimationFrame(frame)
-  }, [edges, nodes])
+  }, [edges, enteringNodeId, nodes])
 
   const nodePosition = useCallback(
     (node: PositionedSymbol) =>
@@ -891,6 +928,7 @@ export default function DreamMap({
     setEnteringNodeId(node._id)
     setEnteringDreamTitle(targetDream.title?.trim() || 'Untitled dream')
     setIsPlaying(false)
+    void playEnterSound()
     animateCameraTo(targetZoom, targetPan)
 
     if (enterTimerRef.current !== null) {
@@ -1110,6 +1148,30 @@ export default function DreamMap({
                       <feMergeNode in="SourceGraphic" />
                     </feMerge>
                   </filter>
+
+                  <filter id="organicBlob" x="-60%" y="-60%" width="220%" height="220%">
+                    <feTurbulence
+                      type="fractalNoise"
+                      baseFrequency="0.012 0.018"
+                      numOctaves="2"
+                      seed="7"
+                      result="noise"
+                    >
+                      <animate
+                        attributeName="baseFrequency"
+                        dur="10s"
+                        values="0.012 0.018;0.018 0.012;0.014 0.02;0.012 0.018"
+                        repeatCount="indefinite"
+                      />
+                    </feTurbulence>
+                    <feDisplacementMap
+                      in="SourceGraphic"
+                      in2="noise"
+                      scale="8"
+                      xChannelSelector="R"
+                      yChannelSelector="B"
+                    />
+                  </filter>
                 </defs>
 
                 <StarField />
@@ -1201,7 +1263,29 @@ export default function DreamMap({
                         }}
                         onBlur={() => setHoveredId(null)}
                         onPointerDown={(event) => event.stopPropagation()}
+                        onDoubleClick={(event) => event.stopPropagation()}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault()
+                            enterNode(node)
+                          }
+                        }}
                       >
+                        <circle
+                          r={radius + 8}
+                          fill={meta.color}
+                          opacity={selected || hovered ? 0.11 : 0.045}
+                          className={styles.blobSkin}
+                          filter="url(#organicBlob)"
+                        />
+                        <circle
+                          r={radius + 19}
+                          fill="none"
+                          stroke={meta.color}
+                          strokeWidth="0.8"
+                          opacity={selected || hovered ? 0.34 : 0}
+                          className={styles.orbitRing}
+                        />
                         <circle
                           r={radius + 13}
                           fill={meta.glow}
@@ -1236,6 +1320,15 @@ export default function DreamMap({
                             <circle r="11" fill={meta.color} />
                             <text className={styles.frequencyText} textAnchor="middle" dominantBaseline="central">
                               {node.frequency}
+                            </text>
+                          </g>
+                        )}
+
+                        {(hovered || selected) && !entering && (
+                          <g className={styles.nodePrompt} transform={`translate(0 ${radius + 43})`}>
+                            <rect x="-45" y="-11" width="90" height="22" rx="11" />
+                            <text textAnchor="middle" dominantBaseline="central">
+                              enter dream
                             </text>
                           </g>
                         )}
