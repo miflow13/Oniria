@@ -1,0 +1,240 @@
+.page {
+  min-height: 100vh;
+  padding: 72px 24px 96px;
+  background:
+    radial-gradient(circle at 18% 8%, rgba(121, 86, 170, 0.17), transparent 34%),
+    radial-gradient(circle at 84% 24%, rgba(86, 190, 193, 0.11), transparent 28%),
+    radial-gradient(circle at 50% 100%, rgba(80, 54, 120, 0.08), transparent 34%),
+    #090d1c;
+}
+
+.shell {
+  width: min(920px, 100%);
+  margin: 0 auto;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 32px;
+  margin-bottom: 46px;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  color: #9da7c2;
+  font-size: 0.75rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: clamp(2.5rem, 7vw, 4.8rem);
+  font-weight: 500;
+  letter-spacing: -0.05em;
+}
+
+.subtitle {
+  margin: 8px 0 0;
+  color: #858da7;
+  line-height: 1.6;
+}
+
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.mapButton {
+  padding: 11px 15px;
+  color: #b9bfd4;
+  text-decoration: none;
+  background: rgba(127, 105, 164, 0.07);
+  border: 1px solid rgba(185, 173, 223, 0.13);
+  border-radius: 999px;
+  transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
+}
+
+.mapButton:hover {
+  transform: translateY(-1px);
+  color: #e1d9f3;
+  background: rgba(127, 105, 164, 0.12);
+  border-color: rgba(185, 173, 223, 0.24);
+}
+
+.newDreamButton {
+  flex-shrink: 0;
+  padding: 11px 17px;
+  color: #dffcff;
+  text-decoration: none;
+  background: rgba(89, 192, 194, 0.11);
+  border: 1px solid rgba(114, 224, 219, 0.24);
+  border-radius: 999px;
+  transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
+}
+
+.newDreamButton:hover {
+  transform: translateY(-1px);
+  background: rgba(89, 192, 194, 0.17);
+  border-color: rgba(114, 224, 219, 0.38);
+}
+
+.dreamList {
+  display: grid;
+  gap: 16px;
+}
+
+.dreamCard {
+  padding: 26px;
+  background: rgba(20, 25, 47, 0.76);
+  border: 1px solid rgba(188, 175, 231, 0.1);
+  border-radius: 18px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2), inset 0 1px rgba(255, 255, 255, 0.025);
+  backdrop-filter: blur(14px);
+}
+
+.cardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 13px;
+  color: #79839e;
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.dreamCard h2 {
+  margin: 0 0 12px;
+  font-size: 1.45rem;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
+.body {
+  margin: 0;
+  color: #b8bfd3;
+  line-height: 1.72;
+  white-space: pre-line;
+}
+
+.symbols {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.symbol {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 10px;
+  color: #b9f2ed;
+  background: rgba(81, 183, 183, 0.11);
+  border: 1px solid rgba(105, 216, 210, 0.16);
+  border-radius: 999px;
+  font-size: 0.78rem;
+}
+
+.lucid {
+  color: #d8b7ff;
+}
+
+.mood {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 22px;
+  color: #858da7;
+  font-size: 0.78rem;
+}
+
+.moodDots {
+  display: flex;
+  gap: 5px;
+}
+
+.moodDot,
+.moodDotActive {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.moodDot {
+  background: #343a51;
+}
+
+.moodDotActive {
+  background: #8fd7d5;
+  box-shadow: 0 0 8px rgba(143, 215, 213, 0.45);
+}
+
+.empty {
+  padding: 80px 24px;
+  text-align: center;
+  color: #8d95ad;
+  border: 1px dashed rgba(185, 176, 223, 0.16);
+  border-radius: 18px;
+}
+
+.emptyStar {
+  display: block;
+  margin-bottom: 16px;
+  color: #a6dad8;
+  font-size: 2rem;
+}
+
+.empty h2 {
+  color: #e5e8f4;
+  font-weight: 500;
+}
+
+.empty a {
+  display: inline-block;
+  margin-top: 12px;
+  color: #99dcda;
+}
+
+@media (max-width: 680px) {
+  .page {
+    padding: 44px 16px 72px;
+  }
+
+  .header {
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .headerActions {
+    width: 100%;
+  }
+
+  .mapButton,
+  .newDreamButton {
+    flex: 1;
+    text-align: center;
+  }
+
+  .dreamCard {
+    padding: 20px;
+  }
+}
+
+.demoNote {
+  width: fit-content;
+  margin: 14px 0 0;
+  padding: 6px 9px;
+  color: #9da7c2;
+  background: rgba(145, 118, 190, 0.08);
+  border: 1px solid rgba(188, 175, 231, 0.1);
+  border-radius: 999px;
+  font-size: 0.72rem;
+}
