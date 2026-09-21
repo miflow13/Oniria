@@ -348,9 +348,14 @@ export default function DreamMap({
                     symbol{(focusedDream.symbols?.length ?? 0) === 1 ? '' : 's'}
                   </small>
                 </div>
-                <button type="button" onClick={() => focusDream(null)}>
-                  Show all
-                </button>
+                <div className={styles.focusActions}>
+                  <Link href={`/dream/${encodeURIComponent(focusedDream._id)}`}>
+                    Read dream
+                  </Link>
+                  <button type="button" onClick={() => focusDream(null)}>
+                    Show all
+                  </button>
+                </div>
               </div>
             )}
 
