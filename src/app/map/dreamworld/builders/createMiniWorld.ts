@@ -50,6 +50,45 @@ export function createMiniWorld(
   const phase = (seed % 997) / 997 * Math.PI * 2
   const detail = settings.miniWorldDetail
 
+  const particleCount = Math.max(6, settings.particleCount)
+  const particlePositions = new Float32Array(particleCount * 3)
+  for (let index = 0; index < particleCount; index += 1) {
+    const t = index + seed * 0.001
+    const radius = 0.18 + ((Math.sin(t * 12.9898) * 43758.5453) % 1 + 1) % 1 * 0.22
+    const theta = t * 2.399963
+    const y = -0.22 + (index / Math.max(1, particleCount - 1)) * 0.44
+    const horizontal = Math.sqrt(Math.max(0, radius * radius - y * y))
+
+    particlePositions[index * 3] = Math.cos(theta) * horizontal
+    particlePositions[index * 3 + 1] = y
+    particlePositions[index * 3 + 2] = Math.sin(theta) * horizontal
+  }
+
+  const particleGeometry = new THREE.BufferGeometry()
+  particleGeometry.setAttribute(
+    'position',
+    new THREE.BufferAttribute(particlePositions, 3),
+  )
+  const particleMaterial = new THREE.PointsMaterial({
+    color: color.clone().lerp(new THREE.Color(0xffffff), 0.38),
+    size: detail === 2 ? 0.018 : 0.014,
+    transparent: true,
+    opacity: detail === 2 ? 0.48 : 0.28,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  })
+  const particles = new THREE.Points(particleGeometry, particleMaterial)
+  group.add(particles)
+  disposables.push(particleGeometry, particleMaterial)
+
+  const updateParticles = (time: number, focus: number) => {
+    particles.rotation.y = time * 0.16
+    particles.rotation.x = Math.sin(time * 0.21 + phase) * 0.2
+    particleMaterial.opacity =
+      (detail === 2 ? 0.46 : 0.28) + focus * 0.22
+    particles.scale.setScalar(1 + focus * 0.12)
+  }
+
   if (detail === 0) {
     const core = addMesh(
       new THREE.IcosahedronGeometry(0.22, 1),
@@ -59,6 +98,7 @@ export function createMiniWorld(
     return {
       group,
       update: (time, focus) => {
+        updateParticles(time, focus)
         core.rotation.x = time * 0.28
         core.rotation.y = time * 0.36
         core.scale.setScalar(1 + Math.sin(time * 0.9 + phase) * 0.08 + focus * 0.1)
@@ -101,6 +141,7 @@ export function createMiniWorld(
     return {
       group,
       update: (time, focus) => {
+        updateParticles(time, focus)
         water.rotation.z = time * 0.08
         arch.rotation.y = Math.sin(time * 0.3 + phase) * 0.15
         moon.position.y = 0.18 + Math.sin(time * 0.55 + phase) * 0.035
@@ -126,6 +167,7 @@ export function createMiniWorld(
     return {
       group,
       update: (time, focus) => {
+        updateParticles(time, focus)
         silhouette.rotation.y = time * 0.18
         halo.rotation.z = time * 0.14
         halo.scale.setScalar(1 + Math.sin(time * 0.8 + phase) * 0.06 + focus * 0.12)
@@ -148,6 +190,7 @@ export function createMiniWorld(
     return {
       group,
       update: (time, focus) => {
+        updateParticles(time, focus)
         crystal.rotation.x = time * 0.34
         crystal.rotation.y = -time * 0.48
         ring.rotation.z = time * 0.22
@@ -170,6 +213,7 @@ export function createMiniWorld(
     return {
       group,
       update: (time, focus) => {
+        updateParticles(time, focus)
         cloud.rotation.y = time * 0.12
         cloud.rotation.z = Math.sin(time * 0.23 + phase) * 0.18
         cloud.scale.set(
@@ -201,10 +245,10 @@ export function createMiniWorld(
   return {
     group,
     update: (time, focus) => {
+      updateParticles(time, focus)
       streaks.forEach((streak, index) => {
         streak.position.y =
           ((time * 0.18 + index * 0.16 + phase) % 0.7) - 0.35
-        streak.material = streak.material
         streak.scale.y = 1 + focus * 0.22
       })
     },
