@@ -1081,3 +1081,330 @@
     font-size: .7rem;
   }
 }
+
+
+/* Dreamlike atmosphere + camera */
+.dreamFog {
+  position: absolute;
+  z-index: 1;
+  inset: -18%;
+  pointer-events: none;
+  opacity: .44;
+  background:
+    radial-gradient(ellipse at 18% 42%, rgba(139, 108, 176, .08), transparent 26%),
+    radial-gradient(ellipse at 74% 38%, rgba(102, 191, 190, .065), transparent 23%),
+    radial-gradient(ellipse at 50% 76%, rgba(81, 111, 159, .07), transparent 26%);
+  filter: blur(34px);
+  animation: fogDrift 28s ease-in-out infinite alternate;
+}
+
+.nebula {
+  animation: nebulaBreathe 22s ease-in-out infinite alternate;
+}
+
+@keyframes fogDrift {
+  0% {
+    transform: translate3d(-2%, 1%, 0) scale(1.03);
+    opacity: .34;
+  }
+  45% {
+    transform: translate3d(3%, -2%, 0) scale(1.1);
+    opacity: .52;
+  }
+  100% {
+    transform: translate3d(-1%, 3%, 0) scale(1.06);
+    opacity: .4;
+  }
+}
+
+@keyframes nebulaBreathe {
+  from {
+    transform: scale(1.02);
+    opacity: .72;
+  }
+  to {
+    transform: scale(1.1) translate3d(1%, -1%, 0);
+    opacity: 1;
+  }
+}
+
+.star {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: starDream 5.8s ease-in-out infinite alternate;
+}
+
+@keyframes starDream {
+  0%, 18% {
+    opacity: .26;
+    transform: scale(.8);
+  }
+  60% {
+    opacity: .82;
+    transform: scale(1.12);
+  }
+  100% {
+    opacity: .42;
+    transform: scale(.94);
+  }
+}
+
+.mapSvg {
+  z-index: 2;
+  cursor: grab;
+  touch-action: none;
+}
+
+.mapDragging {
+  cursor: grabbing;
+}
+
+.world {
+  transform-origin: center;
+}
+
+.edgeActive,
+.edgeMuted {
+  stroke-linecap: round;
+}
+
+.edgeActive {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  animation: edgeMaterialize 1.45s cubic-bezier(.2, .76, .28, 1) both;
+}
+
+@keyframes edgeMaterialize {
+  from {
+    stroke-dashoffset: 1;
+    opacity: 0;
+  }
+}
+
+.nodeGroup {
+  animation: nodeMaterialize 1.05s cubic-bezier(.18, .74, .24, 1) both;
+}
+
+@keyframes nodeMaterialize {
+  0% {
+    opacity: 0;
+    filter: blur(5px);
+  }
+  45% {
+    opacity: .64;
+    filter: blur(1px);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+.nodeHalo {
+  animation: haloBreathe 7.5s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+@keyframes haloBreathe {
+  0%, 100% {
+    transform: scale(.92);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+}
+
+.nodeGroup:hover .nodeHalo,
+.nodeGroup:focus .nodeHalo {
+  animation-duration: 3.2s;
+}
+
+.mapControls {
+  position: absolute;
+  z-index: 9;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.soundButton,
+.soundButtonActive,
+.zoomControls {
+  min-height: 36px;
+  background: rgba(12, 18, 35, .82);
+  border: 1px solid rgba(172, 183, 219, .11);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, .18);
+  backdrop-filter: blur(16px);
+}
+
+.soundButton,
+.soundButtonActive {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 11px;
+  cursor: pointer;
+  border-radius: 999px;
+  font-size: .66rem;
+  letter-spacing: .01em;
+}
+
+.soundButton {
+  color: #758099;
+}
+
+.soundButtonActive {
+  color: #bfece9;
+  background:
+    radial-gradient(circle at 16% 50%, rgba(112, 216, 211, .12), transparent 46%),
+    rgba(12, 18, 35, .86);
+  border-color: rgba(113, 216, 211, .2);
+  box-shadow:
+    0 12px 34px rgba(0, 0, 0, .18),
+    0 0 24px rgba(97, 201, 197, .05);
+}
+
+.soundButtonActive > span {
+  animation: soundPulse 2.8s ease-in-out infinite;
+}
+
+@keyframes soundPulse {
+  0%, 100% { opacity: .54; }
+  50% { opacity: 1; }
+}
+
+.zoomControls {
+  display: inline-flex;
+  align-items: center;
+  overflow: hidden;
+  border-radius: 999px;
+}
+
+.zoomControls button {
+  min-width: 34px;
+  height: 34px;
+  cursor: pointer;
+  color: #9ba6be;
+  background: transparent;
+  border: 0;
+  font-size: .85rem;
+}
+
+.zoomControls button:hover:not(:disabled) {
+  color: #e3eef0;
+  background: rgba(102, 190, 190, .07);
+}
+
+.zoomControls button:disabled {
+  cursor: default;
+  opacity: .3;
+}
+
+.zoomControls > span {
+  min-width: 47px;
+  color: #747f99;
+  text-align: center;
+  font-size: .61rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.zoomControls .resetZoom {
+  width: auto;
+  padding: 0 10px;
+  border-left: 1px solid rgba(172, 183, 219, .08);
+  font-size: .6rem;
+}
+
+.focusBanner {
+  z-index: 8;
+}
+
+.detailCard {
+  z-index: 10;
+  top: 66px;
+}
+
+.timeline {
+  z-index: 11;
+}
+
+.mapFrame::before,
+.mapFrame::after {
+  animation: orbitDrift 30s ease-in-out infinite alternate;
+}
+
+.mapFrame::after {
+  animation-duration: 38s;
+  animation-direction: alternate-reverse;
+}
+
+@keyframes orbitDrift {
+  from {
+    transform: translate3d(-1.5%, -1%, 0) scale(.97);
+  }
+  to {
+    transform: translate3d(2%, 1.5%, 0) scale(1.04);
+  }
+}
+
+@media (max-width: 900px) {
+  .mapControls {
+    top: 10px;
+    right: 10px;
+  }
+
+  .soundButton,
+  .soundButtonActive {
+    width: 36px;
+    justify-content: center;
+    padding: 0;
+    font-size: 0;
+  }
+
+  .soundButton > span,
+  .soundButtonActive > span {
+    font-size: .72rem;
+  }
+
+  .zoomControls .resetZoom {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .mapControls {
+    top: auto;
+    right: 10px;
+    bottom: 92px;
+  }
+
+  .detailCard {
+    bottom: 140px;
+    max-height: calc(100% - 220px);
+  }
+
+  .zoomControls > span {
+    display: none;
+  }
+
+  .zoomControls button {
+    min-width: 32px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dreamFog,
+  .nebula,
+  .star,
+  .nodeGroup,
+  .nodeHalo,
+  .edgeActive,
+  .mapFrame::before,
+  .mapFrame::after,
+  .soundButtonActive > span {
+    animation: none !important;
+  }
+}
