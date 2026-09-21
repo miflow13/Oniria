@@ -304,13 +304,13 @@ export default function DreamMap({
                 onClick={() => focusDream(dream._id)}
                 aria-pressed={focusedDreamId === dream._id}
               >
-                <div className={styles.dreamThumb} aria-hidden="true">
+                <span className={styles.dreamThumb} aria-hidden="true">
                   {dream.symbols?.[0]?.icon ?? '✦'}
-                </div>
-                <div>
+                </span>
+                <span className={styles.dreamMeta}>
                   <strong>{dream.title?.trim() || 'Untitled dream'}</strong>
                   <span>{formatShortDate(dream.date)}</span>
-                </div>
+                </span>
               </button>
             ))}
           </div>
