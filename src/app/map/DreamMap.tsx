@@ -506,7 +506,7 @@ export default function DreamMap({
 
         return resolved + 1
       })
-    }, 1200)
+    }, 1800)
 
     return () => window.clearInterval(timer)
   }, [isPlaying, maxTimelineIndex, timelineDreams.length])
@@ -694,6 +694,46 @@ export default function DreamMap({
 
           <div className={styles.mapFrame}>
             <div className={styles.nebula} aria-hidden="true" />
+            <div className={styles.dreamFog} aria-hidden="true" />
+
+            <div className={styles.mapControls}>
+              <button
+                type="button"
+                className={soundEnabled ? styles.soundButtonActive : styles.soundButton}
+                onClick={() => void toggleSound()}
+                aria-pressed={soundEnabled}
+                title={soundEnabled ? 'Mute dream soundscape' : 'Enable dream soundscape'}
+              >
+                <span aria-hidden="true">{soundEnabled ? '◉' : '○'}</span>
+                {soundEnabled ? 'Soundscape' : 'Sound off'}
+              </button>
+
+              <div className={styles.zoomControls} aria-label="Map zoom controls">
+                <button
+                  type="button"
+                  onClick={() => changeZoom(zoom - 0.18)}
+                  aria-label="Zoom out"
+                >
+                  −
+                </button>
+                <span>{Math.round(zoom * 100)}%</span>
+                <button
+                  type="button"
+                  onClick={() => changeZoom(zoom + 0.18)}
+                  aria-label="Zoom in"
+                >
+                  +
+                </button>
+                <button
+                  type="button"
+                  onClick={resetCamera}
+                  className={styles.resetZoom}
+                  disabled={zoom === 1 && pan.x === 0 && pan.y === 0}
+                >
+                  Reset
+                </button>
+              </div>
+            </div>
 
             {focusedDream && (
               <div className={styles.focusBanner}>
@@ -728,11 +768,20 @@ export default function DreamMap({
               </div>
             ) : (
               <svg
-                className={styles.mapSvg}
+                className={`${styles.mapSvg} ${isDragging ? styles.mapDragging : ''}`}
                 viewBox="0 0 1000 700"
                 role="img"
                 aria-label="Interactive map of recurring dream symbols"
                 onClick={() => setSelectedId(null)}
+                onDoubleClick={resetCamera}
+                onWheel={(event) => {
+                  event.preventDefault()
+                  changeZoom(zoom + (event.deltaY < 0 ? 0.12 : -0.12))
+                }}
+                onPointerDown={beginPan}
+                onPointerMove={movePan}
+                onPointerUp={endPan}
+                onPointerCancel={endPan}
               >
                 <defs>
                   <filter id="edgeGlow" x="-40%" y="-40%" width="180%" height="180%">
@@ -746,6 +795,10 @@ export default function DreamMap({
 
                 <StarField />
 
+                <g
+                  className={styles.world}
+                  transform={`translate(${pan.x} ${pan.y}) translate(500 350) scale(${zoom}) translate(-500 -350)`}
+                >
                 <g className={styles.edges}>
                   {edges.map((edge) => {
                     const source = nodeById.get(edge.source)
@@ -773,6 +826,7 @@ export default function DreamMap({
                             : 0.06
                         }
                         filter={highlighted && (activeId || focusedDream) ? 'url(#edgeGlow)' : undefined}
+                        pathLength={1}
                       />
                     )
                   })}
@@ -799,6 +853,7 @@ export default function DreamMap({
                     return (
                       <g
                         key={node._id}
+                        data-node="true"
                         className={connected ? styles.nodeGroup : styles.nodeGroupMuted}
                         transform={`translate(${node.x * 10} ${node.y * 7})`}
                         tabIndex={0}
@@ -808,10 +863,17 @@ export default function DreamMap({
                           event.stopPropagation()
                           setSelectedId((current) => (current === node._id ? null : node._id))
                         }}
-                        onMouseEnter={() => setHoveredId(node._id)}
+                        onMouseEnter={() => {
+                          setHoveredId(node._id)
+                          void playNodeTone(node)
+                        }}
                         onMouseLeave={() => setHoveredId(null)}
-                        onFocus={() => setHoveredId(node._id)}
+                        onFocus={() => {
+                          setHoveredId(node._id)
+                          void playNodeTone(node)
+                        }}
                         onBlur={() => setHoveredId(null)}
+                        onPointerDown={(event) => event.stopPropagation()}
                       >
                         <circle
                           r={radius + 13}
@@ -853,6 +915,7 @@ export default function DreamMap({
                       </g>
                     )
                   })}
+                </g>
                 </g>
               </svg>
             )}
@@ -933,7 +996,7 @@ export default function DreamMap({
             <div className={styles.mapHint}>
               {focusedDream
                 ? 'Focused constellation · select a symbol to inspect it'
-                : 'Click a dream or symbol to trace its relationships'}
+                : 'Hover symbols to hear them · drag to drift · scroll to zoom'}
             </div>
 
             {selectedNode && (
