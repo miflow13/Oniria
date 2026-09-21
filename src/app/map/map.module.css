@@ -1824,3 +1824,32 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+
+/* Keep relationship dimming intact while nodes reveal. */
+.nodeGroup,
+.nodeGroupMuted {
+  animation: none;
+}
+
+.nodeCircle,
+.nodeIcon,
+.nodeLabel,
+.frequencyText {
+  animation: nodeReveal 1.05s ease-out both;
+}
+
+.nodeHalo {
+  animation:
+    nodeReveal 1.05s ease-out both,
+    haloBreathe 5.8s ease-in-out 1.05s infinite;
+}
+
+@keyframes nodeReveal {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
