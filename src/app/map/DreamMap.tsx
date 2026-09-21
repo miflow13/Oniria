@@ -172,10 +172,19 @@ function StarField() {
   )
 }
 
-export default function DreamMap({initialDreams, demoMode}: {initialDreams: Dream[]; demoMode: boolean}) {
+export default function DreamMap({
+  initialDreams,
+  demoMode,
+  initialDreamId,
+}: {
+  initialDreams: Dream[]
+  demoMode: boolean
+  initialDreamId: string | null
+}) {
   const [localDreams, setLocalDreams] = useState<Dream[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [hoveredId, setHoveredId] = useState<string | null>(null)
+  const [focusedDreamId, setFocusedDreamId] = useState<string | null>(initialDreamId)
 
   useEffect(() => {
     if (demoMode) setLocalDreams(readLocalDreams())
@@ -191,6 +200,27 @@ export default function DreamMap({initialDreams, demoMode}: {initialDreams: Drea
   const nodeById = useMemo(() => new Map(nodes.map((node) => [node._id, node])), [nodes])
   const activeId = hoveredId ?? selectedId
   const selectedNode = selectedId ? nodeById.get(selectedId) ?? null : null
+  const focusedDream = focusedDreamId
+    ? dreams.find((dream) => dream._id === focusedDreamId) ?? null
+    : null
+
+  const focusedSymbolIds = useMemo(
+    () => new Set((focusedDream?.symbols ?? []).map((symbol) => symbol._id)),
+    [focusedDream],
+  )
+
+  const focusedEdgeIds = useMemo(() => {
+    if (!focusedDream) return new Set<string>()
+    return new Set(
+      edges
+        .filter(
+          (edge) =>
+            focusedSymbolIds.has(edge.source) &&
+            focusedSymbolIds.has(edge.target),
+        )
+        .map((edge) => edge.id),
+    )
+  }, [edges, focusedDream, focusedSymbolIds])
 
   const relatedEdgeIds = useMemo(() => {
     if (!activeId) return new Set<string>()
@@ -204,6 +234,41 @@ export default function DreamMap({initialDreams, demoMode}: {initialDreams: Drea
   const selectedDreams = selectedNode
     ? dreams.filter((dream) => selectedNode.dreamIds.includes(dream._id))
     : []
+
+  const selectedConnections = useMemo(() => {
+    if (!selectedNode) return []
+
+    return edges
+      .filter(
+        (edge) =>
+          edge.source === selectedNode._id ||
+          edge.target === selectedNode._id,
+      )
+      .map((edge) => {
+        const otherId =
+          edge.source === selectedNode._id ? edge.target : edge.source
+        const node = nodeById.get(otherId)
+        return node ? {node, weight: edge.weight} : null
+      })
+      .filter(
+        (connection): connection is {node: PositionedSymbol; weight: number} =>
+          connection !== null,
+      )
+      .sort((a, b) => b.weight - a.weight || b.node.frequency - a.node.frequency)
+      .slice(0, 4)
+  }, [edges, nodeById, selectedNode])
+
+  function focusDream(dreamId: string | null) {
+    setFocusedDreamId(dreamId)
+    setSelectedId(null)
+    setHoveredId(null)
+
+    const nextUrl = dreamId
+      ? `/map?dream=${encodeURIComponent(dreamId)}`
+      : '/map'
+
+    window.history.replaceState(null, '', nextUrl)
+  }
 
   return (
     <main className={styles.page}>
@@ -230,7 +295,15 @@ export default function DreamMap({initialDreams, demoMode}: {initialDreams: Drea
 
           <div className={styles.dreamList}>
             {dreams.slice(0, 7).map((dream) => (
-              <article key={dream._id} className={styles.dreamRow}>
+              <button
+                key={dream._id}
+                type="button"
+                className={`${styles.dreamRow} ${
+                  focusedDreamId === dream._id ? styles.dreamRowActive : ''
+                }`}
+                onClick={() => focusDream(dream._id)}
+                aria-pressed={focusedDreamId === dream._id}
+              >
                 <div className={styles.dreamThumb} aria-hidden="true">
                   {dream.symbols?.[0]?.icon ?? '✦'}
                 </div>
@@ -238,7 +311,7 @@ export default function DreamMap({initialDreams, demoMode}: {initialDreams: Drea
                   <strong>{dream.title?.trim() || 'Untitled dream'}</strong>
                   <span>{formatShortDate(dream.date)}</span>
                 </div>
-              </article>
+              </button>
             ))}
           </div>
 
@@ -264,6 +337,22 @@ export default function DreamMap({initialDreams, demoMode}: {initialDreams: Drea
 
           <div className={styles.mapFrame}>
             <div className={styles.nebula} aria-hidden="true" />
+
+            {focusedDream && (
+              <div className={styles.focusBanner}>
+                <div>
+                  <span>Focused dream</span>
+                  <strong>{focusedDream.title?.trim() || 'Untitled dream'}</strong>
+                  <small>
+                    {formatShortDate(focusedDream.date)} · {focusedDream.symbols?.length ?? 0}{' '}
+                    symbol{(focusedDream.symbols?.length ?? 0) === 1 ? '' : 's'}
+                  </small>
+                </div>
+                <button type="button" onClick={() => focusDream(null)}>
+                  Show all
+                </button>
+              </div>
+            )}
 
             {nodes.length === 0 ? (
               <div className={styles.emptyState}>
@@ -297,7 +386,11 @@ export default function DreamMap({initialDreams, demoMode}: {initialDreams: Drea
                     const target = nodeById.get(edge.target)
                     if (!source || !target) return null
 
-                    const highlighted = !activeId || relatedEdgeIds.has(edge.id)
+                    const inFocusedDream =
+                      !focusedDream || focusedEdgeIds.has(edge.id)
+                    const relatedToActiveSymbol =
+                      !activeId || relatedEdgeIds.has(edge.id)
+                    const highlighted = inFocusedDream && relatedToActiveSymbol
 
                     return (
                       <line
@@ -307,8 +400,13 @@ export default function DreamMap({initialDreams, demoMode}: {initialDreams: Drea
                         x2={target.x * 10}
                         y2={target.y * 7}
                         className={highlighted ? styles.edgeActive : styles.edgeMuted}
-                        strokeWidth={Math.min(2.4, 0.7 + edge.weight * 0.48)}
-                        filter={highlighted && activeId ? 'url(#edgeGlow)' : undefined}
+                        strokeWidth={Math.min(3.4, 0.7 + edge.weight * 0.62)}
+                        opacity={
+                          highlighted
+                            ? Math.min(0.72, 0.2 + edge.weight * 0.13)
+                            : 0.06
+                        }
+                        filter={highlighted && (activeId || focusedDream) ? 'url(#edgeGlow)' : undefined}
                       />
                     )
                   })}
@@ -319,7 +417,7 @@ export default function DreamMap({initialDreams, demoMode}: {initialDreams: Drea
                     const meta = CATEGORY_META[node.category]
                     const selected = selectedId === node._id
                     const hovered = hoveredId === node._id
-                    const connected =
+                    const connectedToActiveSymbol =
                       !activeId ||
                       activeId === node._id ||
                       edges.some(
@@ -327,6 +425,9 @@ export default function DreamMap({initialDreams, demoMode}: {initialDreams: Drea
                           relatedEdgeIds.has(edge.id) &&
                           (edge.source === node._id || edge.target === node._id),
                       )
+                    const inFocusedDream =
+                      !focusedDream || focusedSymbolIds.has(node._id)
+                    const connected = connectedToActiveSymbol && inFocusedDream
                     const radius = 29 + Math.min(node.frequency - 1, 4) * 5
 
                     return (
@@ -390,7 +491,11 @@ export default function DreamMap({initialDreams, demoMode}: {initialDreams: Drea
               </svg>
             )}
 
-            <div className={styles.mapHint}>Click a symbol to inspect its dream trail</div>
+            <div className={styles.mapHint}>
+              {focusedDream
+                ? 'Focused constellation · select a symbol to inspect it'
+                : 'Click a dream or symbol to trace its relationships'}
+            </div>
 
             {selectedNode && (
               <aside className={styles.detailCard} aria-live="polite">
@@ -418,14 +523,40 @@ export default function DreamMap({initialDreams, demoMode}: {initialDreams: Drea
                   Appears in {selectedNode.frequency} dream{selectedNode.frequency === 1 ? '' : 's'}
                 </p>
 
-                <div className={styles.trail}>
-                  {selectedDreams.slice(0, 4).map((dream) => (
-                    <div key={dream._id}>
-                      <span>{formatShortDate(dream.date)}</span>
-                      <strong>{dream.title?.trim() || 'Untitled dream'}</strong>
+                {selectedConnections.length > 0 && (
+                  <section className={styles.connectionSection}>
+                    <p>Strongest connections</p>
+                    <div className={styles.connectionList}>
+                      {selectedConnections.map(({node, weight}) => (
+                        <button
+                          key={node._id}
+                          type="button"
+                          onClick={() => setSelectedId(node._id)}
+                        >
+                          <span aria-hidden="true">{node.icon || '✦'}</span>
+                          <strong>{node.name}</strong>
+                          <em>×{weight}</em>
+                        </button>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </section>
+                )}
+
+                <section className={styles.trailSection}>
+                  <p>Dream trail</p>
+                  <div className={styles.trail}>
+                    {selectedDreams.slice(0, 4).map((dream) => (
+                      <button
+                        key={dream._id}
+                        type="button"
+                        onClick={() => focusDream(dream._id)}
+                      >
+                        <span>{formatShortDate(dream.date)}</span>
+                        <strong>{dream.title?.trim() || 'Untitled dream'}</strong>
+                      </button>
+                    ))}
+                  </div>
+                </section>
               </aside>
             )}
           </div>
