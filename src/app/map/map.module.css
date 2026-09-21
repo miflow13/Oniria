@@ -2928,3 +2928,95 @@
   fill: #f0f5ff;
   letter-spacing: .04em;
 }
+
+
+/* ==========================================================================
+   WebGL dream world
+   ========================================================================== */
+
+.webglShell {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  background:
+    radial-gradient(circle at 50% 48%, rgba(82, 111, 175, .08), transparent 28%),
+    #030611;
+  outline: none;
+}
+
+.webglCanvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: grab;
+  outline: none;
+}
+
+.webglCanvas:active {
+  cursor: grabbing;
+}
+
+.mapFrame:has(.webglShell) .voidDepth,
+.mapFrame:has(.webglShell) .aurora,
+.mapFrame:has(.webglShell) .particleField,
+.mapFrame:has(.webglShell) .nebula,
+.mapFrame:has(.webglShell) .dreamFog {
+  opacity: .28;
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+
+.mapFrame:has(.webglShell) .voidDepth {
+  opacity: .42;
+}
+
+.mapFrame:has(.webglShell) .dreamFog {
+  z-index: 5;
+  opacity: .17;
+}
+
+.mapFrame:has(.webglShell) .mapControls,
+.mapFrame:has(.webglShell) .timeline,
+.mapFrame:has(.webglShell) .focusBanner,
+.mapFrame:has(.webglShell) .mapHint,
+.mapFrame:has(.webglShell) .noteCluster,
+.mapFrame:has(.webglShell) .enterDreamOverlay {
+  transform: translateZ(0);
+}
+
+.mapFrame:has(.webglShell) .mapHint {
+  z-index: 12;
+  background: rgba(4, 8, 20, .56);
+  border-color: rgba(168, 199, 228, .1);
+  backdrop-filter: blur(14px);
+}
+
+.mapFrame:has(.webglShell) .mapControls {
+  z-index: 13;
+}
+
+.mapFrame:has(.webglShell) .timeline {
+  z-index: 14;
+}
+
+.mapFrame:has(.webglShell) .noteCluster {
+  z-index: 24;
+}
+
+.mapFrame:has(.webglShell) .enterDreamOverlay {
+  z-index: 26;
+}
+
+@supports not selector(:has(*)) {
+  .webglShell {
+    z-index: 4;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .webglCanvas {
+    scroll-behavior: auto;
+  }
+}
