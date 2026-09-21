@@ -340,8 +340,12 @@ export default function DreamMap({
       return
     }
 
-    setSoundEnabled(true)
-    await startAmbient()
+    try {
+      await startAmbient()
+      setSoundEnabled(true)
+    } catch {
+      setSoundEnabled(false)
+    }
   }, [soundEnabled, startAmbient, stopAmbient])
 
   const playNodeTone = useCallback(
@@ -365,6 +369,9 @@ export default function DreamMap({
       const shimmer = context.createOscillator()
       const gain = context.createGain()
       const filter = context.createBiquadFilter()
+      const delay = context.createDelay(1)
+      const feedback = context.createGain()
+      const wet = context.createGain()
 
       oscillator.type = 'sine'
       shimmer.type = 'triangle'
@@ -373,6 +380,9 @@ export default function DreamMap({
       filter.type = 'bandpass'
       filter.frequency.value = Math.min(4200, frequency * 3.2)
       filter.Q.value = 1.1
+      delay.delayTime.value = 0.23
+      feedback.gain.value = 0.22
+      wet.gain.value = 0.28
 
       gain.gain.setValueAtTime(0.0001, now)
       gain.gain.exponentialRampToValueAtTime(0.045, now + 0.025)
@@ -382,11 +392,70 @@ export default function DreamMap({
       shimmer.connect(filter)
       filter.connect(gain)
       gain.connect(master)
+      gain.connect(delay)
+      delay.connect(feedback)
+      feedback.connect(delay)
+      delay.connect(wet)
+      wet.connect(master)
 
       oscillator.start(now)
       shimmer.start(now)
       oscillator.stop(now + 0.76)
       shimmer.stop(now + 0.76)
+
+      window.setTimeout(() => {
+        try {
+          oscillator.disconnect()
+          shimmer.disconnect()
+          filter.disconnect()
+          gain.disconnect()
+          delay.disconnect()
+          feedback.disconnect()
+          wet.disconnect()
+        } catch {
+          // The short-lived voice has already been released.
+        }
+      }, 1500)
+    },
+    [ensureAudio, soundEnabled],
+  )
+
+  const playTimelineBloom = useCallback(
+    async (dream: Dream) => {
+      if (!soundEnabled) return
+
+      const {context, master} = await ensureAudio()
+      const now = context.currentTime
+      const oscillator = context.createOscillator()
+      const overtone = context.createOscillator()
+      const gain = context.createGain()
+      const filter = context.createBiquadFilter()
+      const baseFrequency = 96 + dream.mood * 12
+
+      oscillator.type = 'sine'
+      overtone.type = 'sine'
+      oscillator.frequency.setValueAtTime(baseFrequency, now)
+      oscillator.frequency.exponentialRampToValueAtTime(baseFrequency * 1.5, now + 1.3)
+      overtone.frequency.setValueAtTime(baseFrequency * 2.01, now)
+
+      filter.type = 'lowpass'
+      filter.frequency.setValueAtTime(620, now)
+      filter.frequency.exponentialRampToValueAtTime(1800, now + 1.1)
+      filter.Q.value = 0.7
+
+      gain.gain.setValueAtTime(0.0001, now)
+      gain.gain.exponentialRampToValueAtTime(0.018, now + 0.16)
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.55)
+
+      oscillator.connect(filter)
+      overtone.connect(filter)
+      filter.connect(gain)
+      gain.connect(master)
+
+      oscillator.start(now)
+      overtone.start(now)
+      oscillator.stop(now + 1.6)
+      overtone.stop(now + 1.6)
     },
     [ensureAudio, soundEnabled],
   )
@@ -491,6 +560,16 @@ export default function DreamMap({
   const atLatestPoint =
     timelineDreams.length === 0 ||
     currentTimelineIndex === maxTimelineIndex
+
+  useEffect(() => {
+    if (!soundEnabled || !currentTimelineDream) return
+
+    const timeout = window.setTimeout(() => {
+      void playTimelineBloom(currentTimelineDream)
+    }, 100)
+
+    return () => window.clearTimeout(timeout)
+  }, [currentTimelineDream, currentTimelineIndex, playTimelineBloom, soundEnabled])
 
   useEffect(() => {
     if (!isPlaying || timelineDreams.length <= 1) return
