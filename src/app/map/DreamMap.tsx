@@ -4,6 +4,8 @@ import Link from 'next/link'
 import {useCallback, useEffect, useMemo, useRef, useState, type CSSProperties} from 'react'
 import type {Dream, DreamSymbol, SymbolCategory} from '@/types/dream'
 import styles from './map.module.css'
+import DreamWorld3D from './DreamWorld3D'
+import type {DreamQuality} from './dreamworld/quality'
 
 const STORAGE_KEY = 'oniria-demo-dreams'
 
@@ -241,10 +243,16 @@ export default function DreamMap({
   const [pan, setPan] = useState<Pan>({x: 0, y: 0})
   const [isDragging, setIsDragging] = useState(false)
   const [soundEnabled, setSoundEnabled] = useState(false)
+  const [quality, setQuality] = useState<DreamQuality>('high')
   const [motionPositions, setMotionPositions] = useState<Record<string, {x: number; y: number}>>({})
   const [enteringNodeId, setEnteringNodeId] = useState<string | null>(null)
   const [enteringDreamTitle, setEnteringDreamTitle] = useState<string | null>(null)
   const [openDreamId, setOpenDreamId] = useState<string | null>(null)
+  const [selectedProjection, setSelectedProjection] = useState<{
+    x: number
+    y: number
+    visible: boolean
+  } | null>(null)
 
   const dragRef = useRef<DragState | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
@@ -609,7 +617,29 @@ export default function DreamMap({
 
   useEffect(() => {
     if (demoMode) setLocalDreams(readLocalDreams())
+
+    try {
+      const stored = window.localStorage.getItem('oniria-dream-quality')
+      if (
+        stored === 'low' ||
+        stored === 'medium' ||
+        stored === 'high' ||
+        stored === 'cinematic'
+      ) {
+        setQuality(stored)
+      }
+    } catch {
+      // Ignore storage failures.
+    }
   }, [demoMode])
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('oniria-dream-quality', quality)
+    } catch {
+      // Ignore storage failures.
+    }
+  }, [quality])
 
   useEffect(() => {
     return () => {
@@ -973,6 +1003,7 @@ export default function DreamMap({
     setEnteringNodeId(null)
     setEnteringDreamTitle(null)
     setOpenDreamId(null)
+    setSelectedProjection(null)
     setSelectedId(null)
     setHoveredId(null)
     setFocusedDreamId(null)
@@ -1000,19 +1031,13 @@ export default function DreamMap({
   const selectedMeta = selectedNode
     ? CATEGORY_META[selectedNode.category]
     : null
-  const selectedPosition = selectedNode ? nodePosition(selectedNode) : null
-  const projectedSelectedPosition = selectedPosition
-    ? {
-        x: (selectedPosition.x - 500) * zoom + 500 + pan.x,
-        y: (selectedPosition.y - 350) * zoom + 350 + pan.y,
-      }
-    : null
-  const noteAnchor = projectedSelectedPosition
-    ? {
-        x: Math.max(10, Math.min(90, projectedSelectedPosition.x / 10)),
-        y: Math.max(15, Math.min(78, projectedSelectedPosition.y / 7)),
-      }
-    : null
+  const noteAnchor =
+    selectedProjection?.visible
+      ? {
+          x: Math.max(10, Math.min(90, selectedProjection.x)),
+          y: Math.max(15, Math.min(78, selectedProjection.y)),
+        }
+      : null
   const noteSide = noteAnchor && noteAnchor.x > 58 ? 'left' : 'right'
   const noteStyle =
     noteAnchor && selectedMeta
@@ -1128,6 +1153,22 @@ export default function DreamMap({
                 {soundEnabled ? 'Soundscape' : 'Sound off'}
               </button>
 
+              <label className={styles.qualityControl}>
+                <span>Dream quality</span>
+                <select
+                  value={quality}
+                  onChange={(event) =>
+                    setQuality(event.target.value as DreamQuality)
+                  }
+                  aria-label="Dream graphics quality"
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                  <option value="cinematic">Cinematic</option>
+                </select>
+              </label>
+
               <div className={styles.zoomControls} aria-label="Map zoom controls">
                 <button
                   type="button"
@@ -1195,282 +1236,29 @@ export default function DreamMap({
                 </p>
               </div>
             ) : (
-              <svg
-                className={`${styles.mapSvg} ${isDragging ? styles.mapDragging : ''}`}
-                viewBox="0 0 1000 700"
-                role="img"
-                aria-label="Interactive map of recurring dream symbols"
-                onClick={() => {
+              <DreamWorld3D
+                nodes={nodes}
+                edges={edges}
+                positions={motionPositions}
+                selectedId={selectedId}
+                activeId={activeId}
+                focusedIds={focusedSymbolIds}
+                relatedEdgeIds={relatedEdgeIds}
+                zoom={zoom}
+                pan={pan}
+                quality={quality}
+                onZoomChange={changeZoom}
+                onPanChange={setPan}
+                onNodeHover={(node) => {
+                  setHoveredId(node?._id ?? null)
+                  if (node) void playNodeTone(node)
+                }}
+                onNodeSelect={enterNode}
+                onBackgroundClick={() => {
                   if (selectedNode) closeDreamNote()
                 }}
-                onDoubleClick={resetCamera}
-                onWheel={(event) => {
-                  event.preventDefault()
-                  changeZoom(zoom + (event.deltaY < 0 ? 0.12 : -0.12))
-                }}
-                onPointerDown={beginPan}
-                onPointerMove={movePan}
-                onPointerUp={endPan}
-                onPointerCancel={endPan}
-              >
-                <defs>
-                  <filter id="edgeGlow" x="-40%" y="-40%" width="180%" height="180%">
-                    <feGaussianBlur stdDeviation="3" result="blur" />
-                    <feMerge>
-                      <feMergeNode in="blur" />
-                      <feMergeNode in="SourceGraphic" />
-                    </feMerge>
-                  </filter>
-
-                  <filter id="organicBlob" x="-60%" y="-60%" width="220%" height="220%">
-                    <feTurbulence
-                      type="fractalNoise"
-                      baseFrequency="0.012 0.018"
-                      numOctaves="2"
-                      seed="7"
-                      result="noise"
-                    >
-                      <animate
-                        attributeName="baseFrequency"
-                        dur="10s"
-                        values="0.012 0.018;0.018 0.012;0.014 0.02;0.012 0.018"
-                        repeatCount="indefinite"
-                      />
-                    </feTurbulence>
-                    <feDisplacementMap
-                      in="SourceGraphic"
-                      in2="noise"
-                      scale="8"
-                      xChannelSelector="R"
-                      yChannelSelector="B"
-                    />
-                  </filter>
-
-                  <filter id="nodeBloom" x="-80%" y="-80%" width="260%" height="260%">
-                    <feGaussianBlur stdDeviation="5" result="blur" />
-                    <feColorMatrix
-                      in="blur"
-                      type="matrix"
-                      values="1 0 0 0 0
-                              0 1 0 0 0
-                              0 0 1 0 0
-                              0 0 0 1.8 0"
-                      result="boosted"
-                    />
-                    <feMerge>
-                      <feMergeNode in="boosted" />
-                      <feMergeNode in="SourceGraphic" />
-                    </feMerge>
-                  </filter>
-
-                  <linearGradient id="energyLine" x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" stopColor="#7ddedb" stopOpacity="0.22" />
-                    <stop offset="45%" stopColor="#c6a7ff" stopOpacity="0.78" />
-                    <stop offset="100%" stopColor="#77b8ff" stopOpacity="0.24" />
-                  </linearGradient>
-
-                  {(Object.keys(CATEGORY_META) as SymbolCategory[]).map((category) => {
-                    const meta = CATEGORY_META[category]
-                    return (
-                      <radialGradient
-                        key={category}
-                        id={`orb-${category}`}
-                        cx="31%"
-                        cy="24%"
-                        r="78%"
-                      >
-                        <stop offset="0%" stopColor="#ffffff" stopOpacity="0.82" />
-                        <stop offset="12%" stopColor={meta.color} stopOpacity="0.62" />
-                        <stop offset="42%" stopColor={meta.color} stopOpacity="0.21" />
-                        <stop offset="76%" stopColor="#10172d" stopOpacity="0.94" />
-                        <stop offset="100%" stopColor="#050814" stopOpacity="1" />
-                      </radialGradient>
-                    )
-                  })}
-                </defs>
-
-                <StarField />
-
-                <g
-                  className={styles.world}
-                  style={{
-                    transform: `translate(${pan.x}px, ${pan.y}px) translate(500px, 350px) scale(${zoom}) translate(-500px, -350px)`,
-                  }}
-                >
-                <g className={styles.edges}>
-                  {edges.map((edge) => {
-                    const source = nodeById.get(edge.source)
-                    const target = nodeById.get(edge.target)
-                    if (!source || !target) return null
-                    const sourcePosition = nodePosition(source)
-                    const targetPosition = nodePosition(target)
-
-                    const inFocusedDream =
-                      !focusedDream || focusedEdgeIds.has(edge.id)
-                    const relatedToActiveSymbol =
-                      !activeId || relatedEdgeIds.has(edge.id)
-                    const highlighted = inFocusedDream && relatedToActiveSymbol
-
-                    return (
-                      <line
-                        key={edge.id}
-                        x1={sourcePosition.x}
-                        y1={sourcePosition.y}
-                        x2={targetPosition.x}
-                        y2={targetPosition.y}
-                        className={highlighted ? styles.edgeActive : styles.edgeMuted}
-                        stroke="url(#energyLine)"
-                        strokeWidth={Math.min(3.4, 0.7 + edge.weight * 0.62)}
-                        opacity={
-                          highlighted
-                            ? Math.min(0.72, 0.2 + edge.weight * 0.13)
-                            : 0.06
-                        }
-                        filter={highlighted && (activeId || focusedDream) ? 'url(#edgeGlow)' : undefined}
-                        pathLength={1}
-                      />
-                    )
-                  })}
-                </g>
-
-                <g>
-                  {nodes.map((node) => {
-                    const meta = CATEGORY_META[node.category]
-                    const selected = selectedId === node._id
-                    const hovered = hoveredId === node._id
-                    const connectedToActiveSymbol =
-                      !activeId ||
-                      activeId === node._id ||
-                      edges.some(
-                        (edge) =>
-                          relatedEdgeIds.has(edge.id) &&
-                          (edge.source === node._id || edge.target === node._id),
-                      )
-                    const inFocusedDream =
-                      !focusedDream || focusedSymbolIds.has(node._id)
-                    const connected = connectedToActiveSymbol && inFocusedDream
-                    const radius = 29 + Math.min(node.frequency - 1, 4) * 5
-                    const position = nodePosition(node)
-                    const depthScale = 0.9 + (position.y / 700) * 0.18
-                    const entering = enteringNodeId === node._id
-
-                    return (
-                      <g
-                        key={node._id}
-                        data-node="true"
-                        className={`${connected ? styles.nodeGroup : styles.nodeGroupMuted} ${
-                          entering ? styles.nodeEntering : ''
-                        }`}
-                        transform={`translate(${position.x} ${position.y}) scale(${depthScale})`}
-                        tabIndex={0}
-                        role="button"
-                        aria-label={`${node.name}, ${node.frequency} dream${node.frequency === 1 ? '' : 's'}`}
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          enterNode(node)
-                        }}
-                        onMouseEnter={() => {
-                          setHoveredId(node._id)
-                          void playNodeTone(node)
-                        }}
-                        onMouseLeave={() => setHoveredId(null)}
-                        onFocus={() => {
-                          setHoveredId(node._id)
-                          void playNodeTone(node)
-                        }}
-                        onBlur={() => setHoveredId(null)}
-                        onPointerDown={(event) => event.stopPropagation()}
-                        onDoubleClick={(event) => event.stopPropagation()}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault()
-                            enterNode(node)
-                          }
-                        }}
-                      >
-                        <circle
-                          r={radius + 8}
-                          fill={meta.color}
-                          opacity={selected || hovered ? 0.11 : 0.045}
-                          className={styles.blobSkin}
-                          filter="url(#organicBlob)"
-                        />
-                        <circle
-                          r={radius + 19}
-                          fill="none"
-                          stroke={meta.color}
-                          strokeWidth="0.8"
-                          opacity={selected || hovered ? 0.34 : 0}
-                          className={styles.orbitRing}
-                        />
-                        <circle
-                          r={radius + 13}
-                          fill={meta.glow}
-                          opacity={selected || hovered ? 0.24 : 0.1}
-                          className={styles.nodeHalo}
-                        />
-                        <circle
-                          r={radius}
-                          fill={`url(#orb-${node.category})`}
-                          stroke={meta.color}
-                          strokeWidth={selected || hovered ? 2.4 : 1.35}
-                          className={styles.nodeCircle}
-                          filter={selected || hovered || selectedId === node._id ? 'url(#nodeBloom)' : undefined}
-                        />
-                        <ellipse
-                          cx={-radius * 0.28}
-                          cy={-radius * 0.32}
-                          rx={radius * 0.24}
-                          ry={radius * 0.15}
-                          fill="white"
-                          opacity={selected || hovered ? 0.34 : 0.2}
-                          className={styles.nodeSpecular}
-                        />
-                        <circle
-                          r={radius - 6}
-                          fill="none"
-                          stroke="rgba(255,255,255,.13)"
-                          strokeWidth="0.9"
-                          className={styles.nodeInnerRing}
-                        />
-                        <text
-                          className={styles.nodeIcon}
-                          textAnchor="middle"
-                          dominantBaseline="central"
-                          y="-1"
-                        >
-                          {node.icon || '✦'}
-                        </text>
-                        <text
-                          className={styles.nodeLabel}
-                          textAnchor="middle"
-                          y={radius + 24}
-                        >
-                          {node.name}
-                        </text>
-                        {node.frequency > 1 && (
-                          <g transform={`translate(${radius - 2} ${-radius + 3})`}>
-                            <circle r="11" fill={meta.color} />
-                            <text className={styles.frequencyText} textAnchor="middle" dominantBaseline="central">
-                              {node.frequency}
-                            </text>
-                          </g>
-                        )}
-
-                        {(hovered || selected) && !entering && (
-                          <g className={styles.nodePrompt} transform={`translate(0 ${radius + 43})`}>
-                            <rect x="-45" y="-11" width="90" height="22" rx="11" />
-                            <text textAnchor="middle" dominantBaseline="central">
-                              open journal
-                            </text>
-                          </g>
-                        )}
-                      </g>
-                    )
-                  })}
-                </g>
-                </g>
-              </svg>
+                onProjectionChange={setSelectedProjection}
+              />
             )}
 
             {timelineDreams.length > 0 && (
@@ -1549,7 +1337,7 @@ export default function DreamMap({
             <div className={styles.mapHint}>
               {focusedDream
                 ? 'Focused constellation · select a symbol to inspect it'
-                : 'Hover symbols to hear them · drag to drift · scroll to zoom'}
+                : 'Hover to hear · drag through space · scroll to zoom · click an orb to open its journal'}
             </div>
 
             {selectedNode &&
