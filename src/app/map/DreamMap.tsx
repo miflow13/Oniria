@@ -1,8 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import {useRouter} from 'next/navigation'
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react'
+import {useCallback, useEffect, useMemo, useRef, useState, type CSSProperties} from 'react'
 import type {Dream, DreamSymbol, SymbolCategory} from '@/types/dream'
 import styles from './map.module.css'
 
@@ -104,6 +103,26 @@ function formatTimelineDate(date: string) {
     month: 'long',
     year: 'numeric',
   }).format(new Date(date))
+}
+
+function formatDreamTime(date: string) {
+  return new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(date))
+}
+
+function dreamExcerpt(body: string, max = 420) {
+  const normalized = body.replace(/\s+/g, ' ').trim()
+  return normalized.length > max
+    ? `${normalized.slice(0, max).trim()}…`
+    : normalized
+}
+
+function moodName(value: number) {
+  return ['Heavy', 'Uneasy', 'Neutral', 'Pleasant', 'Euphoric'][
+    Math.max(0, Math.min(4, value - 1))
+  ]
 }
 
 function buildGraph(dreams: Dream[]) {
@@ -219,7 +238,6 @@ export default function DreamMap({
   demoMode: boolean
   initialDreamId: string | null
 }) {
-  const router = useRouter()
   const [localDreams, setLocalDreams] = useState<Dream[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [hoveredId, setHoveredId] = useState<string | null>(null)
@@ -233,6 +251,7 @@ export default function DreamMap({
   const [motionPositions, setMotionPositions] = useState<Record<string, {x: number; y: number}>>({})
   const [enteringNodeId, setEnteringNodeId] = useState<string | null>(null)
   const [enteringDreamTitle, setEnteringDreamTitle] = useState<string | null>(null)
+  const [openDreamId, setOpenDreamId] = useState<string | null>(null)
 
   const dragRef = useRef<DragState | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
@@ -691,6 +710,7 @@ export default function DreamMap({
     if (!stillVisible) {
       setFocusedDreamId(null)
       setSelectedId(null)
+      setOpenDreamId(null)
       window.history.replaceState(null, '', '/map')
     }
   }, [focusedDreamId, visibleDreams])
@@ -882,6 +902,13 @@ export default function DreamMap({
     ? visibleDreams.filter((dream) => selectedNode.dreamIds.includes(dream._id))
     : []
 
+  const openDream =
+    (openDreamId
+      ? visibleDreams.find((dream) => dream._id === openDreamId)
+      : null) ??
+    selectedDreams.at(-1) ??
+    null
+
   const selectedConnections = useMemo(() => {
     if (!selectedNode) return []
 
@@ -917,27 +944,47 @@ export default function DreamMap({
     }
 
     const position = nodePosition(node)
-    const targetZoom = 2.18
+    const targetZoom = 1.82
+    const desiredX = position.x > 590 ? 660 : 340
     const targetPan = {
-      x: (500 - position.x) * targetZoom,
-      y: (350 - position.y) * targetZoom,
+      x: (desiredX - position.x) * targetZoom,
+      y: (330 - position.y) * targetZoom,
     }
 
     setSelectedId(node._id)
+    setOpenDreamId(targetDream._id)
+    setFocusedDreamId(targetDream._id)
     setHoveredId(null)
     setEnteringNodeId(node._id)
     setEnteringDreamTitle(targetDream.title?.trim() || 'Untitled dream')
     setIsPlaying(false)
     void playEnterSound()
-    animateCameraTo(targetZoom, targetPan)
+    animateCameraTo(targetZoom, targetPan, 760)
+
+    window.history.replaceState(
+      null,
+      '',
+      `/map?dream=${encodeURIComponent(targetDream._id)}`,
+    )
 
     if (enterTimerRef.current !== null) {
       window.clearTimeout(enterTimerRef.current)
     }
 
     enterTimerRef.current = window.setTimeout(() => {
-      router.push(`/dream/${encodeURIComponent(targetDream._id)}`)
-    }, 980)
+      setEnteringNodeId(null)
+    }, 760)
+  }
+
+  function closeDreamNote() {
+    setEnteringNodeId(null)
+    setEnteringDreamTitle(null)
+    setOpenDreamId(null)
+    setSelectedId(null)
+    setHoveredId(null)
+    setFocusedDreamId(null)
+    animateCameraTo(1, {x: 0, y: 0}, 680)
+    window.history.replaceState(null, '', '/map')
   }
 
   function focusDream(dreamId: string | null) {
@@ -971,6 +1018,7 @@ export default function DreamMap({
 
     setFocusedDreamId(null)
     setSelectedId(null)
+    setOpenDreamId(null)
     setHoveredId(null)
     window.history.replaceState(null, '', '/map')
     setIsPlaying(true)
@@ -1092,7 +1140,7 @@ export default function DreamMap({
               </div>
             )}
 
-            {focusedDream && (
+            {focusedDream && !selectedNode && (
               <div className={styles.focusBanner}>
                 <div>
                   <span>Focused dream</span>
@@ -1129,7 +1177,9 @@ export default function DreamMap({
                 viewBox="0 0 1000 700"
                 role="img"
                 aria-label="Interactive map of recurring dream symbols"
-                onClick={() => setSelectedId(null)}
+                onClick={() => {
+                  if (selectedNode) closeDreamNote()
+                }}
                 onDoubleClick={resetCamera}
                 onWheel={(event) => {
                   event.preventDefault()
