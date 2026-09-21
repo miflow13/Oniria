@@ -1853,3 +1853,242 @@
     opacity: 1;
   }
 }
+
+
+/* Organic physics + cinematic entry */
+.blobSkin {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: blobPulse 7.5s ease-in-out infinite alternate;
+  transition:
+    opacity 500ms ease,
+    filter 700ms ease;
+  pointer-events: none;
+}
+
+.orbitRing {
+  transform-box: fill-box;
+  transform-origin: center;
+  stroke-dasharray: 4 8;
+  animation: orbitTurn 16s linear infinite;
+  transition: opacity 500ms ease;
+  pointer-events: none;
+}
+
+.nodePrompt {
+  pointer-events: none;
+  animation: promptIn 260ms ease-out both;
+}
+
+.nodePrompt rect {
+  fill: rgba(10, 16, 31, .9);
+  stroke: rgba(170, 204, 220, .13);
+  stroke-width: .8;
+}
+
+.nodePrompt text {
+  fill: #9eb7c9;
+  font-size: 8px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.nodeEntering {
+  pointer-events: none;
+}
+
+.nodeEntering .nodeCircle {
+  animation: nodePortal 900ms cubic-bezier(.16, .76, .18, 1) both;
+}
+
+.nodeEntering .nodeHalo {
+  animation: portalHalo 900ms cubic-bezier(.16, .76, .18, 1) both;
+}
+
+.nodeEntering .blobSkin {
+  animation: portalBlob 900ms cubic-bezier(.16, .76, .18, 1) both;
+}
+
+.nodeEntering .orbitRing {
+  opacity: .7 !important;
+  animation: orbitTurn 1.2s linear infinite;
+}
+
+.enterDreamOverlay {
+  position: absolute;
+  z-index: 20;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  pointer-events: none;
+  text-align: center;
+  background:
+    radial-gradient(circle at 50% 48%, rgba(103, 191, 187, .12), transparent 18%),
+    radial-gradient(circle at 50% 50%, rgba(116, 88, 159, .1), transparent 34%);
+  backdrop-filter: blur(1.5px);
+  animation: dreamVeil 980ms ease-in both;
+}
+
+.enterDreamOverlay > span {
+  color: #86a5b7;
+  font-size: .62rem;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+
+.enterDreamOverlay > strong {
+  max-width: min(420px, 70%);
+  color: #edf7f7;
+  font-size: clamp(1.1rem, 2.6vw, 1.8rem);
+  font-weight: 500;
+  letter-spacing: -.025em;
+  text-shadow: 0 0 24px rgba(157, 228, 222, .18);
+}
+
+.enterDreamPulse {
+  width: 84px;
+  height: 84px;
+  margin-bottom: 2px;
+  border: 1px solid rgba(156, 226, 220, .34);
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 12px rgba(111, 205, 200, .025),
+    0 0 50px rgba(111, 205, 200, .16);
+  animation: entryPulse 980ms cubic-bezier(.16, .76, .18, 1) both;
+}
+
+.nodeGroup:hover .blobSkin,
+.nodeGroup:focus .blobSkin {
+  opacity: .13;
+}
+
+.nodeGroup:hover .orbitRing,
+.nodeGroup:focus .orbitRing {
+  opacity: .34;
+}
+
+.nodeGroup:hover .nodeLabel,
+.nodeGroup:focus .nodeLabel {
+  fill: #d7e7ee;
+}
+
+.nodeGroup:hover .nodeIcon,
+.nodeGroup:focus .nodeIcon {
+  filter: drop-shadow(0 0 6px rgba(225, 245, 245, .28));
+}
+
+@keyframes blobPulse {
+  0% {
+    transform: scale(.97) rotate(-1deg);
+  }
+  42% {
+    transform: scale(1.06) rotate(1.4deg);
+  }
+  100% {
+    transform: scale(1.01) rotate(-.6deg);
+  }
+}
+
+@keyframes orbitTurn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes promptIn {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes nodePortal {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  54% {
+    transform: scale(1.18);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: .12;
+  }
+}
+
+@keyframes portalHalo {
+  0% {
+    transform: scale(1);
+    opacity: .18;
+  }
+  65% {
+    transform: scale(1.8);
+    opacity: .32;
+  }
+  100% {
+    transform: scale(3.2);
+    opacity: 0;
+  }
+}
+
+@keyframes portalBlob {
+  0% {
+    transform: scale(1);
+    opacity: .08;
+  }
+  62% {
+    transform: scale(1.36);
+    opacity: .2;
+  }
+  100% {
+    transform: scale(2.25);
+    opacity: 0;
+  }
+}
+
+@keyframes entryPulse {
+  0% {
+    opacity: 0;
+    transform: scale(.35);
+  }
+  38% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(5.6);
+  }
+}
+
+@keyframes dreamVeil {
+  0% {
+    opacity: 0;
+  }
+  34% {
+    opacity: 1;
+  }
+  100% {
+    opacity: .2;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .blobSkin,
+  .orbitRing,
+  .nodeEntering .nodeCircle,
+  .nodeEntering .nodeHalo,
+  .nodeEntering .blobSkin,
+  .enterDreamOverlay,
+  .enterDreamPulse,
+  .nodePrompt {
+    animation: none !important;
+  }
+}
