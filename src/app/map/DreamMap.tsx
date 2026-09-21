@@ -876,7 +876,9 @@ export default function DreamMap({
 
                 <g
                   className={styles.world}
-                  transform={`translate(${pan.x} ${pan.y}) translate(500 350) scale(${zoom}) translate(-500 -350)`}
+                  style={{
+                    transform: `translate(${pan.x}px, ${pan.y}px) translate(500px, 350px) scale(${zoom}) translate(-500px, -350px)`,
+                  }}
                 >
                 <g className={styles.edges}>
                   {edges.map((edge) => {
