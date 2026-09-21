@@ -70,6 +70,13 @@ function formatShortDate(date: string) {
   }).format(new Date(date))
 }
 
+function formatTimelineDate(date: string) {
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'long',
+    year: 'numeric',
+  }).format(new Date(date))
+}
+
 function buildGraph(dreams: Dream[]) {
   const symbolMap = new Map<string, {symbol: DreamSymbol; dreamIds: Set<string>; frequency: number}>()
   const edgeMap = new Map<string, Edge>()
@@ -185,6 +192,8 @@ export default function DreamMap({
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const [focusedDreamId, setFocusedDreamId] = useState<string | null>(initialDreamId)
+  const [timelineIndex, setTimelineIndex] = useState(-1)
+  const [isPlaying, setIsPlaying] = useState(false)
 
   useEffect(() => {
     if (demoMode) setLocalDreams(readLocalDreams())
@@ -195,13 +204,81 @@ export default function DreamMap({
     return combined.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
   }, [demoMode, initialDreams, localDreams])
 
-  const {nodes, edges} = useMemo(() => buildGraph(dreams), [dreams])
+  const timelineDreams = useMemo(
+    () =>
+      [...dreams].sort(
+        (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+      ),
+    [dreams],
+  )
+
+  const maxTimelineIndex = Math.max(0, timelineDreams.length - 1)
+  const currentTimelineIndex =
+    timelineIndex < 0
+      ? maxTimelineIndex
+      : Math.min(timelineIndex, maxTimelineIndex)
+
+  const visibleDreams = useMemo(
+    () => timelineDreams.slice(0, currentTimelineIndex + 1),
+    [currentTimelineIndex, timelineDreams],
+  )
+
+  const visibleDreamsRecent = useMemo(
+    () =>
+      [...visibleDreams].sort(
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+      ),
+    [visibleDreams],
+  )
+
+  const currentTimelineDream = timelineDreams[currentTimelineIndex] ?? null
+  const atLatestPoint =
+    timelineDreams.length === 0 ||
+    currentTimelineIndex === maxTimelineIndex
+
+  useEffect(() => {
+    if (!isPlaying || timelineDreams.length <= 1) return
+
+    const timer = window.setInterval(() => {
+      setTimelineIndex((current) => {
+        const resolved = current < 0 ? maxTimelineIndex : current
+
+        if (resolved >= maxTimelineIndex) {
+          setIsPlaying(false)
+          return maxTimelineIndex
+        }
+
+        return resolved + 1
+      })
+    }, 1200)
+
+    return () => window.clearInterval(timer)
+  }, [isPlaying, maxTimelineIndex, timelineDreams.length])
+
+  useEffect(() => {
+    if (!focusedDreamId) return
+
+    const stillVisible = visibleDreams.some(
+      (dream) => dream._id === focusedDreamId,
+    )
+
+    if (!stillVisible) {
+      setFocusedDreamId(null)
+      setSelectedId(null)
+      window.history.replaceState(null, '', '/map')
+    }
+  }, [focusedDreamId, visibleDreams])
+
+  const {nodes, edges} = useMemo(
+    () => buildGraph(visibleDreams),
+    [visibleDreams],
+  )
 
   const nodeById = useMemo(() => new Map(nodes.map((node) => [node._id, node])), [nodes])
   const activeId = hoveredId ?? selectedId
   const selectedNode = selectedId ? nodeById.get(selectedId) ?? null : null
   const focusedDream = focusedDreamId
-    ? dreams.find((dream) => dream._id === focusedDreamId) ?? null
+    ? visibleDreams.find((dream) => dream._id === focusedDreamId) ?? null
     : null
 
   const focusedSymbolIds = useMemo(
@@ -232,7 +309,7 @@ export default function DreamMap({
   }, [activeId, edges])
 
   const selectedDreams = selectedNode
-    ? dreams.filter((dream) => selectedNode.dreamIds.includes(dream._id))
+    ? visibleDreams.filter((dream) => selectedNode.dreamIds.includes(dream._id))
     : []
 
   const selectedConnections = useMemo(() => {
@@ -270,6 +347,30 @@ export default function DreamMap({
     window.history.replaceState(null, '', nextUrl)
   }
 
+  function changeTimeline(nextIndex: number) {
+    setIsPlaying(false)
+    setTimelineIndex(nextIndex)
+  }
+
+  function toggleTimelinePlayback() {
+    if (timelineDreams.length <= 1) return
+
+    if (isPlaying) {
+      setIsPlaying(false)
+      return
+    }
+
+    if (atLatestPoint) {
+      setTimelineIndex(0)
+    }
+
+    setFocusedDreamId(null)
+    setSelectedId(null)
+    setHoveredId(null)
+    window.history.replaceState(null, '', '/map')
+    setIsPlaying(true)
+  }
+
   return (
     <main className={styles.page}>
       <header className={styles.topbar}>
@@ -290,11 +391,11 @@ export default function DreamMap({
         <aside className={styles.sidebar}>
           <div className={styles.sidebarHeader}>
             <p>Recent fragments</p>
-            <span>{dreams.length}</span>
+            <span>{visibleDreams.length}</span>
           </div>
 
           <div className={styles.dreamList}>
-            {dreams.slice(0, 7).map((dream) => (
+            {visibleDreamsRecent.slice(0, 7).map((dream) => (
               <button
                 key={dream._id}
                 type="button"
@@ -363,7 +464,11 @@ export default function DreamMap({
               <div className={styles.emptyState}>
                 <span>✦</span>
                 <h2>No symbols to map yet.</h2>
-                <p>Record a dream and tag a few symbols to make the first constellation.</p>
+                <p>
+                  {visibleDreams.length === 0
+                    ? 'Move the timeline forward to reveal your first constellation.'
+                    : 'Record a dream and tag a few symbols to make the first constellation.'}
+                </p>
               </div>
             ) : (
               <svg
@@ -494,6 +599,79 @@ export default function DreamMap({
                   })}
                 </g>
               </svg>
+            )}
+
+            {timelineDreams.length > 0 && (
+              <section className={styles.timeline} aria-label="Dream history timeline">
+                <button
+                  type="button"
+                  className={styles.timelinePlay}
+                  onClick={toggleTimelinePlayback}
+                  disabled={timelineDreams.length <= 1}
+                  aria-label={isPlaying ? 'Pause timeline' : 'Play timeline'}
+                >
+                  {isPlaying ? 'Ⅱ' : '▶'}
+                </button>
+
+                <div className={styles.timelineBody}>
+                  <div className={styles.timelineMeta}>
+                    <div>
+                      <span>Dream history</span>
+                      <strong>
+                        {currentTimelineDream
+                          ? formatTimelineDate(currentTimelineDream.date)
+                          : 'No dreams yet'}
+                      </strong>
+                    </div>
+                    <small>
+                      {visibleDreams.length} / {timelineDreams.length} dreams ·{' '}
+                      {nodes.length} symbols · {edges.length} connections
+                    </small>
+                  </div>
+
+                  <div className={styles.timelineTrack}>
+                    <input
+                      type="range"
+                      min={0}
+                      max={maxTimelineIndex}
+                      step={1}
+                      value={currentTimelineIndex}
+                      onChange={(event) => changeTimeline(Number(event.target.value))}
+                      aria-label="Dream history cutoff"
+                    />
+                    <div className={styles.timelineTicks} aria-hidden="true">
+                      {timelineDreams.map((dream, index) => (
+                        <i
+                          key={dream._id}
+                          className={
+                            index <= currentTimelineIndex
+                              ? styles.timelineTickActive
+                              : styles.timelineTick
+                          }
+                          style={{
+                            left:
+                              timelineDreams.length <= 1
+                                ? '0%'
+                                : `${(index / maxTimelineIndex) * 100}%`,
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  className={styles.timelineLatest}
+                  onClick={() => {
+                    setIsPlaying(false)
+                    setTimelineIndex(-1)
+                  }}
+                  disabled={atLatestPoint}
+                >
+                  Latest
+                </button>
+              </section>
             )}
 
             <div className={styles.mapHint}>
