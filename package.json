@@ -14,12 +14,14 @@
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "sanity": "^6.15.0",
-    "styled-components": "^6.5.3"
+    "styled-components": "^6.5.3",
+    "three": "^0.186.0"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
-    "typescript": "^5.9.0"
+    "typescript": "^5.9.0",
+    "@types/three": "^0.186.0"
   }
 }
