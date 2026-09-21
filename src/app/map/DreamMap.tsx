@@ -1004,6 +1004,33 @@ export default function DreamMap({
     setTimelineIndex(nextIndex)
   }
 
+  const selectedMeta = selectedNode
+    ? CATEGORY_META[selectedNode.category]
+    : null
+  const selectedPosition = selectedNode ? nodePosition(selectedNode) : null
+  const projectedSelectedPosition = selectedPosition
+    ? {
+        x: (selectedPosition.x - 500) * zoom + 500 + pan.x,
+        y: (selectedPosition.y - 350) * zoom + 350 + pan.y,
+      }
+    : null
+  const noteAnchor = projectedSelectedPosition
+    ? {
+        x: Math.max(10, Math.min(90, projectedSelectedPosition.x / 10)),
+        y: Math.max(15, Math.min(78, projectedSelectedPosition.y / 7)),
+      }
+    : null
+  const noteSide = noteAnchor && noteAnchor.x > 58 ? 'left' : 'right'
+  const noteStyle =
+    noteAnchor && selectedMeta
+      ? ({
+          left: `${noteAnchor.x}%`,
+          top: `${noteAnchor.y}%`,
+          '--node-accent': selectedMeta.color,
+          '--node-glow': selectedMeta.glow,
+        } as CSSProperties)
+      : undefined
+
   function toggleTimelinePlayback() {
     if (timelineDreams.length <= 1) return
 
@@ -1090,7 +1117,10 @@ export default function DreamMap({
           </div>
 
           <div className={styles.mapFrame}>
+            <div className={styles.voidDepth} aria-hidden="true" />
             <div className={styles.nebula} aria-hidden="true" />
+            <div className={styles.aurora} aria-hidden="true" />
+            <div className={styles.particleField} aria-hidden="true" />
             <div className={styles.dreamFog} aria-hidden="true" />
 
             <div className={styles.mapControls}>
@@ -1222,6 +1252,48 @@ export default function DreamMap({
                       yChannelSelector="B"
                     />
                   </filter>
+
+                  <filter id="nodeBloom" x="-80%" y="-80%" width="260%" height="260%">
+                    <feGaussianBlur stdDeviation="5" result="blur" />
+                    <feColorMatrix
+                      in="blur"
+                      type="matrix"
+                      values="1 0 0 0 0
+                              0 1 0 0 0
+                              0 0 1 0 0
+                              0 0 0 1.8 0"
+                      result="boosted"
+                    />
+                    <feMerge>
+                      <feMergeNode in="boosted" />
+                      <feMergeNode in="SourceGraphic" />
+                    </feMerge>
+                  </filter>
+
+                  <linearGradient id="energyLine" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="#7ddedb" stopOpacity="0.22" />
+                    <stop offset="45%" stopColor="#c6a7ff" stopOpacity="0.78" />
+                    <stop offset="100%" stopColor="#77b8ff" stopOpacity="0.24" />
+                  </linearGradient>
+
+                  {(Object.keys(CATEGORY_META) as SymbolCategory[]).map((category) => {
+                    const meta = CATEGORY_META[category]
+                    return (
+                      <radialGradient
+                        key={category}
+                        id={`orb-${category}`}
+                        cx="31%"
+                        cy="24%"
+                        r="78%"
+                      >
+                        <stop offset="0%" stopColor="#ffffff" stopOpacity="0.82" />
+                        <stop offset="12%" stopColor={meta.color} stopOpacity="0.62" />
+                        <stop offset="42%" stopColor={meta.color} stopOpacity="0.21" />
+                        <stop offset="76%" stopColor="#10172d" stopOpacity="0.94" />
+                        <stop offset="100%" stopColor="#050814" stopOpacity="1" />
+                      </radialGradient>
+                    )
+                  })}
                 </defs>
 
                 <StarField />
@@ -1254,6 +1326,7 @@ export default function DreamMap({
                         x2={targetPosition.x}
                         y2={targetPosition.y}
                         className={highlighted ? styles.edgeActive : styles.edgeMuted}
+                        stroke="url(#energyLine)"
                         strokeWidth={Math.min(3.4, 0.7 + edge.weight * 0.62)}
                         opacity={
                           highlighted
@@ -1285,6 +1358,7 @@ export default function DreamMap({
                     const connected = connectedToActiveSymbol && inFocusedDream
                     const radius = 29 + Math.min(node.frequency - 1, 4) * 5
                     const position = nodePosition(node)
+                    const depthScale = 0.9 + (position.y / 700) * 0.18
                     const entering = enteringNodeId === node._id
 
                     return (
@@ -1294,7 +1368,7 @@ export default function DreamMap({
                         className={`${connected ? styles.nodeGroup : styles.nodeGroupMuted} ${
                           entering ? styles.nodeEntering : ''
                         }`}
-                        transform={`translate(${position.x} ${position.y})`}
+                        transform={`translate(${position.x} ${position.y}) scale(${depthScale})`}
                         tabIndex={0}
                         role="button"
                         aria-label={`${node.name}, ${node.frequency} dream${node.frequency === 1 ? '' : 's'}`}
@@ -1344,11 +1418,27 @@ export default function DreamMap({
                         />
                         <circle
                           r={radius}
-                          fill="rgba(18, 26, 49, .94)"
+                          fill={`url(#orb-${node.category})`}
                           stroke={meta.color}
                           strokeWidth={selected || hovered ? 2.4 : 1.35}
                           className={styles.nodeCircle}
-                          style={{filter: `drop-shadow(0 0 ${selected || hovered ? 14 : 8}px ${meta.glow})`}}
+                          filter={selected || hovered || selectedId === node._id ? 'url(#nodeBloom)' : undefined}
+                        />
+                        <ellipse
+                          cx={-radius * 0.28}
+                          cy={-radius * 0.32}
+                          rx={radius * 0.24}
+                          ry={radius * 0.15}
+                          fill="white"
+                          opacity={selected || hovered ? 0.34 : 0.2}
+                          className={styles.nodeSpecular}
+                        />
+                        <circle
+                          r={radius - 6}
+                          fill="none"
+                          stroke="rgba(255,255,255,.13)"
+                          strokeWidth="0.9"
+                          className={styles.nodeInnerRing}
                         />
                         <text
                           className={styles.nodeIcon}
@@ -1378,7 +1468,7 @@ export default function DreamMap({
                           <g className={styles.nodePrompt} transform={`translate(0 ${radius + 43})`}>
                             <rect x="-45" y="-11" width="90" height="22" rx="11" />
                             <text textAnchor="middle" dominantBaseline="central">
-                              enter dream
+                              open journal
                             </text>
                           </g>
                         )}
@@ -1469,68 +1559,141 @@ export default function DreamMap({
                 : 'Hover symbols to hear them · drag to drift · scroll to zoom'}
             </div>
 
-            {selectedNode && (
-              <aside className={styles.detailCard} aria-live="polite">
-                <button
-                  className={styles.closeDetail}
-                  onClick={() => setSelectedId(null)}
-                  aria-label="Close symbol details"
-                >
-                  ×
-                </button>
-
+            {selectedNode &&
+              openDream &&
+              selectedMeta &&
+              noteStyle &&
+              !enteringNodeId && (
                 <div
-                  className={styles.detailIcon}
-                  style={{
-                    borderColor: CATEGORY_META[selectedNode.category].color,
-                    boxShadow: `0 0 28px ${CATEGORY_META[selectedNode.category].glow}`,
-                  }}
+                  className={`${styles.noteCluster} ${
+                    noteSide === 'left'
+                      ? styles.noteClusterLeft
+                      : styles.noteClusterRight
+                  }`}
+                  style={noteStyle}
+                  aria-live="polite"
                 >
-                  {selectedNode.icon || '✦'}
-                </div>
+                  <span className={styles.noteAnchorPulse} aria-hidden="true" />
+                  <span className={styles.noteAnchorBeam} aria-hidden="true" />
 
-                <p className={styles.detailCategory}>{CATEGORY_META[selectedNode.category].label}</p>
-                <h2>{selectedNode.name}</h2>
-                <p className={styles.frequencyLabel}>
-                  Appears in {selectedNode.frequency} dream{selectedNode.frequency === 1 ? '' : 's'}
-                </p>
+                  <div className={styles.noteStage}>
+                    <button
+                      type="button"
+                      className={styles.noteClose}
+                      onClick={closeDreamNote}
+                      aria-label="Close dream journal"
+                    >
+                      ×
+                    </button>
 
-                {selectedConnections.length > 0 && (
-                  <section className={styles.connectionSection}>
-                    <p>Strongest connections</p>
-                    <div className={styles.connectionList}>
-                      {selectedConnections.map(({node, weight}) => (
-                        <button
-                          key={node._id}
-                          type="button"
-                          onClick={() => setSelectedId(node._id)}
-                        >
-                          <span aria-hidden="true">{node.icon || '✦'}</span>
-                          <strong>{node.name}</strong>
-                          <em>×{weight}</em>
-                        </button>
-                      ))}
-                    </div>
-                  </section>
-                )}
+                    <article className={`${styles.noteBlob} ${styles.noteBlobPrimary}`}>
+                      <div className={styles.blobSheen} aria-hidden="true" />
+                      <header className={styles.noteHeader}>
+                        <div>
+                          <p>{selectedMeta.label} memory</p>
+                          <h2>{openDream.title?.trim() || 'Untitled dream'}</h2>
+                          <span>
+                            {formatShortDate(openDream.date)} · {formatDreamTime(openDream.date)}
+                          </span>
+                        </div>
+                        <div className={styles.noteOrb} aria-hidden="true">
+                          {selectedNode.icon || '✦'}
+                        </div>
+                      </header>
 
-                <section className={styles.trailSection}>
-                  <p>Dream trail</p>
-                  <div className={styles.trail}>
-                    {selectedDreams.slice(0, 4).map((dream) => (
-                      <button
-                        key={dream._id}
-                        type="button"
-                        onClick={() => focusDream(dream._id)}
-                      >
-                        <span>{formatShortDate(dream.date)}</span>
-                        <strong>{dream.title?.trim() || 'Untitled dream'}</strong>
-                      </button>
-                    ))}
+                      <p className={styles.noteBody}>{dreamExcerpt(openDream.body)}</p>
+
+                      <div className={styles.noteTags}>
+                        {(openDream.symbols ?? []).slice(0, 6).map((symbol) => (
+                          <span key={symbol._id}>
+                            <b aria-hidden="true">{symbol.icon || '✦'}</b>
+                            {symbol.name}
+                          </span>
+                        ))}
+                      </div>
+                    </article>
+
+                    <aside className={`${styles.noteBlob} ${styles.noteBlobStats}`}>
+                      <div className={styles.blobSheen} aria-hidden="true" />
+                      <p className={styles.blobLabel}>Dream details</p>
+
+                      <div className={styles.statRows}>
+                        <div>
+                          <span>Mood</span>
+                          <strong>{moodName(openDream.mood)}</strong>
+                        </div>
+                        <div>
+                          <span>Lucid</span>
+                          <strong>{openDream.lucid ? 'Yes' : 'No'}</strong>
+                        </div>
+                        <div>
+                          <span>Recurrence</span>
+                          <strong>{selectedNode.frequency}×</strong>
+                        </div>
+                        <div>
+                          <span>Vividness</span>
+                          <span className={styles.vividDots} aria-label={`${openDream.mood} of 5`}>
+                            {Array.from({length: 5}).map((_, index) => (
+                              <i
+                                key={index}
+                                className={
+                                  index < openDream.mood
+                                    ? styles.vividDotActive
+                                    : styles.vividDot
+                                }
+                              />
+                            ))}
+                          </span>
+                        </div>
+                      </div>
+                    </aside>
+
+                    <aside className={`${styles.noteBlob} ${styles.noteBlobLinks}`}>
+                      <div className={styles.blobSheen} aria-hidden="true" />
+                      <p className={styles.blobLabel}>Related symbols</p>
+
+                      <div className={styles.relatedMini}>
+                        {selectedConnections.slice(0, 4).map(({node, weight}) => (
+                          <button
+                            type="button"
+                            key={node._id}
+                            onClick={() => enterNode(node)}
+                          >
+                            <span aria-hidden="true">{node.icon || '✦'}</span>
+                            <strong>{node.name}</strong>
+                            <em>×{weight}</em>
+                          </button>
+                        ))}
+                      </div>
+
+                      <p className={styles.blobLabel}>Dream trail</p>
+                      <div className={styles.dreamTrailMini}>
+                        {[...selectedDreams]
+                          .slice(-3)
+                          .reverse()
+                          .map((dream) => (
+                            <button
+                              type="button"
+                              key={dream._id}
+                              onClick={() => {
+                                setOpenDreamId(dream._id)
+                                setFocusedDreamId(dream._id)
+                                window.history.replaceState(
+                                  null,
+                                  '',
+                                  `/map?dream=${encodeURIComponent(dream._id)}`,
+                                )
+                              }}
+                            >
+                              <span>{formatShortDate(dream.date)}</span>
+                              <strong>{dream.title?.trim() || 'Untitled dream'}</strong>
+                            </button>
+                          ))}
+                      </div>
+                    </aside>
                   </div>
-                </section>
-              </aside>
-            )}
+                </div>
+              )}
           </div>
         </section>
       </div>
