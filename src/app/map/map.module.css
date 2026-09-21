@@ -1408,3 +1408,27 @@
     animation: none !important;
   }
 }
+
+
+.world {
+  transform-origin: 0 0;
+  transition: transform 700ms cubic-bezier(.18, .72, .24, 1);
+}
+
+.mapDragging .world {
+  transition: none;
+}
+
+@media (max-width: 760px) {
+  .mapControls {
+    top: auto;
+    right: 10px;
+    bottom: 92px;
+  }
+
+  .detailCard {
+    top: auto;
+    bottom: 140px;
+    max-height: calc(100% - 220px);
+  }
+}
