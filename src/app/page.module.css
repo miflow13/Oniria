@@ -284,3 +284,42 @@
     flex-direction: column;
   }
 }
+
+
+.cardActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.readDream {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 11px;
+  color: #aaa8c7;
+  text-decoration: none;
+  background: rgba(125, 111, 164, 0.05);
+  border: 1px solid rgba(188, 175, 231, 0.1);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  transition:
+    color 160ms ease,
+    background 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease;
+}
+
+.readDream:hover {
+  color: #e4ddf4;
+  background: rgba(125, 111, 164, 0.1);
+  border-color: rgba(188, 175, 231, 0.2);
+  transform: translateY(-1px);
+}
+
+@media (max-width: 560px) {
+  .cardActions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+}
