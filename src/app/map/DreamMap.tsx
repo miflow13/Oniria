@@ -112,13 +112,6 @@ function formatDreamTime(date: string) {
   }).format(new Date(date))
 }
 
-function dreamExcerpt(body: string, max = 420) {
-  const normalized = body.replace(/\s+/g, ' ').trim()
-  return normalized.length > max
-    ? `${normalized.slice(0, max).trim()}…`
-    : normalized
-}
-
 function moodName(value: number) {
   return ['Heavy', 'Uneasy', 'Neutral', 'Pleasant', 'Euphoric'][
     Math.max(0, Math.min(4, value - 1))
@@ -1601,7 +1594,7 @@ export default function DreamMap({
                         </div>
                       </header>
 
-                      <p className={styles.noteBody}>{dreamExcerpt(openDream.body)}</p>
+                      <p className={styles.noteBody}>{openDream.body}</p>
 
                       <div className={styles.noteTags}>
                         {(openDream.symbols ?? []).slice(0, 6).map((symbol) => (
