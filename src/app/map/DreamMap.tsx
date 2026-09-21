@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import {useEffect, useMemo, useState} from 'react'
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react'
 import type {Dream, DreamSymbol, SymbolCategory} from '@/types/dream'
 import styles from './map.module.css'
 
@@ -19,6 +19,25 @@ type Edge = {
   source: string
   target: string
   weight: number
+}
+
+type Pan = {
+  x: number
+  y: number
+}
+
+type DragState = {
+  pointerId: number
+  startX: number
+  startY: number
+  panX: number
+  panY: number
+}
+
+type AmbientAudio = {
+  gain: GainNode
+  oscillators: OscillatorNode[]
+  lfo: OscillatorNode
 }
 
 const CATEGORY_META: Record<SymbolCategory, {label: string; color: string; glow: string}> = {
@@ -173,6 +192,8 @@ function StarField() {
           r={`${star.r}%`}
           fill="white"
           opacity={star.opacity}
+          className={styles.star}
+          style={{animationDelay: `-${index * 0.31}s`}}
         />
       ))}
     </g>
@@ -194,10 +215,245 @@ export default function DreamMap({
   const [focusedDreamId, setFocusedDreamId] = useState<string | null>(initialDreamId)
   const [timelineIndex, setTimelineIndex] = useState(-1)
   const [isPlaying, setIsPlaying] = useState(false)
+  const [zoom, setZoom] = useState(1)
+  const [pan, setPan] = useState<Pan>({x: 0, y: 0})
+  const [isDragging, setIsDragging] = useState(false)
+  const [soundEnabled, setSoundEnabled] = useState(false)
+
+  const dragRef = useRef<DragState | null>(null)
+  const audioContextRef = useRef<AudioContext | null>(null)
+  const audioMasterRef = useRef<GainNode | null>(null)
+  const ambientRef = useRef<AmbientAudio | null>(null)
+  const lastHoverToneRef = useRef<{id: string; time: number} | null>(null)
+
+  const stopAmbient = useCallback(() => {
+    const ambient = ambientRef.current
+    if (!ambient) return
+
+    const context = audioContextRef.current
+    const now = context?.currentTime ?? 0
+
+    try {
+      ambient.gain.gain.cancelScheduledValues(now)
+      ambient.gain.gain.setValueAtTime(
+        Math.max(ambient.gain.gain.value, 0.0001),
+        now,
+      )
+      ambient.gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.8)
+    } catch {
+      // Audio may already be shutting down.
+    }
+
+    window.setTimeout(() => {
+      for (const oscillator of ambient.oscillators) {
+        try {
+          oscillator.stop()
+          oscillator.disconnect()
+        } catch {
+          // Already stopped.
+        }
+      }
+
+      try {
+        ambient.lfo.stop()
+        ambient.lfo.disconnect()
+        ambient.gain.disconnect()
+      } catch {
+        // Already disconnected.
+      }
+    }, 850)
+
+    ambientRef.current = null
+  }, [])
+
+  const ensureAudio = useCallback(async () => {
+    let context = audioContextRef.current
+    let master = audioMasterRef.current
+
+    if (!context || context.state === 'closed') {
+      context = new AudioContext()
+      master = context.createGain()
+      master.gain.value = 0.52
+      master.connect(context.destination)
+      audioContextRef.current = context
+      audioMasterRef.current = master
+    }
+
+    if (context.state === 'suspended') {
+      await context.resume()
+    }
+
+    return {context, master: master!}
+  }, [])
+
+  const startAmbient = useCallback(async () => {
+    if (ambientRef.current) return
+
+    const {context, master} = await ensureAudio()
+    const now = context.currentTime
+
+    const ambientGain = context.createGain()
+    ambientGain.gain.setValueAtTime(0.0001, now)
+    ambientGain.gain.exponentialRampToValueAtTime(0.032, now + 2.4)
+
+    const filter = context.createBiquadFilter()
+    filter.type = 'lowpass'
+    filter.frequency.value = 420
+    filter.Q.value = 0.45
+
+    const lfo = context.createOscillator()
+    const lfoGain = context.createGain()
+    lfo.frequency.value = 0.045
+    lfoGain.gain.value = 0.012
+    lfo.connect(lfoGain)
+    lfoGain.connect(ambientGain.gain)
+
+    const frequencies = [55, 82.5, 110]
+    const oscillators = frequencies.map((frequency, index) => {
+      const oscillator = context.createOscillator()
+      const voiceGain = context.createGain()
+      oscillator.type = index === 1 ? 'triangle' : 'sine'
+      oscillator.frequency.value = frequency
+      oscillator.detune.value = index === 2 ? 7 : index === 1 ? -5 : 0
+      voiceGain.gain.value = index === 0 ? 0.48 : index === 1 ? 0.24 : 0.12
+      oscillator.connect(voiceGain)
+      voiceGain.connect(filter)
+      oscillator.start(now + index * 0.08)
+      return oscillator
+    })
+
+    filter.connect(ambientGain)
+    ambientGain.connect(master)
+    lfo.start(now)
+
+    ambientRef.current = {
+      gain: ambientGain,
+      oscillators,
+      lfo,
+    }
+  }, [ensureAudio])
+
+  const toggleSound = useCallback(async () => {
+    if (soundEnabled) {
+      setSoundEnabled(false)
+      stopAmbient()
+      return
+    }
+
+    setSoundEnabled(true)
+    await startAmbient()
+  }, [soundEnabled, startAmbient, stopAmbient])
+
+  const playNodeTone = useCallback(
+    async (node: PositionedSymbol) => {
+      if (!soundEnabled) return
+
+      const nowMs = performance.now()
+      const last = lastHoverToneRef.current
+      if (last?.id === node._id && nowMs - last.time < 500) return
+      lastHoverToneRef.current = {id: node._id, time: nowMs}
+
+      const {context, master} = await ensureAudio()
+      const now = context.currentTime
+      const scale = [0, 2, 4, 7, 9]
+      const degree = scale[hashString(node._id) % scale.length]
+      const octave = node.frequency > 2 ? 5 : 4
+      const midi = 12 * (octave + 1) + degree
+      const frequency = 440 * Math.pow(2, (midi - 69) / 12)
+
+      const oscillator = context.createOscillator()
+      const shimmer = context.createOscillator()
+      const gain = context.createGain()
+      const filter = context.createBiquadFilter()
+
+      oscillator.type = 'sine'
+      shimmer.type = 'triangle'
+      oscillator.frequency.setValueAtTime(frequency, now)
+      shimmer.frequency.setValueAtTime(frequency * 2.01, now)
+      filter.type = 'bandpass'
+      filter.frequency.value = Math.min(4200, frequency * 3.2)
+      filter.Q.value = 1.1
+
+      gain.gain.setValueAtTime(0.0001, now)
+      gain.gain.exponentialRampToValueAtTime(0.045, now + 0.025)
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.72)
+
+      oscillator.connect(filter)
+      shimmer.connect(filter)
+      filter.connect(gain)
+      gain.connect(master)
+
+      oscillator.start(now)
+      shimmer.start(now)
+      oscillator.stop(now + 0.76)
+      shimmer.stop(now + 0.76)
+    },
+    [ensureAudio, soundEnabled],
+  )
+
+  const resetCamera = useCallback(() => {
+    setZoom(1)
+    setPan({x: 0, y: 0})
+  }, [])
+
+  const changeZoom = useCallback((nextZoom: number) => {
+    setZoom(Math.min(2.6, Math.max(0.72, nextZoom)))
+  }, [])
+
+  function beginPan(event: React.PointerEvent<SVGSVGElement>) {
+    const target = event.target as SVGElement
+    if (target.closest('[data-node="true"]')) return
+
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      panX: pan.x,
+      panY: pan.y,
+    }
+    setIsDragging(true)
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+
+  function movePan(event: React.PointerEvent<SVGSVGElement>) {
+    const drag = dragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+
+    const rect = event.currentTarget.getBoundingClientRect()
+    const dx = ((event.clientX - drag.startX) / rect.width) * 1000
+    const dy = ((event.clientY - drag.startY) / rect.height) * 700
+
+    setPan({
+      x: drag.panX + dx / zoom,
+      y: drag.panY + dy / zoom,
+    })
+  }
+
+  function endPan(event: React.PointerEvent<SVGSVGElement>) {
+    const drag = dragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+
+    dragRef.current = null
+    setIsDragging(false)
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+  }
 
   useEffect(() => {
     if (demoMode) setLocalDreams(readLocalDreams())
   }, [demoMode])
+
+  useEffect(() => {
+    return () => {
+      stopAmbient()
+      const context = audioContextRef.current
+      if (context && context.state !== 'closed') {
+        void context.close()
+      }
+    }
+  }, [stopAmbient])
 
   const dreams = useMemo(() => {
     const combined = demoMode ? [...localDreams, ...initialDreams] : initialDreams
