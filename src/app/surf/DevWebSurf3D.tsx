@@ -667,12 +667,13 @@ export default function DevWebSurf3D({
         texture: THREE.Texture | null
         loading: boolean
         failed: boolean
-        waiters: Set<THREE.MeshBasicMaterial>
+        listeners: Set<(texture: THREE.Texture) => void>
       }
     >()
     const thumbnailPrefetchTimers = new Set<number>()
     const MAX_RESIDENT_COVERS = 32
-    const THUMBNAILS_PER_FLOOR = 14
+    const SHELF_ATLAS_PANELS_PER_FLOOR = 6
+    const COVERS_PER_SHELF_ATLAS = 3
     const MAX_ACTIVE_BOOK_DETAILS = 14
     const COVER_LOAD_DISTANCE = 10.5
     const COVER_EVICT_AGE = 4.5
@@ -682,9 +683,9 @@ export default function DevWebSurf3D({
     let lastDetailSelection = 0
     let destroyed = false
 
-    function attachThumbnailMaterial(
-      material: THREE.MeshBasicMaterial,
+    function requestThumbnailTexture(
       url: string,
+      onReady: (texture: THREE.Texture) => void,
     ) {
       let entry = thumbnailCache.get(url)
       if (!entry) {
@@ -692,20 +693,19 @@ export default function DevWebSurf3D({
           texture: null,
           loading: false,
           failed: false,
-          waiters: new Set<THREE.MeshBasicMaterial>(),
+          listeners: new Set<(texture: THREE.Texture) => void>(),
         }
         thumbnailCache.set(url, entry)
       }
 
       if (entry.texture) {
-        material.map = entry.texture
-        material.color.set(0xffffff)
-        material.needsUpdate = true
+        onReady(entry.texture)
         return
       }
 
-      entry.waiters.add(material)
-      if (entry.loading || entry.failed) return
+      if (entry.failed) return
+      entry.listeners.add(onReady)
+      if (entry.loading) return
       entry.loading = true
 
       const proxied =
@@ -729,18 +729,14 @@ export default function DevWebSurf3D({
           entry!.texture = texture
           remoteTextures.add(texture)
 
-          entry!.waiters.forEach((waitingMaterial) => {
-            waitingMaterial.map = texture
-            waitingMaterial.color.set(0xffffff)
-            waitingMaterial.needsUpdate = true
-          })
-          entry!.waiters.clear()
+          entry!.listeners.forEach((listener) => listener(texture))
+          entry!.listeners.clear()
         },
         undefined,
         () => {
           entry!.loading = false
           entry!.failed = true
-          entry!.waiters.clear()
+          entry!.listeners.clear()
         },
       )
     }
