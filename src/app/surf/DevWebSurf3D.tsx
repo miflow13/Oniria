@@ -78,7 +78,7 @@ const SECTION_DOORWAYS: Record<LibrarySection, THREE.Vector3> = {
 }
 
 const STACK_FLOOR_HEIGHT = 4.6
-const STACK_FLOOR_COUNT = 3
+const STACK_FLOOR_COUNT = 4
 const ELEVATOR_X = 6.6
 const ELEVATOR_Z = 10.8
 
@@ -1056,7 +1056,7 @@ export default function DevWebSurf3D({
     })
     architecturalMaterials.push(stackFloorMaterial)
 
-    const stackAccents = [0x4f6dff, 0x53d3ff, 0xae7bff]
+    const stackAccents = [0x4f6dff, 0x53d3ff, 0xae7bff, 0xff4fd8]
     for (let floor = 1; floor <= STACK_FLOOR_COUNT; floor += 1) {
       const baseY = floor * STACK_FLOOR_HEIGHT
       const accent = stackAccents[floor - 1] ?? 0x53d3ff
