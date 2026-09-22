@@ -2312,7 +2312,7 @@ export default function DevWebSurf3D({
               ? 1.04
               : node.kind === 'tag'
                 ? .86
-                : .88 + Math.min(.2, node.importance * .075)
+                : 1
 
       group.scale.setScalar(baseScale)
 
@@ -2397,9 +2397,7 @@ export default function DevWebSurf3D({
           proxyUp,
           node.rotationY ?? 0,
         )
-        proxyScale.setScalar(
-          .88 + Math.min(.18, node.importance * .06),
-        )
+        proxyScale.setScalar(1)
         proxyMatrix.compose(
           proxyPosition,
           proxyQuaternion,
@@ -2700,9 +2698,7 @@ export default function DevWebSurf3D({
             proxyUp,
             node.rotationY ?? 0,
           )
-          const scale = revealReal
-            ? 0
-            : .88 + Math.min(.18, node.importance * .06)
+          const scale = revealReal ? 0 : 1
           proxyScale.setScalar(scale)
           proxyMatrix.compose(
             proxyPosition,
