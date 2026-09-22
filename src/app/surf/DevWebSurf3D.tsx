@@ -1579,15 +1579,63 @@ export default function DevWebSurf3D({
       addFloor(-11.85, archiveCenterZ, 14.3, archiveDepth, floorMaterial, base)
       addFloor(11.85, archiveCenterZ, 14.3, archiveDepth, floorMaterial, base)
 
-      // Brighter matte lanes establish foreground navigation while shelves
-      // and distant architecture can safely recede into shadow.
-      addWalkwaySurface(-10.2, archiveCenterZ, 2.5, 88, base, floorAccent)
-      addWalkwaySurface(10.2, archiveCenterZ, 2.5, 88, base, floorAccent)
+      // Layered balcony decks give the player a readable walking plane
+      // above the heavier structural slab.
+      addFloorInsetSurface(
+        -10.2,
+        archiveCenterZ,
+        2.85,
+        88,
+        base,
+        floor,
+        'primary',
+      )
+      addFloorInsetSurface(
+        10.2,
+        archiveCenterZ,
+        2.85,
+        88,
+        base,
+        floor,
+        'primary',
+      )
+      addRouteBorder(-10.2, archiveCenterZ, 2.85, 88, base, floor, .1)
+      addRouteBorder(10.2, archiveCenterZ, 2.85, 88, base, floor, .1)
+      addFloorSeams(-10.2, archiveCenterZ, 2.85, 88, base, 'z', 9)
+      addFloorSeams(10.2, archiveCenterZ, 2.85, 88, base, 'z', 9)
 
       UPPER_BRIDGE_Z.forEach((z) => {
         addFloor(0, z, 9.4, 4.4, floorMaterial, base)
-        addWalkwaySurface(0, z, 8.7, 2.25, base, floorAccent)
+        addFloorInsetSurface(
+          0,
+          z,
+          8.75,
+          2.55,
+          base,
+          floor,
+          'bridge',
+        )
+        addRouteBorder(0, z, 8.75, 2.55, base, floor, .2)
+
+        // Small raised threshold plates make the transition from balcony to
+        // bridge obvious and provide repeated scale cues down the atrium.
+        ;[-4.22, 4.22].forEach((x) => {
+          addFloorInsetSurface(
+            x,
+            z,
+            .78,
+            2.9,
+            base,
+            floor,
+            'threshold',
+          )
+        })
       })
+
+      // The lift bridge gets a thicker landing pad and physical floor marker.
+      addFloorInsetSurface(0, 7, 4.15, 3.05, base, floor, 'landing')
+      addRouteBorder(0, 7, 4.15, 3.05, base, floor, .28)
+      addLandingMarker(floor, -3.05, 7, base)
 
       // Colored slab fascias make each storey identifiable from the atrium.
       // This is visible even when the floor surface itself is mostly hidden.
@@ -1875,10 +1923,24 @@ export default function DevWebSurf3D({
     addFloor(13, -13, 16, 28)
     addFloor(0, -39, 18, 12)
 
-    addWalkwaySurface(0, -15, 3.2, 56, 0, FLOOR_ACCENTS[0])
-    addWalkwaySurface(-13, -15, 2.5, 26, 0, FLOOR_ACCENTS[0])
-    addWalkwaySurface(13, -15, 2.5, 26, 0, FLOOR_ACCENTS[0])
-    addWalkwaySurface(0, -39, 5.2, 10.5, 0, FLOOR_ACCENTS[5])
+    // Ground-floor decks are layered separately from the structural slab.
+    // The raised surfaces and joints give the long nave a measurable rhythm.
+    addFloorInsetSurface(0, -15, 3.65, 56, 0, 0, 'primary')
+    addRouteBorder(0, -15, 3.65, 56, 0, 0, .14)
+    addFloorSeams(0, -15, 3.65, 56, 0, 'z', 8)
+
+    addFloorInsetSurface(-13, -15, 2.85, 26, 0, 0, 'secondary')
+    addFloorInsetSurface(13, -15, 2.85, 26, 0, 0, 'secondary')
+    addRouteBorder(-13, -15, 2.85, 26, 0, 0, .09)
+    addRouteBorder(13, -15, 2.85, 26, 0, 0, .09)
+    addFloorSeams(-13, -15, 2.85, 26, 0, 'z', 4)
+    addFloorSeams(13, -15, 2.85, 26, 0, 'z', 4)
+
+    addFloorInsetSurface(0, -39, 5.6, 10.5, 0, 5, 'threshold')
+    addRouteBorder(0, -39, 5.6, 10.5, 0, 5, .2)
+
+    // Level 01 marker sits beside the information desk rather than under it.
+    addLandingMarker(0, -4.15, 6.8, 0)
 
     // The playable archive stops around z=-43, but the physical collection
     // continues another thirty-plus metres into fog.
