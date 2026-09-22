@@ -3459,6 +3459,7 @@ export default function DevWebSurf3D({
       scene.add(group)
 
       const color = new THREE.Color(node.accent)
+      const isFeaturedDevLandmark = node.id === 'section:featured'
       const material = new THREE.MeshPhysicalMaterial({
         color: color.clone().multiplyScalar(
           node.kind === 'article' ? .36 : .48,
@@ -3476,12 +3477,125 @@ export default function DevWebSurf3D({
         opacity: node.kind === 'section' ? .72 : .94,
       })
 
-      const body = new THREE.Mesh(getNodeGeometry(node.kind), material)
+      const bodyGeometry = isFeaturedDevLandmark
+        ? new THREE.BoxGeometry(2.9, 2.18, .46)
+        : getNodeGeometry(node.kind)
+      if (isFeaturedDevLandmark) {
+        architecturalGeometries.push(bodyGeometry)
+        material.color.set(0x111315)
+        material.emissive.set(0x3b49df)
+        material.emissiveIntensity = .09
+        material.roughness = .5
+        material.metalness = .3
+        material.clearcoat = .22
+        material.clearcoatRoughness = .34
+        material.opacity = 1
+      }
+
+      const body = new THREE.Mesh(bodyGeometry, material)
       body.userData.nodeId = node.id
       body.castShadow = true
       body.receiveShadow = true
       interactive.push(body)
       group.add(body)
+
+      if (isFeaturedDevLandmark) {
+        // Replace the old generic section cylinder + glowing torus with a
+        // grounded DEV sculpture. The route target remains section:featured,
+        // while the physical mark sits just beyond it so travel stops in front
+        // of the landmark instead of running the camera into the plinth.
+        body.position.set(0, .08, -1.45)
+
+        const devPlinthGeometry = new THREE.BoxGeometry(3.35, .3, .9)
+        const devLetterStrokeGeometry = new THREE.BoxGeometry(1, 1, .11)
+        const devOutlineGeometry = new THREE.EdgesGeometry(bodyGeometry, 30)
+        architecturalGeometries.push(
+          devPlinthGeometry,
+          devLetterStrokeGeometry,
+          devOutlineGeometry,
+        )
+
+        const devPlinthMaterial = new THREE.MeshStandardMaterial({
+          color: 0x1c2024,
+          roughness: .76,
+          metalness: .16,
+        })
+        const devLetterMaterial = new THREE.MeshStandardMaterial({
+          color: 0xf2f2f2,
+          emissive: 0xffffff,
+          emissiveIntensity: .025,
+          roughness: .34,
+          metalness: .16,
+        })
+        const devOutlineMaterial = new THREE.LineBasicMaterial({
+          color: 0x6170ff,
+          transparent: true,
+          opacity: .26,
+        })
+        architecturalMaterials.push(
+          devPlinthMaterial,
+          devLetterMaterial,
+          devOutlineMaterial,
+        )
+
+        const devPlinth = new THREE.Mesh(
+          devPlinthGeometry,
+          devPlinthMaterial,
+        )
+        devPlinth.position.set(0, -1.12, -1.45)
+        devPlinth.castShadow = true
+        devPlinth.receiveShadow = true
+        group.add(devPlinth)
+
+        const devOutline = new THREE.LineSegments(
+          devOutlineGeometry,
+          devOutlineMaterial,
+        )
+        devOutline.position.copy(body.position)
+        group.add(devOutline)
+
+        const addDevStroke = (
+          x: number,
+          y: number,
+          width: number,
+          height: number,
+          rotation = 0,
+        ) => {
+          const stroke = new THREE.Mesh(
+            devLetterStrokeGeometry,
+            devLetterMaterial,
+          )
+          stroke.position.set(x, y, -1.185)
+          stroke.scale.set(width, height, 1)
+          stroke.rotation.z = rotation
+          stroke.castShadow = true
+          group.add(stroke)
+        }
+
+        // Block-built DEV mark: physical raised geometry rather than a sprite.
+        // D
+        addDevStroke(-1.03, .08, .13, 1.12)
+        addDevStroke(-.76, .575, .5, .13)
+        addDevStroke(-.76, -.415, .5, .13)
+        addDevStroke(-.49, .08, .13, .86)
+        // E
+        addDevStroke(-.12, .08, .13, 1.12)
+        addDevStroke(.15, .575, .54, .13)
+        addDevStroke(.1, .08, .44, .13)
+        addDevStroke(.15, -.415, .54, .13)
+        // V
+        addDevStroke(.69, .08, .13, 1.08, -.31)
+        addDevStroke(1.06, .08, .13, 1.08, .31)
+
+        collisionRects.push({
+          minX: -1.7,
+          maxX: 1.7,
+          minZ: -6.78,
+          maxZ: -6.1,
+          minY: 0,
+          maxY: 2.65,
+        })
+      }
 
       let bookGlowMaterial: THREE.MeshBasicMaterial | undefined
       let bookTitleMaterial: THREE.MeshBasicMaterial | undefined
@@ -3587,7 +3701,10 @@ export default function DevWebSurf3D({
         group.add(halo)
       }
 
-      if (node.kind === 'tag' || node.kind === 'section') {
+      if (
+        (node.kind === 'tag' || node.kind === 'section') &&
+        !isFeaturedDevLandmark
+      ) {
         const archGeometry = new THREE.TorusGeometry(
           node.kind === 'section' ? 1.1 : .82,
           .055,
@@ -3643,20 +3760,22 @@ export default function DevWebSurf3D({
         0,
       )
       label.scale.set(4.7, 1.12, 1)
-      if (node.kind !== 'article') {
+      if (node.kind !== 'article' && !isFeaturedDevLandmark) {
         group.add(label)
       }
 
       const baseScale =
-        node.kind === 'section'
-          ? .95
-          : node.kind === 'home'
-            ? 1
-            : node.kind === 'profile'
-              ? 1.04
-              : node.kind === 'tag'
-                ? .86
-                : 1
+        isFeaturedDevLandmark
+          ? 1
+          : node.kind === 'section'
+            ? .95
+            : node.kind === 'home'
+              ? 1
+              : node.kind === 'profile'
+                ? 1.04
+                : node.kind === 'tag'
+                  ? .86
+                  : 1
 
       group.scale.setScalar(baseScale)
 
