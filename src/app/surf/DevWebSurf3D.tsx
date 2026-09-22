@@ -78,7 +78,7 @@ const SECTION_DOORWAYS: Record<LibrarySection, THREE.Vector3> = {
 }
 
 const STACK_FLOOR_HEIGHT = 4.6
-const STACK_FLOOR_COUNT = 4
+const STACK_FLOOR_COUNT = 6
 const ELEVATOR_X = 6.6
 const ELEVATOR_Z = 10.8
 
@@ -419,7 +419,7 @@ export default function DevWebSurf3D({
       antialias: true,
       powerPreference: 'high-performance',
     })
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5))
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25))
     renderer.toneMapping = THREE.ACESFilmicToneMapping
     renderer.toneMappingExposure = 1.06
     renderer.outputColorSpace = THREE.SRGBColorSpace
@@ -435,7 +435,7 @@ export default function DevWebSurf3D({
     const key = new THREE.DirectionalLight(0xf5f5f5, 2.65)
     key.position.set(-9, 13, 9)
     key.castShadow = true
-    key.shadow.mapSize.set(2048, 2048)
+    key.shadow.mapSize.set(1024, 1024)
     key.shadow.bias = -0.0002
     scene.add(key)
 
@@ -486,9 +486,10 @@ export default function DevWebSurf3D({
         lastUsed: number
       }
     >()
-    const MAX_RESIDENT_COVERS = 14
-    const COVER_LOAD_DISTANCE = 11
-    const COVER_KEEP_DISTANCE = 17
+    const MAX_RESIDENT_COVERS = 32
+    const COVER_LOAD_DISTANCE = 10
+    const COVER_KEEP_DISTANCE = 18
+    const COVER_EVICT_AGE = 4.5
     let lastCoverTrim = 0
     let destroyed = false
 
@@ -585,24 +586,27 @@ export default function DevWebSurf3D({
         .filter(([, entry]) => entry.texture)
         .sort((a, b) => b[1].lastUsed - a[1].lastUsed)
 
-      resident.slice(MAX_RESIDENT_COVERS).forEach(([url, entry]) => {
-        const texture = entry.texture
-        if (!texture) return
+      resident
+        .slice(MAX_RESIDENT_COVERS)
+        .filter(([, entry]) => now - entry.lastUsed > COVER_EVICT_AGE)
+        .forEach(([url, entry]) => {
+          const texture = entry.texture
+          if (!texture) return
 
-        visuals.forEach((visual) => {
-          if (
-            visual.coverUrl === url &&
-            visual.coverMaterial?.map === texture
-          ) {
-            downgradeCover(visual)
-          }
+          visuals.forEach((visual) => {
+            if (
+              visual.coverUrl === url &&
+              visual.coverMaterial?.map === texture
+            ) {
+              downgradeCover(visual)
+            }
+          })
+
+          remoteTextures.delete(texture)
+          texture.dispose()
+          entry.texture = null
+          entry.loading = false
         })
-
-        remoteTextures.delete(texture)
-        texture.dispose()
-        entry.texture = null
-        entry.loading = false
-      })
     }
 
     const TITLE_LOAD_DISTANCE = 7.5
@@ -750,7 +754,7 @@ export default function DevWebSurf3D({
       const right = new THREE.Mesh(sideGeometry, shelfMaterial)
       left.position.set(-width / 2, 1.76, 0)
       right.position.set(width / 2, 1.76, 0)
-      left.castShadow = right.castShadow = true
+      left.castShadow = right.castShadow = baseY === 0
       group.add(left, right)
 
       const back = new THREE.Mesh(backGeometry, concrete)
@@ -762,7 +766,7 @@ export default function DevWebSurf3D({
       boardLevels.forEach((boardY) => {
         const board = new THREE.Mesh(boardGeometry, shelfMaterial)
         board.position.set(0, boardY, 0)
-        board.castShadow = true
+        board.castShadow = baseY === 0
         board.receiveShadow = true
         group.add(board)
       })
@@ -1056,7 +1060,7 @@ export default function DevWebSurf3D({
     })
     architecturalMaterials.push(stackFloorMaterial)
 
-    const stackAccents = [0x4f6dff, 0x53d3ff, 0xae7bff, 0xff4fd8]
+    const stackAccents = [0x4f6dff, 0x53d3ff, 0x7f8cff, 0xae7bff, 0xd06dff, 0xff4fd8]
     for (let floor = 1; floor <= STACK_FLOOR_COUNT; floor += 1) {
       const baseY = floor * STACK_FLOOR_HEIGHT
       const accent = stackAccents[floor - 1] ?? 0x53d3ff
@@ -1337,10 +1341,14 @@ export default function DevWebSurf3D({
           transparent: true,
           opacity: .98,
           toneMapped: false,
+          depthWrite: false,
+          polygonOffset: true,
+          polygonOffsetFactor: -2,
+          polygonOffsetUnits: -2,
         })
         architecturalMaterials.push(coverMaterial)
         const cover = new THREE.Mesh(coverGeometry, coverMaterial)
-        cover.position.set(.012, .12, .086)
+        cover.position.set(.012, .12, .096)
         group.add(cover)
 
         const remoteCover =
@@ -1361,12 +1369,15 @@ export default function DevWebSurf3D({
           opacity: .97,
           toneMapped: false,
           depthWrite: false,
+          polygonOffset: true,
+          polygonOffsetFactor: -3,
+          polygonOffsetUnits: -3,
         })
         architecturalMaterials.push(bookTitleMaterial)
         const titleGeometry = new THREE.PlaneGeometry(.58, .22)
         architecturalGeometries.push(titleGeometry)
         const titlePanel = new THREE.Mesh(titleGeometry, bookTitleMaterial)
-        titlePanel.position.set(.012, -.26, .09)
+        titlePanel.position.set(.012, -.26, .101)
         group.add(titlePanel)
 
         if (!isBulkStack) {
