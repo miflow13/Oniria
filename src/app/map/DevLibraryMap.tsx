@@ -275,14 +275,21 @@ export default function DevLibraryMap() {
   }, [loadMoreCatalog])
 
   const resumeFirstPersonControls = useCallback(() => {
-    window.dispatchEvent(
-      new Event('oniria:library-resume-fps'),
+    const canvas = document.querySelector<HTMLCanvasElement>(
+      'canvas[data-oniria-library-fps="true"]',
     )
+    if (!canvas) return
+
+    canvas.focus({preventScroll: true})
+    if (document.pointerLockElement !== canvas) {
+      void canvas.requestPointerLock()
+    }
   }, [])
 
   const closeArticleReader = useCallback(() => {
-    // Request pointer lock synchronously from the user's key/click gesture.
-    // The Three.js listener handles the actual canvas lock.
+    // Pointer lock must be requested directly inside the trusted keyboard/click
+    // gesture. Doing this before the React state update keeps the browser user
+    // activation intact and restores FPS mouse-look as the reader disappears.
     resumeFirstPersonControls()
     setArticle(null)
     setReadingBook(null)
