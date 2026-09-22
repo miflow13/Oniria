@@ -254,9 +254,12 @@ export default function DevLibraryMap() {
     async (applyDefaultMovement = false) => {
       try {
         setWorldSyncing(true)
-        const response = await fetch('/api/library-world', {
-          cache: 'no-store',
-        })
+        const response = await fetch(
+          '/api/library-world?preview=1&_=' + Date.now(),
+          {
+            cache: 'no-store',
+          },
+        )
         if (!response.ok) return
         const payload = (await response.json()) as LibraryWorldConfig
         setWorldConfig(payload)
@@ -989,12 +992,18 @@ export default function DevLibraryMap() {
             data-active={worldConfig.source === 'sanity' ? 'true' : 'false'}
             onClick={() => void refreshWorldConfig(false)}
             disabled={worldSyncing}
-            title="Reload the spatial archive configuration from Sanity"
+            title={
+              worldConfig.syncMode === 'drafts'
+                ? 'Reload saved Sanity drafts into the spatial archive'
+                : 'Reload the published spatial archive configuration from Sanity'
+            }
           >
             {worldSyncing
               ? '◌ SYNCING'
               : worldConfig.source === 'sanity'
-                ? '◉ SANITY LIVE'
+                ? worldConfig.syncMode === 'drafts'
+                  ? '◉ SANITY DRAFT LIVE'
+                  : '◉ SANITY LIVE'
                 : '○ LOCAL MODEL'}
           </button>
           <button
