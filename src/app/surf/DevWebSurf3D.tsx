@@ -1392,6 +1392,24 @@ export default function DevWebSurf3D({
         addWalkwaySurface(0, z, 8.7, 2.25, base, floorAccent)
       })
 
+      // Colored slab fascias make each storey identifiable from the atrium.
+      // This is visible even when the floor surface itself is mostly hidden.
+      const fasciaGeometry = new THREE.BoxGeometry(.075, .18, archiveDepth - 4)
+      architecturalGeometries.push(fasciaGeometry)
+      const fasciaMaterial = new THREE.MeshBasicMaterial({
+        color: floorAccent,
+        transparent: true,
+        opacity: .42,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })
+      architecturalMaterials.push(fasciaMaterial)
+      ;[-4.73, 4.73].forEach((x) => {
+        const fascia = new THREE.Mesh(fasciaGeometry, fasciaMaterial)
+        fascia.position.set(x, base - .045, archiveCenterZ)
+        scene.add(fascia)
+      })
+
       // Balcony rails stop at bridge entrances instead of slicing across
       // them, so the cross-floor circulation reads as physically plausible.
       const balconyRailMaterial = new THREE.MeshBasicMaterial({
@@ -1538,9 +1556,9 @@ export default function DevWebSurf3D({
     const liftRingGeometry = new THREE.BoxGeometry(3.5, .045, 4.1)
     architecturalGeometries.push(liftColumnGeometry, liftRingGeometry)
     const liftMaterial = new THREE.MeshBasicMaterial({
-      color: 0x53d3ff,
+      color: 0x8d9aad,
       transparent: true,
-      opacity: .25,
+      opacity: .14,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     })
@@ -1552,8 +1570,16 @@ export default function DevWebSurf3D({
         scene.add(column)
       })
     })
-    for (let floor = 0; floor <= LIBRARY_FLOOR_COUNT; floor += 1) {
-      const ring = new THREE.Mesh(liftRingGeometry, liftMaterial)
+    for (let floor = 0; floor < LIBRARY_FLOOR_COUNT; floor += 1) {
+      const ringMaterial = new THREE.MeshBasicMaterial({
+        color: FLOOR_ACCENTS[floor],
+        transparent: true,
+        opacity: .48,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })
+      architecturalMaterials.push(ringMaterial)
+      const ring = new THREE.Mesh(liftRingGeometry, ringMaterial)
       ring.position.set(0, floor * LIBRARY_FLOOR_HEIGHT + .04, 7)
       scene.add(ring)
     }
@@ -1595,10 +1621,12 @@ export default function DevWebSurf3D({
     scene.add(liftCabin)
 
     for (let floor = 0; floor < LIBRARY_FLOOR_COUNT; floor += 1) {
+      const floorAccentHex =
+        '#' + new THREE.Color(FLOOR_ACCENTS[floor]).getHexString()
       const liftSignTexture = createTextTexture(
         'CENTRAL LIFT · LEVEL ' + String(floor + 1).padStart(2, '0'),
         FLOOR_IDENTITIES[floor] + ' · Pg↑ / Pg↓',
-        '#8ae8ff',
+        floorAccentHex,
         760,
         160,
       )
@@ -1618,6 +1646,30 @@ export default function DevWebSurf3D({
       )
       liftSign.scale.set(4.4, 1.05, 1)
       scene.add(liftSign)
+
+      const landmarkTexture = createTextTexture(
+        String(floor + 1).padStart(2, '0'),
+        FLOOR_AISLES[floor].join(' · '),
+        floorAccentHex,
+        420,
+        210,
+      )
+      labelsToDispose.push(landmarkTexture)
+      const landmarkMaterial = new THREE.SpriteMaterial({
+        map: landmarkTexture,
+        transparent: true,
+        depthWrite: false,
+        toneMapped: false,
+      })
+      architecturalMaterials.push(landmarkMaterial)
+      const landmark = new THREE.Sprite(landmarkMaterial)
+      landmark.position.set(
+        -5.8,
+        floor * LIBRARY_FLOOR_HEIGHT + 1.55,
+        7.1,
+      )
+      landmark.scale.set(3.4, 1.7, 1)
+      scene.add(landmark)
     }
 
     // Main library architecture.
