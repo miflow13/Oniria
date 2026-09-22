@@ -1355,6 +1355,8 @@ export default function DreamWorld3D({
     const flightRight = new THREE.Vector3()
     const flightMove = new THREE.Vector3()
     const flightUp = new THREE.Vector3(0, 1, 0)
+    const flightCollisionPoint = new THREE.Vector3()
+    const flightCollisionDelta = new THREE.Vector3()
     let flightYaw = 0
     let flightPitch = 0
     let flightInitialized = false
@@ -2964,6 +2966,27 @@ export default function DreamWorld3D({
           -12,
           14,
         )
+
+        if (!flightRoute) {
+          nodeVisuals.forEach((visual) => {
+            visual.group.getWorldPosition(flightCollisionPoint)
+            flightCollisionDelta
+              .copy(flightPosition)
+              .sub(flightCollisionPoint)
+
+            const distance = flightCollisionDelta.length()
+            const minimumDistance =
+              .68 + visual.baseScale * .62
+
+            if (distance > .001 && distance < minimumDistance) {
+              flightCollisionDelta
+                .normalize()
+                .multiplyScalar(minimumDistance - distance)
+              flightPosition.add(flightCollisionDelta)
+              flightVelocity.multiplyScalar(.58)
+            }
+          })
+        }
 
         if (!flightRoute) {
           camera.position.copy(flightPosition)
