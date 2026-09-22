@@ -2214,6 +2214,83 @@ export default function DreamWorld3D({
         | null = null
       const worldPoint = new THREE.Vector3()
 
+      if (
+        flightModeRef.current &&
+        diveMode === 'none' &&
+        document.pointerLockElement === renderer.domElement &&
+        !openingBook
+      ) {
+        hoveredBook = pickCenterBook()
+      }
+
+      const openingSeconds = openingBook
+        ? now / 1000 - openingBook.startedAt
+        : 0
+      const openingProgress = openingBook
+        ? THREE.MathUtils.clamp(openingSeconds / .78, 0, 1)
+        : 0
+      const openingEase =
+        1 - Math.pow(1 - openingProgress, 3)
+
+      libraryBookVisuals.forEach((bookVisual) => {
+        const isOpening = openingBook?.visual === bookVisual
+        const isHovered = hoveredBook === bookVisual
+        const positionTarget = bookVisual.basePosition.clone()
+        positionTarget.z += isOpening
+          ? .72 * openingEase
+          : isHovered
+            ? .2
+            : 0
+        positionTarget.y += isOpening ? .08 * openingEase : 0
+
+        bookVisual.group.position.lerp(
+          positionTarget,
+          isOpening ? .2 : .14,
+        )
+
+        const targetScale = isOpening
+          ? 1 + .13 * openingEase
+          : isHovered
+            ? 1.045
+            : 1
+        bookVisual.group.scale.lerp(
+          new THREE.Vector3(
+            targetScale,
+            targetScale,
+            targetScale,
+          ),
+          isOpening ? .18 : .12,
+        )
+
+        const targetYaw = isOpening
+          ? .07 * openingEase
+          : isHovered
+            ? .025
+            : 0
+        bookVisual.group.rotation.y +=
+          (targetYaw - bookVisual.group.rotation.y) * .14
+
+        const targetCoverAngle = isOpening
+          ? -Math.PI * .72 * openingEase
+          : 0
+        bookVisual.coverHinge.rotation.y +=
+          (targetCoverAngle - bookVisual.coverHinge.rotation.y) *
+          (isOpening ? .2 : .15)
+      })
+
+      if (openingBook) {
+        if (openingProgress >= .68 && !openingBook.fired) {
+          openingBook.fired = true
+          onBookSelectRef.current?.(
+            openingBook.visual.nodeId,
+            openingBook.visual.index,
+          )
+        }
+        if (openingSeconds >= 1.15) {
+          openingBook = null
+        }
+      }
+
       for (const node of nodeRef.current) {
         const visual = nodeVisuals.get(node._id)
         if (!visual) continue
