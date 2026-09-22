@@ -1046,10 +1046,10 @@ export default function DreamWorld3D({
     dreamPost.uniforms.uIntensity.value =
       qualityRef.current === 'cinematic'
         ? libraryMode
-          ? .54
+          ? .5
           : .72
         : libraryMode
-          ? .24
+          ? .22
           : .32
     composer.addPass(dreamPost)
     composer.addPass(new OutputPass())
@@ -1996,6 +1996,8 @@ export default function DreamWorld3D({
         'rgba(170, 91, 214, 0.32)',
         'rgba(235, 119, 179, 0.28)',
         'rgba(124, 104, 205, 0.27)',
+        'rgba(83, 205, 220, 0.24)',
+        'rgba(118, 126, 232, 0.23)',
       ]
 
       const fogTextures = fogTextureColors.map((color) => {
@@ -2026,11 +2028,11 @@ export default function DreamWorld3D({
 
       const fogBankCount =
         qualityRef.current === 'cinematic'
-          ? 36
+          ? 40
           : qualityRef.current === 'high'
-            ? 28
+            ? 30
             : qualityRef.current === 'medium'
-              ? 20
+              ? 22
               : 14
 
       for (let index = 0; index < fogBankCount; index += 1) {
@@ -5618,6 +5620,22 @@ export default function DreamWorld3D({
 
       if (libraryLocalHaze.length > 0) {
         const cameraBay = archiveBayFromWorldZ(camera.position.z)
+        const nearestDistrict =
+          activeDistricts.length > 0
+            ? activeDistricts.reduce(
+                (nearest, candidate) =>
+                  Math.abs(candidate.bay - cameraBay) <
+                  Math.abs(nearest.bay - cameraBay)
+                    ? candidate
+                    : nearest,
+              )
+            : null
+        const localHazeTint = nearestDistrict
+          ? new THREE.Color(nearestDistrict.accent).lerp(
+              new THREE.Color(0xe8faff),
+              .34,
+            )
+          : new THREE.Color(0xb9b8ef)
 
         libraryLocalHaze.forEach((sprite, index) => {
           const bayOffset =
@@ -5654,6 +5672,16 @@ export default function DreamWorld3D({
           const material = sprite.material as THREE.SpriteMaterial
           const centerFade =
             index <= 1 ? .72 : index >= 6 ? .8 : 1
+          const landmarkRichness = nearestDistrict
+            ? 1 +
+              (1 -
+                THREE.MathUtils.smoothstep(
+                  Math.abs(nearestDistrict.bay - cameraBay),
+                  .4,
+                  3.6,
+                )) *
+                .32
+            : 1
           material.opacity =
             (.025 +
               Math.max(
@@ -5661,7 +5689,9 @@ export default function DreamWorld3D({
                 Math.sin(elapsed * .09 + phase),
               ) *
                 .01) *
-            centerFade
+            centerFade *
+            landmarkRichness
+          material.color.lerp(localHazeTint, .025)
         })
       }
 
@@ -6728,8 +6758,8 @@ export default function DreamWorld3D({
       const libraryBloomStrength =
         settings.bloomStrength *
         (selectedVisual?.group.userData.libraryKind === 'shelf'
-          ? .42
-          : .52)
+          ? .47
+          : .55)
       bloom.strength +=
         ((selectedVisual
           ? libraryBloomStrength * 1.05
@@ -6746,12 +6776,12 @@ export default function DreamWorld3D({
       const readingRitualActive = Boolean(openingBook)
       renderer.toneMappingExposure +=
         (((readingRitualActive
-          ? .62
+          ? .66
           : selectedVisual?.group.userData.libraryKind === 'shelf'
-            ? .78
+            ? .82
             : selectedVisual
-              ? .84
-              : .86)) -
+              ? .88
+              : .9)) -
           renderer.toneMappingExposure) *
         .045
 
