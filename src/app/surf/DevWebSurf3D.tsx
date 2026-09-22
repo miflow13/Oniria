@@ -1694,6 +1694,7 @@ export default function DevWebSurf3D({
       material: THREE.MeshBasicMaterial
       center: THREE.Vector3
       floorIndex: number
+      layoutKey?: string
     }> = []
     const sectionFloorGlows: Array<{
       section: LibrarySection
@@ -1824,6 +1825,8 @@ export default function DevWebSurf3D({
       key: string
       label: string
       group: THREE.Group
+      width: number
+      collisionRect: (typeof collisionRects)[number]
     }
     const editableShelves: EditableShelf[] = []
     const editableShelfRoots: THREE.Object3D[] = []
@@ -1939,19 +1942,26 @@ export default function DevWebSurf3D({
               z,
             ),
             floorIndex: shelfFloorIndex,
+            layoutKey,
           })
         })
       }
 
-      const rotated = Math.abs(Math.sin(rotationY)) > .5
-      collisionRects.push({
-        minX: x - (rotated ? .33 : width / 2),
-        maxX: x + (rotated ? .33 : width / 2),
-        minZ: z - (rotated ? width / 2 : .33),
-        maxZ: z + (rotated ? width / 2 : .33),
+      const halfX =
+        Math.abs(Math.cos(rotationY)) * (width / 2) +
+        Math.abs(Math.sin(rotationY)) * .33
+      const halfZ =
+        Math.abs(Math.sin(rotationY)) * (width / 2) +
+        Math.abs(Math.cos(rotationY)) * .33
+      const shelfCollision = {
+        minX: x - halfX,
+        maxX: x + halfX,
+        minZ: z - halfZ,
+        maxZ: z + halfZ,
         minY: floorBase,
         maxY: floorBase + 3.7,
-      })
+      }
+      collisionRects.push(shelfCollision)
 
       if (layoutKey && floorBase === 0) {
         const label = layoutKey
@@ -1959,7 +1969,13 @@ export default function DevWebSurf3D({
           .replace(/:/g, ' · ')
         group.userData.layoutKey = layoutKey
         group.userData.layoutLabel = label
-        editableShelves.push({key: layoutKey, label, group})
+        editableShelves.push({
+          key: layoutKey,
+          label,
+          group,
+          width,
+          collisionRect: shelfCollision,
+        })
         editableShelfRoots.push(group)
       }
 
@@ -2995,14 +3011,9 @@ export default function DevWebSurf3D({
       ({x, z, rotationY, floorBase}, layoutKey) => {
         const width = floorBase === 0 ? 4.5 : 4.45
         addShelf(x, z, width, rotationY, floorBase, layoutKey)
-        densityShelfUnits.push({
-          x,
-          z,
-          rotationY,
-          floorBase,
-          width,
-          distant: false,
-        })
+        // Real ground-floor shelves render their real article objects only.
+        // Static filler-book instances are reserved for the faux archive below,
+        // otherwise editor moves would leave decorative "ghost books" behind.
       },
     )
 
@@ -3346,9 +3357,9 @@ export default function DevWebSurf3D({
     distantUprights.instanceMatrix.needsUpdate = true
     scene.add(distantBacks, distantBoards, distantUprights)
 
-    // One instanced spine field fills every real shelf plus the faux archive
-    // below. Lower books are visual article silhouettes only; real interactive
-    // article objects remain on the main library floor.
+    // One instanced spine field fills only the faux archive below. Main-floor
+    // shelves use real article objects, which keeps layout editing coherent and
+    // avoids static decorative books remaining at a shelf's old coordinates.
     const fillerBooksPerLevel = 18
     const fillerBookGeometry = new THREE.BoxGeometry(1, 1, 1)
     const fillerBookMaterial = new THREE.MeshStandardMaterial({
@@ -4128,8 +4139,25 @@ export default function DevWebSurf3D({
 
     function syncEditableShelfContents() {
       if (!selectedEditableShelf) return
-      const {group, key} = selectedEditableShelf
+      const {group, key, width, collisionRect} = selectedEditableShelf
       group.updateMatrixWorld(true)
+
+      const rotationY = group.rotation.y
+      const halfX =
+        Math.abs(Math.cos(rotationY)) * (width / 2) +
+        Math.abs(Math.sin(rotationY)) * .33
+      const halfZ =
+        Math.abs(Math.sin(rotationY)) * (width / 2) +
+        Math.abs(Math.cos(rotationY)) * .33
+      collisionRect.minX = group.position.x - halfX
+      collisionRect.maxX = group.position.x + halfX
+      collisionRect.minZ = group.position.z - halfZ
+      collisionRect.maxZ = group.position.z + halfZ
+
+      shelfAccentBars.forEach((entry) => {
+        if (entry.layoutKey !== key) return
+        entry.mesh.getWorldPosition(entry.center)
+      })
 
       selectedShelfArticles.forEach(
         ({visual, node, localPosition, rotationOffset}) => {
@@ -4608,14 +4636,9 @@ export default function DevWebSurf3D({
       shelfCoverAtlasesByFloor.forEach((entries, floorIndex) => {
         const isCurrentFloor = floorIndex === floor
         const floorDistance = Math.abs(floorIndex - floor)
-        const sparseCurrentFloor =
-          isCurrentFloor &&
-          (realArticleCountByFloor[floorIndex] ?? 0) < 36
         const opacity =
           isCurrentFloor
-            ? sparseCurrentFloor
-              ? .16
-              : 0
+            ? 0
             : floorDistance <= 1
               ? .18
               : floorDistance === 2
