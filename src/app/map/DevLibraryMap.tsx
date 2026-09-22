@@ -18,6 +18,7 @@ import type {DreamQuality} from './dreamworld/quality'
 import {
   DEFAULT_LIBRARY_WORLD_CONFIG,
   districtForTags,
+  packLibraryDistricts,
   type LibraryDistrictConfig,
   type LibraryWorldConfig,
 } from '@/lib/libraryWorldConfig'
@@ -189,6 +190,18 @@ export default function DevLibraryMap() {
     nearestId: null,
     routeTargetId: null,
   })
+
+  const packedWorldConfig = useMemo<LibraryWorldConfig>(
+    () => ({
+      ...worldConfig,
+      districts: packLibraryDistricts(
+        worldConfig.districts.length > 0
+          ? worldConfig.districts
+          : DEFAULT_LIBRARY_WORLD_CONFIG.districts,
+      ),
+    }),
+    [worldConfig],
+  )
 
   const loadMoreCatalog = useCallback(async () => {
     if (
@@ -504,10 +517,7 @@ export default function DevLibraryMap() {
     const latest = takeFresh(bootstrap.latest, 9)
     const mine = takeFresh(bootstrap.profileArticles, 9)
     const remaining = catalog.filter((item) => !used.has(item.id))
-    const districts =
-      worldConfig.districts.length > 0
-        ? worldConfig.districts
-        : DEFAULT_LIBRARY_WORLD_CONFIG.districts
+    const districts = packedWorldConfig.districts
 
     const result: LibraryShelf[] = [
       makeShelf(
@@ -654,8 +664,8 @@ export default function DevLibraryMap() {
           district.id === 'front-page'
             ? .68 + Math.floor(localIndex / 2) * .46
             : district.bay +
-              .92 +
-              Math.floor(localIndex / 2) * .5
+              .62 +
+              Math.floor(localIndex / 2) * .46
         const shelfId = 'shelf:catalog:' + catalogShelfIndex
         const shelf = makeShelf(
           shelfId,
@@ -678,7 +688,7 @@ export default function DevLibraryMap() {
               laneBias:
                 district.id === 'front-page'
                   ? -2.15
-                  : -.58,
+                  : -.72,
               alongJitterScale:
                 district.id === 'front-page'
                   ? .05
@@ -729,7 +739,7 @@ export default function DevLibraryMap() {
     dynamicTitle,
     query,
     searchResults,
-    worldConfig,
+    packedWorldConfig,
     districtSamples,
   ])
 
@@ -960,7 +970,7 @@ export default function DevLibraryMap() {
         observatoryMode={false}
         flightMode={flightMode}
         libraryMovementMode={movementMode}
-        libraryWorldConfig={worldConfig}
+        libraryWorldConfig={packedWorldConfig}
         libraryReadingBook={readingBook}
         inputBlocked={Boolean(article) || Boolean(readingBook)}
         onZoomChange={() => {}}
