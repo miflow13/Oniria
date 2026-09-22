@@ -43,8 +43,65 @@ const FLOOR_ACCENT_HEX = [
   '#68d98a',
   '#8d9aad',
 ] as const
+const CATALOG_SHELF_CAPACITY_PER_FLOOR = 4 * 6 * 9
 const MEGA_SHELF_CAPACITY =
-  (LIBRARY_FLOOR_COUNT - 1) * 4 * 6 * 9
+  (LIBRARY_FLOOR_COUNT - 1) * CATALOG_SHELF_CAPACITY_PER_FLOOR
+
+const CATALOG_FLOOR_TAGS: Record<number, Set<string>> = {
+  1: new Set([
+    'webdev',
+    'javascript',
+    'typescript',
+    'react',
+    'nextjs',
+    'frontend',
+    'html',
+    'css',
+    'vue',
+    'angular',
+  ]),
+  2: new Set([
+    'backend',
+    'python',
+    'database',
+    'databases',
+    'sql',
+    'postgres',
+    'node',
+    'api',
+    'django',
+    'fastapi',
+    'java',
+    'csharp',
+    'go',
+    'rust',
+  ]),
+  3: new Set([
+    'ai',
+    'machinelearning',
+    'ml',
+    'datascience',
+    'data',
+    'automation',
+    'openai',
+    'llm',
+    'genai',
+  ]),
+  4: new Set([
+    'linux',
+    'devops',
+    'opensource',
+    'docker',
+    'kubernetes',
+    'cloud',
+    'aws',
+    'azure',
+    'git',
+    'github',
+    'security',
+    'terminal',
+  ]),
+}
 
 const SECTION_COPY: Record<
   LibrarySection,
@@ -286,10 +343,34 @@ function shelfPlacement(
   }
 }
 
-function megaShelfPlacement(index: number): ShelfPlacement {
-  const catalogFloorCount = LIBRARY_FLOOR_COUNT - 1
-  const floorIndex = 1 + (index % catalogFloorCount)
-  const floorBookIndex = Math.floor(index / catalogFloorCount)
+function catalogFloorForArticle(article: DevArticleSummary): number {
+  const tags = new Set(
+    articleTags(article).map((tag) => tag.toLowerCase().replace(/[^a-z0-9]/g, '')),
+  )
+  let bestFloor = 5
+  let bestScore = 0
+
+  for (let floor = 1; floor <= 4; floor += 1) {
+    const floorTags = CATALOG_FLOOR_TAGS[floor]
+    let score = 0
+    floorTags?.forEach((tag) => {
+      if (tags.has(tag)) score += 1
+    })
+    if (score > bestScore) {
+      bestFloor = floor
+      bestScore = score
+    }
+  }
+
+  // Anything without a strong topical match becomes long-tail discovery
+  // material in the Deep Archive instead of being mislabeled by round-robin.
+  return bestFloor
+}
+
+function megaShelfPlacement(
+  floorIndex: number,
+  floorBookIndex: number,
+): ShelfPlacement {
   const booksPerShelf = 9
   const shelfIndex = Math.floor(floorBookIndex / booksPerShelf)
   const localIndex = floorBookIndex % booksPerShelf
@@ -630,12 +711,44 @@ function buildLibraryGraph(
       .filter((id): id is number => typeof id === 'number'),
   )
 
+  const catalogFloorCounts = Array.from(
+    {length: LIBRARY_FLOOR_COUNT},
+    () => 0,
+  )
+
   catalogArticles
     .filter((article) => !alreadyPlaced.has(article.id))
     .slice(0, MEGA_SHELF_CAPACITY)
-    .forEach((article, index) => {
+    .forEach((article) => {
       const id = 'article:' + article.id
-      const placement = megaShelfPlacement(index)
+      const preferredFloor = catalogFloorForArticle(article)
+      let floorIndex = preferredFloor
+
+      if (
+        catalogFloorCounts[floorIndex] >=
+        CATALOG_SHELF_CAPACITY_PER_FLOOR
+      ) {
+        const availableFloors = [1, 2, 3, 4, 5].filter(
+          (floor) =>
+            catalogFloorCounts[floor] <
+            CATALOG_SHELF_CAPACITY_PER_FLOOR,
+        )
+        if (!availableFloors.length) return
+
+        floorIndex = availableFloors.reduce((leastFilled, floor) =>
+          catalogFloorCounts[floor] <
+          catalogFloorCounts[leastFilled]
+            ? floor
+            : leastFilled,
+        )
+      }
+
+      const floorBookIndex = catalogFloorCounts[floorIndex]
+      catalogFloorCounts[floorIndex] += 1
+      const placement = megaShelfPlacement(
+        floorIndex,
+        floorBookIndex,
+      )
       addNode({
         id,
         kind: 'article',
