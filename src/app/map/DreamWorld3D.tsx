@@ -1263,6 +1263,16 @@ export default function DreamWorld3D({
     let flightInitialized = false
     let previousFlightMode = false
     let flightNearestId: string | null = null
+    let flightRoute:
+      | {
+          source: THREE.Vector3
+          control: THREE.Vector3
+          target: THREE.Vector3
+          targetId: string
+          startedAt: number
+          duration: number
+        }
+      | null = null
 
     let activeCellId: string | null = null
     let activeCellDreamId: string | null = null
@@ -1907,6 +1917,66 @@ export default function DreamWorld3D({
       if (!flightModeRef.current || diveMode !== 'none') return
 
       flightKeys.add(event.code)
+
+      if (
+        [
+          'KeyW',
+          'KeyA',
+          'KeyS',
+          'KeyD',
+          'Space',
+          'KeyQ',
+          'ControlLeft',
+          'ControlRight',
+        ].includes(event.code)
+      ) {
+        flightRoute = null
+      }
+
+      if (event.code === 'KeyR') {
+        event.preventDefault()
+        const sourceNode = nearestFlightNode(4.5)
+        if (sourceNode) {
+          const strongest = edges
+            .filter(
+              (edge) =>
+                edge.source === sourceNode._id ||
+                edge.target === sourceNode._id,
+            )
+            .sort((a, b) => b.weight - a.weight)[0]
+
+          if (strongest) {
+            const targetId =
+              strongest.source === sourceNode._id
+                ? strongest.target
+                : strongest.source
+            const targetVisual = nodeVisuals.get(targetId)
+            if (targetVisual) {
+              const start = camera.position.clone()
+              const target = targetVisual.group
+                .getWorldPosition(new THREE.Vector3())
+                .add(new THREE.Vector3(0, 0, 1.2))
+              const controlPoint = start.clone().lerp(target, .5)
+              controlPoint.y += 1.2 + strongest.weight * .16
+              controlPoint.z += .8
+              const distance = start.distanceTo(target)
+
+              flightRoute = {
+                source: start,
+                control: controlPoint,
+                target,
+                targetId,
+                startedAt: performance.now() / 1000,
+                duration: THREE.MathUtils.clamp(
+                  distance / 4.2,
+                  1.2,
+                  3.8,
+                ),
+              }
+            }
+          }
+        }
+      }
 
       if (event.code === 'KeyE') {
         event.preventDefault()
@@ -2654,6 +2724,68 @@ export default function DreamWorld3D({
         ((selectedVisual ? 15 : 11) - cyanLight.intensity) * 0.025
 
       if (flightActive && flightInitialized) {
+        const routeProgress = flightRoute
+          ? THREE.MathUtils.clamp(
+              (elapsed - flightRoute.startedAt) / flightRoute.duration,
+              0,
+              1,
+            )
+          : 0
+
+        if (flightRoute) {
+          const oneMinus = 1 - routeProgress
+          const routePoint = new THREE.Vector3()
+            .copy(flightRoute.source)
+            .multiplyScalar(oneMinus * oneMinus)
+            .addScaledVector(
+              flightRoute.control,
+              2 * oneMinus * routeProgress,
+            )
+            .addScaledVector(
+              flightRoute.target,
+              routeProgress * routeProgress,
+            )
+
+          const lookProgress = Math.min(1, routeProgress + .035)
+          const lookOneMinus = 1 - lookProgress
+          const routeLook = new THREE.Vector3()
+            .copy(flightRoute.source)
+            .multiplyScalar(lookOneMinus * lookOneMinus)
+            .addScaledVector(
+              flightRoute.control,
+              2 * lookOneMinus * lookProgress,
+            )
+            .addScaledVector(
+              flightRoute.target,
+              lookProgress * lookProgress,
+            )
+
+          flightPosition.copy(routePoint)
+          camera.position.copy(routePoint)
+          camera.lookAt(routeLook)
+          camera.fov +=
+            ((50 + Math.sin(routeProgress * Math.PI) * 7) - camera.fov) *
+            .12
+          camera.updateProjectionMatrix()
+          dreamPost.uniforms.uTravel.value +=
+            ((.6 + Math.sin(routeProgress * Math.PI) * .34) -
+              dreamPost.uniforms.uTravel.value) *
+            .12
+
+          if (routeProgress >= 1) {
+            const arrived = nodeRef.current.find(
+              (node) => node._id === flightRoute?.targetId,
+            )
+            if (arrived) {
+              flightNearestId = arrived._id
+              hoveredId = arrived._id
+              onNodeHoverRef.current(arrived)
+            }
+            flightRoute = null
+            flightVelocity.set(0, 0, 0)
+          }
+        }
+
         flightForward.set(
           -Math.sin(flightYaw) * Math.cos(flightPitch),
           Math.sin(flightPitch),
@@ -2683,8 +2815,13 @@ export default function DreamWorld3D({
         const flightSpeed = boosted ? 7.2 : 3.15
         const desiredVelocity = flightMove.multiplyScalar(flightSpeed)
         const damping = 1 - Math.exp(-delta * 7.5)
-        flightVelocity.lerp(desiredVelocity, damping)
-        flightPosition.addScaledVector(flightVelocity, delta)
+
+        if (!flightRoute) {
+          flightVelocity.lerp(desiredVelocity, damping)
+          flightPosition.addScaledVector(flightVelocity, delta)
+        } else {
+          flightVelocity.multiplyScalar(.72)
+        }
 
         const distanceFromOrigin = flightPosition.length()
         if (distanceFromOrigin > 34) {
@@ -2697,10 +2834,12 @@ export default function DreamWorld3D({
           14,
         )
 
-        camera.position.copy(flightPosition)
-        camera.rotation.order = 'YXZ'
-        camera.rotation.y = flightYaw
-        camera.rotation.x = flightPitch
+        if (!flightRoute) {
+          camera.position.copy(flightPosition)
+          camera.rotation.order = 'YXZ'
+          camera.rotation.y = flightYaw
+          camera.rotation.x = flightPitch
+        }
         camera.rotation.z = THREE.MathUtils.lerp(
           camera.rotation.z,
           -flightVelocity.dot(flightRight) * .008,
