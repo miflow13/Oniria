@@ -1525,8 +1525,8 @@ export default function DreamWorld3D({
     let libraryWalkwayRails: THREE.LineSegments | null = null
     let libraryBranchGeometry: THREE.BufferGeometry | null = null
     let libraryBranchRailGeometry: THREE.BufferGeometry | null = null
-    let libraryBranchMaterial: THREE.MeshBasicMaterial | null = null
-    let libraryBranchRailMaterial: THREE.LineBasicMaterial | null = null
+    let libraryBranchMaterial: THREE.ShaderMaterial | null = null
+    let libraryBranchRailMaterial: THREE.ShaderMaterial | null = null
     let libraryBranches: THREE.Mesh | null = null
     let libraryBranchRails: THREE.LineSegments | null = null
     const libraryRouteTextures: THREE.Texture[] = []
@@ -1888,12 +1888,16 @@ export default function DreamWorld3D({
       world.add(libraryRouteDots)
 
       const branchPositions: number[] = []
+      const branchProgress: number[] = []
+      const branchAnchors: number[] = []
       const branchIndices: number[] = []
       const branchRailPositions: number[] = []
+      const branchRailProgress: number[] = []
+      const branchRailAnchors: number[] = []
       let branchVertexCount = 0
-      const branchSamples = 6
-      const branchHalfWidth = .58
-      const shelfApproachDistance = 2.35
+      const branchSamples = 7
+      const branchHalfWidth = .56
+      const shelfApproachDistance = 2.48
 
       nodeRef.current
         .filter(
@@ -1903,10 +1907,12 @@ export default function DreamWorld3D({
         )
         .forEach((node) => {
           const pathBay = node.libraryPathBay as number
+          const pathPoint = archivePathPoint(pathBay)
           const anchor = new THREE.Vector3(
-            ...archivePathPoint(pathBay),
+            pathPoint[0],
+            pathPoint[1] + ARCHIVE_WALKWAY_Y_OFFSET,
+            pathPoint[2],
           )
-          anchor.y += ARCHIVE_WALKWAY_Y_OFFSET
 
           const shelfCenter = worldPosition(
             node,
@@ -1917,21 +1923,23 @@ export default function DreamWorld3D({
           if (outward.lengthSq() < .0001) outward.set(1, 0, 0)
           outward.normalize()
 
+          const mainHalfWidth =
+            ARCHIVE_WALKWAY_HALF_WIDTH +
+            archiveDistrictInfluence(pathBay) * 2.4
+
+          // The spur starts exactly on the causeway edge. Its first crossbar
+          // shares that boundary instead of sitting on top of the main mesh.
           const branchStart = anchor
             .clone()
-            .addScaledVector(
-              outward,
-              ARCHIVE_WALKWAY_HALF_WIDTH * .84,
-            )
+            .addScaledVector(outward, mainHalfWidth)
 
           const branchEnd = shelfCenter
             .clone()
             .addScaledVector(outward, -shelfApproachDistance)
-          branchEnd.y = shelfCenter.y + ARCHIVE_WALKWAY_Y_OFFSET
+          branchEnd.y =
+            shelfCenter.y + ARCHIVE_WALKWAY_Y_OFFSET + .02
 
-          const travel = branchEnd.clone().sub(branchStart)
-          const travelLength = Math.max(.001, travel.length())
-          const horizontalTravel = travel.clone()
+          const horizontalTravel = branchEnd.clone().sub(branchStart)
           horizontalTravel.y = 0
           if (horizontalTravel.lengthSq() < .0001) {
             horizontalTravel.copy(outward)
@@ -1947,17 +1955,32 @@ export default function DreamWorld3D({
 
           let previousLeft: THREE.Vector3 | null = null
           let previousRight: THREE.Vector3 | null = null
+          let previousProgress = 0
+
+          const pushRailVertex = (
+            point: THREE.Vector3,
+            progress: number,
+          ) => {
+            branchRailPositions.push(
+              point.x,
+              point.y,
+              point.z,
+            )
+            branchRailProgress.push(progress)
+            branchRailAnchors.push(
+              branchStart.x,
+              branchStart.y,
+              branchStart.z,
+            )
+          }
 
           for (let sample = 0; sample <= branchSamples; sample += 1) {
             const t = sample / branchSamples
             const eased = t * t * (3 - 2 * t)
-            const center = branchStart
-              .clone()
-              .lerp(branchEnd, eased)
-
+            const center = branchStart.clone().lerp(branchEnd, eased)
             const landingFlare =
-              t > .68
-                ? THREE.MathUtils.smoothstep(t, .68, 1) * .34
+              t > .66
+                ? THREE.MathUtils.smoothstep(t, .66, 1) * .34
                 : 0
             const width = branchHalfWidth + landingFlare
 
@@ -1976,6 +1999,15 @@ export default function DreamWorld3D({
               right.y,
               right.z,
             )
+            branchProgress.push(t, t)
+            branchAnchors.push(
+              branchStart.x,
+              branchStart.y,
+              branchStart.z,
+              branchStart.x,
+              branchStart.y,
+              branchStart.z,
+            )
 
             const currentLeft = branchVertexCount
             const currentRight = branchVertexCount + 1
@@ -1992,39 +2024,22 @@ export default function DreamWorld3D({
                 currentLeft,
               )
 
-              branchRailPositions.push(
-                previousLeft.x,
-                previousLeft.y + .03,
-                previousLeft.z,
-                left.x,
-                left.y + .03,
-                left.z,
-                previousRight.x,
-                previousRight.y + .03,
-                previousRight.z,
-                right.x,
-                right.y + .03,
-                right.z,
-              )
+              pushRailVertex(previousLeft, previousProgress)
+              pushRailVertex(left, t)
+              pushRailVertex(previousRight, previousProgress)
+              pushRailVertex(right, t)
             }
 
             if (sample === 0 || sample === branchSamples) {
-              branchRailPositions.push(
-                left.x,
-                left.y + .038,
-                left.z,
-                right.x,
-                right.y + .038,
-                right.z,
-              )
+              pushRailVertex(left, t)
+              pushRailVertex(right, t)
             }
 
             previousLeft = left
             previousRight = right
+            previousProgress = t
             branchVertexCount += 2
           }
-
-          void travelLength
         })
 
       if (branchPositions.length > 0) {
@@ -2032,6 +2047,14 @@ export default function DreamWorld3D({
         libraryBranchGeometry.setAttribute(
           'position',
           new THREE.Float32BufferAttribute(branchPositions, 3),
+        )
+        libraryBranchGeometry.setAttribute(
+          'aProgress',
+          new THREE.Float32BufferAttribute(branchProgress, 1),
+        )
+        libraryBranchGeometry.setAttribute(
+          'aAnchor',
+          new THREE.Float32BufferAttribute(branchAnchors, 3),
         )
         libraryBranchGeometry.setIndex(branchIndices)
         libraryBranchGeometry.computeVertexNormals()
@@ -2045,21 +2068,87 @@ export default function DreamWorld3D({
             3,
           ),
         )
+        libraryBranchRailGeometry.setAttribute(
+          'aProgress',
+          new THREE.Float32BufferAttribute(branchRailProgress, 1),
+        )
+        libraryBranchRailGeometry.setAttribute(
+          'aAnchor',
+          new THREE.Float32BufferAttribute(branchRailAnchors, 3),
+        )
         libraryBranchRailGeometry.computeBoundingSphere()
 
-        libraryBranchMaterial = new THREE.MeshBasicMaterial({
-          color: 0x63dbe8,
+        const branchVertexShader = `
+          attribute float aProgress;
+          attribute vec3 aAnchor;
+          uniform vec3 uCameraPosition;
+          varying float vProgress;
+          varying float vAnchorDistance;
+
+          void main() {
+            vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+            vec4 worldAnchor = modelMatrix * vec4(aAnchor, 1.0);
+            vProgress = aProgress;
+            vAnchorDistance = distance(
+              uCameraPosition,
+              worldAnchor.xyz
+            );
+            gl_Position = projectionMatrix * viewMatrix * worldPosition;
+          }
+        `
+
+        const branchFragmentShader = `
+          uniform vec3 uColor;
+          uniform float uOpacity;
+          uniform float uTime;
+          varying float vProgress;
+          varying float vAnchorDistance;
+
+          void main() {
+            float proximity =
+              1.0 - smoothstep(15.0, 46.0, vAnchorDistance);
+            float reveal = smoothstep(0.04, 0.92, proximity);
+            float front =
+              1.0 - smoothstep(
+                reveal - 0.12,
+                reveal + 0.05,
+                vProgress
+              );
+            float idle = 0.035;
+            float pulse =
+              0.86 + 0.14 * sin(uTime * 1.3 - vProgress * 8.0);
+            float alpha =
+              uOpacity * max(idle, front * proximity) * pulse;
+            if (alpha < 0.003) discard;
+            gl_FragColor = vec4(uColor, alpha);
+          }
+        `
+
+        libraryBranchMaterial = new THREE.ShaderMaterial({
+          uniforms: {
+            uColor: {value: new THREE.Color(0x63dbe8)},
+            uOpacity: {value: .12},
+            uTime: {value: 0},
+            uCameraPosition: {value: new THREE.Vector3()},
+          },
+          vertexShader: branchVertexShader,
+          fragmentShader: branchFragmentShader,
           transparent: true,
-          opacity: .055,
           side: THREE.DoubleSide,
           depthWrite: false,
           blending: THREE.NormalBlending,
           toneMapped: true,
         })
-        libraryBranchRailMaterial = new THREE.LineBasicMaterial({
-          color: 0x91c9ff,
+        libraryBranchRailMaterial = new THREE.ShaderMaterial({
+          uniforms: {
+            uColor: {value: new THREE.Color(0xa7c8ff)},
+            uOpacity: {value: .34},
+            uTime: {value: 0},
+            uCameraPosition: {value: new THREE.Vector3()},
+          },
+          vertexShader: branchVertexShader,
+          fragmentShader: branchFragmentShader,
           transparent: true,
-          opacity: .2,
           depthWrite: false,
           blending: THREE.NormalBlending,
           toneMapped: true,
@@ -3940,10 +4029,14 @@ export default function DreamWorld3D({
       }
 
       if (libraryBranchMaterial && libraryBranchRailMaterial) {
-        libraryBranchMaterial.opacity =
-          .052 + Math.sin(elapsed * .36 + .9) * .006
-        libraryBranchRailMaterial.opacity =
-          .18 + Math.max(0, Math.sin(elapsed * .31 + 1.4)) * .035
+        libraryBranchMaterial.uniforms.uTime.value = elapsed
+        libraryBranchRailMaterial.uniforms.uTime.value = elapsed
+        libraryBranchMaterial.uniforms.uCameraPosition.value.copy(
+          camera.position,
+        )
+        libraryBranchRailMaterial.uniforms.uCameraPosition.value.copy(
+          camera.position,
+        )
       }
 
       worldLightShafts.forEach((shaft, index) => {
