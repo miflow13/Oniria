@@ -3940,6 +3940,21 @@ export default function DreamWorld3D({
         openingBook.visual.group.scale.setScalar(1)
         openingBook.visual.coverHinge.rotation.y = 0
         openingBook = null
+      } else if (
+        openingBook &&
+        openingBook.fired &&
+        libraryReadingBookRef.current &&
+        openingSeconds > 1.65
+      ) {
+        // Last-resort lifecycle guard: a reader transition must never be able
+        // to strand a physical book outside its authored shelf slot.
+        openingBook.visual.group.position.copy(
+          openingBook.visual.basePosition,
+        )
+        openingBook.visual.group.rotation.set(0, 0, 0)
+        openingBook.visual.group.scale.setScalar(1)
+        openingBook.visual.coverHinge.rotation.y = 0
+        openingBook = null
       }
 
       for (const node of nodeRef.current) {
