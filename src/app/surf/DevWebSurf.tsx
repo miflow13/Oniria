@@ -22,6 +22,9 @@ import type {
 import styles from './surf.module.css'
 
 const DEFAULT_USERNAME = 'mikachu'
+const LIBRARY_FLOOR_COUNT = 4
+const LIBRARY_FLOOR_HEIGHT = 5.2
+const DEEP_CATALOG_PAGES = 6
 
 const SECTION_COPY: Record<
   LibrarySection,
@@ -152,6 +155,7 @@ type ShelfPlacement = Pick<
   | 'shelfLevel'
   | 'shelfSlot'
   | 'shelfOrder'
+  | 'floorIndex'
 >
 
 const SHELF_ANCHORS: Partial<
@@ -211,6 +215,7 @@ function shelfPlacement(
       shelfLevel: 0,
       shelfSlot: index,
       shelfOrder: index,
+      floorIndex: 0,
     }
   }
 
@@ -242,11 +247,53 @@ function shelfPlacement(
     shelfLevel: level,
     shelfSlot: slot,
     shelfOrder: localIndex,
+    floorIndex: 0,
+  }
+}
+
+function megaShelfPlacement(index: number): ShelfPlacement {
+  const floorIndex = index % LIBRARY_FLOOR_COUNT
+  const floorBookIndex = Math.floor(index / LIBRARY_FLOOR_COUNT)
+  const booksPerShelf = 9
+  const shelfIndex = Math.floor(floorBookIndex / booksPerShelf)
+  const localIndex = floorBookIndex % booksPerShelf
+  const level = Math.floor(localIndex / 3)
+  const slot = localIndex % 3
+
+  const columns = [-13.5, -8.1, -2.7, 2.7, 8.1, 13.5]
+  const rows = [-9.5, -15.2, -20.9, -26.6, -32.3, -38]
+  const columnIndex = shelfIndex % columns.length
+  const rowIndex = Math.floor(shelfIndex / columns.length) % rows.length
+  const rotationY = rowIndex % 2 === 0 ? 0 : Math.PI
+  const localOffset = (slot - 1) * .96
+  const floorBase = floorIndex * LIBRARY_FLOOR_HEIGHT
+
+  return {
+    position: [
+      columns[columnIndex] + localOffset,
+      floorBase + .7 + level * 1.1,
+      rows[rowIndex] + (rotationY === 0 ? .42 : -.42),
+    ],
+    rotationY,
+    shelfKey:
+      'catalog:f' +
+      floorIndex +
+      ':r' +
+      rowIndex +
+      ':c' +
+      columnIndex +
+      ':level-' +
+      level,
+    shelfLevel: level,
+    shelfSlot: slot,
+    shelfOrder: localIndex,
+    floorIndex,
   }
 }
 
 function buildLibraryGraph(
   bootstrap: DevBootstrap,
+  catalogArticles: DevArticleSummary[],
   dynamicArticles: DevArticleSummary[],
   dynamicLabel: string | null,
 ) {
