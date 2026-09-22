@@ -153,6 +153,43 @@ export async function GET(request: NextRequest) {
       })
     }
 
+    if (mode === 'catalog') {
+      const pageCount = Math.min(
+        6,
+        Math.max(1, Number(searchParams.get('pages') ?? 6) || 6),
+      )
+      const perPage = Math.min(
+        100,
+        Math.max(20, Number(searchParams.get('per_page') ?? 100) || 100),
+      )
+
+      const pages = await Promise.all(
+        Array.from({length: pageCount}, (_, index) =>
+          devFetch(
+            `/articles?per_page=${perPage}&page=${index + 1}`,
+          ).catch(() => []),
+        ),
+      )
+
+      const seen = new Set<number>()
+      const articles = pages
+        .flatMap((page) => normalizeArticles(page))
+        .filter((article) => {
+          if (!article || typeof article !== 'object') return false
+          const id = Number((article as {id?: unknown}).id)
+          if (!Number.isFinite(id) || seen.has(id)) return false
+          seen.add(id)
+          return true
+        })
+
+      return NextResponse.json({
+        articles,
+        pageCount,
+        perPage,
+        count: articles.length,
+      })
+    }
+
     if (mode === 'article') {
       const id = safeValue(searchParams.get('id'))
       if (!/^\d+$/.test(id)) {
