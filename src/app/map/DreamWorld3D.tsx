@@ -1067,11 +1067,22 @@ export default function DreamWorld3D({
     let divePost: ShaderPass | null = null
     let diveAudio: SpatialDreamAudio | null = null
     let diveAudioStarted = false
-    let diveMode: 'none' | 'entering' | 'inside' | 'exiting' = 'none'
+    let diveMusic: DreamMusic | null = null
+    let diveMusicStarted = false
+    let diveMode:
+      | 'none'
+      | 'entering'
+      | 'inside'
+      | 'portal'
+      | 'exiting' = 'none'
     let diveTransitionStartedAt = 0
     let lastDiveExitRequest = diveExitRequestRef.current
     let holdTimer: number | null = null
     let holdNodeId: string | null = null
+    let pendingPortal:
+      | {dreamId: string; title: string; depth: number}
+      | null = null
+    let diveStack: string[] = []
 
     function releaseDreamCell() {
       if (activeCellId) {
@@ -1142,35 +1153,84 @@ export default function DreamWorld3D({
       visual.group.add(spatialAudio.audio)
     }
 
-    function disposeDive() {
+    function categoryForDream(dream: Dream): SymbolCategory {
+      const symbols = dream.symbols ?? []
+      const counts: Record<SymbolCategory, number> = {
+        person: 0,
+        place: 0,
+        object: 0,
+        feeling: 0,
+        action: 0,
+      }
+      symbols.forEach((symbol) => {
+        counts[symbol.category] += 1
+      })
+      return (Object.keys(counts) as SymbolCategory[]).sort(
+        (a, b) => counts[b] - counts[a],
+      )[0] ?? 'place'
+    }
+
+    function disposeDive(options: {
+      restoreListener?: boolean
+      clearMode?: boolean
+    } = {}) {
+      const restoreListener = options.restoreListener ?? true
+      const clearMode = options.clearMode ?? true
+
       if (activeDive) {
         activeDive.camera.remove(listener)
       }
+
       diveAudio?.dispose()
       diveAudio = null
       diveAudioStarted = false
-      if (listener.parent !== camera) {
+
+      diveMusic?.dispose()
+      diveMusic = null
+      diveMusicStarted = false
+
+      if (restoreListener && listener.parent !== camera) {
         listener.removeFromParent()
         camera.add(listener)
       }
+
       diveComposer?.dispose()
       diveComposer = null
       divePost = null
       activeDive?.dispose()
       activeDive = null
-      diveMode = 'none'
+      pendingPortal = null
+
+      if (clearMode) diveMode = 'none'
     }
 
-    function beginDreamDive(node: DreamWorldNode) {
-      if (selectedRef.current !== node._id || diveMode !== 'none') return
+    function installDive(
+      dream: Dream,
+      depth: number,
+      options: {resetStack?: boolean} = {},
+    ) {
+      disposeDive({restoreListener: false, clearMode: false})
 
-      const profile = getProfileForNode(node)
-      if (!profile) return
+      const recurrence = dreamRecurrence(dream, dreamsRef.current)
+      const profile = createDreamProfile(dream, recurrence)
+      const relations: DreamRelation[] = getDreamRelations(
+        dream,
+        dreamsRef.current,
+        4,
+      )
+      const category = categoryForDream(dream)
 
       activeDive = createDreamDive(
         profile,
         settings,
-        hashString(`dive:${profile.dreamId}:${node._id}`),
+        hashString(`dive:${dream._id}:${depth}`),
+        {
+          currentDream: dream,
+          dreams: dreamsRef.current,
+          relations,
+          depth,
+          maxDepth: 2,
+        },
       )
 
       listener.removeFromParent()
@@ -1178,8 +1238,8 @@ export default function DreamWorld3D({
 
       diveAudio = createSpatialDreamAudio(
         listener,
-        node.category,
-        hashString(`dive-audio:${profile.dreamId}:${node._id}`),
+        category,
+        hashString(`dive-audio:${dream._id}:${depth}`),
         {
           mood: profile.mood,
           lucid: profile.lucid,
@@ -1189,6 +1249,13 @@ export default function DreamWorld3D({
       )
       diveAudio.audio.position.set(0, 1.2, -4.2)
       activeDive.scene.add(diveAudio.audio)
+
+      diveMusic = createDreamMusic(
+        listener,
+        profile,
+        hashString(`music:${dream._id}:${depth}`),
+      )
+      activeDive.scene.add(diveMusic.audio)
 
       if (spatialAudio?.audio.isPlaying) spatialAudio.audio.pause()
       spatialAudioStarted = false
@@ -1203,9 +1270,9 @@ export default function DreamWorld3D({
 
       const diveBloom = new UnrealBloomPass(
         new THREE.Vector2(1, 1),
-        settings.bloomStrength * 0.82,
-        Math.min(0.7, settings.bloomRadius),
-        Math.max(0.38, settings.bloomThreshold),
+        settings.bloomStrength * 0.74,
+        Math.min(0.66, settings.bloomRadius),
+        Math.max(0.4, settings.bloomThreshold),
       )
       diveComposer.addPass(diveBloom)
 
@@ -1213,18 +1280,49 @@ export default function DreamWorld3D({
       divePost.uniforms.uCinematic.value =
         qualityRef.current === 'cinematic' ? 1 : 0.35
       divePost.uniforms.uIntensity.value =
-        qualityRef.current === 'cinematic' ? 0.82 : 0.42
+        qualityRef.current === 'cinematic' ? 0.78 : 0.4
       diveComposer.addPass(divePost)
       diveComposer.addPass(new OutputPass())
 
       const rect = host.getBoundingClientRect()
       activeDive.resize(rect.width / Math.max(1, rect.height))
       diveComposer.setSize(rect.width, rect.height)
+      activeDive.setTimeline(diveTimelineProgressRef.current)
+
+      if (options.resetStack) {
+        diveStack = [dream._id]
+      } else if (diveStack[diveStack.length - 1] !== dream._id) {
+        diveStack = [...diveStack, dream._id].slice(-3)
+      }
 
       diveMode = 'entering'
       diveTransitionStartedAt = performance.now() / 1000
       onProjectionChangeRef.current(null)
       onDiveStateChangeRef.current(true, profile.title)
+      onDiveDreamChangeRef.current(dream._id, profile.title, depth)
+    }
+
+    function beginDreamDive(node: DreamWorldNode) {
+      if (selectedRef.current !== node._id || diveMode !== 'none') return
+
+      const dream = getDreamForNode(node)
+      if (!dream) return
+      installDive(dream, 0, {resetStack: true})
+    }
+
+    function beginPortalTransition(action: {
+      dreamId: string
+      title: string
+      depth: number
+    }) {
+      if (!activeDive || diveMode !== 'inside') return
+      if (action.depth > 2) return
+      if (diveStack.length >= 3 && !diveStack.includes(action.dreamId)) return
+
+      pendingPortal = action
+      diveMode = 'portal'
+      diveTransitionStartedAt = performance.now() / 1000
+      onDiveDreamChangeRef.current(action.dreamId, action.title, action.depth)
     }
 
     function requestDiveExit() {
