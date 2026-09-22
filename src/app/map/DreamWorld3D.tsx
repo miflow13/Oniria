@@ -785,7 +785,7 @@ export default function DreamWorld3D({
           toneMapped: true,
         })
         const plane = new THREE.Mesh(libraryHazeGeometry, material)
-        plane.position.set(...spec.position)
+        plane.position.set(spec.position[0], spec.position[1], spec.position[2])
         plane.scale.set(spec.scale[0], spec.scale[1], 1)
         plane.rotation.z = spec.rotation
         plane.userData.baseX = spec.position[0]
