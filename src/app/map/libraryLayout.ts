@@ -2,9 +2,9 @@ export const ARCHIVE_PATH_RENDER_BAYS = 72
 export const ARCHIVE_WALKWAY_HALF_WIDTH = 4.1
 export const ARCHIVE_WALKWAY_Y_OFFSET = -2.08
 
-export const ARCHIVE_BAY_SPACING = 7.2
-const ARCHIVE_LANE_MIN = 6.6
-const ARCHIVE_LANE_VARIATION = 1.45
+export const ARCHIVE_BAY_SPACING = 8.4
+const ARCHIVE_LANE_MIN = 7.0
+const ARCHIVE_LANE_VARIATION = 1.15
 
 export type ArchiveDistrict = {
   id: string
@@ -152,7 +152,7 @@ export function archiveShelfPlacement(
   const seed = hashString(key)
   const alongJitterScale = options.alongJitterScale ?? 1
   const alongJitter =
-    (seededUnit(seed, 7) - .5) * 1.25 * alongJitterScale
+    (seededUnit(seed, 7) - .5) * .82 * alongJitterScale
   const fractionalBay = bay + alongJitter / ARCHIVE_BAY_SPACING
   const center = archivePathPoint(fractionalBay)
   const frame = archivePathFrame(fractionalBay)
@@ -176,7 +176,7 @@ export function archiveShelfPlacement(
   const targetZ = center[2] + frame.tangentZ * lookAhead
   const yawJitter =
     (seededUnit(seed, 23) - .5) *
-    .22 *
+    .16 *
     (options.yawJitterScale ?? 1)
 
   const yaw =
