@@ -3805,22 +3805,12 @@ export default function DreamWorld3D({
         !openingBook.fired
       ) {
         openingBook.fired = true
+        openingBook.returningAt = now / 1000
         openingBook.visual.bookmark.visible = true
         onBookSelectRef.current?.(
           openingBook.visual.nodeId,
           openingBook.visual.index,
         )
-      }
-
-      if (
-        openingBook?.fired &&
-        openingSeconds >= 1.08 &&
-        openingBook.returningAt === null
-      ) {
-        // The article reader owns the long-form reading state. The physical
-        // book only performs the handoff, then returns to its exact shelf slot
-        // instead of remaining pinned in front of the camera.
-        openingBook.returningAt = now / 1000
       }
 
       const returnSeconds =
@@ -3831,7 +3821,7 @@ export default function DreamWorld3D({
       const returnProgress =
         openingBook?.returningAt !== null &&
         openingBook?.returningAt !== undefined
-          ? THREE.MathUtils.clamp(returnSeconds / .82, 0, 1)
+          ? THREE.MathUtils.clamp(returnSeconds / .46, 0, 1)
           : 0
       const returnEase =
         returnProgress > 0
@@ -3868,7 +3858,7 @@ export default function DreamWorld3D({
           // Keep the entire reading ritual local to the shelf. Never derive a
           // book transform from the camera: that can pin the cover plane to
           // the visitor's view if the reader opens during the transition.
-          positionTarget.z += .62 * ritualAmount
+          positionTarget.z += .34 * ritualAmount
           positionTarget.y += .08 * ritualAmount
           positionTarget.x += .035 * ritualAmount
         } else {
@@ -3889,7 +3879,7 @@ export default function DreamWorld3D({
         const displacement = bookVisual.group.position
           .clone()
           .sub(bookVisual.basePosition)
-        const maxDisplacement = .78
+        const maxDisplacement = .44
         if (displacement.lengthSq() > maxDisplacement * maxDisplacement) {
           displacement.setLength(maxDisplacement)
           bookVisual.group.position
@@ -3898,7 +3888,7 @@ export default function DreamWorld3D({
         }
 
         const targetScale = isOpening
-          ? 1 + .12 * ritualAmount
+          ? 1 + .06 * ritualAmount
           : isHovered
             ? 1.045
             : isApproachedShelf
