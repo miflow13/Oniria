@@ -756,6 +756,7 @@ export default function DreamWorld3D({
     const shelfBoardGeometry = new THREE.BoxGeometry(3.45, .12, .62)
     const shelfBackGeometry = new THREE.BoxGeometry(3.45, 2.65, .1)
     const shelfBookGeometry = new THREE.BoxGeometry(.34, .56, .24)
+    const shelfAccentGeometry = new THREE.BoxGeometry(3.34, .035, .68)
     const shelfPickGeometry = new THREE.BoxGeometry(3.8, 2.9, .95)
     const shelfFrameMaterial = new THREE.MeshStandardMaterial({
       color: 0x11151e,
@@ -1003,7 +1004,7 @@ export default function DreamWorld3D({
         }
 
         const accentRail = new THREE.Mesh(
-          new THREE.BoxGeometry(3.34, .035, .68),
+          shelfAccentGeometry,
           shelfAccentMaterial,
         )
         accentRail.position.set(0, 1.34, -.02)
@@ -3290,18 +3291,7 @@ export default function DreamWorld3D({
         )
 
         if (!routeActive) {
-          shelfSideGeometry.dispose()
-      shelfBoardGeometry.dispose()
-      shelfBackGeometry.dispose()
-      shelfBookGeometry.dispose()
-      shelfPickGeometry.dispose()
-      shelfFrameMaterial.dispose()
-      shelfBoardMaterial.dispose()
-      shelfBookMaterials.forEach((material) => material.dispose())
-      shelfAccentMaterial.dispose()
-      shelfPickMaterial.dispose()
-
-      nodeVisuals.forEach((visual) => {
+          nodeVisuals.forEach((visual) => {
             visual.group.getWorldPosition(flightCollisionPoint)
             flightCollisionDelta
               .copy(flightPosition)
@@ -3500,6 +3490,18 @@ export default function DreamWorld3D({
       disposeDive()
       releaseDreamCell()
       camera.remove(listener)
+
+      shelfSideGeometry.dispose()
+      shelfBoardGeometry.dispose()
+      shelfBackGeometry.dispose()
+      shelfBookGeometry.dispose()
+      shelfAccentGeometry.dispose()
+      shelfPickGeometry.dispose()
+      shelfFrameMaterial.dispose()
+      shelfBoardMaterial.dispose()
+      shelfBookMaterials.forEach((material) => material.dispose())
+      shelfAccentMaterial.dispose()
+      shelfPickMaterial.dispose()
 
       nodeVisuals.forEach((visual) => {
         ;(visual.shell.geometry as THREE.BufferGeometry).dispose()
