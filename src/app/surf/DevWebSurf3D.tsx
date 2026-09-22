@@ -3343,7 +3343,7 @@ export default function DevWebSurf3D({
           floor * LIBRARY_FLOOR_HEIGHT + 4.05,
           layout.z,
         )
-        light.intensity = floor === 0 ? 3.8 : 4.4
+        light.intensity = floor === 0 ? 3.15 : 3.55
       })
       landingLights.forEach((light, index) => {
         const layout = landingLightLayout[index]
@@ -3352,7 +3352,7 @@ export default function DevWebSurf3D({
           floor * LIBRARY_FLOOR_HEIGHT + 3.65,
           layout.z,
         )
-        light.intensity = floor === 0 ? 3.1 : 3.6
+        light.intensity = floor === 0 ? 2.35 : 2.7
       })
       bridgeEntryLights.forEach((light, index) => {
         const layout = bridgeEntryLightLayout[index]
@@ -3361,7 +3361,16 @@ export default function DevWebSurf3D({
           floor * LIBRARY_FLOOR_HEIGHT + 2.75,
           layout.z,
         )
-        light.intensity = floor === 0 ? 1.9 : 2.5
+        light.intensity = floor === 0 ? 1.35 : 1.65
+      })
+      shelfFillLights.forEach((light, index) => {
+        const layout = shelfFillLightLayout[index]
+        light.position.set(
+          layout.x,
+          floor * LIBRARY_FLOOR_HEIGHT + 2.65,
+          layout.z,
+        )
+        light.intensity = floor === 0 ? .95 : 1.15
       })
       adjacentFloorLights.forEach(({light, direction, entry}) => {
         const targetFloor = floor + direction
@@ -3373,29 +3382,29 @@ export default function DevWebSurf3D({
           targetFloor * LIBRARY_FLOOR_HEIGHT + 3.9,
           entry.z,
         )
-        light.intensity = valid ? 2.15 : 0
+        light.intensity = valid ? 1.35 : 0
       })
       practicalFixtureMaterials.forEach((material, floorIndex) => {
         const distance = Math.abs(floorIndex - floor)
         material.opacity =
           distance === 0
-            ? .84
+            ? .88
             : distance === 1
-              ? .44
+              ? .52
               : distance === 2
-                ? .18
+                ? .2
                 : .07
       })
       balconyUndersideStripMaterials.forEach((material, floorIndex) => {
         const distance = Math.abs(floorIndex - floor)
         material.opacity =
           distance === 0
-            ? .26
+            ? .34
             : distance === 1
-              ? .16
+              ? .22
               : distance === 2
-                ? .07
-                : .025
+                ? .09
+                : .03
       })
       floorShelfTopMaterials.forEach((material, floorIndex) => {
         const distance = Math.abs(floorIndex - floor)
