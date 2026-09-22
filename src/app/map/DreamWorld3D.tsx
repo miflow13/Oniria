@@ -54,6 +54,12 @@ import {
   createPortalSceneTransition,
   type PortalSceneTransition,
 } from './dreamworld/effects/createPortalSceneTransition'
+import {
+  ARCHIVE_PATH_RENDER_BAYS,
+  ARCHIVE_WALKWAY_HALF_WIDTH,
+  ARCHIVE_WALKWAY_Y_OFFSET,
+  archivePathPoint,
+} from './libraryLayout'
 
 export type DreamWorldNode = {
   _id: string
@@ -69,6 +75,7 @@ export type DreamWorldNode = {
   articleCount?: number
   accent?: string
   world?: [number, number, number]
+  libraryYaw?: number
   libraryBooks?: Array<{
     id: string
     title: string
@@ -420,7 +427,7 @@ export default function DreamWorld3D({
       `${quality}::${nodes
         .map(
           (node) =>
-            `${node._id}:${node.articleCount ?? 0}:${node.libraryBooks?.map((book) => book.id + ':' + (book.coverUrl ?? '')).join('|') ?? ''}:${node.world?.join(',') ?? ''}`,
+            `${node._id}:${node.articleCount ?? 0}:${node.libraryBooks?.map((book) => book.id + ':' + (book.coverUrl ?? '')).join('|') ?? ''}:${node.world?.join(',') ?? ''}:${node.libraryYaw ?? ''}`,
         )
         .join('|')}::${edges
         .map((edge) => `${edge.id}:${edge.weight}`)
@@ -1415,10 +1422,12 @@ export default function DreamWorld3D({
       group.position.copy(start)
       if (node.libraryKind === 'shelf') {
         const baseYaw =
-          Math.atan2(
-            camera.position.x - start.x,
-            camera.position.z - start.z,
-          ) + Math.PI
+          typeof node.libraryYaw === 'number'
+            ? node.libraryYaw
+            : Math.atan2(
+                camera.position.x - start.x,
+                camera.position.z - start.z,
+              ) + Math.PI
         group.userData.libraryBaseYaw = baseYaw
         group.rotation.y = baseYaw
       }
@@ -1453,217 +1462,170 @@ export default function DreamWorld3D({
       })
     }
 
-    const libraryWalkwayGeometry = libraryMode
-      ? new THREE.BoxGeometry(1, 1, 1)
-      : null
-    const libraryWalkwayPanelMaterial = libraryMode
-      ? new THREE.MeshBasicMaterial({
-          color: 0x78dce8,
-          transparent: true,
-          opacity: .085,
-          depthWrite: false,
-          blending: THREE.NormalBlending,
-          toneMapped: true,
-        })
-      : null
-    const libraryWalkwayRailMaterial = libraryMode
-      ? new THREE.MeshBasicMaterial({
-          color: 0xa99be8,
-          transparent: true,
-          opacity: .2,
-          depthWrite: false,
-          blending: THREE.NormalBlending,
-          toneMapped: true,
-        })
-      : null
-    const libraryWalkwayGroup = new THREE.Group()
-    let libraryWalkwayPanels: THREE.InstancedMesh | null = null
-    let libraryWalkwayRails: THREE.InstancedMesh | null = null
+    let libraryWalkwayGeometry: THREE.BufferGeometry | null = null
+    let libraryWalkwayRailGeometry: THREE.BufferGeometry | null = null
+    let libraryWalkwayPanelMaterial: THREE.MeshBasicMaterial | null = null
+    let libraryWalkwayRailMaterial: THREE.LineBasicMaterial | null = null
+    let libraryWalkway: THREE.Mesh | null = null
+    let libraryWalkwayRails: THREE.LineSegments | null = null
 
-    if (
-      libraryMode &&
-      libraryWalkwayGeometry &&
-      libraryWalkwayPanelMaterial &&
-      libraryWalkwayRailMaterial
-    ) {
-      const shelfRoutes = nodeRef.current
-        .filter(
-          (node): node is DreamWorldNode & {libraryKind: 'shelf'} =>
-            node.libraryKind === 'shelf',
-        )
-        .map((node) => ({
-          node,
-          position: worldPosition(node, positionsRef.current),
-        }))
-        .sort((a, b) => b.position.z - a.position.z)
+    if (libraryMode) {
+      const subdivisionsPerBay = 4
+      const sampleCount =
+        ARCHIVE_PATH_RENDER_BAYS * subdivisionsPerBay + 1
+      const panelPositions = new Float32Array(sampleCount * 2 * 3)
+      const panelIndices: number[] = []
+      const railPositions: number[] = []
 
-      if (shelfRoutes.length > 0) {
-        const majorPattern =
-          /(featured|new|my dev|topics?|creators?|search|catalog|archive)/i
-        const chosenIds = new Set<string>()
-        const chosenRoutes: typeof shelfRoutes = []
+      const point = new THREE.Vector3()
+      const before = new THREE.Vector3()
+      const after = new THREE.Vector3()
+      const tangent = new THREE.Vector3()
+      const side = new THREE.Vector3()
 
-        const choose = (route: (typeof shelfRoutes)[number]) => {
-          if (chosenIds.has(route.node._id)) return
-          chosenIds.add(route.node._id)
-          chosenRoutes.push(route)
-        }
+      const setSample = (index: number, bay: number) => {
+        point.fromArray(archivePathPoint(bay))
+        before.fromArray(archivePathPoint(bay - .04))
+        after.fromArray(archivePathPoint(bay + .04))
+        tangent.copy(after).sub(before)
+        tangent.y = 0
+        if (tangent.lengthSq() < .0001) tangent.set(0, 0, -1)
+        tangent.normalize()
+        side.set(-tangent.z, 0, tangent.x)
 
-        shelfRoutes
-          .filter((route) =>
-            majorPattern.test(
-              `${route.node.name} ${route.node.subtitle ?? ''}`,
-            ),
+        const pathY = point.y + ARCHIVE_WALKWAY_Y_OFFSET
+        const left = point
+          .clone()
+          .addScaledVector(side, ARCHIVE_WALKWAY_HALF_WIDTH)
+        const right = point
+          .clone()
+          .addScaledVector(side, -ARCHIVE_WALKWAY_HALF_WIDTH)
+        left.y = pathY
+        right.y = pathY
+
+        const leftOffset = index * 6
+        panelPositions[leftOffset] = left.x
+        panelPositions[leftOffset + 1] = left.y
+        panelPositions[leftOffset + 2] = left.z
+        panelPositions[leftOffset + 3] = right.x
+        panelPositions[leftOffset + 4] = right.y
+        panelPositions[leftOffset + 5] = right.z
+
+        if (index > 0) {
+          const previousLeft = (index - 1) * 2
+          const previousRight = previousLeft + 1
+          const currentLeft = index * 2
+          const currentRight = currentLeft + 1
+          panelIndices.push(
+            previousLeft,
+            previousRight,
+            currentLeft,
+            previousRight,
+            currentRight,
+            currentLeft,
           )
-          .forEach(choose)
 
-        shelfRoutes.slice(0, 8).forEach(choose)
-
-        const sampleStride = Math.max(1, Math.floor(shelfRoutes.length / 12))
-        for (
-          let index = 0;
-          index < shelfRoutes.length && chosenRoutes.length < 26;
-          index += sampleStride
-        ) {
-          choose(shelfRoutes[index])
-        }
-
-        const frontRoute = shelfRoutes[0]
-        const backRoute = shelfRoutes[shelfRoutes.length - 1]
-        const frontZ = frontRoute.position.z + 8
-        const backZ = backRoute.position.z
-        const depthSpan = Math.max(1, frontZ - backZ)
-        const spineCount = THREE.MathUtils.clamp(
-          Math.ceil(depthSpan / 26) + 1,
-          3,
-          10,
-        )
-        const spinePoints: THREE.Vector3[] = []
-
-        for (let index = 0; index < spineCount; index += 1) {
-          const t = spineCount === 1 ? 0 : index / (spineCount - 1)
-          const z = THREE.MathUtils.lerp(frontZ, backZ, t)
-          const bandRadius = Math.max(12, depthSpan / spineCount)
-          const nearby = shelfRoutes.filter(
-            (route) => Math.abs(route.position.z - z) <= bandRadius,
-          )
-          const averageY =
-            nearby.length > 0
-              ? nearby.reduce((sum, route) => sum + route.position.y, 0) /
-                nearby.length
-              : frontRoute.position.y
-
-          spinePoints.push(
-            new THREE.Vector3(
-              0,
-              averageY - 2.05,
-              z,
-            ),
+          const previousOffset = (index - 1) * 6
+          railPositions.push(
+            panelPositions[previousOffset],
+            panelPositions[previousOffset + 1] + .035,
+            panelPositions[previousOffset + 2],
+            left.x,
+            left.y + .035,
+            left.z,
+            panelPositions[previousOffset + 3],
+            panelPositions[previousOffset + 4] + .035,
+            panelPositions[previousOffset + 5],
+            right.x,
+            right.y + .035,
+            right.z,
           )
         }
 
-        const segmentPairs: Array<[THREE.Vector3, THREE.Vector3]> = []
-        for (let index = 1; index < spinePoints.length; index += 1) {
-          segmentPairs.push([spinePoints[index - 1], spinePoints[index]])
-        }
-
-        chosenRoutes.forEach((route) => {
-          let nearestSpine = spinePoints[0]
-          let nearestDistance = Infinity
-          spinePoints.forEach((point) => {
-            const distance = Math.abs(point.z - route.position.z)
-            if (distance < nearestDistance) {
-              nearestDistance = distance
-              nearestSpine = point
-            }
-          })
-
-          const towardSpine = new THREE.Vector3(
-            nearestSpine.x - route.position.x,
-            0,
-            nearestSpine.z - route.position.z,
+        if (index % subdivisionsPerBay === 0) {
+          railPositions.push(
+            left.x,
+            left.y + .026,
+            left.z,
+            right.x,
+            right.y + .026,
+            right.z,
           )
-          if (towardSpine.lengthSq() < .001) {
-            towardSpine.set(0, 0, 1)
-          } else {
-            towardSpine.normalize()
-          }
-
-          const destination = route.position
-            .clone()
-            .addScaledVector(towardSpine, 1.7)
-          destination.y -= 1.95
-
-          segmentPairs.push([nearestSpine, destination])
-        })
-
-        const panelCount = segmentPairs.length
-        const railCount = panelCount * 2
-        libraryWalkwayPanels = new THREE.InstancedMesh(
-          libraryWalkwayGeometry,
-          libraryWalkwayPanelMaterial,
-          panelCount,
-        )
-        libraryWalkwayRails = new THREE.InstancedMesh(
-          libraryWalkwayGeometry,
-          libraryWalkwayRailMaterial,
-          railCount,
-        )
-
-        const segmentDummy = new THREE.Object3D()
-        const railDummy = new THREE.Object3D()
-        const direction = new THREE.Vector3()
-        const midpoint = new THREE.Vector3()
-        const side = new THREE.Vector3()
-        const xAxis = new THREE.Vector3(1, 0, 0)
-        const localSide = new THREE.Vector3(0, 0, 1)
-        const width = 1.72
-
-        segmentPairs.forEach(([start, end], index) => {
-          direction.copy(end).sub(start)
-          const length = Math.max(.25, direction.length())
-          direction.normalize()
-          midpoint.copy(start).add(end).multiplyScalar(.5)
-
-          segmentDummy.position.copy(midpoint)
-          segmentDummy.quaternion.setFromUnitVectors(xAxis, direction)
-          segmentDummy.scale.set(length, .035, width)
-          segmentDummy.updateMatrix()
-          libraryWalkwayPanels?.setMatrixAt(index, segmentDummy.matrix)
-
-          side
-            .copy(localSide)
-            .applyQuaternion(segmentDummy.quaternion)
-            .multiplyScalar(width * .5 - .045)
-
-          railDummy.quaternion.copy(segmentDummy.quaternion)
-          railDummy.scale.set(length, .065, .05)
-
-          railDummy.position.copy(midpoint).add(side)
-          railDummy.updateMatrix()
-          libraryWalkwayRails?.setMatrixAt(index * 2, railDummy.matrix)
-
-          railDummy.position.copy(midpoint).sub(side)
-          railDummy.updateMatrix()
-          libraryWalkwayRails?.setMatrixAt(index * 2 + 1, railDummy.matrix)
-        })
-
-        libraryWalkwayPanels.instanceMatrix.needsUpdate = true
-        libraryWalkwayRails.instanceMatrix.needsUpdate = true
-        libraryWalkwayPanels.renderOrder = 1
-        libraryWalkwayRails.renderOrder = 2
-        libraryWalkwayPanels.userData.walkableSurface = true
-        libraryWalkwayPanels.userData.libraryDecorative = true
-        libraryWalkwayRails.userData.libraryDecorative = true
-        libraryWalkwayGroup.add(
-          libraryWalkwayPanels,
-          libraryWalkwayRails,
-        )
-        world.add(libraryWalkwayGroup)
+        }
       }
+
+      for (let index = 0; index < sampleCount; index += 1) {
+        setSample(index, index / subdivisionsPerBay)
+      }
+
+      const first = 0
+      const last = (sampleCount - 1) * 6
+      railPositions.push(
+        panelPositions[first],
+        panelPositions[first + 1] + .045,
+        panelPositions[first + 2],
+        panelPositions[first + 3],
+        panelPositions[first + 4] + .045,
+        panelPositions[first + 5],
+        panelPositions[last],
+        panelPositions[last + 1] + .045,
+        panelPositions[last + 2],
+        panelPositions[last + 3],
+        panelPositions[last + 4] + .045,
+        panelPositions[last + 5],
+      )
+
+      libraryWalkwayGeometry = new THREE.BufferGeometry()
+      libraryWalkwayGeometry.setAttribute(
+        'position',
+        new THREE.BufferAttribute(panelPositions, 3),
+      )
+      libraryWalkwayGeometry.setIndex(panelIndices)
+      libraryWalkwayGeometry.computeVertexNormals()
+      libraryWalkwayGeometry.computeBoundingSphere()
+
+      libraryWalkwayRailGeometry = new THREE.BufferGeometry()
+      libraryWalkwayRailGeometry.setAttribute(
+        'position',
+        new THREE.Float32BufferAttribute(railPositions, 3),
+      )
+      libraryWalkwayRailGeometry.computeBoundingSphere()
+
+      libraryWalkwayPanelMaterial = new THREE.MeshBasicMaterial({
+        color: 0x78dce8,
+        transparent: true,
+        opacity: .075,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        blending: THREE.NormalBlending,
+        toneMapped: true,
+      })
+      libraryWalkwayRailMaterial = new THREE.LineBasicMaterial({
+        color: 0xa99be8,
+        transparent: true,
+        opacity: .24,
+        depthWrite: false,
+        blending: THREE.NormalBlending,
+        toneMapped: true,
+      })
+
+      libraryWalkway = new THREE.Mesh(
+        libraryWalkwayGeometry,
+        libraryWalkwayPanelMaterial,
+      )
+      libraryWalkwayRails = new THREE.LineSegments(
+        libraryWalkwayRailGeometry,
+        libraryWalkwayRailMaterial,
+      )
+      libraryWalkway.renderOrder = 1
+      libraryWalkwayRails.renderOrder = 2
+      libraryWalkway.userData.walkableSurface = true
+      libraryWalkway.userData.libraryDecorative = true
+      libraryWalkwayRails.userData.libraryDecorative = true
+      world.add(libraryWalkway, libraryWalkwayRails)
     }
 
-        const nodeDataById = new Map(nodeRef.current.map((node) => [node._id, node]))
+    const nodeDataById = new Map(nodeRef.current.map((node) => [node._id, node]))
     const newestDreamTime = Math.max(
       ...dreamsRef.current.map((dream) => new Date(dream.date).getTime()),
       Date.now(),
@@ -3493,10 +3455,10 @@ export default function DreamWorld3D({
         .14 + Math.max(0, Math.sin(elapsed * .19)) * .06
 
       if (libraryWalkwayPanelMaterial && libraryWalkwayRailMaterial) {
-        const walkwayPulse = Math.sin(elapsed * .62) * .012
-        libraryWalkwayPanelMaterial.opacity = .085 + walkwayPulse
+        const walkwayPulse = Math.sin(elapsed * .42) * .008
+        libraryWalkwayPanelMaterial.opacity = .075 + walkwayPulse
         libraryWalkwayRailMaterial.opacity =
-          .19 + Math.max(0, Math.sin(elapsed * .48 + .8)) * .045
+          .22 + Math.max(0, Math.sin(elapsed * .36 + .8)) * .04
       }
 
       worldLightShafts.forEach((shaft, index) => {
@@ -4453,9 +4415,11 @@ export default function DreamWorld3D({
       nearDustMaterial.dispose()
       scene.remove(nearDust)
       libraryWalkwayGeometry?.dispose()
+      libraryWalkwayRailGeometry?.dispose()
       libraryWalkwayPanelMaterial?.dispose()
       libraryWalkwayRailMaterial?.dispose()
-      world.remove(libraryWalkwayGroup)
+      if (libraryWalkway) world.remove(libraryWalkway)
+      if (libraryWalkwayRails) world.remove(libraryWalkwayRails)
       shaftGeometries.forEach((geometry) => geometry.dispose())
       shaftMaterials.forEach((material) => material.dispose())
 
