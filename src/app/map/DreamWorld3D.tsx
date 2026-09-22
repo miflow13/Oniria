@@ -69,6 +69,7 @@ export type DreamWorldNode = {
   articleCount?: number
   accent?: string
   world?: [number, number, number]
+  coverImages?: string[]
 }
 
 export type DreamWorldEdge = {
