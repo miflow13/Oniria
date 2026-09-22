@@ -1126,10 +1126,26 @@ export default function DevWebSurf3D({
       material.metalness = .025
       return material
     })
+    // Each upper level gets a restrained, physically present wall finish.
+    // These panels are visible from the balcony corridors, unlike HUD-only
+    // floor identity, but remain part of the same charcoal architecture.
+    const floorIdentityWallMaterials = FLOOR_ACCENTS.map((accent, floor) =>
+      new THREE.MeshStandardMaterial({
+        color: new THREE.Color(0x30343a).lerp(
+          new THREE.Color(accent),
+          .035 + floor * .006,
+        ),
+        map: architecturalSurfaceTexture,
+        roughnessMap: architecturalSurfaceRoughness,
+        roughness: .8 + (floor % 3) * .045,
+        metalness: .025,
+      }),
+    )
     architecturalMaterials.push(
       concrete,
       floorMaterial,
       ...floorMaterials,
+      ...floorIdentityWallMaterials,
     )
 
     const brass = new THREE.MeshStandardMaterial({
@@ -2240,6 +2256,24 @@ export default function DevWebSurf3D({
         '#' + new THREE.Color(floorAccent).getHexString()
 
       addPracticalFixtures(floor, base)
+
+      // Long, inward-facing wall skins make each collection level legible by
+      // ambient material temperature and surface response, not just its HUD.
+      const identityWallGeometry = new THREE.BoxGeometry(
+        .045,
+        3.9,
+        archiveDepth - 1.2,
+      )
+      architecturalGeometries.push(identityWallGeometry)
+      ;[-18.77, 18.77].forEach((x) => {
+        const identityWall = new THREE.Mesh(
+          identityWallGeometry,
+          floorIdentityWallMaterials[floor],
+        )
+        identityWall.position.set(x, base + 2.05, archiveCenterZ)
+        identityWall.receiveShadow = true
+        scene.add(identityWall)
+      })
 
       ;[-4.7, 4.7].forEach((x) => {
         const strip = new THREE.Mesh(
