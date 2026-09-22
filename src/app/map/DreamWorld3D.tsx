@@ -5885,6 +5885,12 @@ export default function DreamWorld3D({
               .45,
               5.2,
             )
+          const passThroughFade =
+            THREE.MathUtils.smoothstep(
+              landmarkDistance,
+              .08,
+              .62,
+            )
           const heroScale =
             1 +
             heroWake * .055 +
@@ -5920,7 +5926,8 @@ export default function DreamWorld3D({
                 Math.sin(elapsed * .34 + phase) * .018
               halo.scale.setScalar(haloScale)
               material.opacity +=
-                ((.08 + heroWake * .17) -
+                (((.08 + heroWake * .17) *
+                  passThroughFade) -
                   material.opacity) *
                 .08
               halo.rotation.z =
@@ -5937,12 +5944,13 @@ export default function DreamWorld3D({
                 (child as THREE.Mesh)
                   .material as THREE.MeshBasicMaterial
               material.opacity =
-                .22 +
-                heroWake * .16 +
-                Math.max(
-                  0,
-                  Math.sin(elapsed * 1.4 + phase),
-                ) * .28
+                (.22 +
+                  heroWake * .16 +
+                  Math.max(
+                    0,
+                    Math.sin(elapsed * 1.4 + phase),
+                  ) * .28) *
+                passThroughFade
             } else if (
               child.userData.libraryLandmarkOrbit
             ) {
@@ -5954,12 +5962,13 @@ export default function DreamWorld3D({
                 (child as THREE.Points)
                   .material as THREE.PointsMaterial
               material.opacity =
-                .4 +
-                heroWake * .22 +
-                Math.max(
-                  0,
-                  Math.sin(elapsed * .7 + phase),
-                ) * .2
+                (.4 +
+                  heroWake * .22 +
+                  Math.max(
+                    0,
+                    Math.sin(elapsed * .7 + phase),
+                  ) * .2) *
+                passThroughFade
             } else if (
               child.userData.libraryDistrictMotif
             ) {
@@ -5971,18 +5980,30 @@ export default function DreamWorld3D({
                 1 + heroWake * .06,
               )
             } else if (
+              child.userData.libraryLandmarkWire
+            ) {
+              const material =
+                (child as THREE.Mesh)
+                  .material as THREE.MeshBasicMaterial
+              material.opacity +=
+                (((.7 + heroWake * .24) *
+                  passThroughFade) -
+                  material.opacity) *
+                .1
+            } else if (
               child.userData.libraryLandmarkPedestal
             ) {
               const material =
                 (child as THREE.Mesh)
                   .material as THREE.MeshBasicMaterial
               material.opacity =
-                .27 +
-                heroWake * .16 +
-                Math.max(
-                  0,
-                  Math.sin(elapsed * .68 + phase),
-                ) * .16
+                (.27 +
+                  heroWake * .16 +
+                  Math.max(
+                    0,
+                    Math.sin(elapsed * .68 + phase),
+                  ) * .16) *
+                (.45 + passThroughFade * .55)
             } else if (
               child.userData.libraryLandmarkCore
             ) {
@@ -5990,11 +6011,13 @@ export default function DreamWorld3D({
                 (child as THREE.Mesh)
                   .material as THREE.MeshBasicMaterial
               material.opacity =
-                .2 +
-                Math.max(
-                  0,
-                  Math.sin(elapsed * .52 + phase),
-                ) * .14
+                (.16 +
+                  heroWake * .12 +
+                  Math.max(
+                    0,
+                    Math.sin(elapsed * .52 + phase),
+                  ) * .12) *
+                passThroughFade
             }
           })
           return
