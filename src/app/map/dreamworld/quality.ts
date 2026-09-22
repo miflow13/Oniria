@@ -10,6 +10,9 @@ export type DreamQualitySettings = {
   particleCount: number
   miniWorldDetail: 0 | 1 | 2
   fogDensity: number
+  cellResolution: 256 | 384 | 512 | 768
+  depthOfField: boolean
+  maxBlur: number
 }
 
 export function getQualitySettings(quality: DreamQuality): DreamQualitySettings {
@@ -25,6 +28,9 @@ export function getQualitySettings(quality: DreamQuality): DreamQualitySettings 
         particleCount: 10,
         miniWorldDetail: 0,
         fogDensity: 0.04,
+        cellResolution: 256,
+        depthOfField: false,
+        maxBlur: 0.0,
       }
     case 'medium':
       return {
@@ -37,6 +43,9 @@ export function getQualitySettings(quality: DreamQuality): DreamQualitySettings 
         particleCount: 18,
         miniWorldDetail: 1,
         fogDensity: 0.044,
+        cellResolution: 384,
+        depthOfField: true,
+        maxBlur: 0.005,
       }
     case 'cinematic':
       return {
@@ -49,6 +58,9 @@ export function getQualitySettings(quality: DreamQuality): DreamQualitySettings 
         particleCount: 44,
         miniWorldDetail: 2,
         fogDensity: 0.052,
+        cellResolution: 768,
+        depthOfField: true,
+        maxBlur: 0.015,
       }
     case 'high':
     default:
@@ -62,6 +74,9 @@ export function getQualitySettings(quality: DreamQuality): DreamQualitySettings 
         particleCount: 30,
         miniWorldDetail: 2,
         fogDensity: 0.047,
+        cellResolution: 512,
+        depthOfField: true,
+        maxBlur: 0.009,
       }
   }
 }
