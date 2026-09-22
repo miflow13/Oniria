@@ -82,6 +82,66 @@ function impossibleMaterial(color: THREE.Color, opacity = 0.46) {
   })
 }
 
+function createPortalLabel(
+  title: string,
+  sharedSymbols: string[],
+  color: THREE.Color,
+) {
+  const canvas = document.createElement('canvas')
+  canvas.width = 768
+  canvas.height = 176
+  const context = canvas.getContext('2d')
+
+  if (context) {
+    context.clearRect(0, 0, canvas.width, canvas.height)
+    const rgb = {
+      r: Math.round(color.r * 255),
+      g: Math.round(color.g * 255),
+      b: Math.round(color.b * 255),
+    }
+    const gradient = context.createLinearGradient(80, 0, 688, 0)
+    gradient.addColorStop(0, 'rgba(4,8,20,0)')
+    gradient.addColorStop(.18, 'rgba(7,12,27,.76)')
+    gradient.addColorStop(.82, 'rgba(7,12,27,.76)')
+    gradient.addColorStop(1, 'rgba(4,8,20,0)')
+    context.fillStyle = gradient
+    context.fillRect(0, 18, canvas.width, 140)
+
+    context.textAlign = 'center'
+    context.textBaseline = 'middle'
+    context.fillStyle = 'rgba(235,245,255,.92)'
+    context.shadowColor = `rgba(${rgb.r},${rgb.g},${rgb.b},.4)`
+    context.shadowBlur = 18
+    context.font = '600 31px system-ui, sans-serif'
+    const cleanTitle =
+      title.length > 34 ? `${title.slice(0, 33)}…` : title
+    context.fillText(cleanTitle, canvas.width / 2, 70)
+
+    context.shadowBlur = 0
+    context.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},.78)`
+    context.font = '500 18px system-ui, sans-serif'
+    const relation =
+      sharedSymbols.length > 0
+        ? `shared: ${sharedSymbols.slice(0, 3).join(' · ')}`
+        : 'related memory'
+    context.fillText(relation, canvas.width / 2, 112)
+  }
+
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.colorSpace = THREE.SRGBColorSpace
+  const material = new THREE.SpriteMaterial({
+    map: texture,
+    transparent: true,
+    opacity: .16,
+    depthWrite: false,
+    toneMapped: false,
+  })
+  const sprite = new THREE.Sprite(material)
+  sprite.scale.set(3.2, .73, 1)
+
+  return {sprite, texture, material}
+}
+
 function glowMaterial(color: THREE.Color, opacity = .42) {
   return new THREE.MeshBasicMaterial({
     color,
@@ -119,10 +179,18 @@ export function createImpossibleSpace({
     dream: Dream
     interaction: Exclude<DiveInteraction, null>
     object: THREE.Object3D
+    label?: {
+      sprite: THREE.Sprite
+      texture: THREE.Texture
+      material: THREE.SpriteMaterial
+    }
+    frameMaterial?: THREE.MeshStandardMaterial
+    portalMaterial?: THREE.Material
   }> = []
   const pickables: THREE.Object3D[] = []
   const raycaster = new THREE.Raycaster()
   const pointer = new THREE.Vector2()
+  let hoveredDreamId: string | null = null
 
   const primaryRelation = relations[0] ?? null
   const mutation: DreamMutation = chooseDreamMutation(
@@ -250,7 +318,10 @@ export function createImpossibleSpace({
   group.add(room)
 
   // Destination portals: live render targets showing related dreams.
-  relations.slice(0, depth < maxDepth ? 2 : 1).forEach((relation, index) => {
+  const portalPreviewLimit =
+    settings.miniWorldDetail === 0 ? 1 : depth < maxDepth ? 2 : 1
+
+  relations.slice(0, portalPreviewLimit).forEach((relation, index) => {
     const destination = relation.dream
     const recurrence = dreamRecurrence(destination, dreams)
     const destinationProfile = createDreamProfile(destination, recurrence)
@@ -313,16 +384,30 @@ export function createImpossibleSpace({
       -7.5 - index * 2.2,
     )
     frame.rotation.y = index === 0 ? .16 : -.18
+
+    const label = createPortalLabel(
+      destination.title?.trim() || 'Untitled dream',
+      relation.sharedSymbols,
+      color,
+    )
+    label.sprite.position.set(0, 1.92, .08)
+    frame.add(label.sprite)
+
     group.add(frame)
     previews.push({
       cell,
       dream: destination,
       interaction,
       object: frame,
+      label,
+      frameMaterial,
+      portalMaterial,
     })
     disposables.push(
       frameMaterial,
       portalMaterial,
+      label.texture,
+      label.material,
       leftGeometry,
       rightGeometry,
       topGeometry,
@@ -331,7 +416,11 @@ export function createImpossibleSpace({
   })
 
   // Recursive memory cell: live miniature world nested inside this one.
-  if (depth < maxDepth && relations.length > 0) {
+  if (
+    depth < maxDepth &&
+    relations.length > 0 &&
+    settings.miniWorldDetail > 0
+  ) {
     const relation = relations[Math.min(1, relations.length - 1)]
     const destination = relation.dream
     const recurrence = dreamRecurrence(destination, dreams)
@@ -436,8 +525,12 @@ export function createImpossibleSpace({
   return {
     group,
     renderPreviews: (renderer, time) => {
-      previews.forEach(({cell}, index) => {
-        cell.update(time, .35 + index * .08)
+      previews.forEach(({cell, interaction}, index) => {
+        const hovered = hoveredDreamId === interaction.dreamId
+        cell.update(time, hovered ? .95 : .35 + index * .08)
+        if (hovered && interaction.kind === 'recursive-cell') {
+          cell.portal.scale.multiplyScalar(1.08)
+        }
         cell.render(renderer)
       })
     },
@@ -445,7 +538,10 @@ export function createImpossibleSpace({
       pointer.set(ndcX, ndcY)
       raycaster.setFromCamera(pointer, camera)
       const hit = raycaster.intersectObjects(pickables, true)[0]
-      if (!hit) return null
+      if (!hit) {
+        hoveredDreamId = null
+        return null
+      }
 
       let object: THREE.Object3D | null = hit.object
       while (object && !object.userData.diveInteraction) {
@@ -454,8 +550,12 @@ export function createImpossibleSpace({
 
       const interaction =
         (object?.userData.diveInteraction as DiveInteraction) ?? null
-      if (!interaction || !object) return null
+      if (!interaction || !object) {
+        hoveredDreamId = null
+        return null
+      }
 
+      hoveredDreamId = interaction.dreamId
       const focus = object.getWorldPosition(new THREE.Vector3())
       return {
         ...interaction,
@@ -525,12 +625,40 @@ export function createImpossibleSpace({
           !(profile.decay * temporalProgress > .52 && index === 1)
       })
 
-      previews.forEach(({object}, index) => {
-        object.position.y +=
-          Math.sin(time * .24 + index * 1.7) *
-          delta *
-          (.04 + instability * .04)
-      })
+      previews.forEach(
+        ({object, interaction, label, frameMaterial, portalMaterial}, index) => {
+          object.position.y +=
+            Math.sin(time * .24 + index * 1.7) *
+            delta *
+            (.04 + instability * .04)
+
+          const hovered = hoveredDreamId === interaction.dreamId
+          const targetScale = hovered ? 1.06 : 1
+          object.scale.lerp(
+            new THREE.Vector3(targetScale, targetScale, targetScale),
+            .08,
+          )
+
+          if (label) {
+            label.material.opacity +=
+              ((hovered ? .92 : .18) - label.material.opacity) * .1
+          }
+
+          if (frameMaterial) {
+            frameMaterial.emissiveIntensity +=
+              ((hovered ? 1.15 : .52) - frameMaterial.emissiveIntensity) *
+              .08
+          }
+
+          if (portalMaterial && 'opacity' in portalMaterial) {
+            const material = portalMaterial as
+              | THREE.MeshBasicMaterial
+              | THREE.SpriteMaterial
+            material.opacity +=
+              ((hovered ? 1 : .88) - material.opacity) * .08
+          }
+        },
+      )
 
       if (mutationObject) {
         if (mutation === 'watcher') {
