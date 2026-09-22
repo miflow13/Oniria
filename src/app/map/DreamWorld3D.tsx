@@ -1190,7 +1190,12 @@ export default function DreamWorld3D({
     let holdTimer: number | null = null
     let holdNodeId: string | null = null
     let pendingPortal:
-      | {dreamId: string; title: string; depth: number}
+      | {
+          dreamId: string
+          title: string
+          depth: number
+          focus?: {x: number; y: number; z: number}
+        }
       | null = null
     let diveStack: string[] = []
 
@@ -1438,6 +1443,7 @@ export default function DreamWorld3D({
       dreamId: string
       title: string
       depth: number
+      focus?: {x: number; y: number; z: number}
     }) {
       if (!activeDive || diveMode !== 'inside') return
       if (action.depth > 2) return
@@ -1680,6 +1686,25 @@ export default function DreamWorld3D({
         activeDive.setLookTarget(pointerTarget.x, pointerTarget.y)
         activeDive.setTimeline(diveTimelineProgressRef.current)
         activeDive.update(elapsed, delta)
+
+        if (diveMode === 'portal' && pendingPortal?.focus) {
+          const portalProgress = Math.min(
+            1,
+            Math.max(0, (elapsed - diveTransitionStartedAt) / .72),
+          )
+          const eased = 1 - Math.pow(1 - portalProgress, 3)
+          const focus = new THREE.Vector3(
+            pendingPortal.focus.x,
+            pendingPortal.focus.y,
+            pendingPortal.focus.z,
+          )
+          const travelTarget = focus.clone().add(
+            new THREE.Vector3(0, 0, .32 * (1 - eased)),
+          )
+          activeDive.camera.position.lerp(travelTarget, .08 + eased * .13)
+          activeDive.camera.lookAt(focus)
+        }
+
         activeDive.renderPreviews(renderer, elapsed)
 
         if (diveAudio) {
