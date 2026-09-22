@@ -1169,6 +1169,15 @@ export default function DreamWorld3D({
 
       const start = worldPosition(node, positionsRef.current)
       group.position.copy(start)
+      if (node.libraryKind === 'shelf') {
+        const baseYaw =
+          Math.atan2(
+            camera.position.x - start.x,
+            camera.position.z - start.z,
+          ) + Math.PI
+        group.userData.libraryBaseYaw = baseYaw
+        group.rotation.y = baseYaw
+      }
 
       const baseScale =
         node.libraryKind === 'shelf'
@@ -3226,7 +3235,12 @@ export default function DreamWorld3D({
         )
 
         if (node.libraryKind === 'shelf') {
+          const baseYaw =
+            typeof visual.group.userData.libraryBaseYaw === 'number'
+              ? visual.group.userData.libraryBaseYaw
+              : Math.PI
           visual.group.rotation.y =
+            baseYaw +
             Math.sin(elapsed * .085 + visual.phase) * .012
           visual.group.rotation.x =
             Math.sin(elapsed * .07 + visual.phase) * .004
