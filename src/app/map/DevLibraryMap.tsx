@@ -313,7 +313,12 @@ export default function DevLibraryMap() {
           .map((article) => article.cover_image ?? article.social_image ?? null)
           .filter((url): url is string => Boolean(url))
           .filter((url, index, all) => all.indexOf(url) === index)
-          .slice(0, 9),
+          .slice(0, 9)
+          .map(
+            (url) =>
+              '/api/devto?mode=image&variant=thumb&url=' +
+              encodeURIComponent(url),
+          ),
       })),
     [bootstrap?.tags.length, creators.length, shelves],
   )
