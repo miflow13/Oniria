@@ -82,6 +82,30 @@ function safeTagColor(tag: DevTag | undefined) {
   return SECTION_COPY.topics.accent
 }
 
+function articleTags(article: DevArticleSummary | DevArticle) {
+  const payload = article as DevArticleSummary & {
+    tag_list?: unknown
+    tags?: unknown
+  }
+  const source = payload.tag_list ?? payload.tags
+
+  if (Array.isArray(source)) {
+    return source
+      .filter((tag): tag is string => typeof tag === 'string')
+      .map((tag) => tag.trim())
+      .filter(Boolean)
+  }
+
+  if (typeof source === 'string') {
+    return source
+      .split(',')
+      .map((tag) => tag.trim().replace(/^#/, ''))
+      .filter(Boolean)
+  }
+
+  return []
+}
+
 function cleanMarkdown(markdown: string | undefined) {
   if (!markdown) return ''
   return markdown
@@ -838,15 +862,19 @@ export default function DevWebSurf() {
         ...bootstrap.profileArticles,
       ]
         .filter(
-          (candidate, index, collection) =>
-            candidate.id !== article.id &&
-            candidate.tag_list.some((tag) =>
-              article.tag_list.includes(tag),
-            ) &&
-            graph.nodes.some(
-              (node) => node.id === 'article:' + candidate.id,
-            ) &&
-            collection.findIndex((item) => item.id === candidate.id) === index,
+          (candidate, index, collection) => {
+            const currentTags = new Set(articleTags(article))
+            const candidateTags = articleTags(candidate)
+
+            return (
+              candidate.id !== article.id &&
+              candidateTags.some((tag) => currentTags.has(tag)) &&
+              graph.nodes.some(
+                (node) => node.id === 'article:' + candidate.id,
+              ) &&
+              collection.findIndex((item) => item.id === candidate.id) === index
+            )
+          },
         )
         .sort(
           (a, b) =>
@@ -1195,7 +1223,7 @@ export default function DevWebSurf() {
               </p>
 
               <div className={styles.tags}>
-                {article.tag_list.map((tag) => (
+                {articleTags(article).map((tag) => (
                   <button
                     key={tag}
                     type="button"
