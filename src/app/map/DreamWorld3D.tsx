@@ -340,8 +340,15 @@ export default function DreamWorld3D({
     () =>
       `${quality}::${nodes.map((node) => node._id).join('|')}::${edges
         .map((edge) => `${edge.id}:${edge.weight}`)
+        .join('|')}::${dreams
+        .map(
+          (dream) =>
+            `${dream._id}:${dream.mood}:${dream.lucid ? 1 : 0}:${hashString(dream.body)}:${(dream.symbols ?? [])
+              .map((symbol) => symbol._id)
+              .join(',')}`,
+        )
         .join('|')}`,
-    [edges, nodes, quality],
+    [dreams, edges, nodes, quality],
   )
 
   useEffect(() => {
@@ -1387,6 +1394,7 @@ export default function DreamWorld3D({
 
     let animationFrame = 0
     let lastSelectedId: string | null = null
+    let relationTravel: {from: string; to: string; startedAt: number} | null = null
     const startedAt = performance.now()
     let lastFrameAt = startedAt
 
@@ -1515,6 +1523,8 @@ export default function DreamWorld3D({
 
       const currentSelectedId = selectedRef.current
       if (currentSelectedId !== lastSelectedId) {
+        const previousSelectedId = lastSelectedId
+
         if (currentSelectedId) {
           const selected = nodeVisuals.get(currentSelectedId)
           if (selected) {
@@ -1524,6 +1534,23 @@ export default function DreamWorld3D({
             ;(selected.shockwave.material as THREE.MeshBasicMaterial).opacity = 0.42
           }
         }
+
+        if (
+          previousSelectedId &&
+          currentSelectedId &&
+          edges.some(
+            (edge) =>
+              (edge.source === previousSelectedId && edge.target === currentSelectedId) ||
+              (edge.target === previousSelectedId && edge.source === currentSelectedId),
+          )
+        ) {
+          relationTravel = {
+            from: previousSelectedId,
+            to: currentSelectedId,
+            startedAt: elapsed,
+          }
+        }
+
         lastSelectedId = currentSelectedId
       }
 
@@ -1733,10 +1760,26 @@ export default function DreamWorld3D({
         edgeVisual.material.opacity +=
           (desiredOpacity - edgeVisual.material.opacity) * .08
 
-        const pulseT =
-          (elapsed * (.07 + Math.min(edgeVisual.weight, 4) * .016) +
-            edgeVisual.phase) %
-          1
+        const isRelationEdge = Boolean(
+          relationTravel &&
+            ((edgeVisual.source === relationTravel.from &&
+              edgeVisual.target === relationTravel.to) ||
+              (edgeVisual.target === relationTravel.from &&
+                edgeVisual.source === relationTravel.to)),
+        )
+        const relationProgress = relationTravel
+          ? Math.min(1, Math.max(0, (elapsed - relationTravel.startedAt) / .92))
+          : 0
+        const relationForward =
+          relationTravel?.from === edgeVisual.source
+        const relationT = relationForward
+          ? relationProgress
+          : 1 - relationProgress
+        const pulseT = isRelationEdge
+          ? relationT
+          : (elapsed * (.07 + Math.min(edgeVisual.weight, 4) * .016) +
+              edgeVisual.phase) %
+            1
         const oneMinus = 1 - pulseT
         edgeVisual.pulse.position
           .copy(source)
@@ -1744,10 +1787,19 @@ export default function DreamWorld3D({
           .addScaledVector(control, 2 * oneMinus * pulseT)
           .addScaledVector(target, pulseT * pulseT)
         ;(edgeVisual.pulse.material as THREE.MeshBasicMaterial).opacity =
-          edgeHighlighted
-            ? Math.min(.5, .34 + (touchesSelected ? selectionPulseStrength * .3 : 0))
-            : .05
+          isRelationEdge
+            ? .92 * (1 - relationProgress * .3)
+            : edgeHighlighted
+              ? Math.min(.5, .34 + (touchesSelected ? selectionPulseStrength * .3 : 0))
+              : .05
       })
+
+      if (
+        relationTravel &&
+        elapsed - relationTravel.startedAt > 1.05
+      ) {
+        relationTravel = null
+      }
 
       const selectedNode = selectedRef.current
         ? nodeRef.current.find((node) => node._id === selectedRef.current) ?? null
@@ -1812,12 +1864,14 @@ export default function DreamWorld3D({
         .025
 
       if (scene.fog instanceof THREE.FogExp2) {
+        const sceneReveal = Math.min(1, elapsed / 1.7)
+        const birthFog = (1 - sceneReveal) * 0.072
         scene.fog.density +=
           ((selectedVisual
-            ? settings.fogDensity * 1.18
-            : settings.fogDensity) -
+            ? settings.fogDensity * 1.18 + birthFog
+            : settings.fogDensity + birthFog) -
             scene.fog.density) *
-          0.025
+          0.04
       }
 
       violetLight.intensity +=
