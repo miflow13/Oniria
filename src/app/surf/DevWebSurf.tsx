@@ -223,7 +223,7 @@ function shelfPlacement(
   const anchor = anchors[shelfIndex]
 
   const localOffset = (slot - 1) * 1.02
-  const y = .78 + level * 1.05
+  const y = .7 + level * 1.1
 
   let x = anchor.x
   let z = anchor.z + anchor.front
