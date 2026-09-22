@@ -1256,8 +1256,9 @@ export default function DevWebSurf3D({
     const floorRoughnessTexture = createFloorRoughnessTexture()
     labelsToDispose.push(floorRoughnessTexture)
 
-    // One material family for floors + walls. The floor now reads as the
-    // horizontal face of the same megastructure instead of a separate skin.
+    // Shared architectural material family for the open megastructure.
+    // With the enclosing walls removed, this primarily gives floors, fixtures,
+    // and structural pieces the same textured physical language.
     const concrete = new THREE.MeshStandardMaterial({
       color: 0x30343a,
       map: architecturalSurfaceTexture,
@@ -1265,8 +1266,8 @@ export default function DevWebSurf3D({
       roughness: .92,
       metalness: .045,
     })
-    // Floors remain the exact same material family as the walls, but get a
-    // modest value lift so walkable space can be parsed without a neon grid.
+    // Floors get a modest value lift so walkable space can be parsed without
+    // relying on a neon grid.
     const floorMaterial = concrete.clone()
     floorMaterial.color.setHex(0x3d4149)
     // The architectural color map is mid-value by design; using it directly
@@ -1284,26 +1285,10 @@ export default function DevWebSurf3D({
       material.metalness = .006
       return material
     })
-    // Each upper level gets a restrained, physically present wall finish.
-    // These panels are visible from the balcony corridors, unlike HUD-only
-    // floor identity, but remain part of the same charcoal architecture.
-    const floorIdentityWallMaterials = FLOOR_ACCENTS.map((accent, floor) =>
-      new THREE.MeshStandardMaterial({
-        color: new THREE.Color(0x30343a).lerp(
-          new THREE.Color(accent),
-          .035 + floor * .006,
-        ),
-        map: architecturalSurfaceTexture,
-        roughnessMap: architecturalSurfaceRoughness,
-        roughness: .8 + (floor % 3) * .045,
-        metalness: .025,
-      }),
-    )
     architecturalMaterials.push(
       concrete,
       floorMaterial,
       ...floorMaterials,
-      ...floorIdentityWallMaterials,
     )
 
     const brass = new THREE.MeshStandardMaterial({
@@ -1604,22 +1589,14 @@ export default function DevWebSurf3D({
       return group
     }
 
-    function addWall(
+    function addBoundaryCollision(
       x: number,
       z: number,
       width: number,
       depth: number,
       height: number,
-      material = concrete,
       floorBase = 0,
     ) {
-      const geometry = new THREE.BoxGeometry(width, height, depth)
-      architecturalGeometries.push(geometry)
-      const mesh = new THREE.Mesh(geometry, material)
-      mesh.position.set(x, floorBase + height / 2 - .02, z)
-      mesh.castShadow = true
-      mesh.receiveShadow = true
-      scene.add(mesh)
       collisionRects.push({
         minX: x - width / 2,
         maxX: x + width / 2,
@@ -1628,7 +1605,6 @@ export default function DevWebSurf3D({
         minY: floorBase,
         maxY: floorBase + height,
       })
-      return mesh
     }
 
     const shelfAccentBars: Array<{
@@ -2401,16 +2377,19 @@ export default function DevWebSurf3D({
     restrictedGate.position.set(0, 1.72, -34.25)
     scene.add(restrictedGate)
 
-    addWall(-19, archiveCenterZ, .38, archiveDepth, buildingHeight, concrete, 0)
-    addWall(19, archiveCenterZ, .38, archiveDepth, buildingHeight, concrete, 0)
-    addWall(0, -78.3, 38, .38, buildingHeight, concrete, 0)
-    addWall(-10.4, 14.7, 17.2, .38, buildingHeight, concrete, 0)
-    addWall(10.4, 14.7, 17.2, .38, buildingHeight, concrete, 0)
+    // The library is now an open-air digital megastructure: no opaque
+    // exterior wall slabs. Retain only perimeter collisions at the wireframe
+    // boundary so the open silhouette does not let the player walk into void.
+    addBoundaryCollision(-19, archiveCenterZ, .38, archiveDepth, buildingHeight)
+    addBoundaryCollision(19, archiveCenterZ, .38, archiveDepth, buildingHeight)
+    addBoundaryCollision(0, -78.3, 38, .38, buildingHeight)
+    addBoundaryCollision(-10.4, 14.7, 17.2, .38, buildingHeight)
+    addBoundaryCollision(10.4, 14.7, 17.2, .38, buildingHeight)
 
     // TRON-like "inside the system" exoskeleton. Keep this as one batched
     // LineSegments object so the extra depth language costs a single draw call.
-    // The frame deliberately continues above the walls but never closes across
-    // the top, preserving the newly open vertical sightline.
+    // The frame now acts as the exposed outer structure itself. It continues
+    // into the star field without opaque walls or a top cap.
     const systemWirePositions: number[] = []
     const addSystemWire = (
       x1: number,
@@ -2545,23 +2524,9 @@ export default function DevWebSurf3D({
 
       addPracticalFixtures(floor, base)
 
-      // Long, inward-facing wall skins make each collection level legible by
-      // ambient material temperature and surface response, not just its HUD.
-      const identityWallGeometry = new THREE.BoxGeometry(
-        .045,
-        3.9,
-        archiveDepth - 1.2,
-      )
-      architecturalGeometries.push(identityWallGeometry)
-      ;[-18.77, 18.77].forEach((x) => {
-        const identityWall = new THREE.Mesh(
-          identityWallGeometry,
-          floorIdentityWallMaterials[floor],
-        )
-        identityWall.position.set(x, base + 2.05, archiveCenterZ)
-        identityWall.receiveShadow = true
-        scene.add(identityWall)
-      })
+      // No opaque side skins: floor identity now comes from the slab fascias,
+      // shelf accents, lighting, and HUD while the star field remains visible
+      // through the exposed structure.
 
       ;[-4.7, 4.7].forEach((x) => {
         const strip = new THREE.Mesh(
@@ -3050,22 +3015,9 @@ export default function DevWebSurf3D({
     // continues another thirty-plus metres into fog.
     addFloor(0, -61, 38, 34)
 
-    // Atrium shell and central nave. The deep-archive threshold is open in
-    // the middle, producing a sightline into rows the player cannot reach.
-    ;[-8.9, 8.9].forEach((x) => {
-      addWall(x, 7, .35, 10, 5.8)
-      addWall(x, -12.5, .35, 11, 5.8)
-      addWall(x, -32.5, .35, 17, 5.8)
-    })
-    addWall(0, 14.5, 18, .35, 5.8)
-    addWall(-6.5, -44.5, 5, .35, 5.8)
-    addWall(6.5, -44.5, 5, .35, 5.8)
-
-    // Wing separators leave intentional door-sized gaps.
-    addWall(-13, 1.8, 7.5, .28, 4.6)
-    addWall(-13, -29.5, 7.5, .28, 4.6)
-    addWall(13, 1.8, 7.5, .28, 4.6)
-    addWall(13, -29.5, 7.5, .28, 4.6)
+    // The atrium and wings are intentionally wall-free. Shelves, floor
+    // treatments, signs, and the exposed system frame now define circulation
+    // without opaque partitions interrupting the sky/void sightlines.
 
     type DensityShelfUnit = {
       x: number
