@@ -55,6 +55,7 @@ function archivePathFrame(bay: number) {
 export type ArchiveShelfPlacement = {
   world: [number, number, number]
   yaw: number
+  pathBay: number
 }
 
 /**
@@ -94,5 +95,5 @@ export function archiveShelfPlacement(
     Math.PI +
     yawJitter
 
-  return {world, yaw}
+  return {world, yaw, pathBay: fractionalBay}
 }
