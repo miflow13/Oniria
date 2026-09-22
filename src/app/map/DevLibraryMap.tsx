@@ -642,10 +642,10 @@ export default function DevLibraryMap() {
           localIndex % 2 === 0 ? -1 : 1
         const bay =
           district.id === 'front-page'
-            ? .78 + Math.floor(localIndex / 2) * .72
+            ? .68 + Math.floor(localIndex / 2) * .46
             : district.bay +
-              1.35 +
-              Math.floor(localIndex / 2) * .82
+              .92 +
+              Math.floor(localIndex / 2) * .5
         const shelfId = 'shelf:catalog:' + catalogShelfIndex
         const shelf = makeShelf(
           shelfId,
@@ -667,16 +667,16 @@ export default function DevLibraryMap() {
             {
               laneBias:
                 district.id === 'front-page'
-                  ? -2.05
-                  : .12,
+                  ? -2.15
+                  : -.58,
               alongJitterScale:
                 district.id === 'front-page'
-                  ? .08
-                  : .26,
+                  ? .05
+                  : .12,
               yawJitterScale:
                 district.id === 'front-page'
-                  ? .18
-                  : .45,
+                  ? .12
+                  : .26,
             },
             districts,
           ),
