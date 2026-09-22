@@ -2967,7 +2967,9 @@ export default function DreamWorld3D({
 
       activeDistricts.forEach((district, index) => {
         const center = new THREE.Vector3(...archivePathPoint(district.bay))
-        center.y += ARCHIVE_WALKWAY_Y_OFFSET + 4.25
+        // Keep the district header just above the tallest landmark so it
+        // reads as signage instead of cutting through the centerpiece.
+        center.y += ARCHIVE_WALKWAY_Y_OFFSET + 6.2
 
         const texture = createLibraryRouteLabelTexture(
           district.label,
