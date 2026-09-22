@@ -3000,26 +3000,12 @@ export default function DreamWorld3D({
           ...archivePathPoint(district.bay),
         )
         const frame = archivePathFrame(district.bay)
-        const side = new THREE.Vector3(
-          frame.normalX,
-          0,
-          frame.normalZ,
-        )
-        const sideSign = index % 2 === 0 ? 1 : -1
-        const halfWidth = archiveWalkwayHalfWidthAtBay(
-          district.bay,
-          activeDistricts,
-        )
 
-        // Keep landmarks on the district plaza itself. The previous placement
-        // pushed them beyond the widened path edge, directly behind shelf
-        // clusters, which made them effectively invisible in first person.
-        const landmarkPosition = pathCenter
-          .clone()
-          .addScaledVector(
-            side,
-            sideSign * Math.max(2.1, halfWidth - 1.25),
-          )
+        // Landmarks are the visual anchor of each district, so place them on
+        // the main causeway centerline directly beneath the district sign.
+        // They remain decorative-only and are intentionally excluded from
+        // collision/raycast systems so the center path stays traversable.
+        const landmarkPosition = pathCenter.clone()
 
         let landmarkGeometry: THREE.BufferGeometry
         let landmarkHeight = 3.4
