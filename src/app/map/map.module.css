@@ -3534,3 +3534,114 @@
     transition: none !important;
   }
 }
+
+
+/* Journal deploys from the selected memory instead of popping in like a modal. */
+.noteClusterRight .noteStage {
+  animation: noteDeployRight 760ms cubic-bezier(.12,.82,.16,1) both;
+}
+
+.noteClusterLeft .noteStage {
+  animation: noteDeployLeft 760ms cubic-bezier(.12,.82,.16,1) both;
+}
+
+.noteAnchorBeam {
+  transform: scaleX(0);
+  animation: memoryBeamDraw 680ms cubic-bezier(.16,.76,.18,1) 120ms forwards;
+}
+
+.noteClusterLeft .noteAnchorBeam {
+  transform: rotate(180deg) scaleX(0);
+}
+
+.noteCluster .noteAnchorPulse {
+  animation:
+    memoryAnchorWake 720ms cubic-bezier(.16,.8,.2,1) both,
+    anchorPulse 2.8s ease-in-out 720ms infinite;
+}
+
+@keyframes noteDeployRight {
+  0% {
+    opacity: 0;
+    filter: blur(14px);
+    transform: translate3d(-62px, 8px, -180px) scale(.08) rotateY(-18deg);
+  }
+  38% {
+    opacity: .58;
+    filter: blur(5px);
+    transform: translate3d(-20px, 3px, -70px) scale(.74) rotateY(-7deg);
+  }
+  72% {
+    opacity: 1;
+    filter: blur(0);
+    transform: translate3d(4px, 0, 10px) scale(1.025) rotateY(1deg);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0);
+    transform: translate3d(0, 0, 0) scale(1) rotateY(0);
+  }
+}
+
+@keyframes noteDeployLeft {
+  0% {
+    opacity: 0;
+    filter: blur(14px);
+    transform: translate3d(62px, 8px, -180px) scale(.08) rotateY(18deg);
+  }
+  38% {
+    opacity: .58;
+    filter: blur(5px);
+    transform: translate3d(20px, 3px, -70px) scale(.74) rotateY(7deg);
+  }
+  72% {
+    opacity: 1;
+    filter: blur(0);
+    transform: translate3d(-4px, 0, 10px) scale(1.025) rotateY(-1deg);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0);
+    transform: translate3d(0, 0, 0) scale(1) rotateY(0);
+  }
+}
+
+@keyframes memoryBeamDraw {
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.noteClusterLeft .noteAnchorBeam {
+  animation-name: memoryBeamDrawLeft;
+}
+
+@keyframes memoryBeamDrawLeft {
+  to {
+    transform: rotate(180deg) scaleX(1);
+  }
+}
+
+@keyframes memoryAnchorWake {
+  0% {
+    opacity: 0;
+    transform: scale(.15);
+  }
+  58% {
+    opacity: 1;
+    transform: scale(1.45);
+  }
+  100% {
+    opacity: .8;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .noteClusterRight .noteStage,
+  .noteClusterLeft .noteStage,
+  .noteAnchorBeam,
+  .noteCluster .noteAnchorPulse {
+    animation: none !important;
+  }
+}
