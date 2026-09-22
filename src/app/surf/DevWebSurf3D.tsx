@@ -610,8 +610,8 @@ export default function DevWebSurf3D({
 
     const floorIdentityLight = new THREE.PointLight(
       FLOOR_ACCENTS[currentFloorRef.current],
-      3.6,
-      42,
+      1.05,
+      26,
       2,
     )
     floorIdentityLight.position.set(
@@ -620,6 +620,23 @@ export default function DevWebSurf3D({
       -18,
     )
     scene.add(floorIdentityLight)
+
+    const practicalLightStops = [-8, -28, -48] as const
+    const practicalLights = practicalLightStops.map((z, index) => {
+      const light = new THREE.PointLight(
+        index === 1 ? 0xf7f2e8 : 0xdce4e8,
+        1.45,
+        16,
+        2,
+      )
+      light.position.set(
+        index % 2 === 0 ? -8.8 : 8.8,
+        currentFloorRef.current * LIBRARY_FLOOR_HEIGHT + 4.15,
+        z,
+      )
+      scene.add(light)
+      return light
+    })
 
     const architecturalGeometries: THREE.BufferGeometry[] = []
     const architecturalMaterials: THREE.Material[] = []
@@ -1631,6 +1648,39 @@ export default function DevWebSurf3D({
     const buildingHeight = LIBRARY_FLOOR_COUNT * LIBRARY_FLOOR_HEIGHT
     const archiveCenterZ = -31.5
     const archiveDepth = 94
+
+    const practicalFixtureGeometry = new THREE.BoxGeometry(1.4, .045, .18)
+    architecturalGeometries.push(practicalFixtureGeometry)
+    const practicalFixtureMaterials = FLOOR_ACCENTS.map((accent) => {
+      const material = new THREE.MeshBasicMaterial({
+        color: new THREE.Color(0xe6e8e7).lerp(
+          new THREE.Color(accent),
+          .055,
+        ),
+        transparent: true,
+        opacity: .52,
+        toneMapped: false,
+      })
+      architecturalMaterials.push(material)
+      return material
+    })
+
+    function addPracticalFixtures(floor: number, base: number) {
+      ;[-4, -14, -24, -34, -44, -54, -64].forEach((z, index) => {
+        ;[-10.2, 10.2].forEach((x) => {
+          const fixture = new THREE.Mesh(
+            practicalFixtureGeometry,
+            practicalFixtureMaterials[floor],
+          )
+          fixture.position.set(
+            x,
+            base + 4.55,
+            z + (index % 2 === 0 ? 0 : .35),
+          )
+          scene.add(fixture)
+        })
+      })
+    }
     addWall(-19, archiveCenterZ, .38, archiveDepth, buildingHeight, concrete, 0)
     addWall(19, archiveCenterZ, .38, archiveDepth, buildingHeight, concrete, 0)
     addWall(0, -78.3, 38, .38, buildingHeight, concrete, 0)
@@ -1642,6 +1692,8 @@ export default function DevWebSurf3D({
       const floorAccent = FLOOR_ACCENTS[floor]
       const floorAccentHex =
         '#' + new THREE.Color(floorAccent).getHexString()
+
+      addPracticalFixtures(floor, base)
 
       // Wide side balconies leave a continuous central void. From any level
       // the player can read the floors above and below as one megastructure.
@@ -2026,6 +2078,7 @@ export default function DevWebSurf3D({
     }
 
     // Main library architecture.
+    addPracticalFixtures(0, 0)
     addFloor(0, -15, 34, 58)
     addFloor(-13, -13, 16, 28)
     addFloor(13, -13, 16, 28)
@@ -3082,7 +3135,13 @@ export default function DevWebSurf3D({
       floorIdentityLight.color.copy(floorAccent)
       floorIdentityLight.position.y =
         floor * LIBRARY_FLOOR_HEIGHT + 3.2
-      floorIdentityLight.intensity = floor === 0 ? 2.8 : 3.8
+      floorIdentityLight.intensity = floor === 0 ? .7 : 1.05
+      practicalLights.forEach((light, index) => {
+        light.position.y =
+          floor * LIBRARY_FLOOR_HEIGHT + 4.15
+        light.position.z = practicalLightStops[index]
+        light.intensity = floor === 0 ? 1.25 : 1.5
+      })
 
       // Keep non-current floors visually alive even when their real article
       // layer is hidden. Sparse current floors retain only a faint book-fill
