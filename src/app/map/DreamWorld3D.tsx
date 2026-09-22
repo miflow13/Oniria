@@ -352,10 +352,41 @@ function createLibraryRouteLabelTexture(
 
 function createLibraryWelcomeTexture() {
   const canvas = document.createElement('canvas')
-  canvas.width = 1400
-  canvas.height = 760
+  canvas.width = 1680
+  canvas.height = 960
   const context = canvas.getContext('2d')
   if (!context) return new THREE.CanvasTexture(canvas)
+
+  const drawWrappedText = (
+    text: string,
+    x: number,
+    y: number,
+    maxWidth: number,
+    lineHeight: number,
+  ) => {
+    const words = text.split(' ')
+    let line = ''
+    let cursorY = y
+
+    words.forEach((word, index) => {
+      const candidate = line ? line + ' ' + word : word
+      const measured = context.measureText(candidate).width
+      if (measured > maxWidth && line) {
+        context.fillText(line, x, cursorY)
+        cursorY += lineHeight
+        line = word
+      } else {
+        line = candidate
+      }
+
+      if (index === words.length - 1 && line) {
+        context.fillText(line, x, cursorY)
+        cursorY += lineHeight
+      }
+    })
+
+    return cursorY
+  }
 
   context.clearRect(0, 0, canvas.width, canvas.height)
 
@@ -365,87 +396,144 @@ function createLibraryWelcomeTexture() {
     canvas.width,
     canvas.height,
   )
-  background.addColorStop(0, 'rgba(4, 9, 20, .97)')
-  background.addColorStop(.55, 'rgba(8, 18, 34, .95)')
-  background.addColorStop(1, 'rgba(24, 18, 52, .94)')
-  roundedRect(context, 28, 28, 1344, 704, 42)
+  background.addColorStop(0, 'rgba(3, 8, 18, .985)')
+  background.addColorStop(.56, 'rgba(8, 16, 32, .97)')
+  background.addColorStop(1, 'rgba(30, 18, 55, .955)')
+
+  roundedRect(context, 36, 36, 1608, 888, 48)
   context.fillStyle = background
   context.fill()
-  context.strokeStyle = 'rgba(108, 221, 235, .5)'
-  context.lineWidth = 4
+  context.strokeStyle = 'rgba(99, 220, 236, .58)'
+  context.lineWidth = 5
   context.stroke()
 
   context.textAlign = 'left'
   context.textBaseline = 'top'
 
-  context.fillStyle = '#f3fbff'
-  context.font = '800 74px system-ui, sans-serif'
-  context.fillText('DEV LIBRARY', 82, 70)
+  context.fillStyle = '#f5fbff'
+  context.font = '800 86px system-ui, sans-serif'
+  context.fillText('DEV LIBRARY', 96, 82)
 
-  context.fillStyle = 'rgba(157, 225, 236, .92)'
-  context.font = '700 28px ui-monospace, monospace'
+  context.fillStyle = 'rgba(158, 225, 238, .94)'
+  context.font = '700 30px ui-monospace, monospace'
   context.fillText(
-    'an explorable archive of DEV Community writing',
-    86,
-    162,
+    'AN EXPLORABLE ARCHIVE OF DEV COMMUNITY WRITING',
+    102,
+    188,
   )
 
-  const columnWidth = 386
-  const columns = [
+  context.strokeStyle = 'rgba(115, 195, 227, .22)'
+  context.lineWidth = 2
+  context.beginPath()
+  context.moveTo(100, 250)
+  context.lineTo(1580, 250)
+  context.stroke()
+
+  const cards = [
     {
-      x: 84,
+      x: 92,
+      width: 456,
       title: 'WHAT THIS IS',
-      lines: [
-        'A spatial browser for DEV articles.',
-        'Walk the archive, browse shelves,',
-        'inspect books, and open real posts.',
+      accent: 'rgba(101, 212, 223, .18)',
+      body: [
+        'A spatial browser for real DEV articles.',
+        'Walk the archive, browse shelves, inspect books, and open posts without leaving the world.',
       ],
     },
     {
-      x: 507,
+      x: 612,
+      width: 456,
       title: 'HOW IT IS BUILT',
-      lines: [
+      accent: 'rgba(140, 124, 255, .18)',
+      body: [
         'Next.js + React + TypeScript + Three.js.',
-        'DEV API data is streamed into seeded',
-        'districts, shelves, paths, and book covers.',
+        'DEV API data is streamed into seeded districts, shelves, paths, covers, and atmosphere.',
       ],
     },
     {
-      x: 930,
+      x: 1132,
+      width: 456,
       title: 'CONTROLS',
-      lines: [
-        'WASD  move      Mouse  look',
-        'E     inspect   R      route',
-        'Click book to read  ·  Esc releases mouse',
+      accent: 'rgba(207, 140, 255, .18)',
+      controls: [
+        ['WASD', 'move'],
+        ['Mouse', 'look'],
+        ['E', 'inspect / close'],
+        ['G', 'toggle WALK / FLY'],
+        ['R', 'auto-route while flying'],
+        ['Click book', 'open article'],
+        ['Esc', 'release mouse'],
       ],
     },
   ] as const
 
-  columns.forEach((column) => {
-    context.fillStyle = 'rgba(133, 211, 232, .92)'
-    context.font = '800 29px system-ui, sans-serif'
-    context.fillText(column.title, column.x, 278)
-
-    context.strokeStyle = 'rgba(121, 191, 224, .26)'
+  cards.forEach((card) => {
+    roundedRect(context, card.x, 300, card.width, 490, 28)
+    context.fillStyle = card.accent
+    context.fill()
+    context.strokeStyle = 'rgba(121, 191, 224, .2)'
     context.lineWidth = 2
-    context.beginPath()
-    context.moveTo(column.x, 326)
-    context.lineTo(column.x + columnWidth, 326)
     context.stroke()
 
-    context.fillStyle = 'rgba(226, 238, 249, .9)'
-    context.font = '500 25px system-ui, sans-serif'
-    column.lines.forEach((line, index) => {
-      context.fillText(line, column.x, 356 + index * 46)
-    })
+    context.fillStyle = 'rgba(145, 220, 237, .96)'
+    context.font = '800 31px system-ui, sans-serif'
+    context.fillText(card.title, card.x + 34, 336)
+
+    context.strokeStyle = 'rgba(121, 191, 224, .22)'
+    context.beginPath()
+    context.moveTo(card.x + 34, 388)
+    context.lineTo(card.x + card.width - 34, 388)
+    context.stroke()
+
+    if ('body' in card) {
+      context.fillStyle = 'rgba(230, 239, 249, .92)'
+      context.font = '500 27px system-ui, sans-serif'
+      let cursorY = 424
+      card.body.forEach((paragraph) => {
+        cursorY = drawWrappedText(
+          paragraph,
+          card.x + 34,
+          cursorY,
+          card.width - 68,
+          41,
+        )
+        cursorY += 22
+      })
+    }
+
+    if ('controls' in card) {
+      let cursorY = 422
+      card.controls.forEach(([key, action]) => {
+        context.fillStyle = 'rgba(194, 178, 242, .98)'
+        context.font = '800 25px ui-monospace, monospace'
+        context.fillText(key, card.x + 34, cursorY)
+
+        context.fillStyle = 'rgba(229, 239, 248, .92)'
+        context.font = '500 25px system-ui, sans-serif'
+        context.fillText(
+          action,
+          card.x + 178,
+          cursorY,
+        )
+        cursorY += 50
+      })
+    }
   })
 
-  context.fillStyle = 'rgba(182, 170, 239, .9)'
-  context.font = '700 24px ui-monospace, monospace'
+  context.fillStyle = 'rgba(193, 177, 239, .94)'
+  context.font = '700 25px ui-monospace, monospace'
   context.fillText(
-    'Follow the holographic causeway. District signs float overhead.',
-    84,
-    640,
+    'Follow the holographic boulevard · district signs float overhead',
+    100,
+    846,
+  )
+
+  context.fillStyle = 'rgba(150, 204, 224, .78)'
+  context.font = '600 22px system-ui, sans-serif'
+  context.fillText(
+    'Press G anytime to switch between grounded exploration and free flight.',
+    100,
+    886,
   )
 
   const texture = new THREE.CanvasTexture(canvas)
@@ -2147,10 +2235,10 @@ export default function DreamWorld3D({
       const welcomeBoard = new THREE.Sprite(welcomeMaterial)
       welcomeBoard.position.set(
         welcomePoint.x,
-        welcomePoint.y + ARCHIVE_WALKWAY_Y_OFFSET + 4.3,
-        welcomePoint.z + 1.0,
+        welcomePoint.y + ARCHIVE_WALKWAY_Y_OFFSET + 4.85,
+        welcomePoint.z + .65,
       )
-      welcomeBoard.scale.set(10.6, 5.75, 1)
+      welcomeBoard.scale.set(9.4, 5.25, 1)
       welcomeBoard.renderOrder = 5
       welcomeBoard.userData.libraryDecorative = true
       welcomeBoard.userData.libraryWelcome = true
