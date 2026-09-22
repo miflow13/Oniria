@@ -81,20 +81,20 @@ const FLOOR_ACCENTS = [
   0x8d9aad,
 ] as const
 const FLOOR_SURFACE_TINTS = [
-  0x444c52,
-  0x3b4055,
-  0x354b49,
-  0x463b50,
-  0x394b40,
-  0x41464e,
+  0x35393d,
+  0x34373c,
+  0x33363b,
+  0x35363c,
+  0x34383b,
+  0x33363a,
 ] as const
 const FLOOR_WALKWAY_TINTS = [
-  0x5a666b,
-  0x505873,
-  0x486762,
-  0x5e4f69,
-  0x4d6656,
-  0x555d68,
+  0x4a4e53,
+  0x484c51,
+  0x474b50,
+  0x4a4c52,
+  0x484d50,
+  0x474b50,
 ] as const
 const FLOOR_AISLES = [
   ['FEATURED', 'NEW', 'POPULAR'],
@@ -549,7 +549,7 @@ export default function DevWebSurf3D({
 
     const scene = new THREE.Scene()
     scene.background = new THREE.Color(0x111319)
-    scene.fog = new THREE.FogExp2(0x111319, .0082)
+    scene.fog = new THREE.FogExp2(0x111319, .0108)
 
     const camera = new THREE.PerspectiveCamera(60, 1, .07, 160)
     camera.position.set(
@@ -574,37 +574,37 @@ export default function DevWebSurf3D({
     renderer.domElement.tabIndex = 0
     container.appendChild(renderer.domElement)
 
-    const ambient = new THREE.HemisphereLight(0xd7defd, 0x101010, 1.18)
+    const ambient = new THREE.HemisphereLight(0xd7defd, 0x101010, .92)
     scene.add(ambient)
 
-    const key = new THREE.DirectionalLight(0xf5f5f5, 2.15)
+    const key = new THREE.DirectionalLight(0xf5f5f5, 1.72)
     key.position.set(-9, 13, 9)
     key.castShadow = true
     key.shadow.mapSize.set(1024, 1024)
     key.shadow.bias = -0.0002
     scene.add(key)
 
-    const cyan = new THREE.PointLight(0x3b49df, 6.5, 36, 2)
+    const cyan = new THREE.PointLight(0x3b49df, .65, 24, 2)
     cyan.position.set(-13, 4, -18)
     scene.add(cyan)
 
-    const violet = new THREE.PointLight(0x5965e8, 5.4, 34, 2)
+    const violet = new THREE.PointLight(0x5965e8, .55, 22, 2)
     violet.position.set(13, 4, -22)
     scene.add(violet)
 
-    const warm = new THREE.PointLight(0xffffff, 3.6, 26, 2)
+    const warm = new THREE.PointLight(0xf1eee7, 1.8, 24, 2)
     warm.position.set(0, 5, -5)
     scene.add(warm)
 
-    const netCyan = new THREE.PointLight(0x53d3ff, 5.4, 34, 2)
+    const netCyan = new THREE.PointLight(0x53d3ff, .45, 20, 2)
     netCyan.position.set(-2, 2.6, -31)
     scene.add(netCyan)
 
-    const netMagenta = new THREE.PointLight(0xff4fd8, 2.8, 26, 2)
+    const netMagenta = new THREE.PointLight(0xff4fd8, .25, 18, 2)
     netMagenta.position.set(15, 3.2, -15)
     scene.add(netMagenta)
 
-    const netViolet = new THREE.PointLight(0xae7bff, 3.2, 30, 2)
+    const netViolet = new THREE.PointLight(0xae7bff, .3, 18, 2)
     netViolet.position.set(-15, 4, -24)
     scene.add(netViolet)
 
@@ -938,8 +938,8 @@ export default function DevWebSurf3D({
     const floorMaterials = FLOOR_SURFACE_TINTS.map((tint, floor) => {
       const material = floorMaterial.clone()
       material.color.setHex(tint)
-      material.emissive = new THREE.Color(FLOOR_ACCENTS[floor])
-      material.emissiveIntensity = floor === 0 ? .018 : .035
+      material.emissive = new THREE.Color(0x0d0f12)
+      material.emissiveIntensity = 0
       return material
     })
     architecturalMaterials.push(
@@ -966,12 +966,12 @@ export default function DevWebSurf3D({
     })
     const floorShelfTopMaterials = FLOOR_ACCENTS.map((accent) => {
       const material = new THREE.MeshStandardMaterial({
-        color: new THREE.Color(0x30343c).lerp(
+        color: new THREE.Color(0x34383e).lerp(
           new THREE.Color(accent),
-          .22,
+          .07,
         ),
         emissive: accent,
-        emissiveIntensity: .12,
+        emissiveIntensity: .025,
         roughness: .52,
         metalness: .4,
       })
@@ -1045,8 +1045,7 @@ export default function DevWebSurf3D({
         const edgeMaterial = new THREE.LineBasicMaterial({
           color: FLOOR_ACCENTS[floorIndex],
           transparent: true,
-          opacity: .16,
-          blending: THREE.AdditiveBlending,
+          opacity: .025,
         })
         architecturalMaterials.push(edgeMaterial)
         const edges = new THREE.LineSegments(edgeGeometry, edgeMaterial)
@@ -1086,10 +1085,10 @@ export default function DevWebSurf3D({
       )
       if (variant === 'secondary') baseColor.multiplyScalar(.9)
       if (variant === 'bridge') {
-        baseColor.lerp(new THREE.Color(FLOOR_ACCENTS[floorIndex]), .08)
+        baseColor.multiplyScalar(1.035)
       }
       if (variant === 'threshold' || variant === 'landing') {
-        baseColor.lerp(new THREE.Color(FLOOR_ACCENTS[floorIndex]), .15)
+        baseColor.lerp(new THREE.Color(FLOOR_ACCENTS[floorIndex]), .045)
       }
 
       const material = new THREE.MeshStandardMaterial({
@@ -1102,11 +1101,9 @@ export default function DevWebSurf3D({
           variant === 'landing' || variant === 'threshold' ? .07 : .035,
         emissive: FLOOR_ACCENTS[floorIndex],
         emissiveIntensity:
-          variant === 'bridge'
-            ? .075
-            : variant === 'threshold' || variant === 'landing'
-              ? .09
-              : .045,
+          variant === 'threshold' || variant === 'landing'
+            ? .018
+            : .006,
       })
       architecturalMaterials.push(material)
 
@@ -1132,8 +1129,7 @@ export default function DevWebSurf3D({
       const edgeMaterial = new THREE.LineBasicMaterial({
         color: FLOOR_ACCENTS[floorIndex],
         transparent: true,
-        opacity,
-        blending: THREE.AdditiveBlending,
+        opacity: opacity * .16,
       })
       architecturalMaterials.push(edgeMaterial)
       const edges = new THREE.LineSegments(edgeGeometry, edgeMaterial)
@@ -1348,8 +1344,7 @@ export default function DevWebSurf3D({
         const accentMaterial = new THREE.MeshBasicMaterial({
           color: FLOOR_ACCENTS[shelfFloorIndex],
           transparent: true,
-          opacity: .09,
-          blending: THREE.AdditiveBlending,
+          opacity: .032,
           depthWrite: false,
         })
         architecturalMaterials.push(accentMaterial)
@@ -1738,8 +1733,7 @@ export default function DevWebSurf3D({
       const fasciaMaterial = new THREE.MeshBasicMaterial({
         color: floorAccent,
         transparent: true,
-        opacity: .42,
-        blending: THREE.AdditiveBlending,
+        opacity: .11,
         depthWrite: false,
       })
       architecturalMaterials.push(fasciaMaterial)
@@ -1754,8 +1748,7 @@ export default function DevWebSurf3D({
       const balconyRailMaterial = new THREE.MeshBasicMaterial({
         color: floorAccent,
         transparent: true,
-        opacity: .18,
-        blending: THREE.AdditiveBlending,
+        opacity: .055,
         depthWrite: false,
       })
       architecturalMaterials.push(balconyRailMaterial)
@@ -1787,8 +1780,7 @@ export default function DevWebSurf3D({
       const bridgeLightMaterial = new THREE.MeshBasicMaterial({
         color: floorAccent,
         transparent: true,
-        opacity: .34,
-        blending: THREE.AdditiveBlending,
+        opacity: .075,
         depthWrite: false,
       })
       architecturalMaterials.push(bridgeLightMaterial)
@@ -1824,7 +1816,7 @@ export default function DevWebSurf3D({
           .1,
         ),
         transparent: true,
-        opacity: .22,
+        opacity: .045,
         depthWrite: false,
         side: THREE.DoubleSide,
       })
