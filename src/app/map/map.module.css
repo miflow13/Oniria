@@ -4241,3 +4241,53 @@
     display: none;
   }
 }
+
+
+.diveActions {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.diveBack {
+  cursor: pointer;
+  color: #9fb6c9;
+  background:
+    linear-gradient(145deg, rgba(9, 16, 31, .6), rgba(12, 19, 34, .34));
+  border: 1px solid rgba(159, 193, 216, .1);
+  border-radius: 999px;
+  padding: 10px 13px;
+  backdrop-filter: blur(14px);
+  font-size: .65rem;
+  transition:
+    color 180ms ease,
+    background 180ms ease,
+    border-color 180ms ease,
+    transform 180ms ease;
+}
+
+.diveBack:hover {
+  color: #dcebed;
+  background: rgba(78, 135, 151, .1);
+  border-color: rgba(159, 209, 221, .2);
+  transform: translateY(-1px);
+}
+
+.pageDiveMode .diveActions,
+.pageDiveMode .diveBack {
+  pointer-events: auto !important;
+}
+
+@media (max-width: 700px) {
+  .diveActions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .diveBack,
+  .diveReturn {
+    padding: 9px 11px;
+    font-size: .62rem;
+  }
+}
