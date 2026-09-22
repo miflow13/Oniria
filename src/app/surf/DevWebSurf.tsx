@@ -24,7 +24,9 @@ import styles from './surf.module.css'
 const DEFAULT_USERNAME = 'mikachu'
 const LIBRARY_FLOOR_COUNT = 4
 const LIBRARY_FLOOR_HEIGHT = 5.2
-const DEEP_CATALOG_PAGES = 6
+const DEEP_CATALOG_PAGES = 8
+const MEGA_SHELF_CAPACITY =
+  (LIBRARY_FLOOR_COUNT - 1) * 4 * 6 * 9
 
 const SECTION_COPY: Record<
   LibrarySection,
@@ -587,6 +589,7 @@ function buildLibraryGraph(
 
   catalogArticles
     .filter((article) => !alreadyPlaced.has(article.id))
+    .slice(0, MEGA_SHELF_CAPACITY)
     .forEach((article, index) => {
       const id = 'article:' + article.id
       const placement = megaShelfPlacement(index)
@@ -1299,32 +1302,34 @@ export default function DevWebSurf() {
         ))}
       </nav>
 
-      <nav className={styles.wingRail} aria-label="Browse library wings">
-        {wingLinks.map((item) => (
-          <button
-            type="button"
-            key={item.section}
-            className={
-              currentSection === item.section
-                ? styles.wingRailActive
-                : ''
-            }
-            onClick={() => {
-              if (item.section === 'search') {
-                walkTo(item.target)
-                window.setTimeout(
-                  () => searchInputRef.current?.focus(),
-                  140,
-                )
-              } else {
-                walkTo(item.target)
+      {currentFloor === 0 && (
+        <nav className={styles.wingRail} aria-label="Browse library wings">
+          {wingLinks.map((item) => (
+            <button
+              type="button"
+              key={item.section}
+              className={
+                currentSection === item.section
+                  ? styles.wingRailActive
+                  : ''
               }
-            }}
-          >
-            {item.label}
-          </button>
-        ))}
-      </nav>
+              onClick={() => {
+                if (item.section === 'search') {
+                  walkTo(item.target)
+                  window.setTimeout(
+                    () => searchInputRef.current?.focus(),
+                    140,
+                  )
+                } else {
+                  walkTo(item.target)
+                }
+              }}
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
+      )}
 
       <nav className={styles.floorRail} aria-label="Library floors">
         <span>Floor</span>
@@ -1345,7 +1350,10 @@ export default function DevWebSurf() {
         <small>
           {catalogLoading
             ? 'cataloging…'
-            : catalogArticles.length + ' deep-catalog books'}
+            : Math.min(catalogArticles.length, MEGA_SHELF_CAPACITY) +
+              '/' +
+              MEGA_SHELF_CAPACITY +
+              ' shelf books · keys 1–4'}
         </small>
       </nav>
 
@@ -1474,6 +1482,8 @@ export default function DevWebSurf() {
           {activeNode?.kind === 'article' ? 'put back' : 'inspect'}
         </span>
         <span><kbd>F</kbd> travel</span>
+        <span><kbd>1–4</kbd> floors</span>
+        <span><kbd>Pg↑↓</kbd> lift</span>
         <span><kbd>Shift</kbd> hurry</span>
         <span><kbd>Esc</kbd> cursor</span>
       </section>
@@ -1542,8 +1552,8 @@ export default function DevWebSurf() {
                 <span><b>{bootstrap.latest.length}</b> new arrivals</span>
                 <span><b>{bootstrap.tags.length}</b> cataloged topics</span>
                 <span>
-                  <b>{catalogArticles.length}</b>{' '}
-                  deep-catalog books
+                  <b>{Math.min(catalogArticles.length, MEGA_SHELF_CAPACITY)}</b>{' '}
+                  deep-catalog shelf books
                 </span>
                 <span>
                   <b>{LIBRARY_FLOOR_COUNT}</b> physical floors
