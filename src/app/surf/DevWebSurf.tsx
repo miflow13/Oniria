@@ -8,7 +8,18 @@ import {
   useRef,
   useState,
 } from 'react'
-import DevWebSurf3D from './DevWebSurf3D'
+import DevWebSurf3D, {
+  type SurfDebugMetrics,
+} from './DevWebSurf3D'
+import {
+  shelfLayoutKey,
+  surfLayout,
+  type LayoutEditorMode,
+  type LayoutEditorSelection,
+  type SceneLayoutTransform,
+  type ShelfLayoutTransform,
+  type SurfLayoutConfig,
+} from './surfLayout'
 import type {
   DevArticle,
   DevArticleSummary,
@@ -22,11 +33,9 @@ import type {
 import styles from './surf.module.css'
 
 const DEFAULT_USERNAME = 'mikachu'
-const LIBRARY_FLOOR_COUNT = 4
 const LIBRARY_FLOOR_HEIGHT = 5.2
-const DEEP_CATALOG_PAGES = 8
-const MEGA_SHELF_CAPACITY =
-  (LIBRARY_FLOOR_COUNT - 1) * 4 * 6 * 9
+const DEEP_CATALOG_PAGES = 10
+const MEGA_SHELF_CAPACITY = 108
 
 const SECTION_COPY: Record<
   LibrarySection,
@@ -160,6 +169,21 @@ type ShelfPlacement = Pick<
   | 'floorIndex'
 >
 
+const MAIN_SHELF_COLUMNS = [-13.5, -7, 7, 13.5] as const
+const MAIN_SHELF_ROWS = [
+  -8.5,
+  -13.2,
+  -17.9,
+  -22.6,
+  -27.3,
+  -32,
+  -36.7,
+  -41.4,
+] as const
+
+// Every physical bookcase now lives on one shared orthogonal aisle grid.
+// All shelves face the same direction so rows read cleanly from anywhere
+// on the platform and Layout Mode starts from a predictable baseline.
 const SHELF_ANCHORS: Partial<
   Record<
     LibrarySection,
@@ -173,35 +197,84 @@ const SHELF_ANCHORS: Partial<
   >
 > = {
   featured: [
-    {id: 'featured-left', x: -4.9, z: -10, rotationY: 0, front: .42},
-    {id: 'featured-right', x: 4.9, z: -10, rotationY: 0, front: .42},
-    {id: 'featured-deep-left', x: -4.9, z: -17, rotationY: 0, front: .42},
-    {id: 'featured-deep-right', x: 4.9, z: -17, rotationY: 0, front: .42},
+    {id: 'featured-left', x: -7, z: -8.5, rotationY: 0, front: .42},
+    {id: 'featured-right', x: 7, z: -8.5, rotationY: 0, front: .42},
+    {id: 'featured-deep-left', x: -7, z: -13.2, rotationY: 0, front: .42},
+    {id: 'featured-deep-right', x: 7, z: -13.2, rotationY: 0, front: .42},
   ],
   latest: [
-    {id: 'latest-outer', x: -14.8, z: -10, rotationY: Math.PI / 2, front: .42},
-    {id: 'latest-inner', x: -11.1, z: -10, rotationY: Math.PI / 2, front: .42},
-    {id: 'latest-deep-outer', x: -14.8, z: -18, rotationY: Math.PI / 2, front: .42},
-    {id: 'latest-deep-inner', x: -11.1, z: -18, rotationY: Math.PI / 2, front: .42},
+    {id: 'latest-outer', x: -13.5, z: -8.5, rotationY: 0, front: .42},
+    {id: 'latest-inner', x: -13.5, z: -13.2, rotationY: 0, front: .42},
+    {id: 'latest-deep-outer', x: -13.5, z: -17.9, rotationY: 0, front: .42},
+    {id: 'latest-deep-inner', x: -7, z: -17.9, rotationY: 0, front: .42},
   ],
   topics: [
-    {id: 'topics-inner', x: 11.1, z: -10, rotationY: -Math.PI / 2, front: .42},
-    {id: 'topics-outer', x: 14.8, z: -10, rotationY: -Math.PI / 2, front: .42},
-    {id: 'topics-deep-inner', x: 11.1, z: -18, rotationY: -Math.PI / 2, front: .42},
-    {id: 'topics-deep-outer', x: 14.8, z: -18, rotationY: -Math.PI / 2, front: .42},
+    {id: 'topics-inner', x: 13.5, z: -8.5, rotationY: 0, front: .42},
+    {id: 'topics-outer', x: 13.5, z: -13.2, rotationY: 0, front: .42},
+    {id: 'topics-deep-inner', x: 7, z: -17.9, rotationY: 0, front: .42},
+    {id: 'topics-deep-outer', x: 13.5, z: -17.9, rotationY: 0, front: .42},
   ],
   creators: [
-    {id: 'creators-inner', x: 11.1, z: -25.5, rotationY: -Math.PI / 2, front: .42},
-    {id: 'creators-outer', x: 14.8, z: -25.5, rotationY: -Math.PI / 2, front: .42},
+    {id: 'creators-inner', x: 7, z: -22.6, rotationY: 0, front: .42},
+    {id: 'creators-outer', x: 13.5, z: -22.6, rotationY: 0, front: .42},
   ],
   search: [
-    {id: 'search-outer', x: -14.8, z: -25.5, rotationY: Math.PI / 2, front: .42},
-    {id: 'search-inner', x: -11.1, z: -25.5, rotationY: Math.PI / 2, front: .42},
+    {id: 'search-outer', x: -13.5, z: -22.6, rotationY: 0, front: .42},
+    {id: 'search-inner', x: -7, z: -22.6, rotationY: 0, front: .42},
   ],
   archive: [
-    {id: 'archive-left', x: -4.6, z: -39.5, rotationY: 0, front: .42},
-    {id: 'archive-right', x: 4.6, z: -39.5, rotationY: 0, front: .42},
+    {id: 'archive-left', x: -7, z: -27.3, rotationY: 0, front: .42},
+    {id: 'archive-right', x: 7, z: -27.3, rotationY: 0, front: .42},
   ],
+}
+
+function shelfSlotWorldPosition(
+  anchorX: number,
+  anchorZ: number,
+  rotationY: number,
+  localOffset: number,
+  front: number,
+): [number, number] {
+  // Shelf slots are authored in shelf-local space:
+  // local X moves along the row; local Z moves toward the aisle.
+  // Rotate that vector once into world space for every shelf orientation.
+  const cos = Math.cos(rotationY)
+  const sin = Math.sin(rotationY)
+  return [
+    anchorX + cos * localOffset + sin * front,
+    anchorZ - sin * localOffset + cos * front,
+  ]
+}
+
+function applyShelfLayoutOverride(
+  placement: ShelfPlacement,
+): ShelfPlacement {
+  const key = shelfLayoutKey(
+    placement.shelfKey,
+    placement.floorIndex ?? 0,
+  )
+  if (!key) return placement
+  const override = surfLayout.shelves[key]
+  if (!override) return placement
+
+  const spacing = placement.shelfKey?.startsWith('catalog:')
+    ? .96
+    : 1.02
+  const localOffset =
+    ((placement.shelfSlot ?? 1) - 1) * spacing
+  const [x, z] = shelfSlotWorldPosition(
+    override.x,
+    override.z,
+    override.rotationY,
+    localOffset,
+    .42,
+  )
+
+  return {
+    ...placement,
+    position: [x, placement.position[1], z],
+    rotationY: override.rotationY,
+  }
 }
 
 function shelfPlacement(
@@ -210,7 +283,7 @@ function shelfPlacement(
 ): ShelfPlacement {
   const anchors = SHELF_ANCHORS[section]
   if (!anchors?.length) {
-    return {
+    return applyShelfLayoutOverride({
       position: [0, .74, -12 - index * 1.1],
       rotationY: 0,
       shelfKey: section + ':fallback',
@@ -218,7 +291,7 @@ function shelfPlacement(
       shelfSlot: index,
       shelfOrder: index,
       floorIndex: 0,
-    }
+    })
   }
 
   const booksPerShelf = 9
@@ -230,19 +303,16 @@ function shelfPlacement(
   const anchor = anchors[shelfIndex]
 
   const localOffset = (slot - 1) * 1.02
-  const y = .7 + level * 1.1
+  const y = .67 + level * 1.1
+  const [x, z] = shelfSlotWorldPosition(
+    anchor.x,
+    anchor.z,
+    anchor.rotationY,
+    localOffset,
+    anchor.front,
+  )
 
-  let x = anchor.x
-  let z = anchor.z + anchor.front
-
-  if (Math.abs(anchor.rotationY) < .1) {
-    x += localOffset
-  } else {
-    z += localOffset
-    x += Math.sign(anchor.rotationY) * anchor.front
-  }
-
-  return {
+  return applyShelfLayoutOverride({
     position: [x, y, z],
     rotationY: anchor.rotationY,
     shelfKey: section + ':' + anchor.id + ':level-' + level,
@@ -250,38 +320,42 @@ function shelfPlacement(
     shelfSlot: slot,
     shelfOrder: localIndex,
     floorIndex: 0,
-  }
+  })
 }
 
-function megaShelfPlacement(index: number): ShelfPlacement {
-  const catalogFloorCount = LIBRARY_FLOOR_COUNT - 1
-  const floorIndex = 1 + (index % catalogFloorCount)
-  const floorBookIndex = Math.floor(index / catalogFloorCount)
+function megaShelfPlacement(
+  floorBookIndex: number,
+): ShelfPlacement {
   const booksPerShelf = 9
   const shelfIndex = Math.floor(floorBookIndex / booksPerShelf)
   const localIndex = floorBookIndex % booksPerShelf
   const level = Math.floor(localIndex / 3)
   const slot = localIndex % 3
 
-  const columns = [-12, -4, 4, 12]
-  const rows = [-9.5, -15.2, -20.9, -26.6, -32.3, -38]
-  const columnIndex = shelfIndex % columns.length
-  const rowIndex = Math.floor(shelfIndex / columns.length) % rows.length
-  const rotationY = rowIndex % 2 === 0 ? 0 : Math.PI
+  const catalogRows = MAIN_SHELF_ROWS.slice(5)
+  const columnIndex = shelfIndex % MAIN_SHELF_COLUMNS.length
+  const rowIndex =
+    Math.floor(shelfIndex / MAIN_SHELF_COLUMNS.length) %
+    catalogRows.length
+  const rotationY = 0
   const localOffset = (slot - 1) * .96
-  const floorBase = floorIndex * LIBRARY_FLOOR_HEIGHT
+  const [x, z] = shelfSlotWorldPosition(
+    MAIN_SHELF_COLUMNS[columnIndex],
+    catalogRows[rowIndex],
+    rotationY,
+    localOffset,
+    .42,
+  )
 
-  return {
+  return applyShelfLayoutOverride({
     position: [
-      columns[columnIndex] + localOffset,
-      floorBase + .7 + level * 1.1,
-      rows[rowIndex] + (rotationY === 0 ? .42 : -.42),
+      x,
+      .67 + level * 1.1,
+      z,
     ],
     rotationY,
     shelfKey:
-      'catalog:f' +
-      floorIndex +
-      ':r' +
+      'catalog:ground:r' +
       rowIndex +
       ':c' +
       columnIndex +
@@ -290,8 +364,8 @@ function megaShelfPlacement(index: number): ShelfPlacement {
     shelfLevel: level,
     shelfSlot: slot,
     shelfOrder: localIndex,
-    floorIndex,
-  }
+    floorIndex: 0,
+  })
 }
 
 function buildLibraryGraph(
@@ -334,12 +408,12 @@ function buildLibraryGraph(
     section: LibrarySection
     position: [number, number, number]
   }> = [
-    {id: 'section:featured', section: 'featured', position: [0, 1.3, -5]},
-    {id: 'section:latest', section: 'latest', position: [-10.3, 1.3, -5]},
-    {id: 'section:topics', section: 'topics', position: [10.3, 1.3, -5]},
-    {id: 'section:creators', section: 'creators', position: [10.3, 1.3, -20.4]},
-    {id: 'section:search', section: 'search', position: [-10.3, 1.3, -20.4]},
-    {id: 'section:archive', section: 'archive', position: [0, 1.3, -34.2]},
+    {id: 'section:featured', section: 'featured', position: [0, 1.3, -6.4]},
+    {id: 'section:latest', section: 'latest', position: [-13.5, 1.3, -6.4]},
+    {id: 'section:topics', section: 'topics', position: [13.5, 1.3, -6.4]},
+    {id: 'section:creators', section: 'creators', position: [13.5, 1.3, -20.4]},
+    {id: 'section:search', section: 'search', position: [-13.5, 1.3, -20.4]},
+    {id: 'section:archive', section: 'archive', position: [0, 1.3, -27.3]},
   ]
 
   sections.forEach(({id, section, position}) => {
@@ -428,10 +502,8 @@ function buildLibraryGraph(
     })
   })
 
-  bootstrap.tags.slice(0, 10).forEach((tag, index) => {
+  bootstrap.tags.slice(0, 6).forEach((tag, index) => {
     const id = 'tag:' + tag.name
-    const column = index % 2
-    const row = Math.floor(index / 2)
     addNode({
       id,
       kind: 'tag',
@@ -440,11 +512,7 @@ function buildLibraryGraph(
       href: 'https://dev.to/t/' + tag.name,
       tag: tag.name,
       section: 'topics',
-      position: [
-        column === 0 ? 11.1 : 14.6,
-        1.15,
-        -9.3 - row * 2.7,
-      ],
+      position: [15.8, 1.15, -7.2 - index * 2.65],
       floorIndex: 0,
       importance: 1.1,
       accent: safeTagColor(tag),
@@ -468,7 +536,7 @@ function buildLibraryGraph(
 
   const creatorNames = [...authors.entries()]
     .sort((a, b) => b[1].length - a[1].length)
-    .slice(0, 6)
+    .slice(0, 4)
 
   creatorNames.forEach(([username, articles], index) => {
     const id = 'profile:' + username
@@ -480,11 +548,7 @@ function buildLibraryGraph(
       href: 'https://dev.to/' + username,
       username,
       section: 'creators',
-      position: [
-        index % 2 === 0 ? 11.2 : 14.7,
-        1.2,
-        -22.5 - Math.floor(index / 2) * 3,
-      ],
+      position: [15.8, 1.2, -24 - index * 3.1],
       floorIndex: 0,
       importance: 1 + articles.length * .12,
       accent: SECTION_COPY.creators.accent,
@@ -508,7 +572,7 @@ function buildLibraryGraph(
       href: 'https://dev.to/' + bootstrap.profile.username,
       username: bootstrap.profile.username,
       section: 'creators',
-      position: [13, 1.25, -20.8],
+      position: [15.8, 1.25, -21.2],
       floorIndex: 0,
       importance: 2,
       accent: '#7c83ff',
@@ -587,21 +651,20 @@ function buildLibraryGraph(
       .filter((id): id is number => typeof id === 'number'),
   )
 
+  let catalogBookCount = 0
+
   catalogArticles
     .filter((article) => !alreadyPlaced.has(article.id))
     .slice(0, MEGA_SHELF_CAPACITY)
-    .forEach((article, index) => {
+    .forEach((article) => {
       const id = 'article:' + article.id
-      const placement = megaShelfPlacement(index)
+      const placement = megaShelfPlacement(catalogBookCount)
+      catalogBookCount += 1
       addNode({
         id,
         kind: 'article',
         title: article.title,
-        subtitle:
-          '@' +
-          article.user.username +
-          ' · floor ' +
-          ((placement.floorIndex ?? 0) + 1),
+        subtitle: '@' + article.user.username + ' · deep catalog',
         href: article.url,
         articleId: article.id,
         username: article.user.username,
@@ -609,10 +672,7 @@ function buildLibraryGraph(
         payload: article,
         ...placement,
         importance: articleImportance(article) * .82,
-        accent:
-          (placement.floorIndex ?? 0) % 2 === 0
-            ? '#3b49df'
-            : '#53d3ff',
+        accent: '#3b49df',
       })
     })
 
@@ -645,10 +705,10 @@ function buildLibraryGraph(
         section,
         position:
           section === 'topics'
-            ? [13, 1.2, -20.4]
+            ? [15.8, 1.2, -7.2]
             : section === 'creators'
-              ? [13, 1.2, -28.5]
-              : [-13, 1.1, -22.4],
+              ? [15.8, 1.2, -21.2]
+              : [-15.8, 1.1, -20.4],
         importance: 1.8,
         accent: SECTION_COPY[section].accent,
       })
@@ -687,6 +747,13 @@ function buildLibraryGraph(
 
 export default function DevWebSurf() {
   const searchInputRef = useRef<HTMLInputElement | null>(null)
+  const chromeRef = useRef<HTMLElement | null>(null)
+  const directoryRef = useRef<HTMLElement | null>(null)
+  const routeCardRef = useRef<HTMLElement | null>(null)
+  const uiPanelRefs = useMemo(
+    () => [chromeRef, directoryRef, routeCardRef],
+    [],
+  )
 
   const [bootstrap, setBootstrap] = useState<DevBootstrap | null>(null)
   const [catalogArticles, setCatalogArticles] = useState<
@@ -712,6 +779,7 @@ export default function DevWebSurf() {
   const [locked, setLocked] = useState(false)
   const [currentSection, setCurrentSection] =
     useState<LibrarySection>('atrium')
+  const [wayfindingCue, setWayfindingCue] = useState<string | null>(null)
   const [routeTargetId, setRouteTargetId] = useState<string | null>(null)
   const [travelRequest, setTravelRequest] = useState<{
     id: string
@@ -724,12 +792,163 @@ export default function DevWebSurf() {
   >([{id: 'dev-home', title: 'Atrium'}])
   const [directoryOpen, setDirectoryOpen] = useState(true)
   const [readingOrigin, setReadingOrigin] = useState<SurfNode | null>(null)
-  const [currentFloor, setCurrentFloor] = useState(0)
-  const [floorNonce, setFloorNonce] = useState(0)
-  const [floorRequest, setFloorRequest] = useState<{
-    floor: number
-    nonce: number
-  } | null>(null)
+  const [debugOpen, setDebugOpen] = useState(false)
+  const [debugMetrics, setDebugMetrics] =
+    useState<SurfDebugMetrics | null>(null)
+  const [guideStep, setGuideStep] = useState<0 | 1 | 2 | 3>(0)
+  const [controlsExpanded, setControlsExpanded] = useState(false)
+  const [layoutEditorEnabled, setLayoutEditorEnabled] = useState(false)
+  const [layoutEditorMode, setLayoutEditorMode] =
+    useState<LayoutEditorMode>('translate')
+  const [layoutEditorSnap, setLayoutEditorSnap] = useState(true)
+  const [layoutSelection, setLayoutSelection] =
+    useState<LayoutEditorSelection | null>(null)
+  const [layoutDraft, setLayoutDraft] = useState<SurfLayoutConfig>(() => ({
+    version: 2,
+    shelves: {...surfLayout.shelves},
+    objects: {...surfLayout.objects},
+  }))
+  const [layoutSaveState, setLayoutSaveState] = useState<
+    'idle' | 'saving' | 'saved' | 'error'
+  >('idle')
+
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'development') return
+
+    const toggleLayoutEditor = (event: KeyboardEvent) => {
+      const target = event.target
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        (target instanceof HTMLElement && target.isContentEditable)
+      ) {
+        return
+      }
+      if (event.code !== 'KeyL') return
+      event.preventDefault()
+      setLayoutEditorEnabled((current) => {
+        const next = !current
+        if (next) {
+          setDirectoryOpen(false)
+          setControlsExpanded(false)
+        } else {
+          setLayoutSelection(null)
+        }
+        return next
+      })
+    }
+
+    window.addEventListener('keydown', toggleLayoutEditor)
+    return () => window.removeEventListener('keydown', toggleLayoutEditor)
+  }, [])
+
+  const updateLayoutTransform = useCallback(
+    (
+      key: string,
+      transform: ShelfLayoutTransform | SceneLayoutTransform,
+      kind: LayoutEditorSelection['kind'],
+    ) => {
+      setLayoutDraft((current) => ({
+        version: 2,
+        shelves:
+          kind === 'shelf'
+            ? {
+                ...current.shelves,
+                [key]: transform as ShelfLayoutTransform,
+              }
+            : current.shelves,
+        objects:
+          kind === 'object'
+            ? {
+                ...current.objects,
+                [key]: transform as SceneLayoutTransform,
+              }
+            : current.objects,
+      }))
+      setLayoutSelection((current) =>
+        current?.key === key
+          ? {
+              ...current,
+              x: transform.x,
+              y:
+                'y' in transform
+                  ? transform.y
+                  : current.y,
+              z: transform.z,
+              rotationX:
+                'rotationX' in transform
+                  ? transform.rotationX
+                  : current.rotationX,
+              rotationY: transform.rotationY,
+              rotationZ:
+                'rotationZ' in transform
+                  ? transform.rotationZ
+                  : current.rotationZ,
+            }
+          : current,
+      )
+      setLayoutSaveState('idle')
+    },
+    [],
+  )
+
+  async function saveLayoutDraft() {
+    if (process.env.NODE_ENV !== 'development') return
+    setLayoutSaveState('saving')
+    try {
+      const response = await fetch('/api/surf-layout', {
+        method: 'POST',
+        headers: {'content-type': 'application/json'},
+        body: JSON.stringify(layoutDraft),
+      })
+      if (!response.ok) throw new Error('Could not save layout')
+      setLayoutSaveState('saved')
+    } catch {
+      setLayoutSaveState('error')
+    }
+  }
+
+  useEffect(() => {
+    const onboardingKey = 'oniria:dev-library:onboarded-v1'
+    if (window.localStorage.getItem(onboardingKey)) return
+
+    setGuideStep(1)
+    setControlsExpanded(true)
+
+    const wingTimer = window.setTimeout(() => setGuideStep(2), 2200)
+    const controlsTimer = window.setTimeout(() => setGuideStep(3), 4600)
+    const finishTimer = window.setTimeout(() => {
+      setGuideStep(0)
+      setControlsExpanded(false)
+      window.localStorage.setItem(onboardingKey, '1')
+    }, 7600)
+
+    return () => {
+      window.clearTimeout(wingTimer)
+      window.clearTimeout(controlsTimer)
+      window.clearTimeout(finishTimer)
+    }
+  }, [])
+
+  useEffect(() => {
+    const toggleDebug = (event: KeyboardEvent) => {
+      const target = event.target
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        (target instanceof HTMLElement && target.isContentEditable)
+      ) {
+        return
+      }
+      if (event.code !== 'Backquote') return
+      event.preventDefault()
+      setDebugOpen((current) => !current)
+    }
+
+    window.addEventListener('keydown', toggleDebug)
+    return () => window.removeEventListener('keydown', toggleDebug)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -820,6 +1039,31 @@ export default function DevWebSurf() {
     [bootstrap, catalogArticles, dynamicArticles, dynamicLabel],
   )
 
+  const wingCounts = useMemo(() => {
+    const counts: Record<LibrarySection, number> = {
+      atrium: 0,
+      featured: 0,
+      latest: 0,
+      topics: 0,
+      creators: 0,
+      search: 0,
+      archive: 0,
+    }
+
+    graph.nodes.forEach((node) => {
+      if (
+        !node.section ||
+        node.kind === 'section' ||
+        node.kind === 'home'
+      ) {
+        return
+      }
+      counts[node.section] += 1
+    })
+
+    return counts
+  }, [graph.nodes])
+
   const fetchArticle = useCallback(async (node: SurfNode) => {
     if (!node.articleId) return
     setRouteLoading(true)
@@ -895,7 +1139,7 @@ export default function DevWebSurf() {
       href: 'https://dev.to/t/' + tag,
       tag,
       section: 'topics',
-      position: [13, 1.2, -20.4],
+      position: [15.8, 1.2, -7.2],
       importance: 1.3,
         accent: SECTION_COPY.topics.accent,
       })
@@ -1016,22 +1260,6 @@ export default function DevWebSurf() {
     setDirectoryOpen(false)
   }
 
-  function requestFloor(
-    floor: number,
-    preserveRoute = false,
-  ) {
-    const clamped = Math.max(
-      0,
-      Math.min(LIBRARY_FLOOR_COUNT - 1, floor),
-    )
-    if (clamped === currentFloor) return
-    const next = floorNonce + 1
-    setFloorNonce(next)
-    setFloorRequest({floor: clamped, nonce: next})
-    setDirectoryOpen(false)
-    if (!preserveRoute) setRouteTargetId(null)
-  }
-
   function returnToReadingShelf() {
     if (!readingOrigin) return
     const origin = readingOrigin
@@ -1089,7 +1317,7 @@ export default function DevWebSurf() {
           href: 'https://dev.to/' + data.profile.username,
           username: data.profile.username,
           section: 'creators',
-          position: [13, 1.2, -28.5],
+          position: [15.8, 1.2, -21.2],
           importance: 1.8,
           accent: SECTION_COPY.creators.accent,
         })
@@ -1113,7 +1341,7 @@ export default function DevWebSurf() {
           title: 'search: ' + value,
           subtitle: 'temporary search aisle',
           section: 'search',
-          position: [-13, 1.1, -22.4],
+          position: [-15.8, 1.1, -20.4],
           importance: 1.8,
           accent: SECTION_COPY.search.accent,
         })
@@ -1141,8 +1369,6 @@ export default function DevWebSurf() {
   const routeTarget = routeTargetId
     ? graph.nodes.find((node) => node.id === routeTargetId) ?? null
     : null
-
-  const routeTargetFloor = routeTarget?.floorIndex ?? 0
 
   const relatedArticles = article
     ? [
@@ -1217,7 +1443,9 @@ export default function DevWebSurf() {
 
   const breadcrumb = [
     'DEV Library',
-    SECTION_COPY[currentSection].title,
+    currentSection === 'atrium'
+      ? null
+      : SECTION_COPY[currentSection].title,
     activeNode?.title,
   ].filter(Boolean)
 
@@ -1247,7 +1475,6 @@ export default function DevWebSurf() {
         onPutBack={putBackArticle}
         onTravel={(node, inspectOnArrival) => {
           setRouteTargetId(null)
-          setCurrentFloor(node.floorIndex ?? currentFloor)
           if (inspectOnArrival) {
             inspectNode(node)
           } else {
@@ -1257,12 +1484,22 @@ export default function DevWebSurf() {
         onHover={setHovered}
         onPointerLockChange={setLocked}
         onZoneChange={setCurrentSection}
-        currentFloor={currentFloor}
-        floorRequest={floorRequest}
-        onFloorChange={setCurrentFloor}
+        onWayfindingCueChange={setWayfindingCue}
+        currentFloor={0}
+        floorRequest={null}
+        onFloorChange={() => {}}
+        uiPanelRefs={uiPanelRefs}
+        catalogLoading={catalogLoading}
+        debugEnabled={debugOpen}
+        onDebugMetrics={setDebugMetrics}
+        layoutEditorEnabled={layoutEditorEnabled}
+        layoutEditorMode={layoutEditorMode}
+        layoutEditorSnap={layoutEditorSnap}
+        onLayoutSelectionChange={setLayoutSelection}
+        onLayoutTransformChange={updateLayoutTransform}
       />
 
-      <header className={styles.chrome}>
+      <header ref={chromeRef} className={styles.chrome}>
         <button
           type="button"
           className={styles.brand}
@@ -1302,64 +1539,64 @@ export default function DevWebSurf() {
         ))}
       </nav>
 
-      {currentFloor === 0 && (
-        <nav className={styles.wingRail} aria-label="Browse library wings">
-          {wingLinks.map((item) => (
-            <button
-              type="button"
-              key={item.section}
-              className={
-                currentSection === item.section
-                  ? styles.wingRailActive
-                  : ''
-              }
-              onClick={() => {
-                if (item.section === 'search') {
-                  walkTo(item.target)
-                  window.setTimeout(
-                    () => searchInputRef.current?.focus(),
-                    140,
-                  )
-                } else {
-                  walkTo(item.target)
-                }
-              }}
-            >
-              {item.label}
-            </button>
-          ))}
-        </nav>
-      )}
-
-      <nav className={styles.floorRail} aria-label="Library floors">
-        <span>Floor</span>
-        {Array.from({length: LIBRARY_FLOOR_COUNT}, (_, floor) => (
+      <nav className={styles.wingRail} aria-label="Browse library wings">
+        {wingLinks.map((item) => (
           <button
             type="button"
-            key={floor}
-            className={
-              currentFloor === floor
-                ? styles.floorRailActive
-                : ''
-            }
-            onClick={() => requestFloor(floor)}
+            key={item.section}
+            className={[
+              currentSection === item.section
+                ? styles.wingRailActive
+                : '',
+              guideStep === 2 && item.section === 'featured'
+                ? styles.guidedPulse
+                : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
+            onClick={() => {
+              if (item.section === 'search') {
+                walkTo(item.target)
+                window.setTimeout(
+                  () => searchInputRef.current?.focus(),
+                  140,
+                )
+              } else {
+                walkTo(item.target)
+              }
+            }}
           >
-            {String(floor + 1).padStart(2, '0')}
+            {item.label}
           </button>
         ))}
+      </nav>
+
+      <div className={styles.floorRail} aria-label="Main library level">
+        <span>Main Library</span>
         <small>
           {catalogLoading
             ? 'cataloging…'
             : Math.min(catalogArticles.length, MEGA_SHELF_CAPACITY) +
               '/' +
               MEGA_SHELF_CAPACITY +
-              ' shelf books · keys 1–4'}
+              ' interactive deep-catalog books'}
         </small>
-      </nav>
+      </div>
+
+      {wayfindingCue && (
+        <aside className={styles.aheadHud} aria-live="polite">
+          {wayfindingCue}
+        </aside>
+      )}
 
       <button
         type="button"
-        className={styles.directoryToggle}
+        className={[
+          styles.directoryToggle,
+          guideStep === 1 ? styles.guidedPulse : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
         onClick={() => setDirectoryOpen((current) => !current)}
       >
         <span aria-hidden="true">☷</span>
@@ -1367,7 +1604,7 @@ export default function DevWebSurf() {
       </button>
 
       {directoryOpen && (
-        <aside className={styles.directory}>
+        <aside ref={directoryRef} className={styles.directory}>
           <div className={styles.directoryHeading}>
             <span>DEV Library Directory</span>
             <button
@@ -1382,6 +1619,28 @@ export default function DevWebSurf() {
             Browse the collection like a place. Pick a wing and follow the
             illuminated floor route.
           </p>
+
+          <div className={styles.wingLegend} aria-label="Wing color key">
+            {(
+              [
+                ['featured', 'Featured'],
+                ['latest', 'New'],
+                ['topics', 'Topics'],
+                ['creators', 'Creators'],
+                ['search', 'Search'],
+                ['archive', 'Archive'],
+              ] as Array<[LibrarySection, string]>
+            ).map(([section, label]) => (
+              <span key={section}>
+                <i
+                  aria-hidden="true"
+                  style={{background: SECTION_COPY[section].accent}}
+                />
+                {label}
+                <b>{wingCounts[section].toLocaleString()}</b>
+              </span>
+            ))}
+          </div>
 
           <div className={styles.directoryGrid}>
             <button type="button" onClick={() => walkTo(continueTarget)}>
@@ -1430,37 +1689,32 @@ export default function DevWebSurf() {
             className={styles.archiveLink}
             onClick={() => walkTo('section:archive')}
           >
-            Restricted stacks · Deep Archive →
+            <span aria-hidden="true">🔒</span>
+            <span>
+              Restricted stacks · Deep Archive
+              <small>{wingCounts.archive.toLocaleString()} catalog entries</small>
+            </span>
+            <b aria-hidden="true">→</b>
           </button>
         </aside>
       )}
 
       {routeTarget && (
-        <aside className={styles.routeCard}>
+        <aside ref={routeCardRef} className={styles.routeCard}>
           <span>Route ready · follow cyan light</span>
           <strong>{routeTarget.title}</strong>
-          <p>
-            {routeTargetFloor !== currentFloor
-              ? 'Take the central lift, then follow the cyan floor strips.'
-              : 'Follow the floor strips through the lit doorway.'}
-          </p>
+          <p>Follow the floor strips through the lit doorway.</p>
           <div>
             <button
               type="button"
               onClick={() => {
-                if (routeTargetFloor !== currentFloor) {
-                  requestFloor(routeTargetFloor, true)
-                  return
-                }
                 const canvas = document.querySelector('canvas')
                 if (canvas instanceof HTMLCanvasElement) {
                   void canvas.requestPointerLock()
                 }
               }}
             >
-              {routeTargetFloor !== currentFloor
-                ? 'Take lift'
-                : 'Walk route'}
+              Walk route
             </button>
             <button type="button" onClick={() => jumpTo(routeTarget.id)}>
               Jump there
@@ -1474,19 +1728,267 @@ export default function DevWebSurf() {
         <i />
       </div>
 
-      <section className={styles.controls}>
-        <span><kbd>WASD</kbd> walk</span>
-        <span><kbd>mouse</kbd> look</span>
-        <span>
-          <kbd>E</kbd>{' '}
-          {activeNode?.kind === 'article' ? 'put back' : 'inspect'}
-        </span>
-        <span><kbd>F</kbd> travel</span>
-        <span><kbd>1–4</kbd> floors</span>
-        <span><kbd>Pg↑↓</kbd> lift</span>
-        <span><kbd>Shift</kbd> hurry</span>
-        <span><kbd>Esc</kbd> cursor</span>
-      </section>
+      <aside className={styles.locationHud} aria-label="Current library location">
+        <span>Main Library</span>
+        <strong>{SECTION_COPY[currentSection].title}</strong>
+        <small>Ground level · archive depths below</small>
+      </aside>
+
+      {process.env.NODE_ENV === 'development' && (
+        <>
+          <button
+            type="button"
+            className={[
+              styles.layoutEditorToggle,
+              layoutEditorEnabled
+                ? styles.layoutEditorToggleActive
+                : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
+            onClick={() => {
+              setLayoutEditorEnabled((current) => {
+                const next = !current
+                if (next) {
+                  setDirectoryOpen(false)
+                  setControlsExpanded(false)
+                } else {
+                  setLayoutSelection(null)
+                }
+                return next
+              })
+            }}
+            title="Toggle visual layout editor (L)"
+          >
+            Layout
+          </button>
+
+          {layoutEditorEnabled && (
+            <aside
+              className={styles.layoutEditorPanel}
+              aria-label="DEV library layout editor"
+            >
+              <div className={styles.layoutEditorHeading}>
+                <div>
+                  <span>Layout Mode</span>
+                  <strong>Scene Editor</strong>
+                </div>
+                <kbd>L</kbd>
+              </div>
+
+              <div className={styles.layoutEditorTools}>
+                <button
+                  type="button"
+                  className={
+                    layoutEditorMode === 'translate'
+                      ? styles.layoutEditorToolActive
+                      : ''
+                  }
+                  onClick={() => setLayoutEditorMode('translate')}
+                >
+                  Move
+                </button>
+                <button
+                  type="button"
+                  className={
+                    layoutEditorMode === 'rotate'
+                      ? styles.layoutEditorToolActive
+                      : ''
+                  }
+                  onClick={() => setLayoutEditorMode('rotate')}
+                >
+                  Rotate
+                </button>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={layoutEditorSnap}
+                    onChange={(event) =>
+                      setLayoutEditorSnap(event.target.checked)
+                    }
+                  />
+                  Snap
+                </label>
+              </div>
+
+              {layoutSelection ? (
+                <div className={styles.layoutEditorSelection}>
+                  <span>Selected</span>
+                  <strong>{layoutSelection.label}</strong>
+                  <dl>
+                    <div>
+                      <dt>X</dt>
+                      <dd>{layoutSelection.x.toFixed(2)}</dd>
+                    </div>
+                    <div>
+                      <dt>Y</dt>
+                      <dd>{layoutSelection.y.toFixed(2)}</dd>
+                    </div>
+                    <div>
+                      <dt>Z</dt>
+                      <dd>{layoutSelection.z.toFixed(2)}</dd>
+                    </div>
+                    <div>
+                      <dt>Rot X</dt>
+                      <dd>
+                        {(
+                          (layoutSelection.rotationX * 180) /
+                          Math.PI
+                        ).toFixed(0)}
+                        °
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Rot Y</dt>
+                      <dd>
+                        {(
+                          (layoutSelection.rotationY * 180) /
+                          Math.PI
+                        ).toFixed(0)}
+                        °
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Rot Z</dt>
+                      <dd>
+                        {(
+                          (layoutSelection.rotationZ * 180) /
+                          Math.PI
+                        ).toFixed(0)}
+                        °
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+              ) : (
+                <p className={styles.layoutEditorEmpty}>
+                  Click a scene object to edit it.
+                </p>
+              )}
+
+              <div className={styles.layoutEditorActions}>
+                <button
+                  type="button"
+                  onClick={() => void saveLayoutDraft()}
+                  disabled={layoutSaveState === 'saving'}
+                >
+                  {layoutSaveState === 'saving'
+                    ? 'Saving…'
+                    : 'Save layout'}
+                </button>
+                <span>
+                  {layoutSaveState === 'saved'
+                    ? 'Saved to layout.json'
+                    : layoutSaveState === 'error'
+                      ? 'Save failed'
+                      : layoutEditorSnap
+                        ? '0.5m · 15° snap'
+                        : 'free transform'}
+                </span>
+              </div>
+            </aside>
+          )}
+        </>
+      )}
+
+      <button
+        type="button"
+        className={
+          debugOpen
+            ? styles.debugToggle + ' ' + styles.debugToggleActive
+            : styles.debugToggle
+        }
+        onClick={() => setDebugOpen((current) => !current)}
+        title="Toggle developer HUD"
+      >
+        DEV
+      </button>
+
+      {debugOpen && (
+        <aside className={styles.debugHud} aria-label="Developer diagnostics">
+          <div>
+            <strong>Renderer</strong>
+            <span>
+              {debugMetrics
+                ? Math.round(debugMetrics.fps) + ' FPS'
+                : 'measuring…'}
+            </span>
+          </div>
+          <dl>
+            <div>
+              <dt>draws</dt>
+              <dd>{debugMetrics?.drawCalls ?? '—'}</dd>
+            </div>
+            <div>
+              <dt>triangles</dt>
+              <dd>
+                {debugMetrics
+                  ? debugMetrics.triangles.toLocaleString()
+                  : '—'}
+              </dd>
+            </div>
+            <div>
+              <dt>textures</dt>
+              <dd>{debugMetrics?.textures ?? '—'}</dd>
+            </div>
+            <div>
+              <dt>nodes</dt>
+              <dd>{graph.nodes.length}</dd>
+            </div>
+            <div>
+              <dt>catalog</dt>
+              <dd>
+                {catalogLoading
+                  ? 'loading'
+                  : catalogArticles.length.toLocaleString()}
+              </dd>
+            </div>
+            <div>
+              <dt>level</dt>
+              <dd>ground</dd>
+            </div>
+          </dl>
+          <small>
+            bootstrap {loading ? 'loading' : error ? 'error' : 'ready'}
+            {' · '}
+            route {routeLoading ? 'loading' : 'idle'}
+            {' · '}
+            {locked ? 'pointer locked' : 'cursor free'}
+          </small>
+        </aside>
+      )}
+
+      <div
+        className={[
+          styles.controlsDock,
+          controlsExpanded ? styles.controlsDockExpanded : '',
+          guideStep === 3 ? styles.guidedPulse : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+      >
+        <button
+          type="button"
+          className={styles.controlsToggle}
+          aria-expanded={controlsExpanded}
+          onClick={() => setControlsExpanded((current) => !current)}
+          title="Show movement controls"
+        >
+          <span aria-hidden="true">⌨</span>
+          Controls
+        </button>
+        <section className={styles.controls}>
+          <span><kbd>WASD</kbd> walk</span>
+          <span><kbd>mouse</kbd> look</span>
+          <span>
+            <kbd>E</kbd>{' '}
+            {activeNode?.kind === 'article' ? 'put back' : 'inspect'}
+          </span>
+          <span><kbd>F</kbd> travel</span>
+          <span><kbd>Shift</kbd> hurry</span>
+          <span><kbd>Esc</kbd> cursor</span>
+        </section>
+      </div>
 
       {hovered && !activeNode && (
         <div className={styles.hoverCard}>
@@ -1556,7 +2058,7 @@ export default function DevWebSurf() {
                   deep-catalog shelf books
                 </span>
                 <span>
-                  <b>{LIBRARY_FLOOR_COUNT}</b> physical floors
+                  <b>1</b> playable level
                 </span>
               </div>
               <div className={styles.pageActions}>
@@ -1755,7 +2257,7 @@ export default function DevWebSurf() {
                       href: 'https://dev.to/' + username,
                       username,
                       section: 'creators',
-                      position: [13, 1.2, -28.5],
+                      position: [15.8, 1.2, -21.2],
                       importance: 1.6,
                       accent: SECTION_COPY.creators.accent,
                     })
