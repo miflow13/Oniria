@@ -234,7 +234,10 @@ export function createLibraryReadingRitual(
         bookVisual.group.rotation.z *= .84
 
         const targetCoverAngle = isOpening
-          ? -Math.PI * .74 * ritualAmount
+          // The shelf fronts face local -Z. Positive Y rotation swings the
+          // left-hinged cover toward the reader; the old negative rotation
+          // folded it backward into the shelf.
+          ? Math.PI * .74 * ritualAmount
           : 0
         bookVisual.coverHinge.rotation.y +=
           (
