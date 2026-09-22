@@ -664,8 +664,8 @@ export default function DevWebSurf3D({
     const container = host
 
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color(0x111319)
-    scene.fog = new THREE.FogExp2(0x17191d, .0115)
+    scene.background = new THREE.Color(0x000000)
+    scene.fog = new THREE.FogExp2(0x000000, .0065)
 
     const camera = new THREE.PerspectiveCamera(60, 1, .07, 160)
     camera.position.set(
@@ -690,10 +690,9 @@ export default function DevWebSurf3D({
     renderer.domElement.tabIndex = 0
     container.appendChild(renderer.domElement)
 
-    // Open-roof sky: reuse the Dream Journal's point-star + additive-nebula
-    // language, but keep it restrained enough to sit behind the DEV/TRON
-    // architecture. The group follows the camera so the field reads as an
-    // effectively infinite skybox rather than particles floating in the room.
+    // Black digital void. Stars stay camera-relative so they behave like an
+    // infinite sky, while distant website platforms remain world-space objects
+    // and provide parallax/scale around the DEV Library.
     const skyGroup = new THREE.Group()
     skyGroup.renderOrder = -20
     scene.add(skyGroup)
@@ -706,17 +705,14 @@ export default function DevWebSurf3D({
     ) => {
       const positions = new Float32Array(count * 3)
       const colors = new Float32Array(count * 3)
-      const base = new THREE.Color(bright ? 0xe8f5ff : 0xcfe5ff)
-      const cyanTint = new THREE.Color(0x9ddcff)
-      const violetTint = new THREE.Color(0xc4b6ff)
+      const base = new THREE.Color(bright ? 0xffffff : 0xcfdcff)
+      const cool = new THREE.Color(0x92bfff)
 
       for (let index = 0; index < count; index += 1) {
         const i = index * 3
         const azimuth = Math.random() * Math.PI * 2
-        // Keep the majority of the field above the horizon so the missing
-        // roof opens into space without filling the walkable interior.
-        const elevation = .12 + Math.random() * 1.12
-        const radius = 92 + Math.random() * 38
+        const elevation = Math.asin(Math.random() * 2 - 1)
+        const radius = 94 + Math.random() * 48
         const horizontalRadius = Math.cos(elevation) * radius
 
         positions[i] = Math.cos(azimuth) * horizontalRadius
@@ -724,10 +720,8 @@ export default function DevWebSurf3D({
         positions[i + 2] = Math.sin(azimuth) * horizontalRadius
 
         const starColor = base.clone()
-        const tintRoll = Math.random()
-        if (tintRoll > .86) starColor.lerp(cyanTint, .38)
-        else if (tintRoll < .08) starColor.lerp(violetTint, .32)
-        const intensity = .72 + Math.random() * .28
+        if (Math.random() > .82) starColor.lerp(cool, .35)
+        const intensity = .62 + Math.random() * .38
         colors[i] = starColor.r * intensity
         colors[i + 1] = starColor.g * intensity
         colors[i + 2] = starColor.b * intensity
@@ -759,60 +753,169 @@ export default function DevWebSurf3D({
       return {geometry, material}
     }
 
-    // Two batched point clouds provide depth/brightness variation for only two
-    // draw calls instead of hundreds of individual star meshes.
-    const skyStars = makeStarField(620, .72, .72)
-    const skyBrightStars = makeStarField(84, 1.25, .9, true)
+    const skyStars = makeStarField(980, .58, .78)
+    const skyBrightStars = makeStarField(120, 1.05, .92, true)
 
-    const skyMistCanvas = document.createElement('canvas')
-    skyMistCanvas.width = 256
-    skyMistCanvas.height = 256
-    const skyMistContext = skyMistCanvas.getContext('2d')
-    if (skyMistContext) {
-      const mistGradient = skyMistContext.createRadialGradient(
-        128,
-        128,
-        0,
-        128,
-        128,
-        128,
-      )
-      mistGradient.addColorStop(0, 'rgba(155,188,255,.34)')
-      mistGradient.addColorStop(.24, 'rgba(92,111,220,.18)')
-      mistGradient.addColorStop(.58, 'rgba(74,108,174,.07)')
-      mistGradient.addColorStop(1, 'rgba(20,28,58,0)')
-      skyMistContext.fillStyle = mistGradient
-      skyMistContext.fillRect(0, 0, 256, 256)
-    }
-    const skyMistTexture = new THREE.CanvasTexture(skyMistCanvas)
-    skyMistTexture.colorSpace = THREE.SRGBColorSpace
-    skyMistTexture.minFilter = THREE.LinearFilter
-    skyMistTexture.magFilter = THREE.LinearFilter
+    // Non-interactive website worlds: instanced architectural silhouettes
+    // scattered around the DEV Library. They never enter routing, collision,
+    // selection, or graph systems.
+    const distantWorldCount = 52
+    const distantWorldGroup = new THREE.Group()
+    scene.add(distantWorldGroup)
 
-    const skyMistMaterials: THREE.SpriteMaterial[] = []
-    const skyMistSprites: THREE.Sprite[] = []
-    ;[
-      {x: -48, y: 68, z: -84, scaleX: 72, scaleY: 38, color: 0x6c63d8},
-      {x: 58, y: 54, z: -66, scaleX: 62, scaleY: 32, color: 0x4bb7c2},
-      {x: 12, y: 82, z: 72, scaleX: 74, scaleY: 34, color: 0x766bbf},
-    ].forEach((mist) => {
-      const material = new THREE.SpriteMaterial({
-        map: skyMistTexture,
-        color: mist.color,
-        transparent: true,
-        opacity: .085,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        depthTest: true,
-        fog: false,
-      })
-      const sprite = new THREE.Sprite(material)
-      sprite.position.set(mist.x, mist.y, mist.z)
-      sprite.scale.set(mist.scaleX, mist.scaleY, 1)
-      skyGroup.add(sprite)
-      skyMistMaterials.push(material)
-      skyMistSprites.push(sprite)
+    const distantPlatformGeometry = new THREE.BoxGeometry(1, 1, 1)
+    const distantStructureGeometry = new THREE.BoxGeometry(1, 1, 1)
+    const distantBeaconGeometry = new THREE.BoxGeometry(1, 1, 1)
+
+    const distantPlatformMaterial = new THREE.MeshStandardMaterial({
+      color: 0x151a22,
+      emissive: 0x0b1018,
+      emissiveIntensity: .12,
+      roughness: .9,
+      metalness: .1,
+      vertexColors: true,
+      fog: true,
     })
+    const distantStructureMaterial = new THREE.MeshStandardMaterial({
+      color: 0x202631,
+      emissive: 0x101726,
+      emissiveIntensity: .16,
+      roughness: .82,
+      metalness: .16,
+      vertexColors: true,
+      fog: true,
+    })
+    const distantBeaconMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: .24,
+      depthWrite: false,
+      vertexColors: true,
+      fog: true,
+    })
+
+    const distantPlatforms = new THREE.InstancedMesh(
+      distantPlatformGeometry,
+      distantPlatformMaterial,
+      distantWorldCount,
+    )
+    const distantStructures = new THREE.InstancedMesh(
+      distantStructureGeometry,
+      distantStructureMaterial,
+      distantWorldCount * 2,
+    )
+    const distantBeacons = new THREE.InstancedMesh(
+      distantBeaconGeometry,
+      distantBeaconMaterial,
+      distantWorldCount,
+    )
+
+    const worldMatrix = new THREE.Matrix4()
+    const worldPosition = new THREE.Vector3()
+    const worldScale = new THREE.Vector3()
+    const worldQuaternion = new THREE.Quaternion()
+    const worldUp = new THREE.Vector3(0, 1, 0)
+    const worldAccentA = new THREE.Color(0x3b49df)
+    const worldAccentB = new THREE.Color(0x53d3ff)
+    const worldAccentC = new THREE.Color(0xae7bff)
+
+    let worldSeed = 0x2f6e2b1
+    const worldRandom = () => {
+      worldSeed = (worldSeed * 1664525 + 1013904223) >>> 0
+      return worldSeed / 0x100000000
+    }
+
+    for (let index = 0; index < distantWorldCount; index += 1) {
+      const angle =
+        (index / distantWorldCount) * Math.PI * 2 +
+        (worldRandom() - .5) * .11
+      const radius = 58 + worldRandom() * 74
+      const y = -9 + worldRandom() * 23
+      const width = 7 + worldRandom() * 13
+      const depth = 5 + worldRandom() * 10
+      const rotationY = angle + (worldRandom() - .5) * .7
+      const x = Math.cos(angle) * radius
+      const z = -22 + Math.sin(angle) * radius
+
+      worldQuaternion.setFromAxisAngle(worldUp, rotationY)
+      worldPosition.set(x, y, z)
+      worldScale.set(width, .55 + worldRandom() * .45, depth)
+      worldMatrix.compose(worldPosition, worldQuaternion, worldScale)
+      distantPlatforms.setMatrixAt(index, worldMatrix)
+
+      const accent =
+        index % 3 === 0
+          ? worldAccentA
+          : index % 3 === 1
+            ? worldAccentB
+            : worldAccentC
+      distantPlatforms.setColorAt(
+        index,
+        new THREE.Color(0x10151d).lerp(accent, .08),
+      )
+
+      for (let block = 0; block < 2; block += 1) {
+        const localX =
+          (block === 0 ? -.22 : .22) * width +
+          (worldRandom() - .5) * width * .12
+        const localZ = (worldRandom() - .5) * depth * .42
+        const localY =
+          y + 1.2 + worldRandom() * (2.2 + width * .08)
+        const cos = Math.cos(rotationY)
+        const sin = Math.sin(rotationY)
+        worldPosition.set(
+          x + cos * localX + sin * localZ,
+          localY,
+          z - sin * localX + cos * localZ,
+        )
+        worldScale.set(
+          width * (.16 + worldRandom() * .18),
+          1.8 + worldRandom() * 5.5,
+          depth * (.12 + worldRandom() * .22),
+        )
+        worldMatrix.compose(worldPosition, worldQuaternion, worldScale)
+        const structureIndex = index * 2 + block
+        distantStructures.setMatrixAt(structureIndex, worldMatrix)
+        distantStructures.setColorAt(
+          structureIndex,
+          new THREE.Color(0x171d26).lerp(accent, .13),
+        )
+      }
+
+      const beaconOffsetX = width * .34
+      const beaconCos = Math.cos(rotationY)
+      const beaconSin = Math.sin(rotationY)
+      worldPosition.set(
+        x + beaconCos * beaconOffsetX,
+        y + 1.35,
+        z - beaconSin * beaconOffsetX,
+      )
+      worldScale.set(.12, 2.2 + worldRandom() * 2.8, .12)
+      worldMatrix.compose(worldPosition, worldQuaternion, worldScale)
+      distantBeacons.setMatrixAt(index, worldMatrix)
+      distantBeacons.setColorAt(index, accent)
+    }
+
+    distantPlatforms.instanceMatrix.needsUpdate = true
+    distantStructures.instanceMatrix.needsUpdate = true
+    distantBeacons.instanceMatrix.needsUpdate = true
+    if (distantPlatforms.instanceColor) {
+      distantPlatforms.instanceColor.needsUpdate = true
+    }
+    if (distantStructures.instanceColor) {
+      distantStructures.instanceColor.needsUpdate = true
+    }
+    if (distantBeacons.instanceColor) {
+      distantBeacons.instanceColor.needsUpdate = true
+    }
+    distantPlatforms.castShadow = false
+    distantStructures.castShadow = false
+    distantBeacons.castShadow = false
+    distantWorldGroup.add(
+      distantPlatforms,
+      distantStructures,
+      distantBeacons,
+    )
 
     const ambient = new THREE.HemisphereLight(0xe6ebf0, 0x202126, 1.38)
     scene.add(ambient)
@@ -2288,22 +2391,6 @@ export default function DevWebSurf3D({
     const archiveCenterZ = -31.5
     const archiveDepth = 94
 
-    const practicalFixtureGeometry = new THREE.BoxGeometry(2.05, .045, .22)
-    architecturalGeometries.push(practicalFixtureGeometry)
-    const practicalFixtureMaterials = FLOOR_ACCENTS.map((accent) => {
-      const material = new THREE.MeshBasicMaterial({
-        color: new THREE.Color(0xf3f1eb).lerp(
-          new THREE.Color(accent),
-          .025,
-        ),
-        transparent: true,
-        opacity: .82,
-        toneMapped: false,
-      })
-      architecturalMaterials.push(material)
-      return material
-    })
-
     const balconyUndersideStripGeometry = new THREE.BoxGeometry(
       .09,
       .045,
@@ -2322,22 +2409,6 @@ export default function DevWebSurf3D({
       return material
     })
 
-    function addPracticalFixtures(floor: number, base: number) {
-      ;[-4, -14, -24, -34, -44, -54, -64].forEach((z, index) => {
-        ;[-10.2, 10.2].forEach((x) => {
-          const fixture = new THREE.Mesh(
-            practicalFixtureGeometry,
-            practicalFixtureMaterials[floor],
-          )
-          fixture.position.set(
-            x,
-            base + 4.55,
-            z + (index % 2 === 0 ? 0 : .35),
-          )
-          scene.add(fixture)
-        })
-      })
-    }
     function addLandmarkArch(
       x: number,
       z: number,
@@ -2608,8 +2679,6 @@ export default function DevWebSurf3D({
       const floorAccent = FLOOR_ACCENTS[floor]
       const floorAccentHex =
         '#' + new THREE.Color(floorAccent).getHexString()
-
-      addPracticalFixtures(floor, base)
 
       // No opaque side skins: floor identity now comes from the slab fascias,
       // shelf accents, lighting, and HUD while the star field remains visible
@@ -2899,7 +2968,6 @@ export default function DevWebSurf3D({
     const liftCabin = new THREE.Group()
 
     // Main library architecture.
-    addPracticalFixtures(0, 0)
     addFloor(0, -15, 34, 58)
     addFloor(-13, -13, 16, 28)
     addFloor(13, -13, 16, 28)
@@ -3446,36 +3514,6 @@ export default function DevWebSurf3D({
     fillerBooks.castShadow = false
     fillerBooks.receiveShadow = false
     scene.add(fillerBooks)
-
-    const ceilingRailGeometry = new THREE.BoxGeometry(.035, .035, 52)
-    const ceilingRailMaterial = new THREE.MeshBasicMaterial({
-      color: 0x3148b5,
-      transparent: true,
-      opacity: .065,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    })
-    architecturalGeometries.push(ceilingRailGeometry)
-    architecturalMaterials.push(ceilingRailMaterial)
-    ;[-2.25, 2.25].forEach((x) => {
-      const rail = new THREE.Mesh(
-        ceilingRailGeometry,
-        ceilingRailMaterial,
-      )
-      rail.position.set(x, 4.72, -15)
-      scene.add(rail)
-    })
-
-    const wingRailGeometry = new THREE.BoxGeometry(.03, .03, 22)
-    architecturalGeometries.push(wingRailGeometry)
-    ;[-13, 13].forEach((x) => {
-      const rail = new THREE.Mesh(
-        wingRailGeometry,
-        ceilingRailMaterial,
-      )
-      rail.position.set(x, 4.15, -15.5)
-      scene.add(rail)
-    })
 
     addSectionSign('atrium', 0, 4.6, 5.5, '#f5f5f5')
     addSectionSign('featured', 0, 4.1, -5.8, '#3b49df')
@@ -4473,13 +4511,9 @@ export default function DevWebSurf3D({
       activeCoverUrls.clear()
 
       const floorAccent = new THREE.Color(FLOOR_ACCENTS[floor])
-      const atmosphere = new THREE.Color(0x111319).lerp(
-        floorAccent,
-        floor === 0 ? .012 : .022,
-      )
-      scene.background = atmosphere.clone()
+      scene.background = new THREE.Color(0x000000)
       if (scene.fog instanceof THREE.FogExp2) {
-        scene.fog.color.copy(atmosphere)
+        scene.fog.color.setHex(0x000000)
       }
       floorIdentityLight.color.copy(floorAccent)
       floorIdentityLight.position.y =
@@ -4532,17 +4566,6 @@ export default function DevWebSurf3D({
           entry.z,
         )
         light.intensity = valid ? 1.35 : 0
-      })
-      practicalFixtureMaterials.forEach((material, floorIndex) => {
-        const distance = Math.abs(floorIndex - floor)
-        material.opacity =
-          distance === 0
-            ? .88
-            : distance === 1
-              ? .52
-              : distance === 2
-                ? .2
-                : .07
       })
       balconyUndersideStripMaterials.forEach((material, floorIndex) => {
         const distance = Math.abs(floorIndex - floor)
@@ -5331,11 +5354,7 @@ export default function DevWebSurf3D({
       skyGroup.position.copy(camera.position)
       skyGroup.rotation.y = now * .00055
       skyBrightStars.material.opacity =
-        .84 + Math.sin(now * .72) * .06
-      skyMistSprites.forEach((sprite, index) => {
-        sprite.material.rotation =
-          Math.sin(now * (.018 + index * .004) + index) * .035
-      })
+        .86 + Math.sin(now * .72) * .045
 
       const streamReveal = THREE.MathUtils.smoothstep(
         nowMs - sceneRevealStartedAt,
@@ -6331,8 +6350,12 @@ export default function DevWebSurf3D({
       skyStars.material.dispose()
       skyBrightStars.geometry.dispose()
       skyBrightStars.material.dispose()
-      skyMistMaterials.forEach((material) => material.dispose())
-      skyMistTexture.dispose()
+      distantPlatformGeometry.dispose()
+      distantStructureGeometry.dispose()
+      distantBeaconGeometry.dispose()
+      distantPlatformMaterial.dispose()
+      distantStructureMaterial.dispose()
+      distantBeaconMaterial.dispose()
       rainGeometry.dispose()
       rainMaterial.dispose()
       destroyed = true
