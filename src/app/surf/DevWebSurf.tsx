@@ -22,9 +22,17 @@ import type {
 import styles from './surf.module.css'
 
 const DEFAULT_USERNAME = 'mikachu'
-const LIBRARY_FLOOR_COUNT = 4
+const LIBRARY_FLOOR_COUNT = 6
 const LIBRARY_FLOOR_HEIGHT = 5.2
-const DEEP_CATALOG_PAGES = 8
+const DEEP_CATALOG_PAGES = 10
+const FLOOR_DIRECTORY = [
+  'ATRIUM / FEATURED / NEW',
+  'WEBDEV / REACT / TYPESCRIPT',
+  'BACKEND / PYTHON / DATABASES',
+  'AI / DATA / AUTOMATION',
+  'LINUX / DEVOPS / OPEN SOURCE',
+  'DEEP ARCHIVE / LONG-TAIL DEV',
+] as const
 const MEGA_SHELF_CAPACITY =
   (LIBRARY_FLOOR_COUNT - 1) * 4 * 6 * 9
 
@@ -1353,7 +1361,9 @@ export default function DevWebSurf() {
             : Math.min(catalogArticles.length, MEGA_SHELF_CAPACITY) +
               '/' +
               MEGA_SHELF_CAPACITY +
-              ' shelf books · keys 1–4'}
+              ' shelf books · ' +
+              FLOOR_DIRECTORY[currentFloor] +
+              ' · keys 1–6'}
         </small>
       </nav>
 
@@ -1482,7 +1492,7 @@ export default function DevWebSurf() {
           {activeNode?.kind === 'article' ? 'put back' : 'inspect'}
         </span>
         <span><kbd>F</kbd> travel</span>
-        <span><kbd>1–4</kbd> floors</span>
+        <span><kbd>1–6</kbd> floors</span>
         <span><kbd>Pg↑↓</kbd> lift</span>
         <span><kbd>Shift</kbd> hurry</span>
         <span><kbd>Esc</kbd> cursor</span>
