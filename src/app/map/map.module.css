@@ -5254,3 +5254,33 @@
     animation: none;
   }
 }
+
+
+/* Guided mode removes advanced controls from the primary hackathon path. */
+.pageGuidedMode .diveIdentity,
+.pageGuidedMode .diveTime,
+.pageGuidedMode .diveBack {
+  display: none !important;
+}
+
+.pageGuidedMode .diveHud {
+  justify-content: flex-end;
+  padding: 18px;
+}
+
+.pageGuidedMode .diveActions {
+  margin-left: auto;
+}
+
+.pageGuidedMode .flightMemoryActions > span:nth-child(2),
+.pageGuidedMode .flightMemoryActions > button {
+  display: none;
+}
+
+.pageGuidedMode .flightMemoryActions {
+  justify-content: flex-start;
+}
+
+.pageGuidedMode .flightMemoryCursorHint {
+  text-align: left;
+}
