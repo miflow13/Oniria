@@ -1,6 +1,13 @@
 'use client'
 
-import {FormEvent, useCallback, useEffect, useMemo, useState} from 'react'
+import {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import DevWebSurf3D from './DevWebSurf3D'
 import type {
   DevArticle,
@@ -8,6 +15,7 @@ import type {
   DevBootstrap,
   DevTag,
   DevUser,
+  LibrarySection,
   SurfEdge,
   SurfNode,
 } from './types'
@@ -15,30 +23,45 @@ import styles from './surf.module.css'
 
 const DEFAULT_USERNAME = 'mikachu'
 
-function hashString(value: string) {
-  let hash = 2166136261
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index)
-    hash = Math.imul(hash, 16777619)
-  }
-  return hash >>> 0
-}
-
-function ringPosition(
-  key: string,
-  index: number,
-  count: number,
-  radius: number,
-  center: [number, number, number],
-): [number, number, number] {
-  const phase = ((hashString(key) % 1000) / 1000) * Math.PI * 2
-  const angle = phase + (index / Math.max(1, count)) * Math.PI * 2
-  const wobble = (((hashString(key + ':y') % 1000) / 1000) - .5) * 2.6
-  return [
-    center[0] + Math.cos(angle) * radius,
-    center[1] + wobble,
-    center[2] + Math.sin(angle) * radius,
-  ]
+const SECTION_COPY: Record<
+  LibrarySection,
+  {title: string; subtitle: string; accent: string}
+> = {
+  atrium: {
+    title: 'DEV Library',
+    subtitle: 'information atrium',
+    accent: '#d8b879',
+  },
+  featured: {
+    title: 'Featured Reading Hall',
+    subtitle: 'popular this week',
+    accent: '#d8b879',
+  },
+  latest: {
+    title: 'New Arrivals',
+    subtitle: 'freshly published',
+    accent: '#67cfd0',
+  },
+  topics: {
+    title: 'Topic Wings',
+    subtitle: 'browse by tag',
+    accent: '#62d7a5',
+  },
+  creators: {
+    title: 'Creator Studies',
+    subtitle: 'authors and their collections',
+    accent: '#a98ae5',
+  },
+  search: {
+    title: 'Card Catalog',
+    subtitle: 'search the live collection',
+    accent: '#e5b760',
+  },
+  archive: {
+    title: 'Deep Archive',
+    subtitle: 'older shelves and long-tail pages',
+    accent: '#7a8794',
+  },
 }
 
 function articleImportance(article: DevArticleSummary) {
@@ -56,7 +79,7 @@ function articleImportance(article: DevArticleSummary) {
 function safeTagColor(tag: DevTag | undefined) {
   const candidate = tag?.bg_color_hex
   if (candidate && /^#[0-9a-f]{6}$/i.test(candidate)) return candidate
-  return '#5ee0a8'
+  return SECTION_COPY.topics.accent
 }
 
 function cleanMarkdown(markdown: string | undefined) {
@@ -65,41 +88,244 @@ function cleanMarkdown(markdown: string | undefined) {
     .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1')
     .replace(/^#{1,6}\s+/gm, '')
-    .replace(/[>*_~\`]/g, '')
+    .replace(/[>*_~`]/g, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
 }
 
-function buildSurfGraph(
+function shelfPosition(
+  section: LibrarySection,
+  index: number,
+): [number, number, number] {
+  const level = index % 3
+  const slot = Math.floor(index / 3)
+  const y = .62 + level * 1.05
+
+  if (section === 'featured') {
+    const side = slot % 2 === 0 ? -4.8 : 4.8
+    return [side, y, -9.2 - Math.floor(slot / 2) * 2.1]
+  }
+
+  if (section === 'latest') {
+    const x = slot % 2 === 0 ? -14.7 : -11.2
+    return [x, y, -8.8 - Math.floor(slot / 2) * 2.15]
+  }
+
+  if (section === 'creators') {
+    const x = slot % 2 === 0 ? 11.2 : 14.7
+    return [x, y, -23.7 - Math.floor(slot / 2) * 2.05]
+  }
+
+  if (section === 'search') {
+    const x = slot % 2 === 0 ? -14.7 : -11.2
+    return [x, y, -23.7 - Math.floor(slot / 2) * 2.05]
+  }
+
+  if (section === 'archive') {
+    const side = slot % 2 === 0 ? -4.5 : 4.5
+    return [side, y, -38.2 - Math.floor(slot / 2) * 1.8]
+  }
+
+  return [0, y, -12 - slot * 1.5]
+}
+
+function buildLibraryGraph(
   bootstrap: DevBootstrap,
   dynamicArticles: DevArticleSummary[],
   dynamicLabel: string | null,
 ) {
   const nodes: SurfNode[] = []
   const edges: SurfEdge[] = []
-  const nodeIds = new Set<string>()
+  const ids = new Set<string>()
 
   const addNode = (node: SurfNode) => {
-    if (nodeIds.has(node.id)) return
-    nodeIds.add(node.id)
+    if (ids.has(node.id)) return
+    ids.add(node.id)
     nodes.push(node)
   }
 
   const addEdge = (edge: SurfEdge) => {
-    if (!nodeIds.has(edge.source) || !nodeIds.has(edge.target)) return
-    if (edges.some((item) => item.id === edge.id)) return
+    if (!ids.has(edge.source) || !ids.has(edge.target)) return
+    if (edges.some((candidate) => candidate.id === edge.id)) return
     edges.push(edge)
   }
 
   addNode({
     id: 'dev-home',
     kind: 'home',
-    title: 'DEV Home',
-    subtitle: 'live community feed',
+    title: 'DEV Library',
+    subtitle: 'information atrium',
     href: 'https://dev.to/',
-    position: [0, 1.4, 0],
+    section: 'atrium',
+    position: [0, .55, 7],
     importance: 2,
-    accent: '#e8edf2',
+    accent: SECTION_COPY.atrium.accent,
+  })
+
+  const sections: Array<{
+    id: string
+    section: LibrarySection
+    position: [number, number, number]
+  }> = [
+    {id: 'section:featured', section: 'featured', position: [0, 1.3, -5]},
+    {id: 'section:latest', section: 'latest', position: [-10.3, 1.3, -5]},
+    {id: 'section:topics', section: 'topics', position: [10.3, 1.3, -5]},
+    {id: 'section:creators', section: 'creators', position: [10.3, 1.3, -20.4]},
+    {id: 'section:search', section: 'search', position: [-10.3, 1.3, -20.4]},
+    {id: 'section:archive', section: 'archive', position: [0, 1.3, -34.2]},
+  ]
+
+  sections.forEach(({id, section, position}) => {
+    const copy = SECTION_COPY[section]
+    addNode({
+      id,
+      kind: 'section',
+      title: copy.title,
+      subtitle: copy.subtitle,
+      section,
+      position,
+      importance: 1.7,
+      accent: copy.accent,
+    })
+    addEdge({
+      id: 'corridor:' + section,
+      source: 'dev-home',
+      target: id,
+      weight: 2.2,
+      kind: 'corridor',
+    })
+  })
+
+  const featured = bootstrap.feed.slice(0, 14)
+  featured.forEach((article, index) => {
+    const id = 'article:' + article.id
+    addNode({
+      id,
+      kind: 'article',
+      title: article.title,
+      subtitle:
+        '@' +
+        article.user.username +
+        ' · ' +
+        (article.readable_publish_date ?? 'featured'),
+      href: article.url,
+      articleId: article.id,
+      username: article.user.username,
+      section: 'featured',
+      payload: article,
+      position: shelfPosition('featured', index),
+      importance: articleImportance(article) + .2,
+      accent: '#d6b36c',
+    })
+    addEdge({
+      id: 'featured:' + article.id,
+      source: 'section:featured',
+      target: id,
+      weight: 1.8 + articleImportance(article),
+      kind: 'feed',
+    })
+  })
+
+  const featuredIds = new Set(featured.map((article) => article.id))
+  const latest = bootstrap.latest
+    .filter((article) => !featuredIds.has(article.id))
+    .slice(0, 18)
+
+  latest.forEach((article, index) => {
+    const id = 'article:' + article.id
+    addNode({
+      id,
+      kind: 'article',
+      title: article.title,
+      subtitle:
+        '@' +
+        article.user.username +
+        ' · ' +
+        (article.readable_publish_date ?? 'new'),
+      href: article.url,
+      articleId: article.id,
+      username: article.user.username,
+      section: 'latest',
+      payload: article,
+      position: shelfPosition('latest', index),
+      importance: articleImportance(article),
+      accent: SECTION_COPY.latest.accent,
+    })
+    addEdge({
+      id: 'latest:' + article.id,
+      source: 'section:latest',
+      target: id,
+      weight: 1.45 + articleImportance(article),
+      kind: 'feed',
+    })
+  })
+
+  bootstrap.tags.slice(0, 10).forEach((tag, index) => {
+    const id = 'tag:' + tag.name
+    const column = index % 2
+    const row = Math.floor(index / 2)
+    addNode({
+      id,
+      kind: 'tag',
+      title: '#' + tag.name,
+      subtitle: 'topic doorway',
+      href: 'https://dev.to/t/' + tag.name,
+      tag: tag.name,
+      section: 'topics',
+      position: [
+        column === 0 ? 11.1 : 14.6,
+        1.15,
+        -9.3 - row * 2.7,
+      ],
+      importance: 1.1,
+      accent: safeTagColor(tag),
+    })
+    addEdge({
+      id: 'topic:' + tag.name,
+      source: 'section:topics',
+      target: id,
+      weight: 1.6,
+      kind: 'tag',
+    })
+  })
+
+  const allPublic = [...featured, ...latest]
+  const authors = new Map<string, DevArticleSummary[]>()
+  allPublic.forEach((article) => {
+    const current = authors.get(article.user.username) ?? []
+    current.push(article)
+    authors.set(article.user.username, current)
+  })
+
+  const creatorNames = [...authors.entries()]
+    .sort((a, b) => b[1].length - a[1].length)
+    .slice(0, 6)
+
+  creatorNames.forEach(([username, articles], index) => {
+    const id = 'profile:' + username
+    addNode({
+      id,
+      kind: 'profile',
+      title: '@' + username,
+      subtitle: articles[0]?.user.name ?? 'DEV creator',
+      href: 'https://dev.to/' + username,
+      username,
+      section: 'creators',
+      position: [
+        index % 2 === 0 ? 11.2 : 14.7,
+        1.2,
+        -22.5 - Math.floor(index / 2) * 3,
+      ],
+      importance: 1 + articles.length * .12,
+      accent: SECTION_COPY.creators.accent,
+    })
+    addEdge({
+      id: 'creator:' + username,
+      source: 'section:creators',
+      target: id,
+      weight: 1.7,
+      kind: 'author',
+    })
   })
 
   if (bootstrap.profile) {
@@ -111,224 +337,140 @@ function buildSurfGraph(
       subtitle: bootstrap.profile.name,
       href: 'https://dev.to/' + bootstrap.profile.username,
       username: bootstrap.profile.username,
-      position: [6.8, 2.2, -7],
-      importance: 1.8,
-      accent: '#a58cff',
+      section: 'creators',
+      position: [13, 1.25, -20.8],
+      importance: 2,
+      accent: '#c09aff',
     })
     addEdge({
-      id: 'home-profile:' + bootstrap.profile.username,
-      source: 'dev-home',
+      id: 'creator:primary',
+      source: 'section:creators',
       target: profileId,
-      weight: 2,
+      weight: 2.4,
       kind: 'author',
     })
-  }
 
-  const profileArticles = bootstrap.profileArticles.slice(0, 12)
-  profileArticles.forEach((article, index) => {
-    const id = 'article:' + article.id
-    addNode({
-      id,
-      kind: 'article',
-      title: article.title,
-      subtitle:
-        '@' +
-        article.user.username +
-        ' · ' +
-        (article.readable_publish_date ?? 'article'),
-      href: article.url,
-      articleId: article.id,
-      username: article.user.username,
-      payload: article,
-      position: ringPosition(
-        'profile:' + article.id,
-        index,
-        profileArticles.length,
-        5.2,
-        [7, 1.9, -7.5],
-      ),
-      importance: articleImportance(article) + .24,
-      accent: '#8f8cff',
-    })
-    if (bootstrap.profile) {
-      addEdge({
-        id: 'profile-article:' + article.id,
-        source: 'profile:' + bootstrap.profile.username,
-        target: id,
-        weight: 1.6 + articleImportance(article),
-        kind: 'author',
-      })
-    }
-  })
+    const mine = bootstrap.profileArticles.slice(0, 14)
+    const recentMine = mine.slice(0, 8)
+    const archivedMine = mine.slice(8, 14)
 
-  const feed = bootstrap.feed
-    .filter(
-      (article) =>
-        !bootstrap.profileArticles.some((mine) => mine.id === article.id),
-    )
-    .slice(0, 22)
-
-  feed.forEach((article, index) => {
-    const id = 'article:' + article.id
-    addNode({
-      id,
-      kind: 'article',
-      title: article.title,
-      subtitle:
-        '@' +
-        article.user.username +
-        ' · ' +
-        (article.readable_publish_date ?? 'article'),
-      href: article.url,
-      articleId: article.id,
-      username: article.user.username,
-      payload: article,
-      position: ringPosition(
-        'feed:' + article.id,
-        index,
-        feed.length,
-        9.2 + (index % 3) * 1.1,
-        [0, 1.25, -4],
-      ),
-      importance: articleImportance(article),
-      accent: '#5ed6e3',
-    })
-    addEdge({
-      id: 'home-feed:' + article.id,
-      source: 'dev-home',
-      target: id,
-      weight: 1 + articleImportance(article),
-      kind: 'feed',
-    })
-  })
-
-  const authors = new Map<string, DevArticleSummary[]>()
-  feed.forEach((article) => {
-    const list = authors.get(article.user.username) ?? []
-    list.push(article)
-    authors.set(article.user.username, list)
-  })
-
-  ;[...authors.entries()]
-    .filter(([username]) => username !== bootstrap.profile?.username)
-    .sort((a, b) => b[1].length - a[1].length)
-    .slice(0, 7)
-    .forEach(([username, articles], index, all) => {
-      const profileId = 'profile:' + username
-      addNode({
-        id: profileId,
-        kind: 'profile',
-        title: '@' + username,
-        subtitle: articles[0]?.user.name ?? 'DEV creator',
-        href: 'https://dev.to/' + username,
-        username,
-        position: ringPosition(
-          'author:' + username,
-          index,
-          all.length,
-          13.4,
-          [0, 2.2, -5],
-        ),
-        importance: 1 + articles.length * .16,
-        accent: '#b48cff',
-      })
-
-      articles.slice(0, 4).forEach((article) => {
-        addEdge({
-          id: 'author-link:' + username + ':' + article.id,
-          source: profileId,
-          target: 'article:' + article.id,
-          weight: 1.4,
-          kind: 'author',
-        })
-      })
-    })
-
-  bootstrap.tags.slice(0, 10).forEach((tag, index, all) => {
-    const tagId = 'tag:' + tag.name
-    addNode({
-      id: tagId,
-      kind: 'tag',
-      title: '#' + tag.name,
-      subtitle: 'topic district',
-      href: 'https://dev.to/t/' + tag.name,
-      tag: tag.name,
-      position: ringPosition(
-        'tag:' + tag.name,
-        index,
-        all.length,
-        17,
-        [0, .3, -7],
-      ),
-      importance: 1.05,
-      accent: safeTagColor(tag),
-    })
-
-    ;[...bootstrap.feed, ...bootstrap.profileArticles]
-      .filter((article) => article.tag_list.includes(tag.name))
-      .slice(0, 4)
-      .forEach((article) => {
-        addEdge({
-          id: 'tag-link:' + tag.name + ':' + article.id,
-          source: tagId,
-          target: 'article:' + article.id,
-          weight: 1.2,
-          kind: 'tag',
-        })
-      })
-  })
-
-  if (dynamicLabel && dynamicArticles.length) {
-    addNode({
-      id: 'search:active',
-      kind: 'search',
-      title: dynamicLabel,
-      subtitle: 'live route results',
-      position: [-8.5, 2.3, -11],
-      importance: 1.7,
-      accent: '#f2c86e',
-    })
-    addEdge({
-      id: 'home-search-active',
-      source: 'dev-home',
-      target: 'search:active',
-      weight: 1.8,
-      kind: 'search',
-    })
-
-    dynamicArticles.slice(0, 18).forEach((article, index, all) => {
+    recentMine.forEach((article, index) => {
       const id = 'article:' + article.id
-      if (!nodeIds.has(id)) {
+      if (!ids.has(id)) {
         addNode({
           id,
           kind: 'article',
           title: article.title,
-          subtitle:
-            '@' +
-            article.user.username +
-            ' · ' +
-            (article.readable_publish_date ?? 'article'),
+          subtitle: '@' + bootstrap.profile!.username,
           href: article.url,
           articleId: article.id,
           username: article.user.username,
+          section: 'creators',
           payload: article,
-          position: ringPosition(
-            'dynamic:' + article.id,
-            index,
-            all.length,
-            5.8,
-            [-8.5, 2.1, -11],
-          ),
-          importance: articleImportance(article),
-          accent: '#f0bd61',
+          position: shelfPosition('creators', index),
+          importance: articleImportance(article) + .18,
+          accent: '#b28be8',
         })
       }
       addEdge({
-        id: 'search-link:' + article.id,
-        source: 'search:active',
+        id: 'primary-article:' + article.id,
+        source: profileId,
         target: id,
-        weight: 1.4,
-        kind: 'search',
+        weight: 2,
+        kind: 'author',
+      })
+    })
+
+    archivedMine.forEach((article, index) => {
+      const id = 'article:' + article.id
+      if (!ids.has(id)) {
+        addNode({
+          id,
+          kind: 'article',
+          title: article.title,
+          subtitle: '@' + bootstrap.profile!.username + ' · archive',
+          href: article.url,
+          articleId: article.id,
+          username: article.user.username,
+          section: 'archive',
+          payload: article,
+          position: shelfPosition('archive', index),
+          importance: articleImportance(article),
+          accent: SECTION_COPY.archive.accent,
+        })
+      }
+      addEdge({
+        id: 'archive-article:' + article.id,
+        source: 'section:archive',
+        target: id,
+        weight: 1.2,
+        kind: 'author',
+      })
+    })
+  }
+
+  if (dynamicLabel && dynamicArticles.length) {
+    const isTag = dynamicLabel.startsWith('#')
+    const isProfile = dynamicLabel.startsWith('@')
+    const section: LibrarySection = isTag
+      ? 'topics'
+      : isProfile
+        ? 'creators'
+        : 'search'
+    const hubId = isTag
+      ? 'tag:' + dynamicLabel.slice(1)
+      : isProfile
+        ? 'profile:' + dynamicLabel.slice(1)
+        : 'search:active'
+
+    if (!ids.has(hubId)) {
+      addNode({
+        id: hubId,
+        kind: isTag ? 'tag' : isProfile ? 'profile' : 'search',
+        title: dynamicLabel,
+        subtitle: isTag
+          ? 'live topic wing'
+          : isProfile
+            ? 'live creator study'
+            : 'temporary search aisle',
+        tag: isTag ? dynamicLabel.slice(1) : undefined,
+        username: isProfile ? dynamicLabel.slice(1) : undefined,
+        section,
+        position:
+          section === 'topics'
+            ? [13, 1.2, -20.4]
+            : section === 'creators'
+              ? [13, 1.2, -28.5]
+              : [-13, 1.1, -22.4],
+        importance: 1.8,
+        accent: SECTION_COPY[section].accent,
+      })
+    }
+
+    dynamicArticles.slice(0, 15).forEach((article, index) => {
+      const id = 'article:' + article.id
+      if (!ids.has(id)) {
+        addNode({
+          id,
+          kind: 'article',
+          title: article.title,
+          subtitle: '@' + article.user.username,
+          href: article.url,
+          articleId: article.id,
+          username: article.user.username,
+          section,
+          payload: article,
+          position: shelfPosition(section, index),
+          importance: articleImportance(article),
+          accent: SECTION_COPY[section].accent,
+        })
+      }
+      addEdge({
+        id: 'dynamic:' + hubId + ':' + article.id,
+        source: hubId,
+        target: id,
+        weight: 1.5,
+        kind: isTag ? 'tag' : isProfile ? 'author' : 'search',
       })
     })
   }
@@ -337,6 +479,8 @@ function buildSurfGraph(
 }
 
 export default function DevWebSurf() {
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
+
   const [bootstrap, setBootstrap] = useState<DevBootstrap | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -345,13 +489,28 @@ export default function DevWebSurf() {
   const [activeNode, setActiveNode] = useState<SurfNode | null>(null)
   const [article, setArticle] = useState<DevArticle | null>(null)
   const [profile, setProfile] = useState<DevUser | null>(null)
-  const [profileArticles, setProfileArticles] = useState<DevArticleSummary[]>([])
-  const [dynamicArticles, setDynamicArticles] = useState<DevArticleSummary[]>([])
+  const [profileArticles, setProfileArticles] = useState<
+    DevArticleSummary[]
+  >([])
+  const [dynamicArticles, setDynamicArticles] = useState<
+    DevArticleSummary[]
+  >([])
   const [dynamicLabel, setDynamicLabel] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [routeLoading, setRouteLoading] = useState(false)
   const [locked, setLocked] = useState(false)
-  const [visited, setVisited] = useState<string[]>(['DEV Home'])
+  const [currentSection, setCurrentSection] =
+    useState<LibrarySection>('atrium')
+  const [routeTargetId, setRouteTargetId] = useState<string | null>(null)
+  const [travelRequest, setTravelRequest] = useState<{
+    id: string
+    nonce: number
+  } | null>(null)
+  const [travelNonce, setTravelNonce] = useState(0)
+  const [visited, setVisited] = useState<
+    Array<{id: string; title: string}>
+  >([{id: 'dev-home', title: 'Atrium'}])
+  const [directoryOpen, setDirectoryOpen] = useState(true)
 
   useEffect(() => {
     let cancelled = false
@@ -391,7 +550,7 @@ export default function DevWebSurf() {
   const graph = useMemo(
     () =>
       bootstrap
-        ? buildSurfGraph(bootstrap, dynamicArticles, dynamicLabel)
+        ? buildLibraryGraph(bootstrap, dynamicArticles, dynamicLabel)
         : {nodes: [], edges: []},
     [bootstrap, dynamicArticles, dynamicLabel],
   )
@@ -402,7 +561,9 @@ export default function DevWebSurf() {
     setProfile(null)
 
     try {
-      const response = await fetch('/api/devto?mode=article&id=' + node.articleId)
+      const response = await fetch(
+        '/api/devto?mode=article&id=' + node.articleId,
+      )
       const data = (await response.json()) as {
         article?: DevArticle
         error?: string
@@ -428,7 +589,8 @@ export default function DevWebSurf() {
 
     try {
       const response = await fetch(
-        '/api/devto?mode=profile&username=' + encodeURIComponent(username),
+        '/api/devto?mode=profile&username=' +
+          encodeURIComponent(username),
       )
       const data = (await response.json()) as {
         profile?: DevUser
@@ -457,18 +619,6 @@ export default function DevWebSurf() {
     setRouteLoading(true)
     setArticle(null)
     setProfile(null)
-    setSelectedId('tag:' + tag)
-    setActiveNode({
-      id: 'tag:' + tag,
-      kind: 'tag',
-      title: '#' + tag,
-      subtitle: 'topic district',
-      href: 'https://dev.to/t/' + tag,
-      tag,
-      position: [0, 0, 0],
-      importance: 1.1,
-      accent: '#5ee0a8',
-    })
 
     try {
       const response = await fetch(
@@ -481,6 +631,7 @@ export default function DevWebSurf() {
       if (!response.ok) throw new Error(data.error ?? 'Tag failed to load')
       setDynamicArticles(data.articles ?? [])
       setDynamicLabel('#' + tag)
+      setRouteTargetId('tag:' + tag)
     } catch (nextError) {
       setError(
         nextError instanceof Error ? nextError.message : 'Tag failed to load',
@@ -495,9 +646,13 @@ export default function DevWebSurf() {
       setSelectedId(node.id)
       setActiveNode(node)
       setError(null)
-      setVisited((current) =>
-        [...current.filter((item) => item !== node.title), node.title].slice(-5),
-      )
+      setVisited((current) => {
+        const next = [
+          ...current.filter((item) => item.id !== node.id),
+          {id: node.id, title: node.title},
+        ]
+        return next.slice(-6)
+      })
 
       const route =
         node.kind === 'article'
@@ -506,9 +661,11 @@ export default function DevWebSurf() {
             ? '/' + (node.username ?? '')
             : node.kind === 'tag'
               ? '/t/' + (node.tag ?? '')
-              : node.kind === 'search'
-                ? '/search'
-                : '/'
+              : node.kind === 'section'
+                ? '/library/' + (node.section ?? 'atrium')
+                : node.kind === 'search'
+                  ? '/search'
+                  : '/'
 
       window.history.replaceState(
         null,
@@ -516,8 +673,9 @@ export default function DevWebSurf() {
         '/surf?to=' + encodeURIComponent(route),
       )
 
-      if (node.kind === 'article') void fetchArticle(node)
-      else if (node.kind === 'profile' && node.username) {
+      if (node.kind === 'article') {
+        void fetchArticle(node)
+      } else if (node.kind === 'profile' && node.username) {
         void fetchProfile(node.username)
       } else if (node.kind === 'tag' && node.tag) {
         void loadTag(node.tag)
@@ -525,10 +683,40 @@ export default function DevWebSurf() {
         setArticle(null)
         setProfile(bootstrap?.profile ?? null)
         setProfileArticles(bootstrap?.profileArticles ?? [])
+      } else {
+        setArticle(null)
       }
     },
     [bootstrap, fetchArticle, fetchProfile, loadTag],
   )
+
+  function walkTo(id: string) {
+    setRouteTargetId(id)
+    setActiveNode(null)
+    setSelectedId(null)
+    setDirectoryOpen(false)
+    if (document.pointerLockElement) return
+  }
+
+  function jumpTo(id: string) {
+    const next = travelNonce + 1
+    setTravelNonce(next)
+    setRouteTargetId(id)
+    setTravelRequest({id, nonce: next})
+    setDirectoryOpen(false)
+  }
+
+  function surpriseMe() {
+    const candidates = graph.nodes.filter(
+      (node) => node.kind === 'article' && node.articleId,
+    )
+    if (!candidates.length) return
+    const visitedIds = new Set(visited.map((item) => item.id))
+    const unvisited = candidates.filter((node) => !visitedIds.has(node.id))
+    const pool = unvisited.length ? unvisited : candidates
+    const index = visited.length % pool.length
+    jumpTo(pool[index].id)
+  }
 
   async function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -542,7 +730,8 @@ export default function DevWebSurf() {
       if (value.startsWith('@')) {
         const username = value.slice(1).trim()
         const response = await fetch(
-          '/api/devto?mode=profile&username=' + encodeURIComponent(username),
+          '/api/devto?mode=profile&username=' +
+            encodeURIComponent(username),
         )
         const data = (await response.json()) as {
           profile?: DevUser
@@ -552,12 +741,13 @@ export default function DevWebSurf() {
         if (!response.ok || !data.profile) {
           throw new Error(data.error ?? 'Profile not found')
         }
+
         setProfile(data.profile)
         setProfileArticles(data.articles ?? [])
         setArticle(null)
         setDynamicArticles(data.articles ?? [])
         setDynamicLabel('@' + data.profile.username)
-        setSelectedId('profile:' + data.profile.username)
+        setRouteTargetId('profile:' + data.profile.username)
         setActiveNode({
           id: 'profile:' + data.profile.username,
           kind: 'profile',
@@ -565,9 +755,10 @@ export default function DevWebSurf() {
           subtitle: data.profile.name,
           href: 'https://dev.to/' + data.profile.username,
           username: data.profile.username,
-          position: [0, 0, 0],
-          importance: 1.4,
-          accent: '#b48cff',
+          section: 'creators',
+          position: [13, 1.2, -28.5],
+          importance: 1.8,
+          accent: SECTION_COPY.creators.accent,
         })
       } else if (value.startsWith('#')) {
         await loadTag(value.slice(1).trim())
@@ -582,15 +773,16 @@ export default function DevWebSurf() {
         if (!response.ok) throw new Error(data.error ?? 'Search failed')
         setDynamicArticles(data.articles ?? [])
         setDynamicLabel('search: ' + value)
-        setSelectedId('search:active')
+        setRouteTargetId('search:active')
         setActiveNode({
           id: 'search:active',
           kind: 'search',
           title: 'search: ' + value,
-          subtitle: 'live route results',
-          position: [0, 0, 0],
-          importance: 1.6,
-          accent: '#f2c86e',
+          subtitle: 'temporary search aisle',
+          section: 'search',
+          position: [-13, 1.1, -22.4],
+          importance: 1.8,
+          accent: SECTION_COPY.search.accent,
         })
       }
     } catch (nextError) {
@@ -606,12 +798,29 @@ export default function DevWebSurf() {
     return (
       <main className={styles.loadingScreen}>
         <div className={styles.loadingCore} aria-hidden="true" />
-        <span>connecting to dev.to</span>
-        <strong>Building the live web around you…</strong>
+        <span>opening the dev library</span>
+        <strong>Cataloging the live collection…</strong>
         {error && <small>{error}</small>}
       </main>
     )
   }
+
+  const routeTarget = routeTargetId
+    ? graph.nodes.find((node) => node.id === routeTargetId) ?? null
+    : null
+
+  const continueTarget =
+    visited.length > 1
+      ? visited[visited.length - 1]?.id
+      : bootstrap.profile
+        ? 'profile:' + bootstrap.profile.username
+        : 'section:featured'
+
+  const breadcrumb = [
+    'DEV Library',
+    SECTION_COPY[currentSection].title,
+    activeNode?.title,
+  ].filter(Boolean)
 
   return (
     <main className={styles.page}>
@@ -619,35 +828,51 @@ export default function DevWebSurf() {
         nodes={graph.nodes}
         edges={graph.edges}
         selectedId={selectedId}
+        routeTargetId={routeTargetId}
+        travelRequest={travelRequest}
         onInspect={inspectNode}
-        onTravel={inspectNode}
+        onTravel={(node) => {
+          setRouteTargetId(null)
+          inspectNode(node)
+        }}
         onHover={setHovered}
         onPointerLockChange={setLocked}
+        onZoneChange={setCurrentSection}
       />
 
       <header className={styles.chrome}>
-        <div className={styles.brand}>
+        <button
+          type="button"
+          className={styles.brand}
+          onClick={() => {
+            setDirectoryOpen(true)
+            setRouteTargetId('dev-home')
+          }}
+        >
           <b>DEV</b>
-          <span>websurf</span>
-        </div>
+          <span>Library</span>
+        </button>
+
         <form className={styles.addressBar} onSubmit={submitSearch}>
           <span aria-hidden="true">⌕</span>
           <input
+            ref={searchInputRef}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search DEV, @username, or #tag"
-            aria-label="Search DEV"
+            placeholder="Ask the card catalog: article, @creator, #topic"
+            aria-label="Search the DEV library"
           />
           <kbd>↵</kbd>
         </form>
+
         <div className={styles.connection}>
           <i className={locked ? styles.online : ''} />
-          {locked ? 'surfing' : 'cursor free'}
+          {locked ? 'walking' : 'cursor free'}
         </div>
       </header>
 
-      <nav className={styles.history} aria-label="Surf history">
-        {visited.map((item, index) => (
+      <nav className={styles.breadcrumb} aria-label="Library location">
+        {breadcrumb.map((item, index) => (
           <span key={item + ':' + index}>
             {index > 0 && <i>›</i>}
             {item}
@@ -655,17 +880,111 @@ export default function DevWebSurf() {
         ))}
       </nav>
 
+      <button
+        type="button"
+        className={styles.directoryToggle}
+        onClick={() => setDirectoryOpen((current) => !current)}
+      >
+        <span aria-hidden="true">☷</span>
+        Directory
+      </button>
+
+      {directoryOpen && (
+        <aside className={styles.directory}>
+          <div className={styles.directoryHeading}>
+            <span>DEV Library Directory</span>
+            <button
+              type="button"
+              onClick={() => setDirectoryOpen(false)}
+              aria-label="Close directory"
+            >
+              ×
+            </button>
+          </div>
+          <p>
+            Browse the collection like a place. Pick a wing and follow the
+            illuminated floor route.
+          </p>
+
+          <div className={styles.directoryGrid}>
+            <button type="button" onClick={() => walkTo(continueTarget)}>
+              <b>Continue browsing</b>
+              <small>return to your last page</small>
+            </button>
+            <button
+              type="button"
+              onClick={() => walkTo('section:featured')}
+            >
+              <b>Featured today</b>
+              <small>popular reading hall</small>
+            </button>
+            <button
+              type="button"
+              onClick={() => walkTo('section:topics')}
+            >
+              <b>Explore topics</b>
+              <small>tag wings and doorways</small>
+            </button>
+            <button
+              type="button"
+              onClick={() => walkTo('section:creators')}
+            >
+              <b>Creators</b>
+              <small>author studies and collections</small>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                walkTo('section:search')
+                window.setTimeout(() => searchInputRef.current?.focus(), 120)
+              }}
+            >
+              <b>Search</b>
+              <small>use the card catalog</small>
+            </button>
+            <button type="button" onClick={surpriseMe}>
+              <b>Surprise me</b>
+              <small>jump to an unread page</small>
+            </button>
+          </div>
+
+          <button
+            type="button"
+            className={styles.archiveLink}
+            onClick={() => walkTo('section:archive')}
+          >
+            Restricted stacks · Deep Archive →
+          </button>
+        </aside>
+      )}
+
+      {routeTarget && (
+        <aside className={styles.routeCard}>
+          <span>Floor route illuminated</span>
+          <strong>{routeTarget.title}</strong>
+          <p>{routeTarget.subtitle}</p>
+          <div>
+            <button type="button" onClick={() => setRouteTargetId(null)}>
+              Walk there
+            </button>
+            <button type="button" onClick={() => jumpTo(routeTarget.id)}>
+              Jump there
+            </button>
+          </div>
+        </aside>
+      )}
+
       <div className={styles.reticle} aria-hidden="true">
         <i />
         <i />
       </div>
 
       <section className={styles.controls}>
-        <span><kbd>WASD</kbd> move</span>
+        <span><kbd>WASD</kbd> walk</span>
         <span><kbd>mouse</kbd> look</span>
         <span><kbd>E</kbd> inspect</span>
-        <span><kbd>F</kbd> surf to page</span>
-        <span><kbd>Shift</kbd> boost</span>
+        <span><kbd>F</kbd> travel</span>
+        <span><kbd>Shift</kbd> hurry</span>
         <span><kbd>Esc</kbd> cursor</span>
       </section>
 
@@ -677,8 +996,14 @@ export default function DevWebSurf() {
         </div>
       )}
 
-      {(activeNode || article) && (
-        <aside className={styles.pageLens}>
+      {activeNode && (
+        <aside
+          className={
+            activeNode.kind === 'article'
+              ? styles.readingRoom
+              : styles.pageLens
+          }
+        >
           <button
             type="button"
             className={styles.closeLens}
@@ -686,37 +1011,71 @@ export default function DevWebSurf() {
               setActiveNode(null)
               setSelectedId(null)
               setArticle(null)
-              setProfile(null)
-              setProfileArticles([])
             }}
-            aria-label="Close page lens"
+            aria-label="Close page"
           >
             ×
           </button>
 
           {routeLoading && (
-            <div className={styles.routeLoading}>loading page…</div>
+            <div className={styles.routeLoading}>retrieving from catalog…</div>
           )}
 
-          {activeNode?.kind === 'home' && (
+          {activeNode.kind === 'home' && (
             <>
-              <div className={styles.pageType}>dev.to / home</div>
-              <h1>DEV Community</h1>
+              <div className={styles.pageType}>Atrium · Information desk</div>
+              <h1>DEV Library</h1>
               <p>
-                The public DEV feed is physically surrounding you. Articles are
-                pages, authors are profile hubs, and tags form topic districts.
+                The live DEV Community organized as a physical library.
+                Popular posts fill the reading hall, new writing arrives in
+                New Arrivals, tags become topic wings, and creators have their
+                own studies.
               </p>
               <div className={styles.metrics}>
-                <span><b>{bootstrap.feed.length}</b> feed pages</span>
-                <span><b>{bootstrap.tags.length}</b> tag routes</span>
-                <span><b>{graph.nodes.length}</b> destinations</span>
+                <span><b>{bootstrap.feed.length}</b> featured pages</span>
+                <span><b>{bootstrap.latest.length}</b> new arrivals</span>
+                <span><b>{bootstrap.tags.length}</b> cataloged topics</span>
+              </div>
+              <div className={styles.pageActions}>
+                <button
+                  type="button"
+                  onClick={() => setDirectoryOpen(true)}
+                >
+                  Open directory
+                </button>
               </div>
             </>
           )}
 
-          {profile && activeNode?.kind === 'profile' && (
+          {activeNode.kind === 'section' && activeNode.section && (
             <>
-              <div className={styles.pageType}>dev.to / profile</div>
+              <div className={styles.pageType}>Library wing</div>
+              <h1>{SECTION_COPY[activeNode.section].title}</h1>
+              <p>{SECTION_COPY[activeNode.section].subtitle}</p>
+              <div className={styles.pageActions}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveNode(null)
+                    setSelectedId(null)
+                    setRouteTargetId(activeNode.id)
+                  }}
+                >
+                  Follow floor route
+                </button>
+                <button
+                  type="button"
+                  onClick={() => jumpTo(activeNode.id)}
+                >
+                  Travel here
+                </button>
+              </div>
+            </>
+          )}
+
+          {activeNode.kind === 'profile' && profile && (
+            <>
+              <div className={styles.pageType}>Creator Study</div>
               <div className={styles.profileHeader}>
                 {profile.profile_image && (
                   <img
@@ -732,43 +1091,55 @@ export default function DevWebSurf() {
               </div>
               <p>{profile.summary || 'DEV Community creator'}</p>
               <div className={styles.metrics}>
-                <span><b>{profileArticles.length}</b> articles</span>
+                <span><b>{profileArticles.length}</b> books on the shelf</span>
                 {profile.location && <span>{profile.location}</span>}
                 {profile.joined_at && <span>joined {profile.joined_at}</span>}
               </div>
+
+              <div className={styles.collectionList}>
+                {profileArticles.slice(0, 6).map((item) => (
+                  <button
+                    type="button"
+                    key={item.id}
+                    onClick={() => {
+                      const node = graph.nodes.find(
+                        (candidate) =>
+                          candidate.id === 'article:' + item.id,
+                      )
+                      if (node) jumpTo(node.id)
+                    }}
+                  >
+                    <span>{item.title}</span>
+                    <small>{item.readable_publish_date}</small>
+                  </button>
+                ))}
+              </div>
+
               <div className={styles.pageActions}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDynamicArticles(profileArticles)
-                    setDynamicLabel('@' + profile.username)
-                  }}
-                >
-                  Materialize articles
-                </button>
                 <a
                   href={'https://dev.to/' + profile.username}
                   target="_blank"
                   rel="noreferrer"
                 >
-                  Open on DEV ↗
+                  Open canonical profile ↗
                 </a>
               </div>
             </>
           )}
 
-          {article && (
+          {activeNode.kind === 'article' && article && (
             <>
-              <div className={styles.pageType}>
-                dev.to / @{article.user.username} / article
-              </div>
+              <div className={styles.pageType}>Reading Room</div>
               <h1>{article.title}</h1>
               <div className={styles.articleMeta}>
                 <span>@{article.user.username}</span>
                 <span>{article.readable_publish_date}</span>
-                <span>{article.reading_time_minutes ?? 0} min</span>
+                <span>{article.reading_time_minutes ?? 0} min read</span>
               </div>
-              <p className={styles.articleDescription}>{article.description}</p>
+              <p className={styles.articleDescription}>
+                {article.description}
+              </p>
+
               <div className={styles.tags}>
                 {article.tag_list.map((tag) => (
                   <button
@@ -776,106 +1147,110 @@ export default function DevWebSurf() {
                     type="button"
                     onClick={() => void loadTag(tag)}
                   >
-                    #{tag}
+                    #{tag} · doorway
                   </button>
                 ))}
               </div>
+
               <div className={styles.articleBody}>
-                {cleanMarkdown(article.body_markdown).slice(0, 2600)}
+                {cleanMarkdown(article.body_markdown).slice(0, 6500)}
               </div>
+
               <div className={styles.metrics}>
-                <span><b>{article.public_reactions_count ?? 0}</b> reactions</span>
-                <span><b>{article.comments_count ?? 0}</b> comments</span>
+                <span>
+                  <b>{article.public_reactions_count ?? 0}</b> reactions
+                </span>
+                <span>
+                  <b>{article.comments_count ?? 0}</b> comments
+                </span>
               </div>
+
               <div className={styles.pageActions}>
                 <button
                   type="button"
                   onClick={() => {
-                    const username = article.user.username
-                    const existing = graph.nodes.find(
-                      (node) =>
-                        node.kind === 'profile' &&
-                        node.username === username,
+                    setDynamicLabel('@' + article.user.username)
+                    void fetchProfile(article.user.username)
+                    setRouteTargetId(
+                      'profile:' + article.user.username,
                     )
-                    const target =
-                      existing ?? {
-                        id: 'profile:' + username,
-                        kind: 'profile' as const,
-                        title: '@' + username,
-                        subtitle: article.user.name,
-                        href: 'https://dev.to/' + username,
-                        username,
-                        position: [0, 0, 0] as [number, number, number],
-                        importance: 1.2,
-                        accent: '#b48cff',
-                      }
-
-                    setSelectedId(existing?.id ?? null)
-                    setActiveNode(target)
-                    void fetchProfile(username)
                   }}
                 >
-                  Visit @{article.user.username}
+                  Enter @{article.user.username}&apos;s study
                 </button>
                 <a href={article.url} target="_blank" rel="noreferrer">
-                  Open full page ↗
+                  Open canonical article ↗
                 </a>
               </div>
             </>
           )}
 
-          {activeNode?.kind === 'tag' && !article && (
+          {activeNode.kind === 'tag' && (
             <>
-              <div className={styles.pageType}>dev.to / tag district</div>
+              <div className={styles.pageType}>Topic Wing</div>
               <h1>#{activeNode.tag}</h1>
               <p>
-                Matching DEV pages are materializing as a live search cluster.
+                The library is rebuilding this aisle from live pages carrying
+                the same tag.
               </p>
               <div className={styles.metrics}>
-                <span><b>{dynamicArticles.length}</b> matching pages</span>
+                <span><b>{dynamicArticles.length}</b> matching books</span>
+              </div>
+              <div className={styles.collectionList}>
+                {dynamicArticles.slice(0, 6).map((item) => (
+                  <button
+                    type="button"
+                    key={item.id}
+                    onClick={() => jumpTo('article:' + item.id)}
+                  >
+                    <span>{item.title}</span>
+                    <small>@{item.user.username}</small>
+                  </button>
+                ))}
               </div>
             </>
           )}
 
-          {activeNode?.kind === 'search' && !article && (
+          {activeNode.kind === 'search' && (
             <>
-              <div className={styles.pageType}>dev.to / live search</div>
-              <h1>{dynamicLabel}</h1>
+              <div className={styles.pageType}>Card Catalog</div>
+              <h1>{dynamicLabel || 'Search'}</h1>
               <p>
-                Search results are now physical destinations around this hub.
+                Search results have materialized as a temporary aisle in this
+                wing.
               </p>
+              <div className={styles.metrics}>
+                <span><b>{dynamicArticles.length}</b> catalog matches</span>
+              </div>
+              <div className={styles.collectionList}>
+                {dynamicArticles.slice(0, 6).map((item) => (
+                  <button
+                    type="button"
+                    key={item.id}
+                    onClick={() => jumpTo('article:' + item.id)}
+                  >
+                    <span>{item.title}</span>
+                    <small>@{item.user.username}</small>
+                  </button>
+                ))}
+              </div>
             </>
           )}
         </aside>
       )}
 
-      {dynamicLabel && dynamicArticles.length > 0 && (
-        <button
-          type="button"
-          className={styles.searchBeacon}
-          onClick={() => {
-            const node = graph.nodes.find((item) => item.id === 'search:active')
-            if (node) inspectNode(node)
-          }}
-        >
-          <span>live route</span>
-          <strong>{dynamicLabel}</strong>
-          <small>{dynamicArticles.length} pages materialized</small>
-        </button>
-      )}
-
       {error && (
         <div className={styles.errorToast}>
-          <strong>DEV connection hiccup</strong>
+          <strong>Catalog connection hiccup</strong>
           <span>{error}</span>
           <button type="button" onClick={() => setError(null)}>×</button>
         </div>
       )}
 
-      {!locked && !activeNode && (
+      {!locked && !activeNode && !directoryOpen && (
         <div className={styles.capturePrompt}>
-          <span>click anywhere in the web</span>
-          <strong>Capture pointer to start surfing</strong>
+          <span>click inside the library</span>
+          <strong>Capture pointer to walk the stacks</strong>
         </div>
       )}
     </main>
