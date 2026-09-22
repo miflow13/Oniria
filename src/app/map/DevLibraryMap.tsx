@@ -12,6 +12,7 @@ import DreamWorld3D, {
   type DreamWorldEdge,
   type DreamWorldNode,
   type LibraryMovementMode,
+  type LibraryReadingBook,
 } from './DreamWorld3D'
 import type {DreamQuality} from './dreamworld/quality'
 import type {
@@ -162,6 +163,8 @@ export default function DevLibraryMap() {
   const [flightMode, setFlightMode] = useState(true)
   const [movementMode, setMovementMode] =
     useState<LibraryMovementMode>('walk')
+  const [readingBook, setReadingBook] =
+    useState<LibraryReadingBook | null>(null)
   const [navigation, setNavigation] = useState<{
     nearestId: string | null
     routeTargetId: string | null
@@ -278,6 +281,7 @@ export default function DevLibraryMap() {
       event.stopPropagation()
       event.stopImmediatePropagation()
       setArticle(null)
+      setReadingBook(null)
     }
 
     window.addEventListener('keydown', closeBookWithE, true)
@@ -657,7 +661,8 @@ export default function DevLibraryMap() {
         observatoryMode={false}
         flightMode={flightMode}
         libraryMovementMode={movementMode}
-        inputBlocked={Boolean(article)}
+        libraryReadingBook={readingBook}
+        inputBlocked={Boolean(article) || Boolean(readingBook)}
         onZoomChange={() => {}}
         onPanChange={() => {}}
         onNodeHover={(node) => setHoveredId(node?._id ?? null)}
@@ -669,9 +674,12 @@ export default function DevLibraryMap() {
           const shelf = shelves.find((item) => item.id === nodeId)
           const selectedBook = shelf?.articles[bookIndex]
           if (selectedBook) {
-            void openArticle(selectedBook)
+            setReadingBook({nodeId, index: bookIndex})
+            void openArticle(selectedBook).catch(() => {
+              setReadingBook(null)
+            })
           }
-        }}
+        }
         onFlightNavigationChange={setNavigation}
         onBackgroundClick={() => setSelectedId(null)}
         onProjectionChange={() => {}}
@@ -837,7 +845,10 @@ export default function DevLibraryMap() {
           <div className={styles.readerCard}>
             <button
               className={styles.close}
-              onClick={() => setArticle(null)}
+              onClick={() => {
+                setArticle(null)
+                setReadingBook(null)
+              }}
               aria-label="Close article"
             >
               ×
