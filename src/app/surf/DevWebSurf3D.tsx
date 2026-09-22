@@ -404,6 +404,7 @@ function makeArchitecturalGuide(
 function createSectionSignTexture(
   section: LibrarySection,
   accent: string,
+  count = 0,
 ) {
   const canvas = document.createElement('canvas')
   canvas.width = 1024
@@ -477,6 +478,24 @@ function createSectionSignTexture(
     context.fillStyle = '#8b94a6'
     context.font = '600 18px system-ui, sans-serif'
     context.fillText('DEV LIBRARY', 248, 222)
+
+    if (section !== 'atrium') {
+      const badgeText = count.toLocaleString() + ' ENTRIES'
+      context.font = '700 18px system-ui, sans-serif'
+      const badgeWidth = Math.max(126, context.measureText(badgeText).width + 34)
+      context.fillStyle = 'rgba(255,255,255,.055)'
+      context.fillRect(canvas.width - badgeWidth - 62, 48, badgeWidth, 42)
+      context.strokeStyle = 'rgba(255,255,255,.08)'
+      context.strokeRect(canvas.width - badgeWidth - 62, 48, badgeWidth, 42)
+      context.textAlign = 'center'
+      context.fillStyle = '#cfd6e2'
+      context.fillText(
+        badgeText,
+        canvas.width - badgeWidth / 2 - 62,
+        69,
+      )
+      context.textAlign = 'left'
+    }
 
     context.textAlign = 'right'
     context.fillStyle = '#d9f8ff'
@@ -1673,6 +1692,26 @@ export default function DevWebSurf3D({
       return group
     }
 
+    const sectionEntryCounts: Record<LibrarySection, number> = {
+      atrium: 0,
+      featured: 0,
+      latest: 0,
+      topics: 0,
+      creators: 0,
+      search: 0,
+      archive: 0,
+    }
+    nodes.forEach((node) => {
+      if (
+        !node.section ||
+        node.kind === 'section' ||
+        node.kind === 'home'
+      ) {
+        return
+      }
+      sectionEntryCounts[node.section] += 1
+    })
+
     function addSectionSign(
       section: LibrarySection,
       x: number,
@@ -1715,7 +1754,11 @@ export default function DevWebSurf3D({
       const edges = new THREE.LineSegments(edgeGeometry, edgeMaterial)
       group.add(edges)
 
-      const texture = createSectionSignTexture(section, accent)
+      const texture = createSectionSignTexture(
+        section,
+        accent,
+        sectionEntryCounts[section],
+      )
       labelsToDispose.push(texture)
       const faceMaterial = new THREE.MeshBasicMaterial({
         map: texture,
