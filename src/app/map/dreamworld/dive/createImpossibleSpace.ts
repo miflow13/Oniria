@@ -193,6 +193,7 @@ export function createImpossibleSpace({
     }
     frameMaterial?: THREE.MeshStandardMaterial
     portalMaterial?: THREE.Material
+    primary?: boolean
   }> = []
   const pickables: THREE.Object3D[] = []
   const raycaster = new THREE.Raycaster()
@@ -459,6 +460,7 @@ export function createImpossibleSpace({
       label,
       frameMaterial,
       portalMaterial,
+      primary: index === 0,
     })
     disposables.push(
       frameMaterial,
@@ -684,27 +686,41 @@ export function createImpossibleSpace({
       })
 
       previews.forEach(
-        ({object, interaction, label, frameMaterial, portalMaterial}, index) => {
+        (
+          {
+            object,
+            interaction,
+            label,
+            frameMaterial,
+            portalMaterial,
+            primary,
+          },
+          index,
+        ) => {
           object.position.y +=
             Math.sin(time * .24 + index * 1.7) *
             delta *
             (.04 + instability * .04)
 
           const hovered = hoveredDreamId === interaction.dreamId
-          const targetScale = hovered ? 1.06 : 1
+          const targetScale = hovered ? 1.06 : primary ? 1.025 : 1
           object.scale.lerp(
             new THREE.Vector3(targetScale, targetScale, targetScale),
             .08,
           )
 
           if (label) {
+            const restingOpacity = primary ? .58 : .18
             label.material.opacity +=
-              ((hovered ? .92 : .18) - label.material.opacity) * .1
+              ((hovered ? .92 : restingOpacity) - label.material.opacity) *
+              .1
           }
 
           if (frameMaterial) {
+            const restingIntensity = primary ? .82 : .52
             frameMaterial.emissiveIntensity +=
-              ((hovered ? 1.15 : .52) - frameMaterial.emissiveIntensity) *
+              ((hovered ? 1.15 : restingIntensity) -
+                frameMaterial.emissiveIntensity) *
               .08
           }
 
@@ -713,12 +729,15 @@ export function createImpossibleSpace({
             portalMaterial instanceof THREE.ShaderMaterial
           ) {
             portalMaterial.uniforms.uTime.value = time
+            const restingHover = primary
+              ? .18 + Math.max(0, Math.sin(time * .7)) * .08
+              : 0
             portalMaterial.uniforms.uHover.value +=
-              ((hovered ? 1 : 0) -
+              ((hovered ? 1 : restingHover) -
                 portalMaterial.uniforms.uHover.value) *
               .1
             portalMaterial.uniforms.uOpacity.value +=
-              ((hovered ? 1 : .88) -
+              ((hovered ? 1 : primary ? .96 : .88) -
                 portalMaterial.uniforms.uOpacity.value) *
               .08
           }
