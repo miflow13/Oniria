@@ -636,9 +636,9 @@ export default function DevWebSurf3D({
     const practicalLights = practicalLightLayout.map((entry) => {
       const light = new THREE.PointLight(
         entry.color,
-        4.5,
-        21,
-        1.45,
+        3.65,
+        26,
+        1.22,
       )
       light.position.set(
         entry.x,
@@ -657,9 +657,9 @@ export default function DevWebSurf3D({
     const landingLights = landingLightLayout.map((entry) => {
       const light = new THREE.PointLight(
         0xf7f3ec,
-        3.8,
-        16,
-        1.5,
+        2.75,
+        20,
+        1.28,
       )
       light.position.set(
         entry.x,
@@ -682,13 +682,38 @@ export default function DevWebSurf3D({
     const bridgeEntryLights = bridgeEntryLightLayout.map((entry) => {
       const light = new THREE.PointLight(
         0xe6e9e8,
-        2.4,
-        11.5,
-        1.45,
+        1.65,
+        15,
+        1.32,
       )
       light.position.set(
         entry.x,
         currentFloorRef.current * LIBRARY_FLOOR_HEIGHT + 2.75,
+        entry.z,
+      )
+      light.castShadow = false
+      scene.add(light)
+      return light
+    })
+
+    const shelfFillLightLayout = [
+      {x: -12.4, z: -10},
+      {x: 12.4, z: -18},
+      {x: -12.4, z: -26},
+      {x: 12.4, z: -34},
+      {x: -12.4, z: -42},
+      {x: 12.4, z: -50},
+    ] as const
+    const shelfFillLights = shelfFillLightLayout.map((entry) => {
+      const light = new THREE.PointLight(
+        0xe2e5e7,
+        1.15,
+        10.5,
+        1.4,
+      )
+      light.position.set(
+        entry.x,
+        currentFloorRef.current * LIBRARY_FLOOR_HEIGHT + 2.65,
         entry.z,
       )
       light.castShadow = false
@@ -1013,7 +1038,7 @@ export default function DevWebSurf3D({
     // One material family for floors + walls. The floor now reads as the
     // horizontal face of the same megastructure instead of a separate skin.
     const concrete = new THREE.MeshStandardMaterial({
-      color: 0x2a2d33,
+      color: 0x30343a,
       map: architecturalSurfaceTexture,
       roughnessMap: architecturalSurfaceRoughness,
       roughness: .92,
@@ -1072,7 +1097,7 @@ export default function DevWebSurf3D({
     )
 
     const shelfBackMaterial = new THREE.MeshStandardMaterial({
-      color: 0x303237,
+      color: 0x373a40,
       map: architecturalSurfaceTexture,
       roughnessMap: architecturalSurfaceRoughness,
       roughness: .9,
@@ -1081,7 +1106,7 @@ export default function DevWebSurf3D({
     architecturalMaterials.push(shelfBackMaterial)
 
     const slabUndersideMaterial = new THREE.MeshStandardMaterial({
-      color: 0x15181d,
+      color: 0x202329,
       roughness: .96,
       metalness: .02,
     })
@@ -1732,7 +1757,7 @@ export default function DevWebSurf3D({
     const archiveCenterZ = -31.5
     const archiveDepth = 94
 
-    const practicalFixtureGeometry = new THREE.BoxGeometry(1.4, .045, .18)
+    const practicalFixtureGeometry = new THREE.BoxGeometry(2.05, .045, .22)
     architecturalGeometries.push(practicalFixtureGeometry)
     const practicalFixtureMaterials = FLOOR_ACCENTS.map((accent) => {
       const material = new THREE.MeshBasicMaterial({
@@ -1741,7 +1766,7 @@ export default function DevWebSurf3D({
           .025,
         ),
         transparent: true,
-        opacity: .72,
+        opacity: .82,
         toneMapped: false,
       })
       architecturalMaterials.push(material)
