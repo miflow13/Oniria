@@ -69,6 +69,10 @@ import {
   archiveWalkwayHalfWidthAtBay,
 } from './libraryLayout'
 import {createLibraryAudio} from './libraryAudio'
+import {
+  createLibraryReadingRitual,
+  type LibraryBookVisual,
+} from './libraryReadingRitual'
 
 export type DreamWorldNode = {
   _id: string
@@ -2046,26 +2050,9 @@ export default function DreamWorld3D({
 
     const nodeVisuals = new Map<string, NodeVisual>()
     const interactive: THREE.Object3D[] = []
-    type LibraryBookVisual = {
-      nodeId: string
-      index: number
-      group: THREE.Group
-      coverHinge: THREE.Group
-      coverMaterial: THREE.MeshStandardMaterial
-      bookmark: THREE.Mesh
-      basePosition: THREE.Vector3
-    }
     const libraryBookVisuals: LibraryBookVisual[] = []
     const bookInteractives: THREE.Object3D[] = []
     let hoveredBook: LibraryBookVisual | null = null
-    let openingBook:
-      | {
-          visual: LibraryBookVisual
-          startedAt: number
-          fired: boolean
-          returningAt: number | null
-        }
-      | null = null
 
     // Reusable shelf kit for cinematic library mode.
     const shelfSideGeometry = new THREE.BoxGeometry(.18, 2.65, .56)
@@ -2157,10 +2144,9 @@ export default function DreamWorld3D({
       : null
     if (libraryShelfLight) scene.add(libraryShelfLight)
 
-    const libraryReadingLight = libraryMode
-      ? new THREE.PointLight(0xe49af2, 0, 8, 2)
+    const libraryReadingRitual = libraryMode
+      ? createLibraryReadingRitual(scene)
       : null
-    if (libraryReadingLight) scene.add(libraryReadingLight)
 
     const libraryShelfSparkleGeometry = libraryMode
       ? new THREE.BufferGeometry()
@@ -4488,13 +4474,13 @@ export default function DreamWorld3D({
     }
 
     function beginBookOpen(visual: LibraryBookVisual) {
-      if (openingBook) return
-      hoveredBook = visual
-      openingBook = {
-        visual,
-        startedAt: performance.now() / 1000,
-        fired: false,
-        returningAt: null,
+      if (
+        libraryReadingRitual?.begin(
+          visual,
+          performance.now() / 1000,
+        )
+      ) {
+        hoveredBook = visual
       }
     }
 
@@ -4508,176 +4494,9 @@ export default function DreamWorld3D({
         flightModeRef.current &&
         diveMode === 'none' &&
         document.pointerLockElement === renderer.domElement &&
-        !openingBook
+        !(libraryReadingRitual?.isActive() ?? false)
       ) {
         hoveredBook = pickCenterBook()
-      }
-
-      const openingSeconds = openingBook
-        ? now / 1000 - openingBook.startedAt
-        : 0
-      const openingProgress = openingBook
-        ? THREE.MathUtils.clamp(openingSeconds / .92, 0, 1)
-        : 0
-      const openingEase =
-        1 - Math.pow(1 - openingProgress, 3)
-
-      if (
-        openingBook &&
-        openingProgress >= .72 &&
-        !openingBook.fired
-      ) {
-        openingBook.fired = true
-        openingBook.returningAt = now / 1000
-        openingBook.visual.bookmark.visible = true
-        onBookSelectRef.current?.(
-          openingBook.visual.nodeId,
-          openingBook.visual.index,
-        )
-      }
-
-      const returnSeconds =
-        openingBook?.returningAt !== null &&
-        openingBook?.returningAt !== undefined
-          ? now / 1000 - openingBook.returningAt
-          : 0
-      const returnProgress =
-        openingBook?.returningAt !== null &&
-        openingBook?.returningAt !== undefined
-          ? THREE.MathUtils.clamp(returnSeconds / .46, 0, 1)
-          : 0
-      const returnEase =
-        returnProgress > 0
-          ? 1 - Math.pow(1 - returnProgress, 3)
-          : 0
-      const ritualAmount = openingBook
-        ? openingBook.returningAt !== null
-          ? 1 - returnEase
-          : openingEase
-        : 0
-
-      libraryBookVisuals.forEach((bookVisual) => {
-        const shelfVisual = nodeVisuals.get(bookVisual.nodeId)
-        const shelfDistance = shelfVisual
-          ? camera.position.distanceTo(shelfVisual.group.position)
-          : Infinity
-        const isOpening = openingBook?.visual === bookVisual
-        const isHovered = hoveredBook === bookVisual
-        const isApproachedShelf =
-          flightNearestId === bookVisual.nodeId &&
-          shelfDistance < 15
-
-        const showFullDetail =
-          shelfDistance < 27 || isOpening || isHovered
-        const showBookBlocks =
-          shelfDistance < 52 || isOpening || isHovered
-
-        bookVisual.group.visible = showBookBlocks
-        bookVisual.coverHinge.visible = showFullDetail
-
-        const positionTarget = bookVisual.basePosition.clone()
-
-        if (isOpening) {
-          // Keep the entire reading ritual local to the shelf. Never derive a
-          // book transform from the camera: that can pin the cover plane to
-          // the visitor's view if the reader opens during the transition.
-          positionTarget.z += .34 * ritualAmount
-          positionTarget.y += .08 * ritualAmount
-          positionTarget.x += .035 * ritualAmount
-        } else {
-          positionTarget.z += isHovered
-            ? .2
-            : isApproachedShelf
-              ? .075
-              : 0
-        }
-
-        bookVisual.group.position.lerp(
-          positionTarget,
-          isOpening ? .2 : .12,
-        )
-
-        // Safety envelope: no book animation is allowed to move a visual more
-        // than a small distance from its authored shelf slot.
-        const displacement = bookVisual.group.position
-          .clone()
-          .sub(bookVisual.basePosition)
-        const maxDisplacement = .44
-        if (displacement.lengthSq() > maxDisplacement * maxDisplacement) {
-          displacement.setLength(maxDisplacement)
-          bookVisual.group.position
-            .copy(bookVisual.basePosition)
-            .add(displacement)
-        }
-
-        const targetScale = isOpening
-          ? 1 + .06 * ritualAmount
-          : isHovered
-            ? 1.045
-            : isApproachedShelf
-              ? 1.018
-              : 1
-        bookVisual.group.scale.lerp(
-          new THREE.Vector3(
-            targetScale,
-            targetScale,
-            targetScale,
-          ),
-          isOpening ? .18 : .1,
-        )
-
-        const targetYaw = isOpening
-          ? .08 * ritualAmount
-          : isHovered
-            ? .025
-            : isApproachedShelf
-              ? .012
-              : 0
-        const targetPitch = isOpening
-          ? -.045 * ritualAmount
-          : 0
-
-        bookVisual.group.rotation.y +=
-          (targetYaw - bookVisual.group.rotation.y) * .18
-        bookVisual.group.rotation.x +=
-          (targetPitch - bookVisual.group.rotation.x) * .18
-        bookVisual.group.rotation.z *= .84
-
-        const targetCoverAngle = isOpening
-          ? -Math.PI * .74 * ritualAmount
-          : 0
-        bookVisual.coverHinge.rotation.y +=
-          (targetCoverAngle - bookVisual.coverHinge.rotation.y) *
-          (isOpening ? .2 : .15)
-      })
-
-      if (
-        openingBook &&
-        openingBook.returningAt !== null &&
-        returnProgress >= 1
-      ) {
-        openingBook.visual.group.position.copy(
-          openingBook.visual.basePosition,
-        )
-        openingBook.visual.group.rotation.set(0, 0, 0)
-        openingBook.visual.group.scale.setScalar(1)
-        openingBook.visual.coverHinge.rotation.y = 0
-        openingBook = null
-      } else if (
-        openingBook &&
-        openingBook.fired &&
-        libraryReadingBookRef.current &&
-        openingSeconds > 1.65
-      ) {
-        // Last-resort lifecycle guard: a reader transition must never be able
-        // to strand a physical book outside its authored shelf slot.
-        openingBook.visual.group.position.copy(
-          openingBook.visual.basePosition,
-        )
-        openingBook.visual.group.rotation.set(0, 0, 0)
-        openingBook.visual.group.scale.setScalar(1)
-        openingBook.visual.coverHinge.rotation.y = 0
-        openingBook = null
       }
 
       for (const node of nodeRef.current) {
@@ -5995,6 +5814,25 @@ export default function DreamWorld3D({
         }
       }
 
+      libraryReadingRitual?.update({
+        nowSeconds: now / 1000,
+        books: libraryBookVisuals,
+        hoveredBook,
+        approachedShelfId: flightNearestId,
+        readerActive: Boolean(libraryReadingBookRef.current),
+        getShelfDistance: (nodeId) => {
+          const shelfVisual = nodeVisuals.get(nodeId)
+          return shelfVisual
+            ? camera.position.distanceTo(
+                shelfVisual.group.position,
+              )
+            : Infinity
+        },
+        onOpen: (nodeId, bookIndex) => {
+          onBookSelectRef.current?.(nodeId, bookIndex)
+        },
+      })
+
       let nearestLibraryShelfId: string | null = null
       let nearestLibraryShelfDistance = Infinity
       const nearestShelfPoint = new THREE.Vector3()
@@ -6059,7 +5897,7 @@ export default function DreamWorld3D({
               ? focusStrength
               : 0
           const presented =
-            openingBook?.visual === bookVisual
+            libraryReadingRitual?.isPresenting(bookVisual) ?? false
 
           bookVisual.coverMaterial.emissive.setHex(
             presented ? 0x6d2f73 : 0x163744,
@@ -6105,15 +5943,6 @@ export default function DreamWorld3D({
           tint.b += ((targetTint * 1.04) - tint.b) * .08
         })
 
-        if (libraryReadingLight && openingBook) {
-          const worldPosition = new THREE.Vector3()
-          openingBook.visual.group.getWorldPosition(worldPosition)
-          libraryReadingLight.position.copy(worldPosition)
-          libraryReadingLight.intensity +=
-            (2.6 - libraryReadingLight.intensity) * .1
-        } else if (libraryReadingLight) {
-          libraryReadingLight.intensity *= .88
-        }
       }
 
       for (const node of nodeRef.current) {
@@ -6617,7 +6446,8 @@ export default function DreamWorld3D({
           ((selectedVisual ? .12 : 0) - dreamPost.uniforms.uTravel.value) *
           .03
       }
-      const readingRitualActive = Boolean(openingBook)
+      const readingRitualActive =
+        libraryReadingRitual?.isActive() ?? false
       renderer.toneMappingExposure +=
         (((readingRitualActive
           ? .66
@@ -7165,7 +6995,7 @@ export default function DreamWorld3D({
       libraryShelfSparkleMaterial?.dispose()
       if (libraryShelfSparkles) world.remove(libraryShelfSparkles)
       if (libraryShelfLight) scene.remove(libraryShelfLight)
-      if (libraryReadingLight) scene.remove(libraryReadingLight)
+      libraryReadingRitual?.dispose()
 
       nodeVisuals.forEach((visual) => {
         ;(visual.shell.geometry as THREE.BufferGeometry).dispose()
