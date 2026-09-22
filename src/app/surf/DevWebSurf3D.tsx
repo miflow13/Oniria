@@ -644,7 +644,18 @@ export default function DevWebSurf3D({
         lastUsed: number
       }
     >()
+    const thumbnailCache = new Map<
+      string,
+      {
+        texture: THREE.Texture | null
+        loading: boolean
+        failed: boolean
+        waiters: Set<THREE.MeshBasicMaterial>
+      }
+    >()
+    const thumbnailPrefetchTimers = new Set<number>()
     const MAX_RESIDENT_COVERS = 32
+    const THUMBNAILS_PER_FLOOR = 14
     const MAX_ACTIVE_BOOK_DETAILS = 14
     const COVER_LOAD_DISTANCE = 10.5
     const COVER_EVICT_AGE = 4.5
@@ -653,6 +664,69 @@ export default function DevWebSurf3D({
     let lastCoverTrim = 0
     let lastDetailSelection = 0
     let destroyed = false
+
+    function attachThumbnailMaterial(
+      material: THREE.MeshBasicMaterial,
+      url: string,
+    ) {
+      let entry = thumbnailCache.get(url)
+      if (!entry) {
+        entry = {
+          texture: null,
+          loading: false,
+          failed: false,
+          waiters: new Set<THREE.MeshBasicMaterial>(),
+        }
+        thumbnailCache.set(url, entry)
+      }
+
+      if (entry.texture) {
+        material.map = entry.texture
+        material.color.set(0xffffff)
+        material.needsUpdate = true
+        return
+      }
+
+      entry.waiters.add(material)
+      if (entry.loading || entry.failed) return
+      entry.loading = true
+
+      const proxied =
+        '/api/devto?mode=image&variant=thumb&url=' +
+        encodeURIComponent(url)
+
+      textureLoader.load(
+        proxied,
+        (texture) => {
+          entry!.loading = false
+          if (destroyed) {
+            texture.dispose()
+            return
+          }
+
+          texture.colorSpace = THREE.SRGBColorSpace
+          texture.minFilter = THREE.LinearFilter
+          texture.magFilter = THREE.LinearFilter
+          texture.generateMipmaps = false
+          texture.anisotropy = 1
+          entry!.texture = texture
+          remoteTextures.add(texture)
+
+          entry!.waiters.forEach((waitingMaterial) => {
+            waitingMaterial.map = texture
+            waitingMaterial.color.set(0xffffff)
+            waitingMaterial.needsUpdate = true
+          })
+          entry!.waiters.clear()
+        },
+        undefined,
+        () => {
+          entry!.loading = false
+          entry!.failed = true
+          entry!.waiters.clear()
+        },
+      )
+    }
 
     function attachCachedCover(
       visual: Visual,
