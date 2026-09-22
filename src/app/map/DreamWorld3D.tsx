@@ -2090,8 +2090,10 @@ export default function DreamWorld3D({
 
         shelf.scale.setScalar(1)
         group.add(shelf)
-        label.position.set(0, -1.82, .2)
-        label.scale.set(3.5, .78, 1)
+        const labelStagger =
+          seededUnit(seed, 141) > .5 ? .12 : -.08
+        label.position.set(0, -1.82 + labelStagger, .2)
+        label.scale.set(3.08, .7, 1)
       }
 
       const start = worldPosition(node, positionsRef.current)
