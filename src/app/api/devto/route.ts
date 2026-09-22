@@ -2,6 +2,11 @@ import {NextRequest, NextResponse} from 'next/server'
 
 const DEV_BASE = 'https://dev.to/api'
 const FOREM_ACCEPT = 'application/vnd.forem.api-v1+json'
+const ALLOWED_IMAGE_HOSTS = new Set([
+  'media2.dev.to',
+  'dev-to-uploads.s3.amazonaws.com',
+  'res.cloudinary.com',
+])
 
 async function devFetch(path: string) {
   const response = await fetch(`${DEV_BASE}${path}`, {
@@ -68,6 +73,64 @@ export async function GET(request: NextRequest) {
   const mode = safeValue(searchParams.get('mode'), 'bootstrap')
 
   try {
+    if (mode === 'image') {
+      const rawUrl = searchParams.get('url')
+      if (!rawUrl) {
+        return NextResponse.json({error: 'Missing image URL'}, {status: 400})
+      }
+
+      let target: URL
+      try {
+        target = new URL(rawUrl)
+      } catch {
+        return NextResponse.json({error: 'Invalid image URL'}, {status: 400})
+      }
+
+      if (
+        target.protocol !== 'https:' ||
+        !ALLOWED_IMAGE_HOSTS.has(target.hostname)
+      ) {
+        return NextResponse.json(
+          {error: 'Image host is not allowed'},
+          {status: 400},
+        )
+      }
+
+      const imageResponse = await fetch(target, {
+        headers: {
+          accept: 'image/avif,image/webp,image/png,image/jpeg,image/*',
+          'user-agent':
+            'Oniria-DEV-Library/0.1 (+https://github.com/miflow13/Oniria)',
+        },
+        next: {revalidate: 3600},
+      })
+
+      if (!imageResponse.ok) {
+        return NextResponse.json(
+          {error: 'Could not load cover image'},
+          {status: imageResponse.status},
+        )
+      }
+
+      const contentType =
+        imageResponse.headers.get('content-type') ?? 'image/jpeg'
+      if (!contentType.startsWith('image/')) {
+        return NextResponse.json(
+          {error: 'Remote resource is not an image'},
+          {status: 415},
+        )
+      }
+
+      const body = await imageResponse.arrayBuffer()
+      return new NextResponse(body, {
+        headers: {
+          'content-type': contentType,
+          'cache-control':
+            'public, max-age=3600, stale-while-revalidate=86400',
+        },
+      })
+    }
+
     if (mode === 'bootstrap') {
       const username = safeValue(searchParams.get('username'), 'mikachu')
 
