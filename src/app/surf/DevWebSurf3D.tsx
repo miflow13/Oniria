@@ -6,9 +6,10 @@ import {TransformControls} from 'three/addons/controls/TransformControls.js'
 import type {
   LayoutEditorMode,
   LayoutEditorSelection,
+  SceneLayoutTransform,
   ShelfLayoutTransform,
 } from './surfLayout'
-import {shelfLayoutKey} from './surfLayout'
+import {shelfLayoutKey, surfLayout} from './surfLayout'
 import type {LibrarySection, SurfEdge, SurfNode, SurfNodeKind} from './types'
 import styles from './surf.module.css'
 
@@ -59,7 +60,8 @@ type Props = {
   ) => void
   onLayoutTransformChange?: (
     key: string,
-    transform: ShelfLayoutTransform,
+    transform: ShelfLayoutTransform | SceneLayoutTransform,
+    kind: LayoutEditorSelection['kind'],
   ) => void
 }
 
@@ -2117,6 +2119,9 @@ export default function DevWebSurf3D({
       const group = new THREE.Group()
       group.position.set(x, y, z)
       group.rotation.y = rotationY
+      group.name = 'section-sign:' + section
+      group.userData.layoutObjectKey = group.name
+      group.userData.layoutLabel = SECTION_LABELS[section]
 
       const panelGeometry = new THREE.BoxGeometry(4.75, 1.38, .11)
       const faceGeometry = new THREE.PlaneGeometry(4.5, 1.16)
@@ -2451,6 +2456,9 @@ export default function DevWebSurf3D({
     // tucked beside the restricted stacks for explorers who wander off-route.
     const archiveBuddy = new THREE.Group()
     archiveBuddy.position.set(-4.55, .28, -36.15)
+    archiveBuddy.name = 'archive-buddy'
+    archiveBuddy.userData.layoutObjectKey = archiveBuddy.name
+    archiveBuddy.userData.layoutLabel = 'Archive Buddy'
 
     const buddyBodyGeometry = new THREE.SphereGeometry(.34, 16, 12)
     const buddyEyeGeometry = new THREE.SphereGeometry(.035, 8, 6)
@@ -3024,6 +3032,9 @@ export default function DevWebSurf3D({
     )
     lowerArchiveHaze.rotation.x = -Math.PI / 2
     lowerArchiveHaze.position.set(0, -3.65, -61)
+    lowerArchiveHaze.name = 'lower-archive-haze'
+    lowerArchiveHaze.userData.layoutObjectKey = lowerArchiveHaze.name
+    lowerArchiveHaze.userData.layoutLabel = 'Lower Archive Haze'
     scene.add(lowerArchiveHaze)
 
     // The atrium and wings are intentionally wall-free. Shelves, floor
@@ -3641,6 +3652,30 @@ export default function DevWebSurf3D({
       const group = new THREE.Group()
       group.position.set(...node.position)
       group.rotation.y = node.rotationY ?? 0
+      const objectKey = 'node:' + node.id
+      group.name = objectKey
+      group.userData.layoutObjectKey = objectKey
+      group.userData.layoutLabel = node.title
+
+      const savedObject = surfLayout.objects[objectKey]
+      if (savedObject) {
+        group.position.set(
+          savedObject.x,
+          savedObject.y,
+          savedObject.z,
+        )
+        group.rotation.set(
+          savedObject.rotationX,
+          savedObject.rotationY,
+          savedObject.rotationZ,
+        )
+        node.position = [
+          savedObject.x,
+          savedObject.y,
+          savedObject.z,
+        ]
+        node.rotationY = savedObject.rotationY
+      }
       scene.add(group)
 
       const color = new THREE.Color(node.accent)
@@ -4113,7 +4148,123 @@ export default function DevWebSurf3D({
     transformHelper.visible = false
     scene.add(transformHelper)
 
-    let selectedEditableShelf: EditableShelf | null = null
+    type EditableSceneObject = {
+      key: string
+      label: string
+      kind: LayoutEditorSelection['kind']
+      object: THREE.Object3D
+      shelf?: EditableShelf
+      node?: SurfNode
+    }
+
+    const editableObjects = new Map<string, EditableSceneObject>()
+    const editableObjectRoots: THREE.Object3D[] = []
+
+    editableShelves.forEach((shelf) => {
+      editableObjects.set(shelf.key, {
+        key: shelf.key,
+        label: shelf.label,
+        kind: 'shelf',
+        object: shelf.group,
+        shelf,
+      })
+      editableObjectRoots.push(shelf.group)
+    })
+
+    const reservedEditorRoots = new Set<THREE.Object3D>([
+      skyGroup,
+      distantWorldGroup,
+      transformHelper,
+      dataRain,
+    ])
+    const autoKeyCounts = new Map<string, number>()
+
+    const sceneChildrenAtEditorSetup = [...scene.children]
+    sceneChildrenAtEditorSetup.forEach((object, index) => {
+      if (reservedEditorRoots.has(object)) return
+      if (
+        object instanceof THREE.Light ||
+        object instanceof THREE.Points ||
+        object instanceof THREE.InstancedMesh ||
+        object instanceof THREE.LineSegments
+      ) {
+        return
+      }
+      if (object.userData.layoutKey) return
+
+      const explicitKey =
+        typeof object.userData.layoutObjectKey === 'string'
+          ? object.userData.layoutObjectKey
+          : null
+      const px = Math.round(object.position.x * 100) / 100
+      const py = Math.round(object.position.y * 100) / 100
+      const pz = Math.round(object.position.z * 100) / 100
+      const geometryType =
+        object instanceof THREE.Mesh
+          ? object.geometry.type
+          : object.type
+      const baseAutoKey =
+        'auto:' +
+        geometryType +
+        ':' +
+        px +
+        ':' +
+        py +
+        ':' +
+        pz
+      const duplicateIndex = autoKeyCounts.get(baseAutoKey) ?? 0
+      autoKeyCounts.set(baseAutoKey, duplicateIndex + 1)
+      const key =
+        explicitKey ??
+        baseAutoKey + (duplicateIndex ? ':' + duplicateIndex : '')
+      const label =
+        typeof object.userData.layoutLabel === 'string'
+          ? object.userData.layoutLabel
+          : object.name ||
+            (object instanceof THREE.Mesh
+              ? object.geometry.type
+              : 'Scene object') +
+              ' ' +
+              String(index + 1)
+
+      const saved = surfLayout.objects[key]
+      if (saved) {
+        object.position.set(saved.x, saved.y, saved.z)
+        object.rotation.set(
+          saved.rotationX,
+          saved.rotationY,
+          saved.rotationZ,
+        )
+      }
+
+      object.userData.layoutObjectKey = key
+      object.userData.layoutLabel = label
+
+      const node =
+        explicitKey?.startsWith('node:')
+          ? nodeById.get(explicitKey.slice(5))
+          : undefined
+      if (node && saved) {
+        node.position = [saved.x, saved.y, saved.z]
+        node.rotationY = saved.rotationY
+        const visual = visuals.get(node.id)
+        if (visual) {
+          visual.basePosition.set(saved.x, saved.y, saved.z)
+          visual.baseRotationY = saved.rotationY
+        }
+      }
+
+      editableObjects.set(key, {
+        key,
+        label,
+        kind: 'object',
+        object,
+        node,
+      })
+      editableObjectRoots.push(object)
+    })
+
+    let selectedEditable: EditableSceneObject | null = null
     let selectedShelfArticles: Array<{
       visual: Visual
       node: SurfNode
@@ -4123,22 +4274,26 @@ export default function DevWebSurf3D({
     let lastEditorEnabled = false
 
     function publishLayoutSelection() {
-      if (!selectedEditableShelf) {
+      if (!selectedEditable) {
         layoutSelectionRef.current?.(null)
         return
       }
-      const {group, key, label} = selectedEditableShelf
+      const {object, key, label, kind} = selectedEditable
       layoutSelectionRef.current?.({
         key,
         label,
-        x: group.position.x,
-        z: group.position.z,
-        rotationY: group.rotation.y,
+        kind,
+        x: object.position.x,
+        y: object.position.y,
+        z: object.position.z,
+        rotationX: object.rotation.x,
+        rotationY: object.rotation.y,
+        rotationZ: object.rotation.z,
       })
     }
 
-    function attachEditableShelf(editable: EditableShelf | null) {
-      selectedEditableShelf = editable
+    function attachEditableObject(editable: EditableSceneObject | null) {
+      selectedEditable = editable
       selectedShelfArticles = []
 
       if (!editable) {
@@ -4148,83 +4303,118 @@ export default function DevWebSurf3D({
         return
       }
 
-      editable.group.updateMatrixWorld(true)
-      visuals.forEach((visual) => {
-        const node = nodeById.get(visual.id)
-        if (!node || node.kind !== 'article') return
-        const key = shelfLayoutKey(
-          node.shelfKey,
-          node.floorIndex ?? 0,
-        )
-        if (key !== editable.key) return
+      if (editable.kind === 'shelf' && editable.shelf) {
+        editable.object.updateMatrixWorld(true)
+        visuals.forEach((visual) => {
+          const node = nodeById.get(visual.id)
+          if (!node || node.kind !== 'article') return
+          const key = shelfLayoutKey(
+            node.shelfKey,
+            node.floorIndex ?? 0,
+          )
+          if (key !== editable.key) return
 
-        const localPosition = editable.group.worldToLocal(
-          visual.group.position.clone(),
-        )
-        selectedShelfArticles.push({
-          visual,
-          node,
-          localPosition,
-          rotationOffset:
-            visual.group.rotation.y - editable.group.rotation.y,
+          const localPosition = editable.object.worldToLocal(
+            visual.group.position.clone(),
+          )
+          selectedShelfArticles.push({
+            visual,
+            node,
+            localPosition,
+            rotationOffset:
+              visual.group.rotation.y - editable.object.rotation.y,
+          })
         })
-      })
+      }
 
-      transformControls.attach(editable.group)
+      transformControls.attach(editable.object)
       transformHelper.visible = true
       publishLayoutSelection()
     }
 
-    function syncEditableShelfContents() {
-      if (!selectedEditableShelf) return
-      const {group, key, width, collisionRect} = selectedEditableShelf
-      group.updateMatrixWorld(true)
+    function syncEditableObject() {
+      if (!selectedEditable) return
+      const {object, key, kind, shelf, node} = selectedEditable
+      object.updateMatrixWorld(true)
 
-      const rotationY = group.rotation.y
-      const halfX =
-        Math.abs(Math.cos(rotationY)) * (width / 2) +
-        Math.abs(Math.sin(rotationY)) * .33
-      const halfZ =
-        Math.abs(Math.sin(rotationY)) * (width / 2) +
-        Math.abs(Math.cos(rotationY)) * .33
-      collisionRect.minX = group.position.x - halfX
-      collisionRect.maxX = group.position.x + halfX
-      collisionRect.minZ = group.position.z - halfZ
-      collisionRect.maxZ = group.position.z + halfZ
+      if (kind === 'shelf' && shelf) {
+        const {width, collisionRect} = shelf
+        const rotationY = object.rotation.y
+        const halfX =
+          Math.abs(Math.cos(rotationY)) * (width / 2) +
+          Math.abs(Math.sin(rotationY)) * .33
+        const halfZ =
+          Math.abs(Math.sin(rotationY)) * (width / 2) +
+          Math.abs(Math.cos(rotationY)) * .33
+        collisionRect.minX = object.position.x - halfX
+        collisionRect.maxX = object.position.x + halfX
+        collisionRect.minZ = object.position.z - halfZ
+        collisionRect.maxZ = object.position.z + halfZ
 
-      shelfAccentBars.forEach((entry) => {
-        if (entry.layoutKey !== key) return
-        entry.mesh.getWorldPosition(entry.center)
-      })
+        shelfAccentBars.forEach((entry) => {
+          if (entry.layoutKey !== key) return
+          entry.mesh.getWorldPosition(entry.center)
+        })
 
-      selectedShelfArticles.forEach(
-        ({visual, node, localPosition, rotationOffset}) => {
-          const world = group.localToWorld(localPosition.clone())
-          visual.group.position.copy(world)
-          visual.group.rotation.y = group.rotation.y + rotationOffset
-          visual.basePosition.copy(world)
-          visual.baseRotationY = visual.group.rotation.y
-          node.position = [world.x, world.y, world.z]
-          node.rotationY = visual.group.rotation.y
-        },
-      )
+        selectedShelfArticles.forEach(
+          ({visual, node: articleNode, localPosition, rotationOffset}) => {
+            const world = object.localToWorld(localPosition.clone())
+            visual.group.position.copy(world)
+            visual.group.rotation.y = object.rotation.y + rotationOffset
+            visual.basePosition.copy(world)
+            visual.baseRotationY = visual.group.rotation.y
+            articleNode.position = [world.x, world.y, world.z]
+            articleNode.rotationY = visual.group.rotation.y
+          },
+        )
 
-      const transform = {
-        x: group.position.x,
-        z: group.position.z,
-        rotationY: group.rotation.y,
+        const shelfTransform: ShelfLayoutTransform = {
+          x: object.position.x,
+          z: object.position.z,
+          rotationY: object.rotation.y,
+        }
+        layoutTransformRef.current?.(key, shelfTransform, 'shelf')
+      } else {
+        if (node) {
+          node.position = [
+            object.position.x,
+            object.position.y,
+            object.position.z,
+          ]
+          node.rotationY = object.rotation.y
+          const visual = visuals.get(node.id)
+          if (visual) {
+            visual.basePosition.copy(object.position)
+            visual.baseRotationY = object.rotation.y
+          }
+        }
+
+        const objectTransform: SceneLayoutTransform = {
+          x: object.position.x,
+          y: object.position.y,
+          z: object.position.z,
+          rotationX: object.rotation.x,
+          rotationY: object.rotation.y,
+          rotationZ: object.rotation.z,
+        }
+        layoutTransformRef.current?.(key, objectTransform, 'object')
       }
-      layoutTransformRef.current?.(key, transform)
+
       publishLayoutSelection()
     }
 
     transformControls.addEventListener(
       'objectChange',
-      syncEditableShelfContents,
+      syncEditableObject,
     )
 
-    function selectShelfFromPointer(event: MouseEvent) {
-      if (!layoutEditorEnabledRef.current) return
+    function selectObjectFromPointer(event: MouseEvent) {
+      if (
+        !layoutEditorEnabledRef.current ||
+        transformControls.dragging
+      ) {
+        return
+      }
       const rect = renderer.domElement.getBoundingClientRect()
       const pointer = new THREE.Vector2(
         ((event.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1,
@@ -4233,27 +4423,32 @@ export default function DevWebSurf3D({
       const editorRaycaster = new THREE.Raycaster()
       editorRaycaster.setFromCamera(pointer, camera)
       const hit = editorRaycaster.intersectObjects(
-        editableShelfRoots,
+        editableObjectRoots,
         true,
       )[0]
 
       if (!hit) {
-        attachEditableShelf(null)
+        attachEditableObject(null)
         return
       }
 
       let current: THREE.Object3D | null = hit.object
-      while (current && !current.userData.layoutKey) {
+      while (
+        current &&
+        !current.userData.layoutKey &&
+        !current.userData.layoutObjectKey
+      ) {
         current = current.parent
       }
       const key =
         typeof current?.userData.layoutKey === 'string'
           ? current.userData.layoutKey
-          : null
-      const editable = key
-        ? editableShelves.find((entry) => entry.key === key) ?? null
-        : null
-      attachEditableShelf(editable)
+          : typeof current?.userData.layoutObjectKey === 'string'
+            ? current.userData.layoutObjectKey
+            : null
+      attachEditableObject(
+        key ? editableObjects.get(key) ?? null : null,
+      )
     }
 
     type ShelfCoverAtlasLod = {
@@ -5276,7 +5471,7 @@ export default function DevWebSurf3D({
 
     function onCanvasClick(event: MouseEvent) {
       if (layoutEditorEnabledRef.current) {
-        selectShelfFromPointer(event)
+        selectObjectFromPointer(event)
         return
       }
 
@@ -5330,14 +5525,21 @@ export default function DevWebSurf3D({
           document.exitPointerLock?.()
         }
         if (!editorEnabled) {
-          attachEditableShelf(null)
+          attachEditableObject(null)
         }
       }
 
       transformControls.setMode(layoutEditorModeRef.current)
-      transformControls.showX = true
-      transformControls.showY = false
-      transformControls.showZ = true
+      const editingShelf = selectedEditable?.kind === 'shelf'
+      if (layoutEditorModeRef.current === 'rotate') {
+        transformControls.showX = !editingShelf
+        transformControls.showY = true
+        transformControls.showZ = !editingShelf
+      } else {
+        transformControls.showX = true
+        transformControls.showY = !editingShelf
+        transformControls.showZ = true
+      }
       transformControls.setTranslationSnap(
         layoutEditorSnapRef.current ? .5 : null,
       )
@@ -5345,7 +5547,7 @@ export default function DevWebSurf3D({
         layoutEditorSnapRef.current ? Math.PI / 12 : null,
       )
       transformHelper.visible =
-        editorEnabled && selectedEditableShelf !== null
+        editorEnabled && selectedEditable !== null
       fillerBooks.visible = !editorEnabled
 
       // Keep the distant field centered on the player for skybox-like depth.
@@ -6300,7 +6502,7 @@ export default function DevWebSurf3D({
       resizeObserver.disconnect()
       transformControls.removeEventListener(
         'objectChange',
-        syncEditableShelfContents,
+        syncEditableObject,
       )
       transformControls.detach()
       transformControls.dispose()
