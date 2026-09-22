@@ -2981,10 +2981,10 @@ export default function DevWebSurf3D({
               books.setMatrixAt(bookIndex, placeholderMatrix)
 
               const variation =
-                .18 + ((seed % 9) / 8) * .18
+                .24 + ((seed % 9) / 8) * .24
               books.setColorAt(
                 bookIndex,
-                new THREE.Color(0x2b3039).lerp(
+                new THREE.Color(0x596474).lerp(
                   accent,
                   variation,
                 ),
@@ -3151,14 +3151,14 @@ export default function DevWebSurf3D({
       fillerBookCount,
     )
     const fillerPalette = [
-      0x1a2230,
-      0x222b3c,
-      0x182833,
-      0x2c2338,
-      0x17313a,
-      0x252d58,
-      0x30365a,
-      0x20242c,
+      0x354257,
+      0x3b4861,
+      0x304b59,
+      0x493953,
+      0x315762,
+      0x424b7c,
+      0x4d557d,
+      0x3a404b,
     ]
 
     let fillerIndex = 0
@@ -3971,16 +3971,16 @@ export default function DevWebSurf3D({
 
         const distantShelfOpacity =
           floorDistance <= 1
-            ? .46
+            ? .42
             : floorDistance === 2
-              ? .26
-              : .12
+              ? .25
+              : .14
         const distantBookOpacity =
           floorDistance <= 1
-            ? .34
+            ? .62
             : floorDistance === 2
-              ? .2
-              : .09
+              ? .4
+              : .18
 
         placeholder.shelfMaterial.opacity =
           isCurrentFloor
@@ -3995,7 +3995,7 @@ export default function DevWebSurf3D({
               : 0
             : distantBookOpacity
         placeholder.bookMaterial.emissiveIntensity =
-          isCurrentFloor ? .018 : floorDistance <= 1 ? .035 : .012
+          isCurrentFloor ? .018 : floorDistance <= 1 ? .052 : .022
       })
 
       shelfCoverAtlasesByFloor.forEach((entries, floorIndex) => {
@@ -4010,10 +4010,10 @@ export default function DevWebSurf3D({
               ? .16
               : 0
             : floorDistance <= 1
-              ? .5
+              ? .58
               : floorDistance === 2
-                ? .28
-                : .12
+                ? .34
+                : .16
 
         entries.forEach(({mesh, material}) => {
           mesh.visible = opacity > .01
@@ -4951,20 +4951,20 @@ export default function DevWebSurf3D({
               ? .12
               : 0
             : floorDistance <= 1
-              ? .46
+              ? .42
               : floorDistance === 2
-                ? .26
-                : .12
+                ? .25
+                : .14
         const normalBookTarget =
           isCurrentFloor
             ? sparseCurrentFloor
               ? .12
               : 0
             : floorDistance <= 1
-              ? .34
+              ? .62
               : floorDistance === 2
-                ? .2
-                : .09
+                ? .4
+                : .18
 
         const shelfTarget = catalogLoadingRef.current
           ? Math.max(normalShelfTarget, isCurrentFloor ? .16 + catalogPulse * .035 : normalShelfTarget)
@@ -4987,8 +4987,8 @@ export default function DevWebSurf3D({
             : isCurrentFloor
               ? .018
               : floorDistance <= 1
-                ? .035
-                : .012) -
+                ? .052
+                : .022) -
             placeholder.bookMaterial.emissiveIntensity) *
           (1 - Math.exp(-delta * 4))
       })
