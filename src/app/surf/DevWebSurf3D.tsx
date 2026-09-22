@@ -827,7 +827,7 @@ export default function DevWebSurf3D({
     >()
     const thumbnailPrefetchTimers = new Set<number>()
     const MAX_RESIDENT_COVERS = 32
-    const SHELF_ATLAS_PANELS_PER_FLOOR = 6
+    const SHELF_ATLAS_STRIPS_PER_SHELF = 2
     const COVERS_PER_SHELF_ATLAS = 3
     const MAX_ACTIVE_BOOK_DETAILS = 14
     const COVER_LOAD_DISTANCE = 10.5
@@ -3725,81 +3725,73 @@ export default function DevWebSurf3D({
       )
       if (!candidates.length) continue
 
-      const floorEntries: ShelfCoverAtlasLod[] = []
       const floorBase = floor * LIBRARY_FLOOR_HEIGHT
+      // One small atlas is shared by every strip on the floor. This keeps
+      // remote image work bounded (three cached requests per floor) while
+      // letting every synthetic stack carry a cover-detail layer on both
+      // faces instead of a handful of floating cards.
+      const urls = candidates
+        .slice(0, COVERS_PER_SHELF_ATLAS)
+        .map(articleCoverUrl)
+        .filter((url): url is string => Boolean(url))
+      if (!urls.length) continue
 
-      for (
-        let panelIndex = 0;
-        panelIndex < SHELF_ATLAS_PANELS_PER_FLOOR;
-        panelIndex += 1
-      ) {
-        const rowIndex = Math.round(
-          panelIndex *
-            ((placeholderRows.length - 1) /
-              Math.max(1, SHELF_ATLAS_PANELS_PER_FLOOR - 1)),
-        )
-        const columnIndex =
-          (panelIndex * 3 + floor) % placeholderColumns.length
-        const rotationY = rowIndex % 2 === 0 ? 0 : Math.PI
-        const level = panelIndex % 3
-        const urls: string[] = []
+      const atlas = createShelfCoverAtlas(
+        urls,
+        floor,
+        (floor - 1) * 320,
+      )
+      const material = new THREE.MeshBasicMaterial({
+        map: atlas,
+        color: 0xffffff,
+        transparent: true,
+        opacity: .48,
+        toneMapped: false,
+        depthWrite: true,
+        polygonOffset: true,
+        polygonOffsetFactor: -1,
+        polygonOffsetUnits: -1,
+      })
+      architecturalMaterials.push(material)
 
-        for (
-          let coverIndex = 0;
-          coverIndex < COVERS_PER_SHELF_ATLAS;
-          coverIndex += 1
-        ) {
-          const sampleIndex =
-            (panelIndex * COVERS_PER_SHELF_ATLAS + coverIndex) %
-            candidates.length
-          const url = articleCoverUrl(candidates[sampleIndex])
-          if (url) urls.push(url)
-        }
-        if (!urls.length) continue
-
-        const atlas = createShelfCoverAtlas(
-          urls,
-          floor,
-          (floor - 1) * 260 + panelIndex * 70,
-        )
-        const material = new THREE.MeshBasicMaterial({
-          map: atlas,
-          color: 0xffffff,
-          transparent: true,
-          opacity: .48,
-          toneMapped: false,
-          depthWrite: true,
-          side: THREE.DoubleSide,
-          polygonOffset: true,
-          polygonOffsetFactor: -1,
-          polygonOffsetUnits: -1,
+      const stripCount =
+        placeholderRows.length *
+        placeholderColumns.length *
+        SHELF_ATLAS_STRIPS_PER_SHELF
+      const mesh = new THREE.InstancedMesh(
+        shelfCoverAtlasGeometry,
+        material,
+        stripCount,
+      )
+      const stripMatrix = new THREE.Matrix4()
+      const stripPosition = new THREE.Vector3()
+      const stripScale = new THREE.Vector3(1, 1, 1)
+      const stripQuaternion = new THREE.Quaternion()
+      let stripIndex = 0
+      placeholderRows.forEach((z, rowIndex) => {
+        placeholderColumns.forEach((x, columnIndex) => {
+          const baseRotation = rowIndex % 2 === 0 ? 0 : Math.PI
+          for (let face = -1; face <= 1; face += 2) {
+            const rotationY = baseRotation + (face < 0 ? Math.PI : 0)
+            const front = face * .692
+            const level =
+              (floor + rowIndex + columnIndex + (face < 0 ? 1 : 0)) % 3
+            stripPosition.set(
+              x + Math.sin(baseRotation) * front,
+              floorBase + .64 + level * 1.08,
+              z + Math.cos(baseRotation) * front,
+            )
+            stripQuaternion.setFromAxisAngle(placeholderUp, rotationY)
+            stripMatrix.compose(stripPosition, stripQuaternion, stripScale)
+            mesh.setMatrixAt(stripIndex, stripMatrix)
+            stripIndex += 1
+          }
         })
-        architecturalMaterials.push(material)
-
-        const mesh = new THREE.Mesh(
-          shelfCoverAtlasGeometry,
-          material,
-        )
-        const x = placeholderColumns[columnIndex]
-        const z = placeholderRows[rowIndex]
-        const front = .095
-        mesh.position.set(
-          x + Math.sin(rotationY) * front,
-          floorBase + .64 + level * 1.08,
-          z + Math.cos(rotationY) * front,
-        )
-        mesh.rotation.y = rotationY
-        mesh.renderOrder = 2
-        scene.add(mesh)
-
-        floorEntries.push({
-          mesh,
-          material,
-          floorIndex: floor,
-        })
-      }
-
-      shelfCoverAtlasesByFloor.set(floor, floorEntries)
+      })
+      mesh.instanceMatrix.needsUpdate = true
+      mesh.renderOrder = 2
+      scene.add(mesh)
+      shelfCoverAtlasesByFloor.set(floor, [{mesh, material, floorIndex: floor}])
     }
 
     // Article LOD: every real article has a tiny instanced stand-in. Distant
