@@ -448,7 +448,12 @@ export default function DreamWorld3D({
       settings.fogDensity * (libraryMode ? 1.18 : 1),
     )
 
-    const camera = new THREE.PerspectiveCamera(43, 1, 0.05, 80)
+    const camera = new THREE.PerspectiveCamera(
+      43,
+      1,
+      0.05,
+      libraryMode ? 900 : 80,
+    )
     camera.position.set(0, 0, 10.8)
 
     const listener = new THREE.AudioListener()
@@ -3649,16 +3654,26 @@ export default function DreamWorld3D({
           flightVelocity.multiplyScalar(.72)
         }
 
-        const distanceFromOrigin = flightPosition.length()
-        if (distanceFromOrigin > 34) {
-          flightPosition.multiplyScalar(34 / distanceFromOrigin)
-          flightVelocity.multiplyScalar(.35)
+        if (!libraryMode) {
+          const distanceFromOrigin = flightPosition.length()
+          if (distanceFromOrigin > 34) {
+            flightPosition.multiplyScalar(34 / distanceFromOrigin)
+            flightVelocity.multiplyScalar(.35)
+          }
+          flightPosition.y = THREE.MathUtils.clamp(
+            flightPosition.y,
+            -12,
+            14,
+          )
+        } else {
+          // The DEV catalogue extends as the user explores, so library flight
+          // must not inherit the dream-map's finite spherical boundary.
+          flightPosition.y = THREE.MathUtils.clamp(
+            flightPosition.y,
+            -48,
+            64,
+          )
         }
-        flightPosition.y = THREE.MathUtils.clamp(
-          flightPosition.y,
-          -12,
-          14,
-        )
 
         if (!routeActive) {
           nodeVisuals.forEach((visual) => {
