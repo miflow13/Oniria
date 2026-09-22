@@ -17,8 +17,10 @@ export type DreamMotifs = {
   moon: boolean
   door: boolean
   stairs: boolean
+  corridor: boolean
   falling: boolean
   person: boolean
+  object: boolean
 }
 
 export type DreamProfile = {
@@ -79,8 +81,10 @@ export function createDreamProfile(
     moon: includesAny(text, ['moon', 'lunar', 'night sky']),
     door: includesAny(text, ['door', 'doorway', 'entrance', 'portal']),
     stairs: includesAny(text, ['stairs', 'staircase', 'steps']),
+    corridor: includesAny(text, ['corridor', 'hallway', 'hall', 'passage', 'tunnel']),
     falling: includesAny(text, ['falling', 'fall', 'dropped', 'plummet']),
     person: categories.person > 0 || includesAny(text, ['person', 'friend', 'stranger', 'face']),
+    object: categories.object > 0,
   }
 
   const ageMs = Math.max(0, now - new Date(dream.date).getTime())
