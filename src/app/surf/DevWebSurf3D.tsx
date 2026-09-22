@@ -1740,6 +1740,28 @@ export default function DevWebSurf3D({
         })
       })
 
+      // A translucent archive horizon hides the actual render cutoff and
+      // suggests more stacks beyond the visible geometry.
+      const horizonGeometry = new THREE.PlaneGeometry(25, 4.2)
+      architecturalGeometries.push(horizonGeometry)
+      const horizonMaterial = new THREE.MeshBasicMaterial({
+        color: new THREE.Color(0x0c0f14).lerp(
+          new THREE.Color(floorAccent),
+          .1,
+        ),
+        transparent: true,
+        opacity: .22,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      })
+      architecturalMaterials.push(horizonMaterial)
+      const horizon = new THREE.Mesh(
+        horizonGeometry,
+        horizonMaterial,
+      )
+      horizon.position.set(0, base + 2.05, -57.8)
+      scene.add(horizon)
+
       const levelTexture = createTextTexture(
         'LEVEL ' + String(floor + 1).padStart(2, '0'),
         FLOOR_IDENTITIES[floor] ?? 'DEEP DEV COLLECTION',
