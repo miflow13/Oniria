@@ -114,6 +114,8 @@ export type ArchiveShelfPlacement = {
 export type ArchiveShelfPlacementOptions = {
   laneBias?: number
   heightBias?: number
+  alongJitterScale?: number
+  yawJitterScale?: number
 }
 
 /**
@@ -127,7 +129,9 @@ export function archiveShelfPlacement(
   options: ArchiveShelfPlacementOptions = {},
 ): ArchiveShelfPlacement {
   const seed = hashString(key)
-  const alongJitter = (seededUnit(seed, 7) - .5) * 1.25
+  const alongJitterScale = options.alongJitterScale ?? 1
+  const alongJitter =
+    (seededUnit(seed, 7) - .5) * 1.25 * alongJitterScale
   const fractionalBay = bay + alongJitter / ARCHIVE_BAY_SPACING
   const center = archivePathPoint(fractionalBay)
   const frame = archivePathFrame(fractionalBay)
@@ -149,7 +153,10 @@ export function archiveShelfPlacement(
   const lookAhead = (seededUnit(seed, 19) - .5) * 1.7
   const targetX = center[0] + frame.tangentX * lookAhead
   const targetZ = center[2] + frame.tangentZ * lookAhead
-  const yawJitter = (seededUnit(seed, 23) - .5) * .22
+  const yawJitter =
+    (seededUnit(seed, 23) - .5) *
+    .22 *
+    (options.yawJitterScale ?? 1)
 
   const yaw =
     Math.atan2(targetX - world[0], targetZ - world[2]) +
