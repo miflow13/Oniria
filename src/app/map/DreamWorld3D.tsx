@@ -675,7 +675,7 @@ export default function DreamWorld3D({
         map: labelTexture,
         transparent: true,
         depthWrite: false,
-        opacity: .86,
+        opacity: node.frequency >= 3 ? .52 : .24,
       })
       const label = new THREE.Sprite(labelMaterial)
       label.position.set(0, -.94, .05)
@@ -685,7 +685,10 @@ export default function DreamWorld3D({
       const start = worldPosition(node, positionsRef.current)
       group.position.copy(start)
 
-      const baseScale = .78 + Math.min(node.frequency, 5) * .07
+      const baseScale =
+        .72 +
+        Math.min(node.frequency, 6) * .095 +
+        Math.min(0.18, Math.max(0, node.frequency - 2) * .035)
       group.scale.setScalar(baseScale)
       world.add(group)
 
@@ -704,6 +707,85 @@ export default function DreamWorld3D({
         phase: seededUnit(seed, 31) * Math.PI * 2,
         z: start.z,
       })
+    }
+
+    const nodeDataById = new Map(nodeRef.current.map((node) => [node._id, node]))
+
+    const gravityParents = new Map<
+      string,
+      {parentId: string; influence: number; radius: number; phase: number}
+    >()
+
+    for (const node of nodeRef.current) {
+      const candidates = edges
+        .filter((edge) => edge.source === node._id || edge.target === node._id)
+        .map((edge) => {
+          const otherId = edge.source === node._id ? edge.target : edge.source
+          const other = nodeDataById.get(otherId)
+          return other ? {other, edge} : null
+        })
+        .filter(
+          (
+            value,
+          ): value is {
+            other: DreamWorldNode
+            edge: DreamWorldEdge
+          } => Boolean(value),
+        )
+        .filter(
+          ({other}) =>
+            other.frequency >= 2 &&
+            other.frequency > node.frequency,
+        )
+        .sort(
+          (a, b) =>
+            b.other.frequency * 2 +
+            b.edge.weight -
+            (a.other.frequency * 2 + a.edge.weight),
+        )
+
+      const strongest = candidates[0]
+      if (strongest) {
+        const seed = hashString(`${node._id}:${strongest.other._id}`)
+        gravityParents.set(node._id, {
+          parentId: strongest.other._id,
+          influence: Math.min(
+            .62,
+            .18 +
+              strongest.edge.weight * .08 +
+              (strongest.other.frequency - node.frequency) * .055,
+          ),
+          radius:
+            1.15 +
+            seededUnit(seed, 9) * 1.35 +
+            Math.max(0, 3 - strongest.edge.weight) * .12,
+          phase: seededUnit(seed, 12) * Math.PI * 2,
+        })
+      }
+    }
+
+    function getDreamForNode(node: DreamWorldNode) {
+      const preferredId = selectedDreamIdRef.current
+      if (preferredId && node.dreamIds.includes(preferredId)) {
+        const preferred = dreamsRef.current.find(
+          (dream) => dream._id === preferredId,
+        )
+        if (preferred) return preferred
+      }
+
+      return [...dreamsRef.current]
+        .filter((dream) => node.dreamIds.includes(dream._id))
+        .sort(
+          (a, b) =>
+            new Date(b.date).getTime() - new Date(a.date).getTime(),
+        )[0] ?? null
+    }
+
+    function getProfileForNode(node: DreamWorldNode): DreamProfile | null {
+      const dream = getDreamForNode(node)
+      return dream
+        ? createDreamProfile(dream, Math.max(1, node.frequency))
+        : null
     }
 
     const edgeVisuals: EdgeVisual[] = []
@@ -761,6 +843,7 @@ export default function DreamWorld3D({
     let lastProjection = {x: -999, y: -999, visible: false}
 
     let activeCellId: string | null = null
+    let activeCellDreamId: string | null = null
     let activeCell: DreamCell | null = null
     let spatialAudio: SpatialDreamAudio | null = null
     let spatialAudioStarted = false
@@ -783,25 +866,39 @@ export default function DreamWorld3D({
       activeCell = null
       spatialAudio = null
       activeCellId = null
+      activeCellDreamId = null
       spatialAudioStarted = false
     }
 
     function ensureDreamCell(node: DreamWorldNode) {
-      if (activeCellId === node._id && activeCell) return
+      const dream = getDreamForNode(node)
+      const profile = dream
+        ? createDreamProfile(dream, Math.max(1, node.frequency))
+        : null
+
+      if (
+        activeCellId === node._id &&
+        activeCellDreamId === dream?._id &&
+        activeCell
+      ) {
+        return
+      }
 
       releaseDreamCell()
 
       const visual = nodeVisuals.get(node._id)
-      if (!visual) return
+      if (!visual || !profile || !dream) return
 
       const color = new THREE.Color(CATEGORY_COLORS[node.category])
       activeCell = createDreamCell(
+        profile,
         node.category,
         color,
         settings,
-        hashString(node._id),
+        hashString(`${node._id}:${dream._id}`),
       )
       activeCellId = node._id
+      activeCellDreamId = dream._id
       visual.group.add(activeCell.portal)
       visual.miniWorld.group.visible = false
       visual.core.visible = false
@@ -809,7 +906,13 @@ export default function DreamWorld3D({
       spatialAudio = createSpatialDreamAudio(
         listener,
         node.category,
-        hashString(node._id),
+        hashString(`${node._id}:${dream._id}`),
+        {
+          mood: profile.mood,
+          lucid: profile.lucid,
+          recurrence: profile.recurrence,
+          mode: 'cell',
+        },
       )
       visual.group.add(spatialAudio.audio)
     }
