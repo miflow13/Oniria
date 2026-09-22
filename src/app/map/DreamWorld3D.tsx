@@ -73,6 +73,7 @@ import {
   createLibraryReadingRitual,
   type LibraryBookVisual,
 } from './libraryReadingRitual'
+import {createLibraryAtmosphere} from './libraryAtmosphere'
 
 export type DreamWorldNode = {
   _id: string
@@ -1081,12 +1082,6 @@ export default function DreamWorld3D({
       farWorld.add(libraryFarParticles)
     }
 
-    const libraryHazeGeometry = libraryMode
-      ? new THREE.PlaneGeometry(1, 1)
-      : null
-    const libraryHazeTextures: THREE.Texture[] = []
-    const libraryHazeMaterials: THREE.MeshBasicMaterial[] = []
-    const libraryHazePlanes: THREE.Mesh[] = []
     let librarySilhouetteGeometry: THREE.BoxGeometry | null = null
     let librarySilhouetteMaterial: THREE.MeshBasicMaterial | null = null
     let librarySilhouettes: THREE.InstancedMesh | null = null
@@ -1097,57 +1092,7 @@ export default function DreamWorld3D({
     let librarySkylineNeonMaterial: THREE.MeshBasicMaterial | null = null
     let librarySkylineNeon: THREE.InstancedMesh | null = null
 
-    if (libraryMode && libraryHazeGeometry) {
-      const hazeSpecs = [
-        {
-          color: 'rgba(73, 132, 176, 0.36)',
-          position: [-28, 7, -72] as const,
-          scale: [92, 42] as const,
-          opacity: .036,
-          rotation: -.035,
-        },
-        {
-          color: 'rgba(111, 82, 176, 0.36)',
-          position: [32, -4, -145] as const,
-          scale: [126, 54] as const,
-          opacity: .031,
-          rotation: .045,
-        },
-        {
-          color: 'rgba(52, 153, 157, 0.36)',
-          position: [-18, 13, -228] as const,
-          scale: [158, 64] as const,
-          opacity: .027,
-          rotation: -.02,
-        },
-      ]
-
-      hazeSpecs.forEach((spec, index) => {
-        const texture = createNebulaTexture(spec.color)
-        const material = new THREE.MeshBasicMaterial({
-          map: texture,
-          transparent: true,
-          opacity: spec.opacity,
-          side: THREE.DoubleSide,
-          depthWrite: false,
-          blending: THREE.NormalBlending,
-          toneMapped: true,
-        })
-        const plane = new THREE.Mesh(libraryHazeGeometry, material)
-        plane.position.set(spec.position[0], spec.position[1], spec.position[2])
-        plane.scale.set(spec.scale[0], spec.scale[1], 1)
-        plane.rotation.z = spec.rotation
-        plane.userData.baseX = spec.position[0]
-        plane.userData.baseY = spec.position[1]
-        plane.userData.baseOpacity = spec.opacity
-        plane.userData.hazePhase = index * 1.73
-        plane.renderOrder = -4
-        farWorld.add(plane)
-        libraryHazeTextures.push(texture)
-        libraryHazeMaterials.push(material)
-        libraryHazePlanes.push(plane)
-      })
-
+    if (libraryMode) {
       // Build a distant archive skyline from instanced stepped tower masses.
       // Facade windows and neon are decorative only: no colliders, raycast
       // targets, or per-building animation.
@@ -1819,159 +1764,15 @@ export default function DreamWorld3D({
       return sprite
     })
 
-    const libraryArchiveFogTextures: THREE.Texture[] = []
-    const libraryArchiveFogMaterials: THREE.SpriteMaterial[] = []
-    const libraryArchiveFog: THREE.Sprite[] = []
-    const libraryLocalHaze: THREE.Sprite[] = []
-
-    if (libraryMode) {
-      const fogTextureColors = [
-        'rgba(224, 92, 188, 0.34)',
-        'rgba(170, 91, 214, 0.32)',
-        'rgba(235, 119, 179, 0.28)',
-        'rgba(124, 104, 205, 0.27)',
-        'rgba(83, 205, 220, 0.24)',
-        'rgba(118, 126, 232, 0.23)',
-      ]
-
-      const fogTextures = fogTextureColors.map((color) => {
-        const texture = createNebulaTexture(color)
-        libraryArchiveFogTextures.push(texture)
-        return texture
-      })
-
-      const fogMaterials = fogTextures.map((texture, index) => {
-        const material = new THREE.SpriteMaterial({
-          map: texture,
-          transparent: true,
-          opacity:
-            index === 0
-              ? .038
-              : index === 1
-                ? .034
-                : index === 2
-                  ? .03
-                  : .026,
-          depthWrite: false,
-          blending: THREE.NormalBlending,
-          toneMapped: true,
+    const libraryAtmosphere = libraryMode
+      ? createLibraryAtmosphere({
+          world,
+          farWorld,
+          quality: qualityRef.current,
+          createNebulaTexture,
+          seededUnit,
         })
-        libraryArchiveFogMaterials.push(material)
-        return material
-      })
-
-      const fogBankCount =
-        qualityRef.current === 'cinematic'
-          ? 40
-          : qualityRef.current === 'high'
-            ? 30
-            : qualityRef.current === 'medium'
-              ? 22
-              : 14
-
-      for (let index = 0; index < fogBankCount; index += 1) {
-        const t = index / (fogBankCount - 1)
-        const bay = THREE.MathUtils.lerp(
-          .25,
-          ARCHIVE_PATH_RENDER_BAYS - .4,
-          t,
-        )
-        const point = archivePathPoint(bay)
-        const frame = archivePathFrame(bay)
-        const phase = index * 1.37
-        const sidePattern = index % 3
-        const sideSign = sidePattern === 0 ? -1 : sidePattern === 1 ? 1 : 0
-        const sideOffset =
-          sideSign *
-          (1.8 + seededUnit(index + 701, 4) * 4.4)
-
-        const sprite = new THREE.Sprite(
-          fogMaterials[index % fogMaterials.length],
-        )
-        sprite.position.set(
-          point[0] + frame.normalX * sideOffset,
-          point[1] +
-            (seededUnit(index + 701, 5) - .5) * 4.2 +
-            .6,
-          point[2] + frame.normalZ * sideOffset,
-        )
-
-        const width =
-          30 + seededUnit(index + 701, 6) * 18
-        const height =
-          12 + seededUnit(index + 701, 7) * 9
-        sprite.scale.set(width, height, 1)
-        sprite.userData.baseX = sprite.position.x
-        sprite.userData.baseY = sprite.position.y
-        sprite.userData.baseZ = sprite.position.z
-        sprite.userData.archiveFogPhase = phase
-        sprite.userData.archiveFogBaseOpacity =
-          index % 4 === 0
-            ? .038
-            : index % 4 === 1
-              ? .033
-              : index % 4 === 2
-                ? .029
-                : .025
-        sprite.renderOrder = -1
-        world.add(sprite)
-        libraryArchiveFog.push(sprite)
-      }
-
-      const localHazeOffsets = [
-        -1.6,
-        -.7,
-        .15,
-        1.0,
-        1.9,
-        3.0,
-        4.3,
-        5.8,
-      ] as const
-
-      localHazeOffsets.forEach((bayOffset, index) => {
-        const material = new THREE.SpriteMaterial({
-          map: fogTextures[index % fogTextures.length],
-          transparent: true,
-          opacity: .03,
-          depthWrite: false,
-          blending: THREE.NormalBlending,
-          toneMapped: true,
-        })
-        libraryArchiveFogMaterials.push(material)
-
-        const sprite = new THREE.Sprite(material)
-        const localSide =
-          index % 3 === 0 ? 0 : index % 2 === 0 ? 1 : -1
-        const initialBay = THREE.MathUtils.clamp(
-          .35 + bayOffset,
-          0,
-          ARCHIVE_PATH_RENDER_BAYS,
-        )
-        const initialPoint = archivePathPoint(initialBay)
-        const initialFrame = archivePathFrame(initialBay)
-        const initialSideDistance = localSide * 2.6
-
-        sprite.userData.localHazeBayOffset = bayOffset
-        sprite.userData.localHazePhase = index * 1.27
-        sprite.userData.localHazeSide = localSide
-        sprite.position.set(
-          initialPoint[0] +
-            initialFrame.normalX * initialSideDistance,
-          initialPoint[1] + .8,
-          initialPoint[2] +
-            initialFrame.normalZ * initialSideDistance,
-        )
-        sprite.scale.set(
-          32 + (index % 3) * 6,
-          14 + (index % 4) * 2.2,
-          1,
-        )
-        sprite.renderOrder = -1
-        world.add(sprite)
-        libraryLocalHaze.push(sprite)
-      })
-    }
+      : null
 
     const nearDustCount =
       qualityRef.current === 'cinematic'
@@ -5192,19 +4993,6 @@ export default function DreamWorld3D({
         libraryFarParticles.position.y = Math.cos(elapsed * .017) * .16
       }
 
-      libraryHazePlanes.forEach((plane, index) => {
-        const material = plane.material as THREE.MeshBasicMaterial
-        const phase = plane.userData.hazePhase as number
-        plane.position.x =
-          (plane.userData.baseX as number) +
-          Math.sin(elapsed * .018 + phase) * (1.4 + index * .35)
-        plane.position.y =
-          (plane.userData.baseY as number) +
-          Math.cos(elapsed * .014 + phase) * (.65 + index * .22)
-        material.opacity =
-          (plane.userData.baseOpacity as number) *
-          (.9 + Math.sin(elapsed * .032 + phase) * .1)
-      })
       if (librarySilhouettes) {
         const skylineYaw = Math.sin(elapsed * .008) * .018
         const skylineLift = Math.sin(elapsed * .012) * .3
@@ -5274,113 +5062,11 @@ export default function DreamWorld3D({
       }
 
 
-      libraryArchiveFog.forEach((sprite, index) => {
-        const phase = sprite.userData.archiveFogPhase as number
-        sprite.position.x =
-          (sprite.userData.baseX as number) +
-          Math.sin(elapsed * .028 + phase) *
-            (1.1 + (index % 3) * .22)
-        sprite.position.y =
-          (sprite.userData.baseY as number) +
-          Math.cos(elapsed * .022 + phase) *
-            (.42 + (index % 4) * .09)
-        sprite.position.z =
-          (sprite.userData.baseZ as number) +
-          Math.sin(elapsed * .017 + phase) * .3
-
-        const material = sprite.material as THREE.SpriteMaterial
-        const baseOpacity =
-          sprite.userData.archiveFogBaseOpacity as number
-        const cameraDistance = sprite.position.distanceTo(
-          camera.position,
-        )
-        const clearance = THREE.MathUtils.smoothstep(
-          cameraDistance,
-          4,
-          13,
-        )
-        material.opacity =
-          baseOpacity *
-          (.88 + Math.sin(elapsed * .041 + phase) * .12) *
-          (.24 + clearance * .76)
+      libraryAtmosphere?.update({
+        elapsed,
+        camera,
+        districts: activeDistricts,
       })
-
-      if (libraryLocalHaze.length > 0) {
-        const cameraBay = archiveBayFromWorldZ(camera.position.z)
-        const nearestDistrict =
-          activeDistricts.length > 0
-            ? activeDistricts.reduce(
-                (nearest, candidate) =>
-                  Math.abs(candidate.bay - cameraBay) <
-                  Math.abs(nearest.bay - cameraBay)
-                    ? candidate
-                    : nearest,
-              )
-            : null
-        const localHazeTint = nearestDistrict
-          ? new THREE.Color(nearestDistrict.accent).lerp(
-              new THREE.Color(0xe8faff),
-              .34,
-            )
-          : new THREE.Color(0xb9b8ef)
-
-        libraryLocalHaze.forEach((sprite, index) => {
-          const bayOffset =
-            sprite.userData.localHazeBayOffset as number
-          const bay = THREE.MathUtils.clamp(
-            cameraBay + bayOffset,
-            0,
-            ARCHIVE_PATH_RENDER_BAYS,
-          )
-          const point = archivePathPoint(bay)
-          const frame = archivePathFrame(bay)
-          const phase = sprite.userData.localHazePhase as number
-          const side = sprite.userData.localHazeSide as number
-          const sideDistance =
-            side *
-            (2.6 + Math.sin(elapsed * .07 + phase) * .65)
-
-          const targetX =
-            point[0] + frame.normalX * sideDistance
-          const targetY =
-            point[1] +
-            .8 +
-            Math.sin(elapsed * .055 + phase) * .72
-          const targetZ =
-            point[2] + frame.normalZ * sideDistance
-
-          sprite.position.x +=
-            (targetX - sprite.position.x) * .12
-          sprite.position.y +=
-            (targetY - sprite.position.y) * .1
-          sprite.position.z +=
-            (targetZ - sprite.position.z) * .12
-
-          const material = sprite.material as THREE.SpriteMaterial
-          const centerFade =
-            index <= 1 ? .72 : index >= 6 ? .8 : 1
-          const landmarkRichness = nearestDistrict
-            ? 1 +
-              (1 -
-                THREE.MathUtils.smoothstep(
-                  Math.abs(nearestDistrict.bay - cameraBay),
-                  .4,
-                  3.6,
-                )) *
-                .32
-            : 1
-          material.opacity =
-            (.025 +
-              Math.max(
-                0,
-                Math.sin(elapsed * .09 + phase),
-              ) *
-                .01) *
-            centerFade *
-            landmarkRichness
-          material.color.lerp(localHazeTint, .025)
-        })
-      }
 
       nearDust.rotation.y = Math.sin(elapsed * .045) * .05
       nearDust.position.x = pointerParallax.x * .16
@@ -7055,18 +6741,7 @@ export default function DreamWorld3D({
         scene.remove(sprite)
       })
 
-      libraryArchiveFog.forEach((sprite) => {
-        world.remove(sprite)
-      })
-      libraryLocalHaze.forEach((sprite) => {
-        world.remove(sprite)
-      })
-      libraryArchiveFogMaterials.forEach((material) =>
-        material.dispose(),
-      )
-      libraryArchiveFogTextures.forEach((texture) =>
-        texture.dispose(),
-      )
+      libraryAtmosphere?.dispose()
 
       nearDustGeometry.dispose()
       nearDustMaterial.dispose()
@@ -7111,9 +6786,6 @@ export default function DreamWorld3D({
 
       libraryFarParticleGeometry?.dispose()
       libraryFarParticleMaterial?.dispose()
-      libraryHazeGeometry?.dispose()
-      libraryHazeTextures.forEach((texture) => texture.dispose())
-      libraryHazeMaterials.forEach((material) => material.dispose())
       librarySilhouetteGeometry?.dispose()
       librarySilhouetteMaterial?.dispose()
       librarySkylineWindowGeometry?.dispose()
