@@ -1261,10 +1261,14 @@ export default function DreamWorld3D({
     let diveComposer: EffectComposer | null = null
     let divePost: ShaderPass | null = null
     let diveBokeh: BokehPass | null = null
+    let diveSsao: SSAOPass | null = null
     let diveAudio: SpatialDreamAudio | null = null
     let diveAudioStarted = false
     let diveMusic: DreamMusic | null = null
     let diveMusicStarted = false
+    let diveMusicAnalyser: THREE.AudioAnalyser | null = null
+    let portalPreviewDive: DreamDive | null = null
+    let portalSceneTransition: PortalSceneTransition | null = null
     let diveMode:
       | 'none'
       | 'entering'
@@ -1390,6 +1394,12 @@ export default function DreamWorld3D({
       diveMusic?.dispose()
       diveMusic = null
       diveMusicStarted = false
+      diveMusicAnalyser = null
+
+      portalPreviewDive?.dispose()
+      portalPreviewDive = null
+      portalSceneTransition?.dispose()
+      portalSceneTransition = null
 
       if (restoreListener && listener.parent !== camera) {
         listener.removeFromParent()
@@ -1400,6 +1410,7 @@ export default function DreamWorld3D({
       diveComposer = null
       divePost = null
       diveBokeh = null
+      diveSsao = null
       activeDive?.dispose()
       activeDive = null
       pendingPortal = null
@@ -1433,6 +1444,7 @@ export default function DreamWorld3D({
           relations,
           depth,
           maxDepth: 2,
+          environmentMap: cinematicEnvironment.texture,
         },
       )
 
@@ -1462,6 +1474,7 @@ export default function DreamWorld3D({
         },
       )
       activeDive.scene.add(diveMusic.audio)
+      diveMusicAnalyser = new THREE.AudioAnalyser(diveMusic.audio, 64)
 
       if (spatialAudio?.audio.isPlaying) spatialAudio.audio.pause()
       spatialAudioStarted = false
@@ -1473,6 +1486,13 @@ export default function DreamWorld3D({
       diveComposer = new EffectComposer(renderer)
       const diveRenderPass = new RenderPass(activeDive.scene, activeDive.camera)
       diveComposer.addPass(diveRenderPass)
+
+      diveSsao = new SSAOPass(activeDive.scene, activeDive.camera, 1, 1)
+      diveSsao.enabled = settings.ssao
+      diveSsao.kernelRadius = Math.max(4, settings.ssaoKernelRadius * .8)
+      diveSsao.minDistance = 0.002
+      diveSsao.maxDistance = 0.1
+      diveComposer.addPass(diveSsao)
 
       diveBokeh = new BokehPass(activeDive.scene, activeDive.camera, {
         focus: 7,
@@ -1536,6 +1556,41 @@ export default function DreamWorld3D({
       if (action.depth > 2) return
       if (diveStack.length >= 3 && !diveStack.includes(action.dreamId)) return
 
+      const destination = dreamsRef.current.find(
+        (dream) => dream._id === action.dreamId,
+      )
+      if (!destination) return
+
+      portalPreviewDive?.dispose()
+      portalPreviewDive = null
+      portalSceneTransition?.dispose()
+      portalSceneTransition = null
+
+      const recurrence = dreamRecurrence(destination, dreamsRef.current)
+      const profile = createDreamProfile(destination, recurrence)
+      const relations = getDreamRelations(destination, dreamsRef.current, 4)
+      portalPreviewDive = createDreamDive(
+        profile,
+        settings,
+        hashString(`portal-preview:${destination._id}:${action.depth}`),
+        {
+          currentDream: destination,
+          dreams: dreamsRef.current,
+          relations,
+          depth: action.depth,
+          maxDepth: 2,
+          environmentMap: cinematicEnvironment.texture,
+        },
+      )
+      portalPreviewDive.setTimeline(diveTimelineProgressRef.current)
+
+      const rect = host.getBoundingClientRect()
+      portalPreviewDive.resize(rect.width / Math.max(1, rect.height))
+      portalSceneTransition = createPortalSceneTransition(
+        Math.max(1, Math.floor(rect.width * settings.portalBlendResolution)),
+        Math.max(1, Math.floor(rect.height * settings.portalBlendResolution)),
+      )
+
       pendingPortal = action
       diveMode = 'portal'
       diveTransitionStartedAt = performance.now() / 1000
@@ -1587,6 +1642,14 @@ export default function DreamWorld3D({
         activeDive.resize(rect.width / rect.height)
         diveComposer.setSize(rect.width, rect.height)
       }
+
+      if (portalPreviewDive) {
+        portalPreviewDive.resize(rect.width / rect.height)
+      }
+      portalSceneTransition?.resize(
+        Math.max(1, Math.floor(rect.width * settings.portalBlendResolution)),
+        Math.max(1, Math.floor(rect.height * settings.portalBlendResolution)),
+      )
     }
 
     const resizeObserver = new ResizeObserver(resize)
@@ -1795,7 +1858,26 @@ export default function DreamWorld3D({
       ) {
         activeDive.setLookTarget(pointerTarget.x, pointerTarget.y)
         activeDive.setTimeline(diveTimelineProgressRef.current)
+
+        const musicEnergy =
+          soundEnabledRef.current &&
+          diveMusic?.audio.isPlaying &&
+          diveMusicAnalyser
+            ? THREE.MathUtils.clamp(
+                diveMusicAnalyser.getAverageFrequency() / 150,
+                0,
+                1,
+              )
+            : 0
+        activeDive.setAudioEnergy(musicEnergy)
         activeDive.update(elapsed, delta)
+
+        if (portalPreviewDive && diveMode === 'portal') {
+          portalPreviewDive.setTimeline(diveTimelineProgressRef.current)
+          portalPreviewDive.setAudioEnergy(musicEnergy * .72)
+          portalPreviewDive.update(elapsed, delta)
+          portalPreviewDive.renderPreviews(renderer, elapsed)
+        }
 
         if (diveMode === 'portal' && pendingPortal?.focus) {
           const portalProgress = Math.min(
@@ -1911,6 +1993,11 @@ export default function DreamWorld3D({
           pendingPortal = null
 
           if (destination) {
+            portalSceneTransition?.dispose()
+            portalSceneTransition = null
+            portalPreviewDive?.dispose()
+            portalPreviewDive = null
+
             installDive(destination, depth, {fromPortal: true})
             pointerTarget.set(0, 0)
             renderer.domElement.style.cursor = 'crosshair'
@@ -1936,7 +2023,23 @@ export default function DreamWorld3D({
           pointerTarget.set(0, 0)
           pointerParallax.set(0, 0)
         } else {
-          diveComposer?.render()
+          if (
+            diveMode === 'portal' &&
+            portalPreviewDive &&
+            portalSceneTransition
+          ) {
+            portalSceneTransition.render(
+              renderer,
+              activeDive.scene,
+              activeDive.camera,
+              portalPreviewDive.scene,
+              portalPreviewDive.camera,
+              portalProgress,
+              elapsed,
+            )
+          } else {
+            diveComposer?.render()
+          }
           return
         }
       }
