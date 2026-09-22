@@ -1093,7 +1093,7 @@ At minimum verify:
 - [x] remove inline `openingBook` state
 - [x] fix mixed-clock timing bug uncovered during extraction
 - [x] source-level stale-reference audit
-- [ ] CI verification
+- [x] CI verification — Cinematic branch checks #325 passed
 - [ ] manual browser smoke test
 
 ## Phase 3 — Atmosphere
