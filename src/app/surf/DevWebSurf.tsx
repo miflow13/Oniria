@@ -1485,6 +1485,27 @@ export default function DevWebSurf() {
             illuminated floor route.
           </p>
 
+          <div className={styles.wingLegend} aria-label="Wing color key">
+            {(
+              [
+                ['featured', 'Featured'],
+                ['latest', 'New'],
+                ['topics', 'Topics'],
+                ['creators', 'Creators'],
+                ['search', 'Search'],
+                ['archive', 'Archive'],
+              ] as Array<[LibrarySection, string]>
+            ).map(([section, label]) => (
+              <span key={section}>
+                <i
+                  aria-hidden="true"
+                  style={{background: SECTION_COPY[section].accent}}
+                />
+                {label}
+              </span>
+            ))}
+          </div>
+
           <div className={styles.directoryGrid}>
             <button type="button" onClick={() => walkTo(continueTarget)}>
               <b>Continue browsing</b>
@@ -1575,6 +1596,12 @@ export default function DevWebSurf() {
         <i />
         <i />
       </div>
+
+      <aside className={styles.locationHud} aria-label="Current library location">
+        <span>Level {String(currentFloor + 1).padStart(2, '0')}</span>
+        <strong>{SECTION_COPY[currentSection].title}</strong>
+        <small>{FLOOR_DIRECTORY[currentFloor]}</small>
+      </aside>
 
       <button
         type="button"
