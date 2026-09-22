@@ -41,6 +41,7 @@ export function shelfLayoutKey(
 ) {
   if (!shelfKey) return null
   return (
+    'aligned-v2:' +
     floorIndex +
     ':' +
     shelfKey.replace(/:level-\d+$/, '')
