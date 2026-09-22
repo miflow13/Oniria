@@ -1494,6 +1494,31 @@ export default function DevWebSurf3D({
       top.scale.y = 1.15
       group.add(top)
 
+      // Keep book bays identical for alignment, but vary the skyline so long
+      // aisles stop reading like cloned test fixtures.
+      const shelfVariant =
+        Math.abs(
+          Math.round(
+            x * 7 +
+            z * 5 +
+            floorBase * 3,
+          ),
+        ) % 3
+      if (shelfVariant > 0) {
+        const crown = new THREE.Mesh(boardGeometry, shelfMaterial)
+        crown.position.set(
+          shelfVariant === 1 ? -.35 : .4,
+          3.63 + shelfVariant * .045,
+          -.08,
+        )
+        crown.scale.set(
+          shelfVariant === 1 ? .68 : .46,
+          shelfVariant === 1 ? .9 : 1.22,
+          .5,
+        )
+        group.add(crown)
+      }
+
       for (let level = 0; level < 3; level += 1) {
         const accentGeometry = new THREE.BoxGeometry(
           width - .24,
@@ -1875,6 +1900,44 @@ export default function DevWebSurf3D({
         })
       })
     }
+    function addLandmarkArch(
+      x: number,
+      z: number,
+      width: number,
+      height: number,
+      floorBase: number,
+      accent: number,
+    ) {
+      const columnGeometry = new THREE.BoxGeometry(.24, height, .36)
+      const beamGeometry = new THREE.BoxGeometry(width, .24, .36)
+      architecturalGeometries.push(columnGeometry, beamGeometry)
+      const frameMaterial = new THREE.MeshStandardMaterial({
+        color: 0x3a3d42,
+        emissive: accent,
+        emissiveIntensity: .025,
+        roughness: .72,
+        metalness: .12,
+      })
+      architecturalMaterials.push(frameMaterial)
+
+      ;[-width / 2, width / 2].forEach((offset) => {
+        const column = new THREE.Mesh(columnGeometry, frameMaterial)
+        column.position.set(x + offset, floorBase + height / 2, z)
+        column.castShadow = true
+        column.receiveShadow = true
+        scene.add(column)
+      })
+
+      const beam = new THREE.Mesh(beamGeometry, frameMaterial)
+      beam.position.set(x, floorBase + height - .12, z)
+      beam.castShadow = true
+      scene.add(beam)
+    }
+
+    // A recognisable portal makes the Deep Archive a destination rather than
+    // just another repeated shelf row.
+    addLandmarkArch(0, -34.4, 6.4, 3.65, 0, FLOOR_ACCENTS[5])
+
     addWall(-19, archiveCenterZ, .38, archiveDepth, buildingHeight, concrete, 0)
     addWall(19, archiveCenterZ, .38, archiveDepth, buildingHeight, concrete, 0)
     addWall(0, -78.3, 38, .38, buildingHeight, concrete, 0)
@@ -1980,6 +2043,17 @@ export default function DevWebSurf3D({
       addFloorInsetSurface(0, 7, 4.15, 3.05, base, floor, 'landing')
       addRouteBorder(0, 7, 4.15, 3.05, base, floor, .28)
       addLandingMarker(floor, -3.05, 7, base)
+
+      if (floor % 2 === 0) {
+        addLandmarkArch(
+          0,
+          -27,
+          8.8,
+          3.2,
+          base,
+          FLOOR_ACCENTS[floor],
+        )
+      }
 
       // Colored slab fascias make each storey identifiable from the atrium.
       // This is visible even when the floor surface itself is mostly hidden.
