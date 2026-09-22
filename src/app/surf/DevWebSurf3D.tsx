@@ -666,8 +666,8 @@ export default function DevWebSurf3D({
     const container = host
 
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color(0x000000)
-    scene.fog = new THREE.FogExp2(0x000000, .0065)
+    scene.background = new THREE.Color(0x030611)
+    scene.fog = new THREE.FogExp2(0x07101f, .0068)
 
     const camera = new THREE.PerspectiveCamera(60, 1, .07, 210)
     camera.position.set(
@@ -1114,6 +1114,296 @@ export default function DevWebSurf3D({
       distantWindows,
       distantOrbs,
     )
+
+    // Dream-branch space language around the fixed library platform:
+    // softly breathing nebulae, low-poly debris, and a small orbital system.
+    // None of these are interactive or collidable.
+    const dreamSpaceGroup = new THREE.Group()
+    dreamSpaceGroup.name = 'dream-space-environment'
+    scene.add(dreamSpaceGroup)
+
+    const createDreamNebulaTexture = (
+      core: string,
+      middle: string,
+    ) => {
+      const canvas = document.createElement('canvas')
+      canvas.width = 384
+      canvas.height = 384
+      const context = canvas.getContext('2d')
+      if (context) {
+        const gradient = context.createRadialGradient(
+          192,
+          192,
+          0,
+          192,
+          192,
+          192,
+        )
+        gradient.addColorStop(0, core)
+        gradient.addColorStop(.28, middle)
+        gradient.addColorStop(.66, 'rgba(25,35,72,.025)')
+        gradient.addColorStop(1, 'rgba(0,0,0,0)')
+        context.fillStyle = gradient
+        context.fillRect(0, 0, 384, 384)
+      }
+      const texture = new THREE.CanvasTexture(canvas)
+      texture.colorSpace = THREE.SRGBColorSpace
+      texture.minFilter = THREE.LinearFilter
+      texture.magFilter = THREE.LinearFilter
+      return texture
+    }
+
+    const dreamNebulaTextures = [
+      createDreamNebulaTexture(
+        'rgba(118,82,205,.25)',
+        'rgba(108,76,181,.1)',
+      ),
+      createDreamNebulaTexture(
+        'rgba(62,180,188,.2)',
+        'rgba(59,174,181,.08)',
+      ),
+      createDreamNebulaTexture(
+        'rgba(203,92,183,.17)',
+        'rgba(137,74,166,.07)',
+      ),
+    ]
+    const dreamNebulae: THREE.Sprite[] = []
+    ;[
+      {x: -70, y: 30, z: -95, sx: 82, sy: 48},
+      {x: 70, y: -4, z: -112, sx: 92, sy: 52},
+      {x: 8, y: 48, z: -126, sx: 106, sy: 58},
+    ].forEach((entry, index) => {
+      const material = new THREE.SpriteMaterial({
+        map: dreamNebulaTextures[index],
+        transparent: true,
+        opacity: .14,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        fog: false,
+      })
+      const sprite = new THREE.Sprite(material)
+      sprite.position.set(entry.x, entry.y, entry.z)
+      sprite.scale.set(entry.sx, entry.sy, 1)
+      dreamSpaceGroup.add(sprite)
+      dreamNebulae.push(sprite)
+    })
+
+    type DreamRockState = {
+      x: number
+      y: number
+      z: number
+      scale: number
+      phase: number
+      bobSpeed: number
+      spinX: number
+      spinY: number
+      spinZ: number
+    }
+
+    const dreamRockMaterial = new THREE.MeshStandardMaterial({
+      color: 0x151d2f,
+      roughness: .88,
+      metalness: .1,
+      emissive: 0x10172b,
+      emissiveIntensity: .3,
+    })
+    const dreamRockGeometryA = new THREE.IcosahedronGeometry(1, 0)
+    const dreamRockGeometryB = new THREE.TetrahedronGeometry(1, 0)
+    const dreamRockCountA = 38
+    const dreamRockCountB = 26
+    const dreamRocksA = new THREE.InstancedMesh(
+      dreamRockGeometryA,
+      dreamRockMaterial,
+      dreamRockCountA,
+    )
+    const dreamRocksB = new THREE.InstancedMesh(
+      dreamRockGeometryB,
+      dreamRockMaterial,
+      dreamRockCountB,
+    )
+    dreamRocksA.castShadow = false
+    dreamRocksB.castShadow = false
+    dreamRocksA.receiveShadow = false
+    dreamRocksB.receiveShadow = false
+    dreamSpaceGroup.add(dreamRocksA, dreamRocksB)
+
+    let dreamSeed = 0x61c88647
+    const dreamRandom = () => {
+      dreamSeed = (dreamSeed * 1664525 + 1013904223) >>> 0
+      return dreamSeed / 0x100000000
+    }
+    const createDreamRockStates = (count: number) =>
+      Array.from({length: count}, (_, index): DreamRockState => {
+        const angle =
+          dreamRandom() * Math.PI * 2 + index * .17
+        const radius = 30 + dreamRandom() * 82
+        return {
+          x: Math.cos(angle) * radius,
+          y: -12 + dreamRandom() * 50,
+          z: -24 + Math.sin(angle) * radius,
+          scale: .42 + dreamRandom() * 2.45,
+          phase: dreamRandom() * Math.PI * 2,
+          bobSpeed: .12 + dreamRandom() * .24,
+          spinX: .08 + dreamRandom() * .18,
+          spinY: .07 + dreamRandom() * .2,
+          spinZ: .04 + dreamRandom() * .12,
+        }
+      })
+
+    const dreamRockStatesA = createDreamRockStates(dreamRockCountA)
+    const dreamRockStatesB = createDreamRockStates(dreamRockCountB)
+    const dreamRockMatrix = new THREE.Matrix4()
+    const dreamRockPosition = new THREE.Vector3()
+    const dreamRockScale = new THREE.Vector3()
+    const dreamRockEuler = new THREE.Euler()
+    const dreamRockQuaternion = new THREE.Quaternion()
+
+    const updateDreamRocks = (
+      mesh: THREE.InstancedMesh,
+      states: DreamRockState[],
+      now: number,
+    ) => {
+      states.forEach((rock, index) => {
+        dreamRockPosition.set(
+          rock.x + Math.cos(now * .035 + rock.phase) * .3,
+          rock.y +
+            Math.sin(now * rock.bobSpeed + rock.phase) * .62,
+          rock.z,
+        )
+        dreamRockEuler.set(
+          now * rock.spinX + rock.phase,
+          now * rock.spinY + rock.phase * .7,
+          now * rock.spinZ,
+        )
+        dreamRockQuaternion.setFromEuler(dreamRockEuler)
+        dreamRockScale.setScalar(rock.scale)
+        dreamRockMatrix.compose(
+          dreamRockPosition,
+          dreamRockQuaternion,
+          dreamRockScale,
+        )
+        mesh.setMatrixAt(index, dreamRockMatrix)
+      })
+      mesh.instanceMatrix.needsUpdate = true
+    }
+
+    // A distant orbital vignette echoes the dream map's celestial composition.
+    const solarSystemGroup = new THREE.Group()
+    solarSystemGroup.position.set(57, 27, -78)
+    solarSystemGroup.rotation.x = -.16
+    dreamSpaceGroup.add(solarSystemGroup)
+
+    const dreamSunMaterial = new THREE.MeshBasicMaterial({
+      color: 0xe9dcff,
+      transparent: true,
+      opacity: .88,
+      fog: false,
+    })
+    const dreamSun = new THREE.Mesh(
+      new THREE.SphereGeometry(3.8, 28, 20),
+      dreamSunMaterial,
+    )
+    solarSystemGroup.add(dreamSun)
+
+    const dreamSunGlowMaterial = new THREE.MeshBasicMaterial({
+      color: 0xa987ff,
+      transparent: true,
+      opacity: .14,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      side: THREE.BackSide,
+      fog: false,
+    })
+    const dreamSunGlow = new THREE.Mesh(
+      new THREE.SphereGeometry(5.2, 20, 14),
+      dreamSunGlowMaterial,
+    )
+    solarSystemGroup.add(dreamSunGlow)
+
+    const orbitMaterial = new THREE.MeshBasicMaterial({
+      color: 0x8297d8,
+      transparent: true,
+      opacity: .095,
+      depthWrite: false,
+      fog: false,
+    })
+    const planetMaterialA = new THREE.MeshStandardMaterial({
+      color: 0x72bccc,
+      emissive: 0x244e68,
+      emissiveIntensity: .34,
+      roughness: .7,
+    })
+    const planetMaterialB = new THREE.MeshStandardMaterial({
+      color: 0x9272cf,
+      emissive: 0x452b73,
+      emissiveIntensity: .32,
+      roughness: .74,
+    })
+    const planetMaterialC = new THREE.MeshStandardMaterial({
+      color: 0xd7c2a3,
+      emissive: 0x5a4937,
+      emissiveIntensity: .23,
+      roughness: .76,
+    })
+    const ringMaterial = new THREE.MeshBasicMaterial({
+      color: 0xd9cbff,
+      transparent: true,
+      opacity: .34,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      fog: false,
+    })
+
+    const dreamOrbitPivots: THREE.Group[] = []
+    const addDreamPlanet = (
+      radius: number,
+      planetRadius: number,
+      material: THREE.Material,
+      phase: number,
+      ringed = false,
+    ) => {
+      const orbit = new THREE.Mesh(
+        new THREE.TorusGeometry(radius, .035, 5, 84),
+        orbitMaterial,
+      )
+      orbit.rotation.x = Math.PI / 2
+      solarSystemGroup.add(orbit)
+
+      const pivot = new THREE.Group()
+      pivot.rotation.y = phase
+      const planet = new THREE.Mesh(
+        new THREE.SphereGeometry(planetRadius, 20, 14),
+        material,
+      )
+      planet.position.x = radius
+      pivot.add(planet)
+
+      if (ringed) {
+        const ring = new THREE.Mesh(
+          new THREE.TorusGeometry(
+            planetRadius * 1.55,
+            planetRadius * .16,
+            8,
+            56,
+          ),
+          ringMaterial,
+        )
+        ring.position.x = radius
+        ring.rotation.x = Math.PI * .62
+        ring.rotation.z = .22
+        pivot.add(ring)
+      }
+
+      solarSystemGroup.add(pivot)
+      dreamOrbitPivots.push(pivot)
+    }
+
+    addDreamPlanet(9.5, 1.25, planetMaterialA, .5)
+    addDreamPlanet(15.5, 2.2, planetMaterialC, 2.2, true)
+    addDreamPlanet(22, 1.6, planetMaterialB, 4.1)
+
+    updateDreamRocks(dreamRocksA, dreamRockStatesA, 0)
+    updateDreamRocks(dreamRocksB, dreamRockStatesB, 0)
 
     const ambient = new THREE.HemisphereLight(0xe6ebf0, 0x202126, 1.38)
     scene.add(ambient)
@@ -2266,6 +2556,7 @@ export default function DevWebSurf3D({
 
       if (layoutKey && floorBase === 0) {
         const label = layoutKey
+          .replace(/^aligned-v2:/, '')
           .replace(/^0:/, '')
           .replace(/:/g, ' · ')
         group.userData.layoutKey = layoutKey
@@ -4370,6 +4661,7 @@ export default function DevWebSurf3D({
     const reservedEditorRoots = new Set<THREE.Object3D>([
       skyGroup,
       distantWorldGroup,
+      dreamSpaceGroup,
       transformHelper,
       dataRain,
     ])
@@ -4902,9 +5194,9 @@ export default function DevWebSurf3D({
       activeCoverUrls.clear()
 
       const floorAccent = new THREE.Color(FLOOR_ACCENTS[floor])
-      scene.background = new THREE.Color(0x000000)
+      scene.background = new THREE.Color(0x030611)
       if (scene.fog instanceof THREE.FogExp2) {
-        scene.fog.color.setHex(0x000000)
+        scene.fog.color.setHex(0x07101f)
       }
       floorIdentityLight.color.copy(floorAccent)
       floorIdentityLight.position.y =
@@ -5754,6 +6046,28 @@ export default function DevWebSurf3D({
       skyBrightStars.material.opacity =
         .86 + Math.sin(now * .72) * .045
       updateDistantWorlds(now)
+      updateDreamRocks(dreamRocksA, dreamRockStatesA, now)
+      updateDreamRocks(dreamRocksB, dreamRockStatesB, now)
+      dreamNebulae.forEach((sprite, index) => {
+        const material = sprite.material as THREE.SpriteMaterial
+        material.opacity =
+          .11 + Math.sin(now * .11 + index * 1.4) * .025
+        sprite.position.x +=
+          Math.sin(now * .035 + index) * .00055
+      })
+      dreamSunGlow.scale.setScalar(
+        1 + Math.sin(now * .38) * .035,
+      )
+      dreamSunGlowMaterial.opacity =
+        .12 + Math.max(0, Math.sin(now * .42)) * .05
+      dreamOrbitPivots.forEach((pivot, index) => {
+        pivot.rotation.y +=
+          (.018 + index * .006) *
+          (reducedMotion ? .15 : 1) *
+          Math.min(.05, Math.max(.001, (nowMs - lastTime) / 1000))
+      })
+      solarSystemGroup.rotation.y =
+        Math.sin(now * .035) * .045
 
       const streamReveal = THREE.MathUtils.smoothstep(
         nowMs - sceneRevealStartedAt,
@@ -6759,6 +7073,33 @@ export default function DevWebSurf3D({
       distantBeaconMaterial.dispose()
       distantWindowMaterial.dispose()
       distantOrbMaterial.dispose()
+      dreamNebulae.forEach((sprite) => {
+        const material = sprite.material as THREE.SpriteMaterial
+        material.dispose()
+      })
+      dreamNebulaTextures.forEach((texture) => texture.dispose())
+      dreamRockGeometryA.dispose()
+      dreamRockGeometryB.dispose()
+      dreamRockMaterial.dispose()
+      ;(dreamSun.geometry as THREE.BufferGeometry).dispose()
+      dreamSunMaterial.dispose()
+      ;(dreamSunGlow.geometry as THREE.BufferGeometry).dispose()
+      dreamSunGlowMaterial.dispose()
+      orbitMaterial.dispose()
+      planetMaterialA.dispose()
+      planetMaterialB.dispose()
+      planetMaterialC.dispose()
+      ringMaterial.dispose()
+      solarSystemGroup.traverse((object) => {
+        if (!(object instanceof THREE.Mesh)) return
+        if (
+          object === dreamSun ||
+          object === dreamSunGlow
+        ) {
+          return
+        }
+        object.geometry.dispose()
+      })
       rainGeometry.dispose()
       rainMaterial.dispose()
       destroyed = true
