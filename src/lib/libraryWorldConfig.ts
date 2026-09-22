@@ -182,35 +182,24 @@ export const DEFAULT_LIBRARY_DISTRICTS: LibraryDistrictConfig[] = [
   },
 ]
 
-export const PACKED_DISTRICT_START_BAY = 1
-export const PACKED_DISTRICT_GAP_BAYS = 3.4
-
 /**
- * Convert authored district ordering into a dense visual boulevard.
+ * Keep Sanity-authored route positions authoritative.
  *
- * Sanity still controls district identity/order through its bay values, but
- * the renderer receives compact display bays so old authored coordinates do
- * not recreate 80–90 unit dead zones between categories.
+ * The previous implementation repacked every district at a fixed interval,
+ * which made Studio's routeBay field appear to save while the rendered
+ * archive ignored it. We still normalize ordering and clamp to the renderer's
+ * supported route range, but never rewrite authored spacing.
  */
 export function packLibraryDistricts(
   districts: LibraryDistrictConfig[],
 ): LibraryDistrictConfig[] {
-  const ordered = [...districts]
+  return [...districts]
     .filter((district) => district.enabled)
+    .map((district) => ({
+      ...district,
+      bay: Math.max(0, Math.min(72, district.bay)),
+    }))
     .sort((a, b) => a.bay - b.bay)
-
-  const packedBayById = new Map(
-    ordered.map((district, index) => [
-      district.id,
-      PACKED_DISTRICT_START_BAY +
-        index * PACKED_DISTRICT_GAP_BAYS,
-    ]),
-  )
-
-  return districts.map((district) => ({
-    ...district,
-    bay: packedBayById.get(district.id) ?? district.bay,
-  }))
 }
 
 export const DEFAULT_LIBRARY_WORLD_CONFIG: LibraryWorldConfig = {
@@ -366,33 +355,6 @@ function sanitizeDistrict(
   }
 }
 
-const MAX_DISTRICT_GAP_BAYS = 4
-
-function compactDistrictRoute(
-  districts: LibraryDistrictConfig[],
-): LibraryDistrictConfig[] {
-  if (districts.length < 2) return districts
-
-  const sorted = [...districts].sort((a, b) => a.bay - b.bay)
-  let previousBay = sorted[0]?.bay ?? 0
-
-  return sorted.map((district, index) => {
-    if (index === 0) {
-      previousBay = district.bay
-      return district
-    }
-
-    const compactedBay = Math.min(
-      district.bay,
-      previousBay + MAX_DISTRICT_GAP_BAYS,
-    )
-    previousBay = compactedBay
-    return compactedBay === district.bay
-      ? district
-      : {...district, bay: compactedBay}
-  })
-}
-
 export function mergeLibraryWorldConfig(
   payload: SanityLibraryWorldPayload | null | undefined,
 ): LibraryWorldConfig {
@@ -412,11 +374,10 @@ export function mergeLibraryWorldConfig(
     )
     .sort((a, b) => a.bay - b.bay)
 
-  const districts = compactDistrictRoute(
+  const districts =
     configuredDistricts.length > 0
       ? configuredDistricts
-      : DEFAULT_LIBRARY_DISTRICTS,
-  )
+      : DEFAULT_LIBRARY_DISTRICTS
 
   const curatedArticles = (payload.curatedArticles ?? [])
     .filter(
