@@ -58,6 +58,8 @@ export type LibraryWorldConfig = {
   source: 'sanity' | 'fallback'
   syncMode?: 'drafts' | 'published' | 'local'
   sanityRevision?: string
+  sanityPreviewAvailable?: boolean
+  sanitySyncIssue?: 'missing-preview-token' | 'fetch-failed'
   welcomeTitle: string
   welcomeSubtitle: string
   welcomeBody: string
@@ -184,6 +186,7 @@ export const DEFAULT_LIBRARY_WORLD_CONFIG: LibraryWorldConfig = {
   source: 'fallback',
   syncMode: 'local',
   sanityRevision: '',
+  sanityPreviewAvailable: false,
   welcomeTitle: 'DEV LIBRARY',
   welcomeSubtitle: 'An explorable archive of DEV Community writing',
   welcomeBody:
