@@ -456,13 +456,18 @@ export default function DevLibraryMap() {
       })),
     )
 
-    return result.map((shelf, index) => ({
-      ...shelf,
-      world: resolvedPlacements[index].world,
-      yaw: resolvedPlacements[index].yaw,
-      pathBay: resolvedPlacements[index].pathBay,
-      districtId: resolvedPlacements[index].districtId,
-    }))
+    return result.map((shelf, index) => {
+      const placement = resolvedPlacements[index]
+      if (!placement) return shelf
+
+      return {
+        ...shelf,
+        world: placement.world,
+        yaw: placement.yaw,
+        pathBay: placement.pathBay,
+        districtId: placement.districtId,
+      }
+    })
   }, [
     bootstrap,
     catalog,
