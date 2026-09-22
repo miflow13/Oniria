@@ -111,6 +111,11 @@ function shelfPosition(
     return [x, y, -8.8 - Math.floor(slot / 2) * 2.15]
   }
 
+  if (section === 'topics') {
+    const x = slot % 2 === 0 ? 11.2 : 14.7
+    return [x, y, -11.8 - Math.floor(slot / 2) * 2.05]
+  }
+
   if (section === 'creators') {
     const x = slot % 2 === 0 ? 11.2 : 14.7
     return [x, y, -23.7 - Math.floor(slot / 2) * 2.05]
