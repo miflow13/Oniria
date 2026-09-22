@@ -220,6 +220,24 @@ const SHELF_ANCHORS: Partial<
   ],
 }
 
+function shelfSlotWorldPosition(
+  anchorX: number,
+  anchorZ: number,
+  rotationY: number,
+  localOffset: number,
+  front: number,
+): [number, number] {
+  // Shelf slots are authored in shelf-local space:
+  // local X moves along the row; local Z moves toward the aisle.
+  // Rotate that vector once into world space for every shelf orientation.
+  const cos = Math.cos(rotationY)
+  const sin = Math.sin(rotationY)
+  return [
+    anchorX + cos * localOffset + sin * front,
+    anchorZ - sin * localOffset + cos * front,
+  ]
+}
+
 function shelfPlacement(
   section: LibrarySection,
   index: number,
@@ -247,16 +265,13 @@ function shelfPlacement(
 
   const localOffset = (slot - 1) * 1.02
   const y = .7 + level * 1.1
-
-  let x = anchor.x
-  let z = anchor.z + anchor.front
-
-  if (Math.abs(anchor.rotationY) < .1) {
-    x += localOffset
-  } else {
-    z += localOffset
-    x += Math.sign(anchor.rotationY) * anchor.front
-  }
+  const [x, z] = shelfSlotWorldPosition(
+    anchor.x,
+    anchor.z,
+    anchor.rotationY,
+    localOffset,
+    anchor.front,
+  )
 
   return {
     position: [x, y, z],
@@ -289,11 +304,19 @@ function megaShelfPlacement(index: number): ShelfPlacement {
   const localOffset = (slot - 1) * .96
   const floorBase = floorIndex * LIBRARY_FLOOR_HEIGHT
 
+  const [x, z] = shelfSlotWorldPosition(
+    columns[columnIndex],
+    rows[rowIndex],
+    rotationY,
+    localOffset,
+    .42,
+  )
+
   return {
     position: [
-      columns[columnIndex] + localOffset,
+      x,
       floorBase + .7 + level * 1.1,
-      rows[rowIndex] + (rotationY === 0 ? .42 : -.42),
+      z,
     ],
     rotationY,
     shelfKey:
