@@ -1326,9 +1326,15 @@ export default function DreamWorld3D({
     }
 
     function requestDiveExit() {
-      if (!activeDive || (diveMode !== 'inside' && diveMode !== 'entering')) {
+      if (
+        !activeDive ||
+        (diveMode !== 'inside' &&
+          diveMode !== 'entering' &&
+          diveMode !== 'portal')
+      ) {
         return
       }
+      pendingPortal = null
       diveMode = 'exiting'
       diveTransitionStartedAt = performance.now() / 1000
     }
@@ -1373,7 +1379,11 @@ export default function DreamWorld3D({
 
       if (diveMode !== 'none') {
         activeDive?.setLookTarget(pointer.x, pointer.y)
-        renderer.domElement.style.cursor = 'crosshair'
+        const interaction =
+          diveMode === 'inside'
+            ? activeDive?.pick(pointer.x, pointer.y)
+            : null
+        renderer.domElement.style.cursor = interaction ? 'pointer' : 'crosshair'
         return
       }
 
@@ -1447,6 +1457,13 @@ export default function DreamWorld3D({
       }
 
       if (diveMode !== 'none') {
+        normalizedPointer(event)
+        if (diveMode === 'inside') {
+          const interaction = activeDive?.pick(pointer.x, pointer.y)
+          if (interaction) {
+            beginPortalTransition(interaction)
+          }
+        }
         return
       }
 
