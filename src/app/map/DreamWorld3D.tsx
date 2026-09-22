@@ -1319,9 +1319,9 @@ export default function DreamWorld3D({
       // targets, or per-building animation.
       librarySilhouetteGeometry = new THREE.BoxGeometry(1, 1, 1)
       librarySilhouetteMaterial = new THREE.MeshBasicMaterial({
-        color: 0x203957,
+        color: 0x2b4c6d,
         transparent: true,
-        opacity: .82,
+        opacity: .9,
         depthWrite: true,
         blending: THREE.NormalBlending,
         toneMapped: false,
@@ -1670,7 +1670,7 @@ export default function DreamWorld3D({
       })
 
       // Secondary background towers create city depth without giant wall slabs.
-      ;[18, 42, 66].forEach((bay, index) => {
+      ;[10, 18, 30, 42, 54, 66].forEach((bay, index) => {
         const path = new THREE.Vector3(...archivePathPoint(bay))
         const frame = archivePathFrame(bay)
         const normal = new THREE.Vector3(
@@ -1691,7 +1691,7 @@ export default function DreamWorld3D({
             .clone()
             .addScaledVector(
               normal,
-              sideSign * (66 + index * 8),
+              sideSign * (58 + index * 5.5),
             )
           center.y += height * .5 - 8
 
@@ -5296,11 +5296,11 @@ export default function DreamWorld3D({
 
       if (librarySkylineWindowMaterial) {
         librarySkylineWindowMaterial.opacity =
-          .94 + Math.sin(elapsed * .19) * .035
+          .96 + Math.sin(elapsed * .19) * .025
       }
       if (librarySkylineNeonMaterial) {
         librarySkylineNeonMaterial.opacity =
-          .88 + Math.sin(elapsed * .31) * .06
+          .82 + Math.sin(elapsed * .31) * .055
       }
 
 
@@ -5392,10 +5392,12 @@ export default function DreamWorld3D({
 
       if (libraryWalkwayPanelMaterial && libraryWalkwayRailMaterial) {
         const walkwayPulse = Math.sin(elapsed * .42) * .008
+        const walkwayBay =
+          archiveBayFromWorldZ(camera.position.z)
         const forwardEnergy =
           Math.max(
             0,
-            Math.sin(elapsed * .56 - currentArchiveBay * .16),
+            Math.sin(elapsed * .56 - walkwayBay * .16),
           ) * .012
         libraryWalkwayPanelMaterial.opacity =
           .075 + walkwayPulse + forwardEnergy
@@ -5403,7 +5405,7 @@ export default function DreamWorld3D({
           .22 +
           Math.max(
             0,
-            Math.sin(elapsed * .64 - currentArchiveBay * .22 + .8),
+            Math.sin(elapsed * .64 - walkwayBay * .22 + .8),
           ) * .065
       }
 
