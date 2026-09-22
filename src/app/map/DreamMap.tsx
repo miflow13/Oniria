@@ -1452,10 +1452,14 @@ export default function DreamMap({
                   }
                 }}
                 aria-pressed={flightMode}
-                title="Travel through the constellation in first person"
+                title={
+                  flightMode
+                    ? 'Return to the classic map controls'
+                    : 'Travel through the constellation in first person'
+                }
               >
                 <span aria-hidden="true">⌁</span>
-                {flightMode ? 'Flying' : 'First person'}
+                {flightMode ? 'Map view' : 'First person'}
               </button>
 
               <label className={styles.qualityControl}>
