@@ -73,7 +73,7 @@ export const LIBRARY_WORLD_QUERY = defineQuery(`
   ]
   | order(order asc, routeBay asc) {
     _id,
-    title,
+    "label": title,
     "id": slug.current,
     code,
     description,
@@ -135,7 +135,7 @@ export const LIBRARY_WORLD_RAW_QUERY = defineQuery(`
     _id,
     _rev,
     _updatedAt,
-    title,
+    "label": title,
     "id": slug.current,
     code,
     description,
