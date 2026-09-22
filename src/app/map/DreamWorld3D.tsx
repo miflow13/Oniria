@@ -464,7 +464,7 @@ export default function DreamWorld3D({
     )
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = 0.94
+    renderer.toneMappingExposure = libraryMode ? .84 : .94
     renderer.shadowMap.enabled = settings.miniWorldDetail > 0
     renderer.shadowMap.type = THREE.PCFSoftShadowMap
     renderer.domElement.className = styles.webglCanvas
@@ -538,11 +538,21 @@ export default function DreamWorld3D({
     keyLight.shadow.normalBias = 0.025
     scene.add(keyLight)
 
-    const violetLight = new THREE.PointLight(0xb791ff, 12, 20, 2)
+    const violetLight = new THREE.PointLight(
+      0xb791ff,
+      libraryMode ? 7 : 12,
+      20,
+      2,
+    )
     violetLight.position.set(-5, 1, 3)
     scene.add(violetLight)
 
-    const cyanLight = new THREE.PointLight(0x72e2df, 11, 20, 2)
+    const cyanLight = new THREE.PointLight(
+      0x72e2df,
+      libraryMode ? 6.5 : 11,
+      20,
+      2,
+    )
     cyanLight.position.set(5, -1, 2)
     scene.add(cyanLight)
 
@@ -2558,7 +2568,7 @@ export default function DreamWorld3D({
 
       if (event.code === 'KeyR') {
         event.preventDefault()
-        const sourceNode = nearestFlightNode(4.5)
+        const sourceNode = nearestFlightNode(12)
         if (sourceNode) {
           const strongest = edges
             .filter(
