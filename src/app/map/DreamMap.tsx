@@ -256,6 +256,9 @@ export default function DreamMap({
   const [flightMode, setFlightMode] = useState(true)
   const [closingJournal, setClosingJournal] = useState(false)
   const [flightCaptured, setFlightCaptured] = useState(false)
+  const [demoGuideDismissed, setDemoGuideDismissed] = useState(false)
+  const [demoHasDived, setDemoHasDived] = useState(false)
+  const [demoHasCrossedPortal, setDemoHasCrossedPortal] = useState(false)
   const [motionPositions, setMotionPositions] = useState<Record<string, {x: number; y: number}>>({})
   const [enteringNodeId, setEnteringNodeId] = useState<string | null>(null)
   const [enteringDreamTitle, setEnteringDreamTitle] = useState<string | null>(null)
@@ -742,6 +745,16 @@ export default function DreamMap({
   }, [])
 
   useEffect(() => {
+    if (!demoMode || !flightCaptured || soundEnabled) return
+
+    void startAmbient()
+      .then(() => setSoundEnabled(true))
+      .catch(() => {
+        // Autoplay policy can still reject on some browsers.
+      })
+  }, [demoMode, flightCaptured, soundEnabled, startAmbient])
+
+  useEffect(() => {
     return () => {
       stopAmbient()
       const context = audioContextRef.current
@@ -1208,6 +1221,58 @@ export default function DreamMap({
     setIsPlaying(true)
   }
 
+  const demoGuide =
+    demoMode && !demoGuideDismissed && introStage >= 4
+      ? observatoryMode
+        ? {
+            eyebrow: '90-second path · complete',
+            title: 'This is your entire dream history.',
+            body: 'Clusters become regions. Recurring ideas become gravity. Every light can be entered again.',
+            action: 'Explore freely',
+          }
+        : diveActive
+          ? diveDepth > 0
+            ? {
+                eyebrow: 'Memory relationship crossed',
+                title: 'You moved directly into another dream.',
+                body: 'The doorway existed because these memories share real symbols. Return to the universe when you are ready.',
+                action: 'Return, then reveal Observatory',
+              }
+            : {
+                eyebrow: 'Inside the dream',
+                title: 'Find the impossible doorway.',
+                body: 'Related memories are already alive beyond its surface. Look around, then click a glowing portal.',
+                action: 'Cross into a related memory',
+              }
+          : demoHasCrossedPortal
+            ? {
+                eyebrow: 'Final reveal',
+                title: 'Pull all the way back.',
+                body: 'You have seen a memory from the inside. Now reveal the shape of the whole history.',
+                action: 'Reveal Observatory',
+              }
+            : openDream && flightMode
+              ? {
+                  eyebrow: 'Memory found',
+                  title: openDream.title?.trim() || 'Untitled dream',
+                  body: 'The Memory Lens stays small on purpose. Press F and move through the memory instead of opening another screen.',
+                  action: 'F · enter dream',
+                }
+              : flightMode
+                ? {
+                    eyebrow: 'First-person dream universe',
+                    title: 'Fly toward a bright memory.',
+                    body: 'WASD + mouse. The closer you get, the memory will wake. Press E when you want to inspect it.',
+                    action: 'E · inspect memory',
+                  }
+                : {
+                    eyebrow: 'Dream universe',
+                    title: 'First person is the intended demo path.',
+                    body: 'Return to flight and move directly through the constellation.',
+                    action: 'Enter first person',
+                  }
+      : null
+
   return (
     <main
       className={`${styles.page} ${
@@ -1302,6 +1367,48 @@ export default function DreamMap({
             <div className={styles.aurora} aria-hidden="true" />
             <div className={styles.particleField} aria-hidden="true" />
             <div className={styles.dreamFog} aria-hidden="true" />
+
+            {demoGuide && !enteringNodeId && (
+              <aside className={styles.demoDirector} aria-live="polite">
+                <button
+                  type="button"
+                  className={styles.demoDirectorDismiss}
+                  onClick={() => setDemoGuideDismissed(true)}
+                  aria-label="Hide demo guide"
+                >
+                  ×
+                </button>
+                <span>{demoGuide.eyebrow}</span>
+                <strong>{demoGuide.title}</strong>
+                <p>{demoGuide.body}</p>
+                <div>
+                  <em>{demoGuide.action}</em>
+                  {demoHasCrossedPortal && !diveActive && !observatoryMode && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFlightMode(false)
+                        setSelectedId(null)
+                        setOpenDreamId(null)
+                        setFocusedDreamId(null)
+                        setObservatoryMode(true)
+                        window.history.replaceState(null, '', '/map')
+                      }}
+                    >
+                      Observatory →
+                    </button>
+                  )}
+                  {!flightMode && !diveActive && !observatoryMode && (
+                    <button
+                      type="button"
+                      onClick={() => setFlightMode(true)}
+                    >
+                      First person →
+                    </button>
+                  )}
+                </div>
+              </aside>
+            )}
 
             {introStage < 4 && (
               <div
@@ -1601,6 +1708,7 @@ export default function DreamMap({
                 onProjectionChange={setSelectedProjection}
                 onDiveStateChange={(active, title) => {
                   setDiveActive(active)
+                  if (active) setDemoHasDived(true)
                   setDiveTitle(
                     active
                       ? title ?? openDream?.title ?? 'Dream'
@@ -1637,6 +1745,7 @@ export default function DreamMap({
                 onDiveDreamChange={(dreamId, title, depth) => {
                   setDiveTitle(title)
                   setDiveDepth(depth)
+                  if (depth > 0) setDemoHasCrossedPortal(true)
                   window.history.replaceState(
                     null,
                     '',
