@@ -132,19 +132,19 @@ export function createLivingOrbMaterial(
         vec3 bodyColor = mix(deepColor, uColor * 0.88, ribbons);
         bodyColor += uColor * aurora * 0.4;
 
-        float focusGlow = 1.0 + uFocus * 0.85 + uPulse * 0.42;
-        vec3 rimColor = uGlow * fresnel * 1.7 * focusGlow;
+        float focusGlow = 1.0 + uFocus * 0.54 + uPulse * 0.24;
+        vec3 rimColor = uGlow * fresnel * 1.12 * focusGlow;
         vec3 coreLight = uGlow * pow(max(0.0, 1.0 - length(vLocalPosition) * 0.92), 2.2);
-        coreLight *= 0.22 + uFocus * 0.18;
+        coreLight *= 0.13 + uFocus * 0.1;
 
         float sparkle = smoothstep(0.91, 0.985, noise(vLocalPosition * 18.0 + uTime * 0.2));
-        vec3 sparkleColor = vec3(1.0) * sparkle * (0.12 + uFocus * 0.18);
+        vec3 sparkleColor = vec3(1.0) * sparkle * (0.07 + uFocus * 0.1);
 
         vec3 finalColor = bodyColor + rimColor + coreLight + sparkleColor;
 
         float alpha = uOpacity;
         alpha *= 0.48 + fresnel * 0.38 + ribbons * 0.22;
-        alpha += uFocus * 0.08;
+        alpha += uFocus * 0.045;
 
         gl_FragColor = vec4(finalColor, clamp(alpha, 0.0, 1.0));
       }
