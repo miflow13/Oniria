@@ -2182,11 +2182,7 @@ export default function DreamWorld3D({
       }
 
       if (event.code === 'Escape') {
-        if (document.pointerLockElement === renderer.domElement) {
-          document.exitPointerLock?.()
-        } else {
-          onFlightModeChangeRef.current(false)
-        }
+        document.exitPointerLock?.()
       }
     }
 
