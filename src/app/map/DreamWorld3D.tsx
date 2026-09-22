@@ -55,9 +55,12 @@ import {
   type PortalSceneTransition,
 } from './dreamworld/effects/createPortalSceneTransition'
 import {
+  ARCHIVE_DISTRICTS,
   ARCHIVE_PATH_RENDER_BAYS,
   ARCHIVE_WALKWAY_HALF_WIDTH,
   ARCHIVE_WALKWAY_Y_OFFSET,
+  archiveDistrictInfluence,
+  archivePathFrame,
   archivePathPoint,
 } from './libraryLayout'
 
@@ -77,6 +80,7 @@ export type DreamWorldNode = {
   world?: [number, number, number]
   libraryYaw?: number
   libraryPathBay?: number
+  libraryDistrictId?: string
   libraryBooks?: Array<{
     id: string
     title: string
@@ -291,6 +295,45 @@ function createLabelTexture(node: DreamWorldNode) {
     110,
     92,
   )
+
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.colorSpace = THREE.SRGBColorSpace
+  texture.minFilter = THREE.LinearFilter
+  texture.magFilter = THREE.LinearFilter
+  return texture
+}
+
+function createLibraryRouteLabelTexture(
+  title: string,
+  code: string,
+) {
+  const canvas = document.createElement('canvas')
+  canvas.width = 768
+  canvas.height = 192
+  const context = canvas.getContext('2d')
+  if (!context) return new THREE.CanvasTexture(canvas)
+
+  context.clearRect(0, 0, canvas.width, canvas.height)
+  const gradient = context.createLinearGradient(0, 0, canvas.width, 0)
+  gradient.addColorStop(0, 'rgba(71, 209, 225, .04)')
+  gradient.addColorStop(.5, 'rgba(130, 155, 255, .22)')
+  gradient.addColorStop(1, 'rgba(151, 117, 231, .04)')
+  context.fillStyle = gradient
+  context.fillRect(0, 18, canvas.width, 156)
+
+  context.strokeStyle = 'rgba(128, 222, 235, .46)'
+  context.lineWidth = 3
+  context.strokeRect(18, 34, canvas.width - 36, 124)
+
+  context.textAlign = 'center'
+  context.textBaseline = 'middle'
+  context.fillStyle = 'rgba(229, 247, 255, .94)'
+  context.font = '800 58px system-ui, sans-serif'
+  context.fillText(title, canvas.width / 2, 82)
+
+  context.fillStyle = 'rgba(151, 207, 233, .84)'
+  context.font = '700 26px ui-monospace, monospace'
+  context.fillText(code, canvas.width / 2, 132)
 
   const texture = new THREE.CanvasTexture(canvas)
   texture.colorSpace = THREE.SRGBColorSpace
@@ -1486,6 +1529,22 @@ export default function DreamWorld3D({
     let libraryBranchRailMaterial: THREE.LineBasicMaterial | null = null
     let libraryBranches: THREE.Mesh | null = null
     let libraryBranchRails: THREE.LineSegments | null = null
+    const libraryRouteTextures: THREE.Texture[] = []
+    const libraryRouteMaterials: THREE.Material[] = []
+    const libraryRouteObjects: THREE.Object3D[] = []
+    let libraryArrowGeometry: THREE.BufferGeometry | null = null
+    let libraryArrowMaterial: THREE.MeshBasicMaterial | null = null
+    let libraryArrows: THREE.InstancedMesh | null = null
+    let libraryGuardGeometry: THREE.BoxGeometry | null = null
+    let libraryGuardMaterial: THREE.MeshBasicMaterial | null = null
+    let libraryGuards: THREE.InstancedMesh | null = null
+    let libraryJunctionGeometry: THREE.TorusGeometry | null = null
+    let libraryJunctionMaterial: THREE.MeshBasicMaterial | null = null
+    let libraryJunctions: THREE.InstancedMesh | null = null
+    let libraryRouteDotGeometry: THREE.BufferGeometry | null = null
+    let libraryRouteDotMaterial: THREE.PointsMaterial | null = null
+    let libraryRouteDots: THREE.Points | null = null
+    const libraryRouteDotCount = 22
 
     if (libraryMode) {
       const subdivisionsPerBay = 4
@@ -1512,12 +1571,15 @@ export default function DreamWorld3D({
         side.set(-tangent.z, 0, tangent.x)
 
         const pathY = point.y + ARCHIVE_WALKWAY_Y_OFFSET
+        const districtInfluence = archiveDistrictInfluence(bay)
+        const localHalfWidth =
+          ARCHIVE_WALKWAY_HALF_WIDTH + districtInfluence * 2.4
         const left = point
           .clone()
-          .addScaledVector(side, ARCHIVE_WALKWAY_HALF_WIDTH)
+          .addScaledVector(side, localHalfWidth)
         const right = point
           .clone()
-          .addScaledVector(side, -ARCHIVE_WALKWAY_HALF_WIDTH)
+          .addScaledVector(side, -localHalfWidth)
         left.y = pathY
         right.y = pathY
 
@@ -1641,6 +1703,189 @@ export default function DreamWorld3D({
       libraryWalkway.userData.libraryDecorative = true
       libraryWalkwayRails.userData.libraryDecorative = true
       world.add(libraryWalkway, libraryWalkwayRails)
+
+      const districtLabelGeometry = new THREE.PlaneGeometry(4.8, 1.2)
+      libraryRouteObjects.push(districtLabelGeometry as unknown as THREE.Object3D)
+
+      ARCHIVE_DISTRICTS.forEach((district) => {
+        const center = new THREE.Vector3(...archivePathPoint(district.bay))
+        center.y += ARCHIVE_WALKWAY_Y_OFFSET + .045
+        const frame = archivePathFrame(district.bay)
+        const yaw = Math.atan2(frame.tangentX, frame.tangentZ)
+
+        const texture = createLibraryRouteLabelTexture(
+          district.label,
+          district.code,
+        )
+        const material = new THREE.MeshBasicMaterial({
+          map: texture,
+          transparent: true,
+          opacity: .78,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+          blending: THREE.NormalBlending,
+          toneMapped: true,
+        })
+        const marking = new THREE.Mesh(districtLabelGeometry, material)
+        marking.position.copy(center)
+        marking.rotation.x = -Math.PI / 2
+        marking.rotation.z = -yaw
+        marking.renderOrder = 3
+        marking.userData.libraryDecorative = true
+        world.add(marking)
+        libraryRouteTextures.push(texture)
+        libraryRouteMaterials.push(material)
+        libraryRouteObjects.push(marking)
+      })
+
+      const arrowVertices = new Float32Array([
+        -.2, 0, .16,
+        .2, 0, .16,
+        0, 0, -.28,
+      ])
+      libraryArrowGeometry = new THREE.BufferGeometry()
+      libraryArrowGeometry.setAttribute(
+        'position',
+        new THREE.BufferAttribute(arrowVertices, 3),
+      )
+      libraryArrowGeometry.setIndex([0, 1, 2])
+      libraryArrowMaterial = new THREE.MeshBasicMaterial({
+        color: 0x9ee9f1,
+        transparent: true,
+        opacity: .33,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        toneMapped: true,
+      })
+      const arrowBays: number[] = []
+      for (let bay = 2.5; bay < ARCHIVE_PATH_RENDER_BAYS; bay += 2.75) {
+        if (archiveDistrictInfluence(bay) < .68) arrowBays.push(bay)
+      }
+      libraryArrows = new THREE.InstancedMesh(
+        libraryArrowGeometry,
+        libraryArrowMaterial,
+        arrowBays.length,
+      )
+      const arrowDummy = new THREE.Object3D()
+      arrowBays.forEach((bay, index) => {
+        const center = new THREE.Vector3(...archivePathPoint(bay))
+        const frame = archivePathFrame(bay)
+        center.y += ARCHIVE_WALKWAY_Y_OFFSET + .055
+        arrowDummy.position.copy(center)
+        arrowDummy.rotation.set(
+          0,
+          Math.atan2(frame.tangentX, frame.tangentZ),
+          0,
+        )
+        arrowDummy.updateMatrix()
+        libraryArrows?.setMatrixAt(index, arrowDummy.matrix)
+      })
+      libraryArrows.instanceMatrix.needsUpdate = true
+      libraryArrows.renderOrder = 3
+      libraryArrows.userData.libraryDecorative = true
+      world.add(libraryArrows)
+
+      libraryGuardGeometry = new THREE.BoxGeometry(1, .32, .035)
+      libraryGuardMaterial = new THREE.MeshBasicMaterial({
+        color: 0x8fc8f4,
+        transparent: true,
+        opacity: .12,
+        depthWrite: false,
+        toneMapped: true,
+      })
+      libraryGuards = new THREE.InstancedMesh(
+        libraryGuardGeometry,
+        libraryGuardMaterial,
+        ARCHIVE_DISTRICTS.length * 2,
+      )
+      const guardDummy = new THREE.Object3D()
+      ARCHIVE_DISTRICTS.forEach((district, index) => {
+        const center = new THREE.Vector3(...archivePathPoint(district.bay))
+        const frame = archivePathFrame(district.bay)
+        const halfWidth =
+          ARCHIVE_WALKWAY_HALF_WIDTH +
+          archiveDistrictInfluence(district.bay) * 2.4
+        const sideVector = new THREE.Vector3(
+          frame.normalX,
+          0,
+          frame.normalZ,
+        )
+        const yaw = Math.atan2(frame.tangentX, frame.tangentZ)
+        ;[-1, 1].forEach((sideSign, sideIndex) => {
+          guardDummy.position
+            .copy(center)
+            .addScaledVector(sideVector, halfWidth * sideSign)
+          guardDummy.position.y +=
+            ARCHIVE_WALKWAY_Y_OFFSET + .24
+          guardDummy.rotation.set(0, yaw, 0)
+          guardDummy.scale.set(3.2, 1, 1)
+          guardDummy.updateMatrix()
+          libraryGuards?.setMatrixAt(
+            index * 2 + sideIndex,
+            guardDummy.matrix,
+          )
+        })
+      })
+      libraryGuards.instanceMatrix.needsUpdate = true
+      libraryGuards.renderOrder = 2
+      libraryGuards.userData.libraryDecorative = true
+      world.add(libraryGuards)
+
+      libraryJunctionGeometry = new THREE.TorusGeometry(
+        .48,
+        .028,
+        6,
+        32,
+      )
+      libraryJunctionMaterial = new THREE.MeshBasicMaterial({
+        color: 0xb19cf0,
+        transparent: true,
+        opacity: .3,
+        depthWrite: false,
+        toneMapped: true,
+      })
+      libraryJunctions = new THREE.InstancedMesh(
+        libraryJunctionGeometry,
+        libraryJunctionMaterial,
+        ARCHIVE_DISTRICTS.length,
+      )
+      const junctionDummy = new THREE.Object3D()
+      ARCHIVE_DISTRICTS.forEach((district, index) => {
+        const center = new THREE.Vector3(...archivePathPoint(district.bay))
+        center.y += ARCHIVE_WALKWAY_Y_OFFSET + .07
+        junctionDummy.position.copy(center)
+        junctionDummy.rotation.set(Math.PI / 2, 0, 0)
+        junctionDummy.updateMatrix()
+        libraryJunctions?.setMatrixAt(index, junctionDummy.matrix)
+      })
+      libraryJunctions.instanceMatrix.needsUpdate = true
+      libraryJunctions.renderOrder = 3
+      libraryJunctions.userData.libraryDecorative = true
+      world.add(libraryJunctions)
+
+      libraryRouteDotGeometry = new THREE.BufferGeometry()
+      libraryRouteDotGeometry.setAttribute(
+        'position',
+        new THREE.BufferAttribute(
+          new Float32Array(libraryRouteDotCount * 3),
+          3,
+        ),
+      )
+      libraryRouteDotMaterial = new THREE.PointsMaterial({
+        color: 0xb9f7ff,
+        size: .075,
+        transparent: true,
+        opacity: .72,
+        depthWrite: false,
+        sizeAttenuation: true,
+      })
+      libraryRouteDots = new THREE.Points(
+        libraryRouteDotGeometry,
+        libraryRouteDotMaterial,
+      )
+      libraryRouteDots.renderOrder = 4
+      libraryRouteDots.userData.libraryDecorative = true
+      world.add(libraryRouteDots)
 
       const branchPositions: number[] = []
       const branchIndices: number[] = []
@@ -3673,6 +3918,27 @@ export default function DreamWorld3D({
           .22 + Math.max(0, Math.sin(elapsed * .36 + .8)) * .04
       }
 
+      if (libraryRouteDots && libraryRouteDotGeometry) {
+        const routePositions =
+          libraryRouteDotGeometry.getAttribute(
+            'position',
+          ) as THREE.BufferAttribute
+        for (let index = 0; index < libraryRouteDotCount; index += 1) {
+          const bay =
+            (elapsed * .34 +
+              index * (ARCHIVE_PATH_RENDER_BAYS / libraryRouteDotCount)) %
+            ARCHIVE_PATH_RENDER_BAYS
+          const point = archivePathPoint(bay)
+          routePositions.setXYZ(
+            index,
+            point[0],
+            point[1] + ARCHIVE_WALKWAY_Y_OFFSET + .09,
+            point[2],
+          )
+        }
+        routePositions.needsUpdate = true
+      }
+
       if (libraryBranchMaterial && libraryBranchRailMaterial) {
         libraryBranchMaterial.opacity =
           .052 + Math.sin(elapsed * .36 + .9) * .006
@@ -4653,6 +4919,23 @@ export default function DreamWorld3D({
       libraryWalkwayRailGeometry?.dispose()
       libraryWalkwayPanelMaterial?.dispose()
       libraryWalkwayRailMaterial?.dispose()
+      libraryArrowGeometry?.dispose()
+      libraryArrowMaterial?.dispose()
+      libraryGuardGeometry?.dispose()
+      libraryGuardMaterial?.dispose()
+      libraryJunctionGeometry?.dispose()
+      libraryJunctionMaterial?.dispose()
+      libraryRouteDotGeometry?.dispose()
+      libraryRouteDotMaterial?.dispose()
+      libraryRouteTextures.forEach((texture) => texture.dispose())
+      libraryRouteMaterials.forEach((material) => material.dispose())
+      libraryRouteObjects.forEach((object) => {
+        if (object instanceof THREE.Object3D) world.remove(object)
+      })
+      if (libraryArrows) world.remove(libraryArrows)
+      if (libraryGuards) world.remove(libraryGuards)
+      if (libraryJunctions) world.remove(libraryJunctions)
+      if (libraryRouteDots) world.remove(libraryRouteDots)
       libraryBranchGeometry?.dispose()
       libraryBranchRailGeometry?.dispose()
       libraryBranchMaterial?.dispose()
