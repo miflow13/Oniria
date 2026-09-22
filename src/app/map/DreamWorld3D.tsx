@@ -94,6 +94,7 @@ type Props = {
   soundEnabled: boolean
   introStage: number
   diveExitRequest: number
+  diveBackRequest: number
   diveTimelineProgress: number
   observatoryMode: boolean
   onZoomChange: (zoom: number) => void
@@ -295,6 +296,7 @@ export default function DreamWorld3D({
   soundEnabled,
   introStage,
   diveExitRequest,
+  diveBackRequest,
   diveTimelineProgress,
   observatoryMode,
   onZoomChange,
@@ -327,6 +329,7 @@ export default function DreamWorld3D({
   const soundEnabledRef = useRef(soundEnabled)
   const introStageRef = useRef(introStage)
   const diveExitRequestRef = useRef(diveExitRequest)
+  const diveBackRequestRef = useRef(diveBackRequest)
   const diveTimelineProgressRef = useRef(diveTimelineProgress)
   const observatoryModeRef = useRef(observatoryMode)
   const onDiveStateChangeRef = useRef(onDiveStateChange)
@@ -352,6 +355,7 @@ export default function DreamWorld3D({
   soundEnabledRef.current = soundEnabled
   introStageRef.current = introStage
   diveExitRequestRef.current = diveExitRequest
+  diveBackRequestRef.current = diveBackRequest
   diveTimelineProgressRef.current = diveTimelineProgress
   observatoryModeRef.current = observatoryMode
   onDiveStateChangeRef.current = onDiveStateChange
@@ -1236,6 +1240,7 @@ export default function DreamWorld3D({
       | 'exiting' = 'none'
     let diveTransitionStartedAt = 0
     let lastDiveExitRequest = diveExitRequestRef.current
+    let lastDiveBackRequest = diveBackRequestRef.current
     let holdTimer: number | null = null
     let holdNodeId: string | null = null
     let pendingPortal:
@@ -1518,6 +1523,24 @@ export default function DreamWorld3D({
       diveTransitionStartedAt = performance.now() / 1000
     }
 
+    function requestDiveBack() {
+      if (!activeDive || diveMode !== 'inside' || diveStack.length <= 1) {
+        return
+      }
+
+      const previousStack = diveStack.slice(0, -1)
+      const previousDreamId = previousStack[previousStack.length - 1]
+      const previousDream = dreamsRef.current.find(
+        (dream) => dream._id === previousDreamId,
+      )
+      if (!previousDream) return
+
+      diveStack = previousStack
+      installDive(previousDream, Math.max(0, previousStack.length - 1), {
+        fromPortal: true,
+      })
+    }
+
     function resize() {
       const rect = host.getBoundingClientRect()
       if (!rect.width || !rect.height) return
@@ -1724,6 +1747,11 @@ export default function DreamWorld3D({
       if (diveExitRequestRef.current !== lastDiveExitRequest) {
         lastDiveExitRequest = diveExitRequestRef.current
         requestDiveExit()
+      }
+
+      if (diveBackRequestRef.current !== lastDiveBackRequest) {
+        lastDiveBackRequest = diveBackRequestRef.current
+        requestDiveBack()
       }
 
       if (
