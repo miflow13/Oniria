@@ -48,6 +48,8 @@ type Visual = {
   bookAccent?: string
   coverMaterial?: THREE.MeshBasicMaterial
   coverUrl?: string
+  coverOpacityTarget?: number
+  coverReleaseAt?: number
   archMaterial?: THREE.MeshBasicMaterial
   basePosition: THREE.Vector3
   baseRotationY: number
@@ -93,7 +95,7 @@ const SECTION_ACCENTS: Record<LibrarySection, number> = {
 
 const KIND_GEOMETRY: Record<SurfNodeKind, () => THREE.BufferGeometry> = {
   home: () => new THREE.CylinderGeometry(.8, 1.05, .72, 8),
-  section: () => new THREE.BoxGeometry(1.6, 2.5, .18),
+  section: () => new THREE.CylinderGeometry(.09, .13, 1.05, 8),
   profile: () => new THREE.BoxGeometry(1.42, 1.8, .16),
   article: () => new THREE.BoxGeometry(.68, .82, .16),
   tag: () => new THREE.BoxGeometry(1.35, 2.15, .14),
@@ -302,6 +304,96 @@ function makeArchitecturalGuide(
   )
 }
 
+function createSectionSignTexture(
+  section: LibrarySection,
+  accent: string,
+) {
+  const canvas = document.createElement('canvas')
+  canvas.width = 1024
+  canvas.height = 300
+  const context = canvas.getContext('2d')
+  const icons: Record<LibrarySection, string> = {
+    atrium: 'DEV',
+    featured: '★',
+    latest: 'NEW',
+    topics: '#',
+    creators: '@',
+    search: '⌕',
+    archive: '↓',
+  }
+  const subtitles: Record<LibrarySection, string> = {
+    atrium: 'INFORMATION ATRIUM',
+    featured: 'POPULAR THIS WEEK',
+    latest: 'FRESHLY PUBLISHED',
+    topics: 'BROWSE BY TAG',
+    creators: 'AUTHOR COLLECTIONS',
+    search: 'SEARCH THE LIVE CATALOG',
+    archive: 'DEEP COLLECTION',
+  }
+
+  if (context) {
+    context.clearRect(0, 0, canvas.width, canvas.height)
+
+    const panel = context.createLinearGradient(0, 0, canvas.width, 0)
+    panel.addColorStop(0, 'rgba(13,15,22,.98)')
+    panel.addColorStop(.5, 'rgba(22,25,35,.98)')
+    panel.addColorStop(1, 'rgba(11,13,19,.98)')
+    context.fillStyle = panel
+    context.fillRect(0, 0, canvas.width, canvas.height)
+
+    const accentGradient = context.createLinearGradient(0, 0, canvas.width, 0)
+    accentGradient.addColorStop(0, accent)
+    accentGradient.addColorStop(.58, '#53d3ff')
+    accentGradient.addColorStop(1, '#ae7bff')
+    context.fillStyle = accentGradient
+    context.fillRect(0, 0, canvas.width, 12)
+    context.fillRect(0, canvas.height - 4, canvas.width, 4)
+
+    context.strokeStyle = 'rgba(255,255,255,.08)'
+    context.lineWidth = 2
+    context.strokeRect(18, 24, canvas.width - 36, canvas.height - 48)
+
+    context.fillStyle = 'rgba(255,255,255,.035)'
+    for (let x = 210; x < canvas.width - 40; x += 54) {
+      context.fillRect(x, 40, 1, canvas.height - 80)
+    }
+
+    context.textAlign = 'left'
+    context.textBaseline = 'middle'
+    context.shadowColor = accent
+    context.shadowBlur = 24
+    context.fillStyle = '#f6f8ff'
+    context.font = icons[section].length > 1
+      ? '800 66px system-ui, sans-serif'
+      : '800 100px system-ui, sans-serif'
+    context.fillText(icons[section], 62, 140)
+
+    context.shadowBlur = 0
+    context.fillStyle = '#f5f7ff'
+    context.font = '800 48px system-ui, sans-serif'
+    context.fillText(sectionLabel(section), 245, 118)
+
+    context.fillStyle = accent
+    context.font = '700 22px system-ui, sans-serif'
+    context.fillText(subtitles[section], 248, 178)
+
+    context.fillStyle = '#8b94a6'
+    context.font = '600 18px system-ui, sans-serif'
+    context.fillText('DEV LIBRARY', 248, 222)
+
+    context.textAlign = 'right'
+    context.fillStyle = '#d9f8ff'
+    context.font = '700 42px system-ui, sans-serif'
+    context.fillText('→', 940, 145)
+  }
+
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.colorSpace = THREE.SRGBColorSpace
+  texture.minFilter = THREE.LinearFilter
+  texture.magFilter = THREE.LinearFilter
+  return texture
+}
+
 function sectionLabel(section: LibrarySection) {
   switch (section) {
     case 'atrium':
@@ -483,8 +575,16 @@ export default function DevWebSurf3D({
         if (visual.coverMaterial.map !== entry.texture) {
           visual.coverMaterial.map = entry.texture
           visual.coverMaterial.color.set(0xffffff)
-          visual.coverMaterial.opacity = .98
+          visual.coverMaterial.opacity = Math.min(
+            visual.coverMaterial.opacity,
+            .08,
+          )
+          visual.coverOpacityTarget = .98
+          visual.coverReleaseAt = undefined
           visual.coverMaterial.needsUpdate = true
+        } else {
+          visual.coverOpacityTarget = .98
+          visual.coverReleaseAt = undefined
         }
         return
       }
@@ -522,7 +622,9 @@ export default function DevWebSurf3D({
           ) {
             visual.coverMaterial.map = texture
             visual.coverMaterial.color.set(0xffffff)
-            visual.coverMaterial.opacity = .98
+            visual.coverMaterial.opacity = .06
+            visual.coverOpacityTarget = .98
+            visual.coverReleaseAt = undefined
             visual.coverMaterial.needsUpdate = true
           }
         },
@@ -533,19 +635,34 @@ export default function DevWebSurf3D({
           if (visual.coverMaterial) {
             visual.coverMaterial.map = null
             visual.coverMaterial.color.set(0x171b28)
-            visual.coverMaterial.opacity = .82
+            visual.coverMaterial.opacity = .72
+            visual.coverOpacityTarget = .72
+            visual.coverReleaseAt = undefined
             visual.coverMaterial.needsUpdate = true
           }
         },
       )
     }
 
-    function downgradeCover(visual: Visual) {
+    function downgradeCover(
+      visual: Visual,
+      now = performance.now() / 1000,
+      immediate = false,
+    ) {
       if (!visual.coverMaterial || !visual.coverMaterial.map) return
-      visual.coverMaterial.map = null
-      visual.coverMaterial.color.set(0x171b28)
-      visual.coverMaterial.opacity = .72
-      visual.coverMaterial.needsUpdate = true
+
+      if (immediate) {
+        visual.coverMaterial.map = null
+        visual.coverMaterial.color.set(0x171b28)
+        visual.coverMaterial.opacity = .72
+        visual.coverOpacityTarget = .72
+        visual.coverReleaseAt = undefined
+        visual.coverMaterial.needsUpdate = true
+        return
+      }
+
+      visual.coverOpacityTarget = .08
+      visual.coverReleaseAt = now + .42
     }
 
     function ensureBookTitle(visual: Visual) {
@@ -606,7 +723,7 @@ export default function DevWebSurf3D({
             visual.coverUrl === url &&
             visual.coverMaterial?.map === texture
           ) {
-            downgradeCover(visual)
+            downgradeCover(visual, now, true)
           }
         })
 
@@ -803,25 +920,74 @@ export default function DevWebSurf3D({
       accent: string,
       rotationY = 0,
     ) {
-      const texture = createTextTexture(
-        sectionLabel(section),
-        section === 'atrium' ? 'DEV LIBRARY' : 'DEV COLLECTION',
-        accent,
+      const group = new THREE.Group()
+      group.position.set(x, y, z)
+      group.rotation.y = rotationY
+
+      const panelGeometry = new THREE.BoxGeometry(4.75, 1.38, .11)
+      const faceGeometry = new THREE.PlaneGeometry(4.5, 1.16)
+      const edgeGeometry = new THREE.EdgesGeometry(panelGeometry)
+      architecturalGeometries.push(
+        panelGeometry,
+        faceGeometry,
+        edgeGeometry,
       )
+
+      const panelMaterial = new THREE.MeshStandardMaterial({
+        color: 0x12151d,
+        roughness: .42,
+        metalness: .52,
+        emissive: new THREE.Color(accent).multiplyScalar(.08),
+        emissiveIntensity: .35,
+      })
+      const edgeMaterial = new THREE.LineBasicMaterial({
+        color: accent,
+        transparent: true,
+        opacity: .58,
+        blending: THREE.AdditiveBlending,
+      })
+      architecturalMaterials.push(panelMaterial, edgeMaterial)
+
+      const panel = new THREE.Mesh(panelGeometry, panelMaterial)
+      panel.castShadow = true
+      group.add(panel)
+
+      const edges = new THREE.LineSegments(edgeGeometry, edgeMaterial)
+      group.add(edges)
+
+      const texture = createSectionSignTexture(section, accent)
       labelsToDispose.push(texture)
-      const material = new THREE.SpriteMaterial({
+      const faceMaterial = new THREE.MeshBasicMaterial({
         map: texture,
         transparent: true,
-        depthWrite: false,
         toneMapped: false,
+        depthWrite: false,
       })
-      architecturalMaterials.push(material)
-      const sprite = new THREE.Sprite(material)
-      sprite.position.set(x, y, z)
-      sprite.scale.set(6.4, 1.6, 1)
-      sprite.rotation.y = rotationY
-      scene.add(sprite)
-      return sprite
+      architecturalMaterials.push(faceMaterial)
+      const face = new THREE.Mesh(faceGeometry, faceMaterial)
+      face.position.z = .061
+      face.renderOrder = 7
+      group.add(face)
+
+      const underGlowGeometry = new THREE.BoxGeometry(3.7, .025, .025)
+      architecturalGeometries.push(underGlowGeometry)
+      const underGlowMaterial = new THREE.MeshBasicMaterial({
+        color: accent,
+        transparent: true,
+        opacity: .45,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })
+      architecturalMaterials.push(underGlowMaterial)
+      const underGlow = new THREE.Mesh(
+        underGlowGeometry,
+        underGlowMaterial,
+      )
+      underGlow.position.set(0, -.78, .04)
+      group.add(underGlow)
+
+      scene.add(group)
+      return group
     }
 
     function addSectionFloorGlow(
@@ -1124,39 +1290,9 @@ export default function DevWebSurf3D({
     addWall(13, 1.8, 7.5, .28, 4.6)
     addWall(13, -29.5, 7.5, .28, 4.6)
 
-    // Shelves define readable aisles instead of an open node cloud.
-    ;[
-      [-4.9, -10, 4.5, 0],
-      [4.9, -10, 4.5, 0],
-      [-4.9, -17, 4.5, 0],
-      [4.9, -17, 4.5, 0],
-      [-14.8, -10, 4.5, Math.PI / 2],
-      [-11.1, -10, 4.5, Math.PI / 2],
-      [-14.8, -18, 4.5, Math.PI / 2],
-      [-11.1, -18, 4.5, Math.PI / 2],
-      [11.1, -10, 4.5, Math.PI / 2],
-      [14.8, -10, 4.5, Math.PI / 2],
-      [11.1, -18, 4.5, Math.PI / 2],
-      [14.8, -18, 4.5, Math.PI / 2],
-      [11.1, -25.5, 4.5, Math.PI / 2],
-      [14.8, -25.5, 4.5, Math.PI / 2],
-      [-14.8, -25.5, 4.5, Math.PI / 2],
-      [-11.1, -25.5, 4.5, Math.PI / 2],
-      [-4.6, -39.5, 4.8, 0],
-      [4.6, -39.5, 4.8, 0],
-    ].forEach(([x, z, width, rotation]) =>
-      addShelf(
-        x as number,
-        z as number,
-        width as number,
-        rotation as number,
-      ),
-    )
-
-    // Upper floors only create shelf units that contain actual DEV articles.
-    // This keeps every visible shelf populated instead of scattering empty
-    // furniture around a huge building.
-    const catalogShelfUnits = new Map<
+    // Build shelves from article occupancy. If a shelf exists, it has books.
+    // This removes the distracting empty-furniture problem on every floor.
+    const occupiedShelfUnits = new Map<
       string,
       {
         x: number
@@ -1165,33 +1301,46 @@ export default function DevWebSurf3D({
         floorBase: number
       }
     >()
-    nodes.forEach((node) => {
-      if (
-        node.kind !== 'article' ||
-        !node.shelfKey ||
-        (node.floorIndex ?? 0) === 0
-      ) {
-        return
-      }
 
-      const physicalKey = node.shelfKey.replace(/:level-\d+$/, '')
-      if (catalogShelfUnits.has(physicalKey)) return
+    nodes.forEach((node) => {
+      if (node.kind !== 'article' || !node.shelfKey) return
+
+      const physicalKey =
+        (node.floorIndex ?? 0) +
+        ':' +
+        node.shelfKey.replace(/:level-\d+$/, '')
+      if (occupiedShelfUnits.has(physicalKey)) return
 
       const rotationY = node.rotationY ?? 0
-      const slotOffset = ((node.shelfSlot ?? 1) - 1) * .96
-      const front = Math.abs(rotationY) < .1 ? .42 : -.42
-      catalogShelfUnits.set(physicalKey, {
-        x: node.position[0] - slotOffset,
-        z: node.position[2] - front,
+      const floorIndex = node.floorIndex ?? 0
+      const slotSpacing = floorIndex === 0 ? 1.02 : .96
+      const slotOffset = ((node.shelfSlot ?? 1) - 1) * slotSpacing
+      const front = .42
+
+      const localX = Math.cos(rotationY) * slotOffset
+      const localZ = -Math.sin(rotationY) * slotOffset
+      const frontX = Math.sin(rotationY) * front
+      const frontZ = Math.cos(rotationY) * front
+
+      occupiedShelfUnits.set(physicalKey, {
+        x: node.position[0] - localX - frontX,
+        z: node.position[2] - localZ - frontZ,
         rotationY,
-        floorBase:
-          (node.floorIndex ?? 0) * LIBRARY_FLOOR_HEIGHT,
+        floorBase: floorIndex * LIBRARY_FLOOR_HEIGHT,
       })
     })
 
-    catalogShelfUnits.forEach(({x, z, rotationY, floorBase}) => {
-      addShelf(x, z, 4.45, rotationY, floorBase)
-    })
+    occupiedShelfUnits.forEach(
+      ({x, z, rotationY, floorBase}) => {
+        addShelf(
+          x,
+          z,
+          floorBase === 0 ? 4.5 : 4.45,
+          rotationY,
+          floorBase,
+        )
+      },
+    )
 
     const ceilingRailGeometry = new THREE.BoxGeometry(.035, .035, 52)
     const ceilingRailMaterial = new THREE.MeshBasicMaterial({
@@ -1225,10 +1374,38 @@ export default function DevWebSurf3D({
 
     addSectionSign('atrium', 0, 4.6, 5.5, '#f5f5f5')
     addSectionSign('featured', 0, 4.1, -5.8, '#3b49df')
-    addSectionSign('latest', -13, 4.1, -6.6, '#5b6cff')
-    addSectionSign('topics', 13, 4.1, -6.6, '#3b49df')
-    addSectionSign('creators', 13, 4.1, -21.4, '#7c83ff')
-    addSectionSign('search', -13, 4.1, -21.4, '#3b49df')
+    addSectionSign(
+      'latest',
+      -13,
+      4.1,
+      -6.6,
+      '#5b6cff',
+      Math.PI / 2,
+    )
+    addSectionSign(
+      'topics',
+      13,
+      4.1,
+      -6.6,
+      '#53d3ff',
+      -Math.PI / 2,
+    )
+    addSectionSign(
+      'creators',
+      13,
+      4.1,
+      -21.4,
+      '#ae7bff',
+      -Math.PI / 2,
+    )
+    addSectionSign(
+      'search',
+      -13,
+      4.1,
+      -21.4,
+      '#ff4fd8',
+      Math.PI / 2,
+    )
     addSectionSign('archive', 0, 4.1, -35.5, '#a3a3a3')
 
     // A retro-futuristic information desk in the atrium.
@@ -1541,6 +1718,7 @@ export default function DevWebSurf3D({
         bookAccent: node.kind === 'article' ? node.accent : undefined,
         coverMaterial: coverMaterialRef,
         coverUrl,
+        coverOpacityTarget: .72,
         archMaterial: archMaterialRef,
         basePosition: new THREE.Vector3(...node.position),
         baseRotationY: node.rotationY ?? 0,
@@ -1564,7 +1742,11 @@ export default function DevWebSurf3D({
         entries.forEach(([, visual]) => {
           visual.group.visible = visible
           if (!visible) {
-            downgradeCover(visual)
+            downgradeCover(
+              visual,
+              performance.now() / 1000,
+              true,
+            )
             downgradeBookTitle(visual)
           }
         })
@@ -1583,7 +1765,7 @@ export default function DevWebSurf3D({
           edge.source === selectedRef.current ||
           edge.target === selectedRef.current,
       )
-      .slice(0, 72)
+      .slice(0, 48)
       .map((edge, index) => {
         const source = visuals.get(edge.source)
         const target = visuals.get(edge.target)
@@ -1658,12 +1840,16 @@ export default function DevWebSurf3D({
           curve,
           geometry,
           material,
+          route,
           glowGeometry,
           glowMaterial,
+          glowRoute,
           packets,
           packetGeometry,
           packetMaterial,
           baseColor,
+          sourceFloor: source.floorIndex,
+          targetFloor: target.floorIndex,
           phase: index * .13,
         }
       })
@@ -1935,7 +2121,13 @@ export default function DevWebSurf3D({
     }
 
     function onMouseMove(event: MouseEvent) {
-      if (document.pointerLockElement !== renderer.domElement || travel) return
+      if (
+        document.pointerLockElement !== renderer.domElement ||
+        travel ||
+        floorTravel
+      ) {
+        return
+      }
       yaw -= event.movementX * .00132
       pitch -= event.movementY * .00116
       pitch = THREE.MathUtils.clamp(pitch, -.52, .52)
@@ -1943,6 +2135,35 @@ export default function DevWebSurf3D({
 
     function onKeyDown(event: KeyboardEvent) {
       keys.add(event.code)
+
+      if (
+        event.code === 'Digit1' ||
+        event.code === 'Digit2' ||
+        event.code === 'Digit3' ||
+        event.code === 'Digit4'
+      ) {
+        event.preventDefault()
+        const targetFloor = Number(event.code.slice(-1)) - 1
+        startFloorTravel(targetFloor)
+        return
+      }
+
+      if (event.code === 'PageUp') {
+        event.preventDefault()
+        startFloorTravel(
+          Math.min(
+            LIBRARY_FLOOR_COUNT - 1,
+            currentFloorIndex + 1,
+          ),
+        )
+        return
+      }
+
+      if (event.code === 'PageDown') {
+        event.preventDefault()
+        startFloorTravel(Math.max(0, currentFloorIndex - 1))
+        return
+      }
 
       if (event.code === 'KeyE') {
         event.preventDefault()
@@ -2131,7 +2352,7 @@ export default function DevWebSurf3D({
             ensureBookTitle(visual)
             attachCachedCover(visual, now)
           } else {
-            downgradeCover(visual)
+            downgradeCover(visual, now)
             downgradeBookTitle(visual)
           }
         })
@@ -2164,6 +2385,28 @@ export default function DevWebSurf3D({
         )
 
         if (node?.kind === 'article') {
+          if (visual.coverMaterial) {
+            const target =
+              visual.coverOpacityTarget ??
+              (visual.coverMaterial.map ? .98 : .72)
+            visual.coverMaterial.opacity +=
+              (target - visual.coverMaterial.opacity) *
+              (1 - Math.exp(-delta * 7.5))
+
+            if (
+              visual.coverReleaseAt !== undefined &&
+              now >= visual.coverReleaseAt &&
+              visual.coverMaterial.opacity <= .14
+            ) {
+              visual.coverMaterial.map = null
+              visual.coverMaterial.color.set(0x171b28)
+              visual.coverMaterial.opacity = .72
+              visual.coverOpacityTarget = .72
+              visual.coverReleaseAt = undefined
+              visual.coverMaterial.needsUpdate = true
+            }
+          }
+
           tempDirection
             .copy(camera.position)
             .sub(visual.basePosition)
@@ -2359,6 +2602,16 @@ export default function DevWebSurf3D({
       })
 
       routeVisuals.forEach((routeVisual) => {
+        const visibleOnFloor =
+          routeVisual.sourceFloor === currentFloorIndex &&
+          routeVisual.targetFloor === currentFloorIndex
+        routeVisual.route.visible = visibleOnFloor
+        routeVisual.glowRoute.visible = visibleOnFloor
+        routeVisual.packets.forEach((packet) => {
+          packet.visible = visibleOnFloor
+        })
+        if (!visibleOnFloor) return
+
         const touchesSelected =
           routeVisual.edge.source === selectedRef.current ||
           routeVisual.edge.target === selectedRef.current
