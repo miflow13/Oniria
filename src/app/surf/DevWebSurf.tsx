@@ -440,6 +440,8 @@ export default function DevWebSurf() {
       }
       setProfile(data.profile)
       setProfileArticles(data.articles ?? [])
+      setDynamicArticles(data.articles ?? [])
+      setDynamicLabel('@' + data.profile.username)
     } catch (nextError) {
       setError(
         nextError instanceof Error
@@ -455,6 +457,18 @@ export default function DevWebSurf() {
     setRouteLoading(true)
     setArticle(null)
     setProfile(null)
+    setSelectedId('tag:' + tag)
+    setActiveNode({
+      id: 'tag:' + tag,
+      kind: 'tag',
+      title: '#' + tag,
+      subtitle: 'topic district',
+      href: 'https://dev.to/t/' + tag,
+      tag,
+      position: [0, 0, 0],
+      importance: 1.1,
+      accent: '#5ee0a8',
+    })
 
     try {
       const response = await fetch(
@@ -483,6 +497,23 @@ export default function DevWebSurf() {
       setError(null)
       setVisited((current) =>
         [...current.filter((item) => item !== node.title), node.title].slice(-5),
+      )
+
+      const route =
+        node.kind === 'article'
+          ? node.payload?.path ?? '/'
+          : node.kind === 'profile'
+            ? '/' + (node.username ?? '')
+            : node.kind === 'tag'
+              ? '/t/' + (node.tag ?? '')
+              : node.kind === 'search'
+                ? '/search'
+                : '/'
+
+      window.history.replaceState(
+        null,
+        '',
+        '/surf?to=' + encodeURIComponent(route),
       )
 
       if (node.kind === 'article') void fetchArticle(node)
@@ -551,6 +582,16 @@ export default function DevWebSurf() {
         if (!response.ok) throw new Error(data.error ?? 'Search failed')
         setDynamicArticles(data.articles ?? [])
         setDynamicLabel('search: ' + value)
+        setSelectedId('search:active')
+        setActiveNode({
+          id: 'search:active',
+          kind: 'search',
+          title: 'search: ' + value,
+          subtitle: 'live route results',
+          position: [0, 0, 0],
+          importance: 1.6,
+          accent: '#f2c86e',
+        })
       }
     } catch (nextError) {
       setError(
