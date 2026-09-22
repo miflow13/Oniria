@@ -1775,7 +1775,11 @@ export default function DevWebSurf3D({
       const hit = raycaster.intersectObjects(interactive, false)[0]
       if (!hit) return null
       const nodeId = hit.object.userData.nodeId as string | undefined
-      return nodeId ? nodeById.get(nodeId) ?? null : null
+      const node = nodeId ? nodeById.get(nodeId) ?? null : null
+      if (!node) return null
+      return (node.floorIndex ?? 0) === currentFloorIndex
+        ? node
+        : null
     }
 
     function startTravel(
