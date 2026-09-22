@@ -501,6 +501,58 @@ export function createDreamDive(
     })
   }
 
+  if (profile.motifs.corridor) {
+    const corridor = new THREE.Group()
+    const frameMaterial = dreamMaterial(
+      accent.clone().multiplyScalar(.34),
+      profile.stability * .82,
+      {glow: .05},
+    )
+    disposables.push(frameMaterial)
+
+    for (let index = 0; index < 12; index += 1) {
+      const sideGeometry = new THREE.BoxGeometry(.12, 3.6, .12)
+      const topGeometry = new THREE.BoxGeometry(3.4, .12, .12)
+      const left = new THREE.Mesh(sideGeometry, frameMaterial)
+      const right = new THREE.Mesh(sideGeometry.clone(), frameMaterial)
+      const top = new THREE.Mesh(topGeometry, frameMaterial)
+      left.position.set(-1.65, 1.8, -index * 1.7)
+      right.position.set(1.65, 1.8, -index * 1.7)
+      top.position.set(0, 3.55, -index * 1.7)
+      corridor.add(left, right, top)
+      disposables.push(sideGeometry, right.geometry, topGeometry)
+    }
+
+    corridor.position.set(0, 0, -3)
+    root.add(corridor)
+    animated.push((time) => {
+      corridor.rotation.z = Math.sin(time * .055) * .012 * (1 - profile.stability)
+    })
+  }
+
+  if (profile.motifs.object) {
+    const artifactMaterial = new THREE.MeshPhysicalMaterial({
+      color: accent.clone().lerp(new THREE.Color(0xffffff), .12),
+      emissive: accent.clone().multiplyScalar(.25),
+      emissiveIntensity: .78,
+      roughness: .16,
+      metalness: .24,
+      transmission: .18,
+      transparent: true,
+      opacity: .82,
+    })
+    const artifactGeometry = new THREE.IcosahedronGeometry(.55, 1)
+    const artifact = new THREE.Mesh(artifactGeometry, artifactMaterial)
+    artifact.position.set(2.1, 2.4, -6.4)
+    root.add(artifact)
+    disposables.push(artifactGeometry, artifactMaterial)
+    animated.push((time) => {
+      artifact.rotation.x = time * .17
+      artifact.rotation.y = -time * .24
+      artifact.position.y = 2.4 + Math.sin(time * .35) * .18
+    })
+  }
+
   if (profile.motifs.door) {
     const door = addDoor(root, disposables, accent, new THREE.Vector3(4.8, 1.25, -8), 1.1)
     animated.push((time) => {
