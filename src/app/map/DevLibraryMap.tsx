@@ -679,7 +679,7 @@ export default function DevLibraryMap() {
               setReadingBook(null)
             })
           }
-        }
+        }}
         onFlightNavigationChange={setNavigation}
         onBackgroundClick={() => setSelectedId(null)}
         onProjectionChange={() => {}}
