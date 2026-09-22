@@ -3116,6 +3116,14 @@ export default function DevWebSurf3D({
           isCurrentFloor ? .04 : .08
       })
 
+      thumbnailLodsByFloor.forEach((entries, floorIndex) => {
+        const isCurrentFloor = floorIndex === floor
+        entries.forEach(({mesh, material}) => {
+          mesh.visible = !isCurrentFloor
+          material.opacity = isCurrentFloor ? .9 : .72
+        })
+      })
+
       visualsByFloor.forEach((entries, floorIndex) => {
         const visible = floorIndex === floor
         entries.forEach(([, visual]) => {
@@ -3390,6 +3398,28 @@ export default function DevWebSurf3D({
         })
 
         mesh.instanceMatrix.needsUpdate = true
+      })
+
+      thumbnailLodsByFloor.forEach((entries, floorIndex) => {
+        const isCurrentFloor = floorIndex === currentFloorIndex
+
+        entries.forEach(({mesh, material, node}) => {
+          const visual = visuals.get(node.id)
+          const priority =
+            node.id === selectedRef.current ||
+            node.id === hoverId ||
+            node.id === routeTargetRef.current
+          const distanceSq = camera.position.distanceToSquared(
+            visual?.basePosition ??
+              proxyPosition.set(...node.position),
+          )
+          const revealFull =
+            isCurrentFloor &&
+            (priority || distanceSq <= revealDistanceSq)
+
+          mesh.visible = !revealFull
+          material.opacity = isCurrentFloor ? .92 : .72
+        })
       })
     }
 
@@ -4500,6 +4530,9 @@ export default function DevWebSurf3D({
       architecturalSurfaceTexture.dispose()
       architecturalSurfaceRoughness.dispose()
       coverCache.clear()
+      thumbnailCache.clear()
+      thumbnailPrefetchTimers.forEach((timer) => window.clearTimeout(timer))
+      thumbnailPrefetchTimers.clear()
       remoteTextures.forEach((texture) => texture.dispose())
       rainGeometry.dispose()
       rainMaterial.dispose()
