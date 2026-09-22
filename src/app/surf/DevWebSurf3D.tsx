@@ -569,7 +569,7 @@ export default function DevWebSurf3D({
 
     const scene = new THREE.Scene()
     scene.background = new THREE.Color(0x111319)
-    scene.fog = new THREE.FogExp2(0x111319, .0089)
+    scene.fog = new THREE.FogExp2(0x15171b, .0092)
 
     const camera = new THREE.PerspectiveCamera(60, 1, .07, 160)
     camera.position.set(
@@ -606,6 +606,17 @@ export default function DevWebSurf3D({
     key.shadow.mapSize.set(1024, 1024)
     key.shadow.bias = -0.0002
     scene.add(key)
+
+    // A soft near-camera key gives the eye a clear foreground plane while
+    // fog and practical-light falloff handle the middle/far distance.
+    const playerKeyLight = new THREE.PointLight(
+      0xf1eee7,
+      1.85,
+      13,
+      1.5,
+    )
+    playerKeyLight.castShadow = false
+    scene.add(playerKeyLight)
 
     const cyan = new THREE.PointLight(0x3b49df, .65, 24, 2)
     cyan.position.set(-13, 4, -18)
@@ -1072,8 +1083,10 @@ export default function DevWebSurf3D({
     const floorMaterials = FLOOR_SURFACE_TINTS.map((tint, floor) => {
       const material = floorMaterial.clone()
       material.color.setHex(tint)
-      material.emissive = new THREE.Color(0x0d0f12)
-      material.emissiveIntensity = 0
+      material.emissive = new THREE.Color(0x17191d)
+      material.emissiveIntensity = .11
+      material.roughness = .84
+      material.metalness = .025
       return material
     })
     architecturalMaterials.push(
@@ -4844,6 +4857,12 @@ export default function DevWebSurf3D({
           (1 - Math.exp(-delta * 5.5))
         camera.updateProjectionMatrix()
       }
+
+      camera.getWorldDirection(tempDirection)
+      playerKeyLight.position
+        .copy(camera.position)
+        .addScaledVector(tempDirection, -1.15)
+      playerKeyLight.position.y += 1.15
 
       renderer.render(scene, camera)
 
