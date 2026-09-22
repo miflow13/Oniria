@@ -1274,6 +1274,11 @@ export default function DevWebSurf3D({
       sharedArticleEdgeMaterial,
     )
 
+    const visualsByFloor = new Map<
+      number,
+      Array<[string, Visual]>
+    >()
+
     nodes.forEach((node, index) => {
       const group = new THREE.Group()
       group.position.set(...node.position)
@@ -1482,7 +1487,7 @@ export default function DevWebSurf3D({
 
       group.scale.setScalar(baseScale)
 
-      visuals.set(node.id, {
+      const visual: Visual = {
         id: node.id,
         group,
         body,
@@ -1506,8 +1511,23 @@ export default function DevWebSurf3D({
         floorIndex: node.floorIndex ?? 0,
         baseScale,
         phase: index * .67,
-      })
+      }
+      visuals.set(node.id, visual)
+      const floorEntries =
+        visualsByFloor.get(visual.floorIndex) ?? []
+      floorEntries.push([node.id, visual])
+      visualsByFloor.set(visual.floorIndex, floorEntries)
     })
+
+    function setVisibleFloor(floor: number) {
+      visualsByFloor.forEach((entries, floorIndex) => {
+        const visible = floorIndex === floor
+        entries.forEach(([, visual]) => {
+          visual.group.visible = visible
+        })
+      })
+    }
+    setVisibleFloor(currentFloorRef.current)
 
     // Relationships become floor routes / corridors instead of floating graph
     // spaghetti. Only the most meaningful routes are rendered.
@@ -1998,6 +2018,9 @@ export default function DevWebSurf3D({
             : undefined
       const routedSection = routeTargetNode?.section
 
+      const activeVisualEntries =
+        visualsByFloor.get(currentFloorIndex) ?? []
+
       if (now - lastDetailSelection > .28) {
         lastDetailSelection = now
         const detailCandidates: Array<{
@@ -2007,12 +2030,9 @@ export default function DevWebSurf3D({
           distanceSq: number
         }> = []
 
-        visuals.forEach((visual, id) => {
+        activeVisualEntries.forEach(([id, visual]) => {
           const node = nodeById.get(id)
-          if (
-            node?.kind !== 'article' ||
-            visual.floorIndex !== currentFloorIndex
-          ) {
+          if (node?.kind !== 'article') {
             return
           }
 
@@ -2075,15 +2095,11 @@ export default function DevWebSurf3D({
         trimCoverCache(now)
       }
 
-      visuals.forEach((visual, id) => {
+      activeVisualEntries.forEach(([id, visual]) => {
         const selected = selectedRef.current === id
         const hovered = hoverId === id
         const routed = routeTargetRef.current === id
         const node = nodeById.get(id)
-        const floorVisible =
-          (node?.floorIndex ?? 0) === currentFloorIndex
-        visual.group.visible = floorVisible
-        if (!floorVisible) return
 
         const sameShelf =
           Boolean(activeShelfKey) &&
@@ -2506,6 +2522,7 @@ export default function DevWebSurf3D({
 
         if (progress >= 1) {
           currentFloorIndex = floorTravel.targetFloor
+          setVisibleFloor(currentFloorIndex)
           position.y =
             currentFloorIndex * LIBRARY_FLOOR_HEIGHT +
             CAMERA_HEIGHT
@@ -2558,6 +2575,7 @@ export default function DevWebSurf3D({
           const inspectOnArrival = travel.inspectOnArrival
           currentFloorIndex =
             arrived.floorIndex ?? currentFloorIndex
+          setVisibleFloor(currentFloorIndex)
           floorChangeRef.current(currentFloorIndex)
           travel = null
           travelRef.current(arrived, inspectOnArrival)
