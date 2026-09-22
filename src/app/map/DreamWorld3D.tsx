@@ -84,6 +84,7 @@ type Props = {
   quality: DreamQuality
   soundEnabled: boolean
   introStage: number
+  diveExitRequest: number
   onZoomChange: (zoom: number) => void
   onPanChange: (pan: Pan) => void
   onNodeHover: (node: DreamWorldNode | null) => void
@@ -270,6 +271,7 @@ export default function DreamWorld3D({
   quality,
   soundEnabled,
   introStage,
+  diveExitRequest,
   onZoomChange,
   onPanChange,
   onNodeHover,
@@ -298,6 +300,7 @@ export default function DreamWorld3D({
   const qualityRef = useRef(quality)
   const soundEnabledRef = useRef(soundEnabled)
   const introStageRef = useRef(introStage)
+  const diveExitRequestRef = useRef(diveExitRequest)
   const onDiveStateChangeRef = useRef(onDiveStateChange)
 
   nodeRef.current = nodes
@@ -319,6 +322,7 @@ export default function DreamWorld3D({
   qualityRef.current = quality
   soundEnabledRef.current = soundEnabled
   introStageRef.current = introStage
+  diveExitRequestRef.current = diveExitRequest
   onDiveStateChangeRef.current = onDiveStateChange
 
   const graphKey = useMemo(
@@ -361,7 +365,8 @@ export default function DreamWorld3D({
     host.appendChild(renderer.domElement)
 
     const composer = new EffectComposer(renderer)
-    composer.addPass(new RenderPass(scene, camera))
+    const renderPass = new RenderPass(scene, camera)
+    composer.addPass(renderPass)
 
     const depthOfField = new BokehPass(scene, camera, {
       focus: 10,
@@ -380,6 +385,13 @@ export default function DreamWorld3D({
       settings.bloomThreshold,
     )
     composer.addPass(bloom)
+
+    const dreamPost = new ShaderPass(DreamPostShader)
+    dreamPost.uniforms.uCinematic.value =
+      qualityRef.current === 'cinematic' ? 1 : 0
+    dreamPost.uniforms.uIntensity.value =
+      qualityRef.current === 'cinematic' ? 0.72 : 0.32
+    composer.addPass(dreamPost)
     composer.addPass(new OutputPass())
 
     scene.add(new THREE.AmbientLight(0x7182b6, 0.75))
