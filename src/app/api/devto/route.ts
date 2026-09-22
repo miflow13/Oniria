@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
       const [profile, profileArticles, feed, tags] = await Promise.all([
         devFetch(`/users/${encodeURIComponent(username)}`).catch(() => null),
         devFetch(
-          `/articles?username=${encodeURIComponent(username)}&state=all&per_page=30`,
+          `/articles?username=${encodeURIComponent(username)}&per_page=30`,
         ).catch(() => []),
         devFetch('/articles?per_page=36&top=7').catch(() => []),
         devFetch('/tags?per_page=24').catch(() => []),
@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
       const [profile, articles] = await Promise.all([
         devFetch(`/users/${encodeURIComponent(username)}`),
         devFetch(
-          `/articles?username=${encodeURIComponent(username)}&state=all&per_page=30`,
+          `/articles?username=${encodeURIComponent(username)}&per_page=30`,
         ),
       ])
 
