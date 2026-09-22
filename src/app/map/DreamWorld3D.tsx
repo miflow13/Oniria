@@ -980,6 +980,55 @@ export default function DreamWorld3D({
       })
     }
 
+    const categoryNebulae = (Object.keys(CATEGORY_COLORS) as SymbolCategory[])
+      .map((category, index) => {
+        const categoryNodes = nodeRef.current.filter(
+          (node) => node.category === category,
+        )
+        if (!categoryNodes.length) return null
+
+        const center = categoryNodes.reduce(
+          (sum, node) => {
+            const position = nodeVisuals.get(node._id)?.group.position
+            if (position) sum.add(position)
+            return sum
+          },
+          new THREE.Vector3(),
+        )
+        center.divideScalar(Math.max(1, categoryNodes.length))
+
+        const color = new THREE.Color(CATEGORY_COLORS[category])
+        const css = `rgba(${Math.round(color.r * 255)}, ${Math.round(
+          color.g * 255,
+        )}, ${Math.round(color.b * 255)}, 0.36)`
+        const texture = createNebulaTexture(css)
+        const material = new THREE.SpriteMaterial({
+          map: texture,
+          transparent: true,
+          opacity: .018,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        })
+        const sprite = new THREE.Sprite(material)
+        sprite.position.copy(center)
+        sprite.position.z -= 2.5 + index * .22
+        const size = 4.5 + Math.min(categoryNodes.length, 5) * .7
+        sprite.scale.set(size * 1.45, size, 1)
+        scene.add(sprite)
+
+        return {sprite, material, texture, phase: index * 1.7}
+      })
+      .filter(
+        (
+          value,
+        ): value is {
+          sprite: THREE.Sprite
+          material: THREE.SpriteMaterial
+          texture: THREE.Texture
+          phase: number
+        } => Boolean(value),
+      )
+
     const lucidDreamIds = new Set(
       dreamsRef.current
         .filter((dream) => dream.lucid)
@@ -1906,6 +1955,16 @@ export default function DreamWorld3D({
           .1 + Math.max(0, Math.sin(elapsed * .23)) * .08
       }
 
+      categoryNebulae.forEach((cluster) => {
+        cluster.material.opacity +=
+          ((observatoryModeRef.current ? .12 : .018) -
+            cluster.material.opacity) *
+          .035
+        cluster.sprite.rotation.z += .00018
+        cluster.sprite.position.y +=
+          Math.sin(elapsed * .08 + cluster.phase) * .0004
+      })
+
       supernovae.forEach((event, index) => {
         event.group.rotation.z += .002 + index * .0003
         event.group.rotation.y = Math.sin(elapsed * .11 + event.phase) * .25
@@ -2463,6 +2522,11 @@ export default function DreamWorld3D({
 
       lucidRiver?.geometry.dispose()
       lucidRiver?.material.dispose()
+      categoryNebulae.forEach((cluster) => {
+        cluster.texture.dispose()
+        cluster.material.dispose()
+        scene.remove(cluster.sprite)
+      })
       supernovae.forEach((event) => {
         event.geometry.dispose()
         event.material.dispose()
