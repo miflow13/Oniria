@@ -1195,6 +1195,28 @@ export default function DevWebSurf3D({
         group.add(pylon)
       })
 
+      const doorwayAccent =
+        '#' + new THREE.Color(SECTION_ACCENTS[section]).getHexString()
+      const doorwayTexture = createTextTexture(
+        sectionLabel(section).toUpperCase(),
+        'ENTER · DEV LIBRARY',
+        doorwayAccent,
+        560,
+        132,
+      )
+      labelsToDispose.push(doorwayTexture)
+      const doorwayMaterial = new THREE.SpriteMaterial({
+        map: doorwayTexture,
+        transparent: true,
+        depthWrite: false,
+        toneMapped: false,
+      })
+      architecturalMaterials.push(doorwayMaterial)
+      const doorwayLabel = new THREE.Sprite(doorwayMaterial)
+      doorwayLabel.position.set(0, 1.82, .08)
+      doorwayLabel.scale.set(3.8, .9, 1)
+      group.add(doorwayLabel)
+
       scene.add(group)
       sectionBeacons.push({section, materials})
     }
@@ -3218,7 +3240,7 @@ export default function DevWebSurf3D({
         const isCurrent = section === currentSection
         const isRouted = section === routedSection
         material.opacity +=
-          ((isRouted ? .1 : isCurrent ? .055 : .018) -
+          ((isRouted ? .14 : isCurrent ? .085 : .008) -
             material.opacity) *
           (1 - Math.exp(-delta * 3.8))
         const targetScale = isRouted ? 1.08 : isCurrent ? 1.03 : 1
@@ -3239,11 +3261,11 @@ export default function DevWebSurf3D({
                 : .54
               : isCurrent
                 ? index === 0
-                  ? .3
-                  : .18
+                  ? .46
+                  : .28
                 : index === 0
-                  ? .12
-                  : .065
+                  ? .055
+                  : .028
           material.opacity +=
             (target - material.opacity) *
             (1 - Math.exp(-delta * 6))
