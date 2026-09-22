@@ -87,8 +87,10 @@ type NodeVisual = {
   glow: THREE.Mesh
   core: THREE.Mesh
   orbit: THREE.Mesh
+  shockwave: THREE.Mesh
   label: THREE.Sprite
   baseScale: number
+  pulseStartedAt: number
   phase: number
   z: number
 }
@@ -327,7 +329,7 @@ export default function DreamWorld3D({
     )
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = 1.12
+    renderer.toneMappingExposure = 0.94
     renderer.shadowMap.enabled = false
     renderer.domElement.className = styles.webglCanvas
     host.appendChild(renderer.domElement)
@@ -360,11 +362,11 @@ export default function DreamWorld3D({
     keyLight.position.set(-5, 6, 8)
     scene.add(keyLight)
 
-    const violetLight = new THREE.PointLight(0xb791ff, 18, 20, 2)
+    const violetLight = new THREE.PointLight(0xb791ff, 12, 20, 2)
     violetLight.position.set(-5, 1, 3)
     scene.add(violetLight)
 
-    const cyanLight = new THREE.PointLight(0x72e2df, 16, 20, 2)
+    const cyanLight = new THREE.PointLight(0x72e2df, 11, 20, 2)
     cyanLight.position.set(5, -1, 2)
     scene.add(cyanLight)
 
@@ -452,6 +454,102 @@ export default function DreamWorld3D({
       fragments.push(fragment)
     }
 
+    const landmarkGeometries: THREE.BufferGeometry[] = []
+    const landmarkMaterials: THREE.Material[] = []
+    const landmarks: THREE.Group[] = []
+
+    const landmarkMaterial = new THREE.MeshStandardMaterial({
+      color: 0x283453,
+      emissive: 0x19233f,
+      emissiveIntensity: 0.38,
+      roughness: 0.78,
+      metalness: 0.18,
+      transparent: true,
+      opacity: 0.34,
+    })
+    const landmarkGlow = new THREE.MeshBasicMaterial({
+      color: 0x8bc9d8,
+      transparent: true,
+      opacity: 0.1,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+    landmarkMaterials.push(landmarkMaterial, landmarkGlow)
+
+    const brokenRing = new THREE.Group()
+    const ringGeometry = new THREE.TorusGeometry(2.5, 0.055, 8, 100, Math.PI * 1.58)
+    const ring = new THREE.Mesh(ringGeometry, landmarkMaterial)
+    ring.rotation.set(0.7, -0.3, 0.2)
+    brokenRing.add(ring)
+    const ringGlowGeometry = new THREE.TorusGeometry(2.52, 0.012, 6, 100, Math.PI * 1.58)
+    const ringGlow = new THREE.Mesh(ringGlowGeometry, landmarkGlow)
+    ringGlow.rotation.copy(ring.rotation)
+    brokenRing.add(ringGlow)
+    landmarkGeometries.push(ringGeometry, ringGlowGeometry)
+    brokenRing.position.set(-7.8, 3.4, -12)
+    farWorld.add(brokenRing)
+    landmarks.push(brokenRing)
+
+    const monoliths = new THREE.Group()
+    for (let index = 0; index < 5; index += 1) {
+      const geometry = new THREE.BoxGeometry(
+        0.42 + index * 0.05,
+        1.7 + index * 0.42,
+        0.34,
+      )
+      const monolith = new THREE.Mesh(geometry, landmarkMaterial)
+      monolith.position.set(
+        (index - 2) * 0.78,
+        -0.4 + index * 0.17,
+        -Math.abs(index - 2) * 0.18,
+      )
+      monolith.rotation.z = (index - 2) * 0.07
+      monoliths.add(monolith)
+      landmarkGeometries.push(geometry)
+    }
+    monoliths.position.set(8.6, -2.2, -15)
+    monoliths.rotation.y = -0.5
+    farWorld.add(monoliths)
+    landmarks.push(monoliths)
+
+    const impossibleStairs = new THREE.Group()
+    for (let index = 0; index < 10; index += 1) {
+      const geometry = new THREE.BoxGeometry(0.72, 0.09, 0.28)
+      const step = new THREE.Mesh(geometry, landmarkMaterial)
+      step.position.set(
+        index * 0.46,
+        index * 0.24,
+        Math.sin(index * 0.72) * 0.44,
+      )
+      step.rotation.y = index * 0.17
+      impossibleStairs.add(step)
+      landmarkGeometries.push(geometry)
+    }
+    impossibleStairs.position.set(1.8, 4.9, -13)
+    impossibleStairs.rotation.z = -0.12
+    farWorld.add(impossibleStairs)
+    landmarks.push(impossibleStairs)
+
+    const foregroundFogTextures = [
+      createNebulaTexture('rgba(166, 193, 218, 0.36)'),
+      createNebulaTexture('rgba(118, 172, 189, 0.36)'),
+    ]
+    const foregroundFog: THREE.Sprite[] = foregroundFogTextures.map((texture, index) => {
+      const material = new THREE.SpriteMaterial({
+        map: texture,
+        transparent: true,
+        opacity: index === 0 ? 0.045 : 0.035,
+        depthWrite: false,
+        blending: THREE.NormalBlending,
+      })
+      const sprite = new THREE.Sprite(material)
+      sprite.position.set(index === 0 ? -4 : 5, index === 0 ? -1.8 : 2.4, 4.6 - index)
+      sprite.scale.set(index === 0 ? 13 : 11, index === 0 ? 8 : 7, 1)
+      sprite.renderOrder = 5
+      scene.add(sprite)
+      return sprite
+    })
+
     const nodeVisuals = new Map<string, NodeVisual>()
     const interactive: THREE.Object3D[] = []
 
@@ -518,6 +616,22 @@ export default function DreamWorld3D({
       orbit.rotation.x = Math.PI * .54
       group.add(orbit)
 
+      const shockwaveMaterial = new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })
+      const shockwave = new THREE.Mesh(
+        new THREE.RingGeometry(.7, .735, 72),
+        shockwaveMaterial,
+      )
+      shockwave.visible = false
+      shockwave.renderOrder = 6
+      group.add(shockwave)
+
       const labelTexture = createLabelTexture(node)
       const labelMaterial = new THREE.SpriteMaterial({
         map: labelTexture,
@@ -545,8 +659,10 @@ export default function DreamWorld3D({
         glow,
         core,
         orbit,
+        shockwave,
         label,
         baseScale,
+        pulseStartedAt: -1,
         phase: seededUnit(seed, 31) * Math.PI * 2,
         z: start.z,
       })
@@ -599,6 +715,8 @@ export default function DreamWorld3D({
 
     const raycaster = new THREE.Raycaster()
     const pointer = new THREE.Vector2()
+    const pointerTarget = new THREE.Vector2()
+    const pointerParallax = new THREE.Vector2()
     let hoveredId: string | null = null
     let pointerDown: {x: number; y: number; pan: Pan} | null = null
     let dragging = false
@@ -676,6 +794,7 @@ export default function DreamWorld3D({
       const rect = renderer.domElement.getBoundingClientRect()
       pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
       pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
+      pointerTarget.set(pointer.x, pointer.y)
     }
 
     function pickNode(event: PointerEvent) {
@@ -769,6 +888,7 @@ export default function DreamWorld3D({
     const curvePoint = new THREE.Vector3()
 
     let animationFrame = 0
+    let lastSelectedId: string | null = null
     const startedAt = performance.now()
 
     function animate(now: number) {
@@ -789,14 +909,66 @@ export default function DreamWorld3D({
         fragment.position.y += Math.sin(elapsed * .22 + index) * .00045
       })
 
+      landmarks.forEach((landmark, index) => {
+        landmark.rotation.y += 0.00018 + index * 0.00005
+        landmark.position.y += Math.sin(elapsed * 0.11 + index * 1.7) * 0.00035
+      })
+
+      foregroundFog.forEach((sprite, index) => {
+        sprite.position.x += Math.sin(elapsed * 0.08 + index * 2.1) * 0.0014
+        sprite.position.y += Math.cos(elapsed * 0.06 + index * 1.2) * 0.001
+        const material = sprite.material as THREE.SpriteMaterial
+        material.opacity =
+          (index === 0 ? 0.04 : 0.03) +
+          Math.sin(elapsed * 0.16 + index) * 0.008
+      })
+
+      pointerParallax.lerp(pointerTarget, 0.035)
+
+      const currentSelectedId = selectedRef.current
+      if (currentSelectedId !== lastSelectedId) {
+        if (currentSelectedId) {
+          const selected = nodeVisuals.get(currentSelectedId)
+          if (selected) {
+            selected.pulseStartedAt = elapsed
+            selected.shockwave.visible = true
+            selected.shockwave.scale.setScalar(0.78)
+            ;(selected.shockwave.material as THREE.MeshBasicMaterial).opacity = 0.42
+          }
+        }
+        lastSelectedId = currentSelectedId
+      }
+
+      let selectionPulseStrength = 0
+      if (currentSelectedId) {
+        const selected = nodeVisuals.get(currentSelectedId)
+        if (selected && selected.pulseStartedAt >= 0) {
+          const progress = Math.min(1, (elapsed - selected.pulseStartedAt) / 1.25)
+          if (progress < 1) {
+            const eased = 1 - Math.pow(1 - progress, 3)
+            selectionPulseStrength = (1 - progress) * 0.9
+            selected.shockwave.visible = true
+            selected.shockwave.scale.setScalar(0.8 + eased * 2.3)
+            ;(selected.shockwave.material as THREE.MeshBasicMaterial).opacity =
+              (1 - progress) * 0.38
+          } else {
+            selected.shockwave.visible = false
+          }
+        }
+      }
+
       for (const node of nodeRef.current) {
         const visual = nodeVisuals.get(node._id)
         if (!visual) continue
 
         const target = worldPosition(node, positionsRef.current)
         target.z = visual.z + Math.sin(elapsed * .21 + visual.phase) * .22
-        target.y += Math.sin(elapsed * .37 + visual.phase) * .08
-        target.x += Math.cos(elapsed * .29 + visual.phase) * .05
+        target.y +=
+          Math.sin(elapsed * .37 + visual.phase) * .08 +
+          Math.cos(elapsed * .105) * .055
+        target.x +=
+          Math.cos(elapsed * .29 + visual.phase) * .05 +
+          Math.sin(elapsed * .12) * .07
 
         visual.group.position.lerp(target, .08)
 
@@ -850,11 +1022,11 @@ export default function DreamWorld3D({
           visual.core.visible = true
         }
         glowMaterial.opacity +=
-          ((selected ? .32 : hoveredId === node._id ? .22 : visible ? .1 : .015) -
+          ((selected ? .2 : hoveredId === node._id ? .14 : visible ? .06 : .01) -
             glowMaterial.opacity) *
           .08
         coreMaterial.emissiveIntensity +=
-          ((selected ? 5.4 : hoveredId === node._id ? 4 : 2.2) -
+          ((selected ? 3.45 : hoveredId === node._id ? 2.65 : 1.45) -
             coreMaterial.emissiveIntensity) *
           .07
         orbitMaterial.opacity +=
@@ -902,9 +1074,17 @@ export default function DreamWorld3D({
               ? `${edgeVisual.source}::${edgeVisual.target}`
               : `${edgeVisual.target}::${edgeVisual.source}`}`,
           )
+        const touchesSelected =
+          currentSelectedId === edgeVisual.source ||
+          currentSelectedId === edgeVisual.target
         const desiredOpacity = edgeHighlighted
-          ? Math.min(.62, .14 + edgeVisual.weight * .095)
-          : .035
+          ? Math.min(
+              .5,
+              .1 +
+                edgeVisual.weight * .07 +
+                (touchesSelected ? selectionPulseStrength * .22 : 0),
+            )
+          : .028
         edgeVisual.material.opacity +=
           (desiredOpacity - edgeVisual.material.opacity) * .08
 
@@ -919,7 +1099,9 @@ export default function DreamWorld3D({
           .addScaledVector(control, 2 * oneMinus * pulseT)
           .addScaledVector(target, pulseT * pulseT)
         ;(edgeVisual.pulse.material as THREE.MeshBasicMaterial).opacity =
-          edgeHighlighted ? .58 : .08
+          edgeHighlighted
+            ? Math.min(.5, .34 + (touchesSelected ? selectionPulseStrength * .3 : 0))
+            : .05
       })
 
       const selectedNode = selectedRef.current
@@ -969,7 +1151,7 @@ export default function DreamWorld3D({
 
       bloom.strength +=
         ((selectedVisual
-          ? settings.bloomStrength * 1.28
+          ? settings.bloomStrength * 1.1
           : settings.bloomStrength) -
           bloom.strength) *
         0.035
@@ -984,9 +1166,9 @@ export default function DreamWorld3D({
       }
 
       violetLight.intensity +=
-        ((selectedVisual ? 24 : 18) - violetLight.intensity) * 0.025
+        ((selectedVisual ? 16 : 12) - violetLight.intensity) * 0.025
       cyanLight.intensity +=
-        ((selectedVisual ? 22 : 16) - cyanLight.intensity) * 0.025
+        ((selectedVisual ? 15 : 11) - cyanLight.intensity) * 0.025
 
       if (selectedVisual) {
         const position = selectedVisual.group.position
@@ -999,8 +1181,8 @@ export default function DreamWorld3D({
         lookTarget.lerp(position, .085)
       } else {
         cameraTarget.set(
-          panRef.current.x / 125,
-          -panRef.current.y / 125,
+          panRef.current.x / 125 + pointerParallax.x * 0.34,
+          -panRef.current.y / 125 + pointerParallax.y * 0.2,
           10.8 / Math.max(.68, zoomRef.current),
         )
         lookTarget.lerp(
@@ -1066,11 +1248,13 @@ export default function DreamWorld3D({
         ;(visual.glow.geometry as THREE.BufferGeometry).dispose()
         ;(visual.core.geometry as THREE.BufferGeometry).dispose()
         ;(visual.orbit.geometry as THREE.BufferGeometry).dispose()
+        ;(visual.shockwave.geometry as THREE.BufferGeometry).dispose()
         visual.shellMaterial.dispose()
         visual.miniWorld.dispose()
         ;(visual.glow.material as THREE.Material).dispose()
         ;(visual.core.material as THREE.Material).dispose()
         ;(visual.orbit.material as THREE.Material).dispose()
+        ;(visual.shockwave.material as THREE.Material).dispose()
         const labelMaterial = visual.label.material as THREE.SpriteMaterial
         labelMaterial.map?.dispose()
         labelMaterial.dispose()
@@ -1087,6 +1271,16 @@ export default function DreamWorld3D({
         ;(fragment.geometry as THREE.BufferGeometry).dispose()
       })
       fragmentMaterial.dispose()
+
+      landmarkGeometries.forEach((geometry) => geometry.dispose())
+      landmarkMaterials.forEach((material) => material.dispose())
+
+      foregroundFog.forEach((sprite) => {
+        const material = sprite.material as THREE.SpriteMaterial
+        material.map?.dispose()
+        material.dispose()
+        scene.remove(sprite)
+      })
 
       nebulae.forEach((sprite) => {
         const material = sprite.material as THREE.SpriteMaterial
