@@ -2186,8 +2186,9 @@ export default function DreamWorld3D({
     const shelfSideGeometry = new THREE.BoxGeometry(.18, 2.65, .56)
     const shelfBoardGeometry = new THREE.BoxGeometry(3.45, .12, .62)
     const shelfBackGeometry = new THREE.BoxGeometry(3.45, 2.65, .1)
-    const shelfBookGeometry = new THREE.BoxGeometry(.92, .58, .1)
-    const shelfCoverGeometry = new THREE.PlaneGeometry(.84, .5)
+    const shelfBookGeometry = new THREE.BoxGeometry(.78, .54, .1)
+    const shelfCoverGeometry = new THREE.PlaneGeometry(.7, .46)
+    const shelfSpineGeometry = new THREE.BoxGeometry(.12, .52, .16)
     const shelfAccentGeometry = new THREE.BoxGeometry(3.34, .035, .68)
     const shelfPickGeometry = new THREE.BoxGeometry(3.8, 2.9, .95)
     const shelfBookmarkGeometry = new THREE.PlaneGeometry(.12, .34)
@@ -2248,6 +2249,14 @@ export default function DreamWorld3D({
         roughness: .92,
       }),
     ]
+    const shelfSpineMaterial = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      vertexColors: true,
+      emissive: 0x050812,
+      emissiveIntensity: .035,
+      roughness: .9,
+      metalness: .04,
+    })
     const shelfAccentMaterial = new THREE.MeshBasicMaterial({
       color: 0x5263c8,
       transparent: true,
@@ -2482,15 +2491,85 @@ export default function DreamWorld3D({
           shelf.add(board)
         })
 
+        // A packed archive should read as books first, covers second. Keep the
+        // nine real DEV articles face-out and fill the remaining shelf width
+        // with cheap instanced spines so bookcases feel physically occupied.
+        const spineRows = 3
+        const spinesPerRow = 14
+        const spineCount = spineRows * spinesPerRow
+        const shelfSpines = new THREE.InstancedMesh(
+          shelfSpineGeometry,
+          shelfSpineMaterial,
+          spineCount,
+        )
+        const spineDummy = new THREE.Object3D()
+        const accentColor = new THREE.Color(
+          node.accent ?? '#6f8dff',
+        )
+        const spinePalette = [
+          new THREE.Color(0x26336f),
+          new THREE.Color(0x24505a),
+          new THREE.Color(0x4c3b70),
+          new THREE.Color(0x656b78),
+          new THREE.Color(0x29334a),
+        ]
+
+        for (let spineIndex = 0; spineIndex < spineCount; spineIndex += 1) {
+          const row = Math.floor(spineIndex / spinesPerRow)
+          const column = spineIndex % spinesPerRow
+          const spineSeed = seed + spineIndex * 17
+          const x =
+            -1.43 +
+            (column / (spinesPerRow - 1)) * 2.86
+          const heightScale =
+            .78 + seededUnit(spineSeed, 2) * .32
+
+          spineDummy.position.set(
+            x,
+            -.84 + row * .84 -
+              (1 - heightScale) * .12,
+            -.145 + seededUnit(spineSeed, 4) * .025,
+          )
+          spineDummy.rotation.set(
+            0,
+            (seededUnit(spineSeed, 5) - .5) * .08,
+            (seededUnit(spineSeed, 6) - .5) * .05,
+          )
+          spineDummy.scale.set(
+            .78 + seededUnit(spineSeed, 7) * .5,
+            heightScale,
+            .86 + seededUnit(spineSeed, 8) * .22,
+          )
+          spineDummy.updateMatrix()
+          shelfSpines.setMatrixAt(
+            spineIndex,
+            spineDummy.matrix,
+          )
+
+          const color = spinePalette[
+            spineIndex % spinePalette.length
+          ].clone()
+          color.lerp(
+            accentColor,
+            .08 + seededUnit(spineSeed, 9) * .12,
+          )
+          shelfSpines.setColorAt(spineIndex, color)
+        }
+        shelfSpines.instanceMatrix.needsUpdate = true
+        if (shelfSpines.instanceColor) {
+          shelfSpines.instanceColor.needsUpdate = true
+        }
+        shelf.add(shelfSpines)
+
         ;(node.libraryBooks ?? []).slice(0, 9).forEach(
           (bookData, index) => {
             const row = Math.floor(index / 3)
             const column = index % 3
             const bookGroup = new THREE.Group()
             const basePosition = new THREE.Vector3(
-              -1.08 + column * 1.08,
+              -.98 + column * .98,
               -.84 + row * .84,
-              -.235,
+              -.255,
             )
             bookGroup.position.copy(basePosition)
 
@@ -2511,7 +2590,7 @@ export default function DreamWorld3D({
             bookInteractives.push(backing)
 
             const coverHinge = new THREE.Group()
-            coverHinge.position.set(-.46, 0, -.056)
+            coverHinge.position.set(-.39, 0, -.056)
             bookGroup.add(coverHinge)
 
             const coverMaterial = new THREE.MeshStandardMaterial({
@@ -2552,7 +2631,7 @@ export default function DreamWorld3D({
               shelfCoverGeometry,
               coverMaterial,
             )
-            cover.position.set(.42, 0, -.002)
+            cover.position.set(.35, 0, -.002)
             cover.rotation.y = Math.PI
             cover.renderOrder = 5
             cover.userData.bookNodeId = node._id
@@ -6534,6 +6613,7 @@ export default function DreamWorld3D({
       shelfBackGeometry.dispose()
       shelfBookGeometry.dispose()
       shelfCoverGeometry.dispose()
+      shelfSpineGeometry.dispose()
       shelfAccentGeometry.dispose()
       shelfPickGeometry.dispose()
       shelfBookmarkGeometry.dispose()
@@ -6543,6 +6623,7 @@ export default function DreamWorld3D({
       shelfBookMaterials.forEach((material) => material.dispose())
       shelfCoverMaterials.forEach((material) => material.dispose())
       shelfCoverTextures.forEach((texture) => texture.dispose())
+      shelfSpineMaterial.dispose()
       shelfAccentMaterial.dispose()
       shelfPickMaterial.dispose()
       libraryShelfSparkleGeometry?.dispose()
