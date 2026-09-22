@@ -1424,14 +1424,13 @@ export default function DevWebSurf3D({
         color: 0x12151d,
         roughness: .42,
         metalness: .52,
-        emissive: new THREE.Color(accent).multiplyScalar(.08),
-        emissiveIntensity: .35,
+        emissive: new THREE.Color(accent).multiplyScalar(.04),
+        emissiveIntensity: .16,
       })
       const edgeMaterial = new THREE.LineBasicMaterial({
         color: accent,
         transparent: true,
-        opacity: .58,
-        blending: THREE.AdditiveBlending,
+        opacity: .22,
       })
       architecturalMaterials.push(panelMaterial, edgeMaterial)
 
@@ -2673,15 +2672,14 @@ export default function DevWebSurf3D({
     const sharedArticleSpineMaterial = new THREE.MeshStandardMaterial({
       color: 0x3b49df,
       emissive: 0x1c2a88,
-      emissiveIntensity: .72,
-      roughness: .3,
+      emissiveIntensity: .34,
+      roughness: .38,
       metalness: .48,
     })
     const sharedArticleEdgeMaterial = new THREE.LineBasicMaterial({
       color: 0x5267ff,
       transparent: true,
-      opacity: .34,
-      blending: THREE.AdditiveBlending,
+      opacity: .16,
     })
     architecturalMaterials.push(
       sharedArticleSpineMaterial,
