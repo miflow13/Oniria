@@ -1084,535 +1084,235 @@ export default function DreamWorld3D({
       farWorld.add(libraryFarParticles)
     }
 
-    let librarySilhouetteGeometry: THREE.BoxGeometry | null = null
-    let librarySilhouetteMaterial: THREE.MeshBasicMaterial | null = null
-    let librarySilhouettes: THREE.InstancedMesh | null = null
-    let librarySkylineWindowGeometry: THREE.BoxGeometry | null = null
-    let librarySkylineWindowMaterial: THREE.MeshBasicMaterial | null = null
-    let librarySkylineWindows: THREE.InstancedMesh | null = null
-    let librarySkylineNeonGeometry: THREE.BoxGeometry | null = null
-    let librarySkylineNeonMaterial: THREE.MeshBasicMaterial | null = null
-    let librarySkylineNeon: THREE.InstancedMesh | null = null
+    const librarySkyways: Array<{
+      group: THREE.Group
+      phase: number
+      laneMaterial: THREE.LineBasicMaterial
+      edgeMaterial: THREE.LineBasicMaterial
+    }> = []
+    const librarySkywayGeometries: THREE.BufferGeometry[] = []
+    const librarySkywayMaterials: THREE.Material[] = []
 
     if (libraryMode) {
-      // Build a distant archive skyline from instanced stepped tower masses.
-      // Facade windows and neon are decorative only: no colliders, raycast
-      // targets, or per-building animation.
-      librarySilhouetteGeometry = new THREE.BoxGeometry(1, 1, 1)
-      librarySilhouetteMaterial = new THREE.MeshBasicMaterial({
-        color: 0x2b4c6d,
-        transparent: true,
-        opacity: .9,
-        depthWrite: true,
-        blending: THREE.NormalBlending,
-        toneMapped: false,
-        fog: false,
-      })
+      // Replace the old archive skyscrapers with unreachable floating
+      // expressways. They are deliberately placed in farWorld only, so they
+      // never become walkable surfaces, raycast targets, or collision bodies.
+      const up = new THREE.Vector3(0, 1, 0)
+      const tangent = new THREE.Vector3()
+      const side = new THREE.Vector3()
+      const center = new THREE.Vector3()
 
-      librarySkylineWindowGeometry = new THREE.BoxGeometry(1, 1, 1)
-      librarySkylineWindowMaterial = new THREE.MeshBasicMaterial({
-        color: 0xffffff,
-        vertexColors: true,
-        transparent: true,
-        opacity: .97,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
-        toneMapped: false,
-        fog: false,
-      })
-
-      librarySkylineNeonGeometry = new THREE.BoxGeometry(1, 1, 1)
-      librarySkylineNeonMaterial = new THREE.MeshBasicMaterial({
-        color: 0xffffff,
-        vertexColors: true,
-        transparent: true,
-        opacity: .92,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
-        toneMapped: false,
-        fog: false,
-      })
-
-      const silhouetteMatrices: THREE.Matrix4[] = []
-      const skylineWindowMatrices: THREE.Matrix4[] = []
-      const skylineWindowColors: THREE.Color[] = []
-      const skylineNeonMatrices: THREE.Matrix4[] = []
-      const skylineNeonColors: THREE.Color[] = []
-      const silhouetteDummy = new THREE.Object3D()
-      const pushSilhouetteBox = (
-        position: THREE.Vector3,
-        scale: THREE.Vector3,
-        yaw = 0,
-        roll = 0,
+      const buildSkywayRibbon = (
+        curve: THREE.CatmullRomCurve3,
+        width: number,
       ) => {
-        silhouetteDummy.position.copy(position)
-        silhouetteDummy.scale.copy(scale)
-        silhouetteDummy.rotation.set(0, yaw, roll)
-        silhouetteDummy.updateMatrix()
-        silhouetteMatrices.push(silhouetteDummy.matrix.clone())
+        const samples = 96
+        const positions = new Float32Array((samples + 1) * 2 * 3)
+        const indices: number[] = []
+        const leftPoints: THREE.Vector3[] = []
+        const rightPoints: THREE.Vector3[] = []
+        const centerPoints: THREE.Vector3[] = []
+
+        for (let sample = 0; sample <= samples; sample += 1) {
+          const t = sample / samples
+          center.copy(curve.getPointAt(t))
+          tangent.copy(curve.getTangentAt(t)).normalize()
+          side.crossVectors(up, tangent)
+          if (side.lengthSq() < .0001) {
+            side.set(1, 0, 0)
+          } else {
+            side.normalize()
+          }
+
+          const left = center
+            .clone()
+            .addScaledVector(side, width * .5)
+          const right = center
+            .clone()
+            .addScaledVector(side, -width * .5)
+          const offset = sample * 6
+
+          positions[offset] = left.x
+          positions[offset + 1] = left.y
+          positions[offset + 2] = left.z
+          positions[offset + 3] = right.x
+          positions[offset + 4] = right.y
+          positions[offset + 5] = right.z
+
+          leftPoints.push(left)
+          rightPoints.push(right)
+          centerPoints.push(center.clone())
+
+          if (sample > 0) {
+            const previousLeft = (sample - 1) * 2
+            const previousRight = previousLeft + 1
+            const currentLeft = sample * 2
+            const currentRight = currentLeft + 1
+            indices.push(
+              previousLeft,
+              previousRight,
+              currentLeft,
+              previousRight,
+              currentRight,
+              currentLeft,
+            )
+          }
+        }
+
+        const ribbonGeometry = new THREE.BufferGeometry()
+        ribbonGeometry.setAttribute(
+          'position',
+          new THREE.BufferAttribute(positions, 3),
+        )
+        ribbonGeometry.setIndex(indices)
+        ribbonGeometry.computeVertexNormals()
+        ribbonGeometry.computeBoundingSphere()
+
+        const leftGeometry =
+          new THREE.BufferGeometry().setFromPoints(leftPoints)
+        const rightGeometry =
+          new THREE.BufferGeometry().setFromPoints(rightPoints)
+        const centerGeometry =
+          new THREE.BufferGeometry().setFromPoints(centerPoints)
+
+        return {
+          ribbonGeometry,
+          leftGeometry,
+          rightGeometry,
+          centerGeometry,
+        }
       }
 
-      activeDistricts.slice(1).forEach((district, index) => {
-        const path = new THREE.Vector3(...archivePathPoint(district.bay))
-        const frame = archivePathFrame(district.bay)
-        const normal = new THREE.Vector3(
-          frame.normalX,
-          0,
-          frame.normalZ,
+      const skywayColors = [
+        0x5fd8e6,
+        0x9b7fea,
+        0xd782e8,
+        0x6f8dff,
+        0x77d7bd,
+        0xb88cf0,
+        0x83c9ef,
+      ]
+
+      for (let routeIndex = 0; routeIndex < 7; routeIndex += 1) {
+        const startBay = 1.5 + routeIndex * 8.6
+        const endBay = Math.min(
+          ARCHIVE_PATH_RENDER_BAYS - 1,
+          startBay + 29 + (routeIndex % 3) * 3,
         )
-        const tangentYaw = Math.atan2(frame.tangentX, frame.tangentZ)
-        const lateralDistance =
-          34 + seededUnit(index + 930, 1) * 24
-        const height =
-          27 + seededUnit(index + 930, 2) * 24
-        const width =
-          6.4 + seededUnit(index + 930, 3) * 4.8
-        const depth =
-          4.2 + seededUnit(index + 930, 4) * 3.8
+        const curvePoints: THREE.Vector3[] = []
+        const crossingRoute = routeIndex === 1 || routeIndex === 3 || routeIndex === 5
 
-        const left = path
-          .clone()
-          .addScaledVector(normal, lateralDistance)
-        const right = path
-          .clone()
-          .addScaledVector(normal, -lateralDistance)
-        left.y += height * .5 - 9
-        right.y += height * .5 - 9
-
-        ;[left, right].forEach((center, sideIndex) => {
-          const yaw =
-            tangentYaw +
-            (sideIndex === 0 ? .08 : -.08) +
-            (seededUnit(index + 930, 5 + sideIndex) - .5) * .18
-
-          const baseHeight = height * .34
-          const shaftHeight = height * .42
-          const crownHeight = height * .2
-
-          const baseCenter = center.clone()
-          baseCenter.y -= height * .31
-          pushSilhouetteBox(
-            baseCenter,
-            new THREE.Vector3(
-              width * 1.16,
-              baseHeight,
-              depth * 1.18,
-            ),
-            yaw,
-          )
-
-          const shaftCenter = center.clone()
-          shaftCenter.y += height * .015
-          pushSilhouetteBox(
-            shaftCenter,
-            new THREE.Vector3(
-              width,
-              shaftHeight,
-              depth,
-            ),
-            yaw,
-          )
-
-          const crownCenter = center.clone()
-          crownCenter.y += height * .325
-          pushSilhouetteBox(
-            crownCenter,
-            new THREE.Vector3(
-              width * .72,
-              crownHeight,
-              depth * .76,
-            ),
-            yaw,
-          )
-
-          const roofCenter = center.clone()
-          roofCenter.y += height * .455
-          pushSilhouetteBox(
-            roofCenter,
-            new THREE.Vector3(
-              width * .48,
-              Math.max(.45, height * .035),
-              depth * .5,
-            ),
-            yaw,
-          )
-
-          const inwardSign = sideIndex === 0 ? -1 : 1
-          const inward = normal
-            .clone()
-            .multiplyScalar(inwardSign)
-          const facadeOffset = depth * .52 + .12
-          const rows = 8
-          const columns = 4
-          const districtColor = new THREE.Color(district.accent)
-          const warmWindow = new THREE.Color(0xffd9a3)
-          const coolWindow = new THREE.Color(0xaeeeff)
-          const neonCyan = new THREE.Color(0x63f5ff)
-          const neonMagenta = new THREE.Color(0xff5ae8)
-          const neonViolet = new THREE.Color(0xa87cff)
-
-          // Neon exists only on the distant skyscraper facades. It is kept in
-          // a separate instanced mesh so shelves/walkways never inherit it.
-          ;[-.43, .43].forEach((edgeOffset, edgeIndex) => {
-            const edgePosition = center
-              .clone()
-              .addScaledVector(
-                new THREE.Vector3(
-                  frame.tangentX,
-                  0,
-                  frame.tangentZ,
-                ),
-                width * edgeOffset,
-              )
-              .addScaledVector(inward, facadeOffset + .055)
-            edgePosition.y += height * .035
-
-            silhouetteDummy.position.copy(edgePosition)
-            silhouetteDummy.rotation.set(0, tangentYaw, 0)
-            silhouetteDummy.scale.set(
-              .075,
-              height * (.72 + edgeIndex * .05),
-              .075,
-            )
-            silhouetteDummy.updateMatrix()
-            skylineNeonMatrices.push(silhouetteDummy.matrix.clone())
-
-            const baseNeon =
-              (index + sideIndex + edgeIndex) % 3 === 0
-                ? neonMagenta.clone()
-                : (index + edgeIndex) % 2 === 0
-                  ? neonCyan.clone()
-                  : neonViolet.clone()
-            baseNeon.lerp(districtColor, .2)
-            skylineNeonColors.push(baseNeon)
-          })
-
-          const neonCrown = center
-            .clone()
-            .addScaledVector(inward, facadeOffset + .06)
-          neonCrown.y += height * .465
-          silhouetteDummy.position.copy(neonCrown)
-          silhouetteDummy.rotation.set(0, tangentYaw, 0)
-          silhouetteDummy.scale.set(width * .9, .075, .075)
-          silhouetteDummy.updateMatrix()
-          skylineNeonMatrices.push(silhouetteDummy.matrix.clone())
-          skylineNeonColors.push(
-            neonCyan.clone().lerp(districtColor, .32),
-          )
-
-          for (let row = 0; row < rows; row += 1) {
-            for (let column = 0; column < columns; column += 1) {
-              const lightSeed =
-                index * 100 +
-                sideIndex * 41 +
-                row * 7 +
-                column
-              if (seededUnit(lightSeed + 811, 3) < .16) continue
-
-              const vertical =
-                -height * .38 +
-                (row / Math.max(1, rows - 1)) *
-                  height *
-                  .76
-              const horizontal =
-                ((column + .5) / columns - .5) *
-                width *
-                .72
-
-              const windowPosition = center
-                .clone()
-                .addScaledVector(
-                  new THREE.Vector3(
-                    frame.tangentX,
-                    0,
-                    frame.tangentZ,
-                  ),
-                  horizontal,
-                )
-                .addScaledVector(inward, facadeOffset)
-              windowPosition.y += vertical
-
-              silhouetteDummy.position.copy(windowPosition)
-              silhouetteDummy.rotation.set(0, tangentYaw, 0)
-              silhouetteDummy.scale.set(
-                Math.max(.34, width / columns * .34),
-                Math.max(.2, height / rows * .07),
-                .07,
-              )
-              silhouetteDummy.updateMatrix()
-              skylineWindowMatrices.push(
-                silhouetteDummy.matrix.clone(),
-              )
-
-              const color =
-                seededUnit(lightSeed + 811, 5) > .58
-                  ? coolWindow.clone()
-                  : warmWindow.clone()
-              color.lerp(
-                districtColor,
-                .18 + seededUnit(lightSeed + 811, 7) * .24,
-              )
-              skylineWindowColors.push(color)
-            }
-          }
-
-          const crownPosition = center.clone()
-          crownPosition.y += height * .49
-          crownPosition.addScaledVector(inward, facadeOffset)
-          silhouetteDummy.position.copy(crownPosition)
-          silhouetteDummy.rotation.set(0, tangentYaw, 0)
-          silhouetteDummy.scale.set(width * .78, .13, .09)
-          silhouetteDummy.updateMatrix()
-          skylineWindowMatrices.push(silhouetteDummy.matrix.clone())
-          skylineWindowColors.push(
-            new THREE.Color(district.accent).lerp(
-              new THREE.Color(0xe6fbff),
-              .56,
-            ),
-          )
-
-          // Large architectural light seams remain readable when the small
-          // windows collapse to sub-pixel detail in the distance.
-          const seamPosition = center
-            .clone()
-            .addScaledVector(
-              new THREE.Vector3(
-                frame.tangentX,
-                0,
-                frame.tangentZ,
-              ),
-              width * (sideIndex === 0 ? .29 : -.29),
-            )
-            .addScaledVector(inward, facadeOffset + .025)
-          seamPosition.y += height * .06
-          silhouetteDummy.position.copy(seamPosition)
-          silhouetteDummy.rotation.set(0, tangentYaw, 0)
-          silhouetteDummy.scale.set(
-            .11,
-            height * (.34 + seededUnit(index + 1200, sideIndex + 1) * .12),
-            .085,
-          )
-          silhouetteDummy.updateMatrix()
-          skylineWindowMatrices.push(silhouetteDummy.matrix.clone())
-          skylineWindowColors.push(
-            new THREE.Color(district.accent).lerp(
-              new THREE.Color(0xbff6ff),
-              .38,
-            ),
-          )
-
-          if ((index + sideIndex) % 2 === 0) {
-            const billboardPosition = center
-              .clone()
-              .addScaledVector(inward, facadeOffset + .04)
-            billboardPosition.y += height * .23
-            silhouetteDummy.position.copy(billboardPosition)
-            silhouetteDummy.rotation.set(0, tangentYaw, 0)
-            silhouetteDummy.scale.set(
-              width * .44,
-              Math.max(.22, height * .018),
-              .09,
-            )
-            silhouetteDummy.updateMatrix()
-            skylineWindowMatrices.push(silhouetteDummy.matrix.clone())
-            skylineWindowColors.push(
-              new THREE.Color(0xffe0ad).lerp(
-                new THREE.Color(district.accent),
-                .24,
-              ),
-            )
-
-            const beaconPosition = center.clone()
-            beaconPosition.y += height * .54
-            silhouetteDummy.position.copy(beaconPosition)
-            silhouetteDummy.rotation.set(0, tangentYaw, 0)
-            silhouetteDummy.scale.set(.24, .24, .24)
-            silhouetteDummy.updateMatrix()
-            skylineWindowMatrices.push(silhouetteDummy.matrix.clone())
-            skylineWindowColors.push(new THREE.Color(0xffd7a0))
-          }
-
-          ;[-.19, .18].forEach((heightRatio, bandIndex) => {
-            const bandCenter = center.clone()
-            bandCenter.y += height * heightRatio
-            pushSilhouetteBox(
-              bandCenter,
-              new THREE.Vector3(
-                width * (1.025 - bandIndex * .035),
-                .1,
-                depth * 1.025,
-              ),
-              yaw,
-            )
-          })
-        })
-
-
-      })
-
-      // Secondary background towers create city depth without giant wall slabs.
-      ;[10, 18, 30, 42, 54, 66].forEach((bay, index) => {
-        const path = new THREE.Vector3(...archivePathPoint(bay))
-        const frame = archivePathFrame(bay)
-        const normal = new THREE.Vector3(
-          frame.normalX,
-          0,
-          frame.normalZ,
-        )
-        const yaw = Math.atan2(frame.tangentX, frame.tangentZ)
-
-        ;[-1, 1].forEach((sideSign, sideIndex) => {
-          const height =
-            18 + seededUnit(index + 1700, sideIndex + 1) * 16
-          const width =
-            5.5 + seededUnit(index + 1700, sideIndex + 4) * 4.5
-          const depth =
-            5 + seededUnit(index + 1700, sideIndex + 7) * 4
-          const center = path
-            .clone()
-            .addScaledVector(
-              normal,
-              sideSign * (58 + index * 5.5),
-            )
-          center.y += height * .5 - 8
-
-          const lower = center.clone()
-          lower.y -= height * .22
-          pushSilhouetteBox(
-            lower,
-            new THREE.Vector3(
-              width * 1.08,
-              height * .5,
-              depth * 1.08,
-            ),
-            yaw,
-          )
-
-          const upper = center.clone()
-          upper.y += height * .24
-          pushSilhouetteBox(
-            upper,
-            new THREE.Vector3(
-              width * .72,
-              height * .42,
-              depth * .74,
-            ),
-            yaw,
-          )
-
-          const inward = normal
-            .clone()
-            .multiplyScalar(sideSign > 0 ? -1 : 1)
-          const tangent = new THREE.Vector3(
-            frame.tangentX,
+        for (let step = 0; step <= 9; step += 1) {
+          const t = step / 9
+          const bay = THREE.MathUtils.lerp(startBay, endBay, t)
+          const pathPoint = new THREE.Vector3(...archivePathPoint(bay))
+          const frame = archivePathFrame(bay)
+          const normal = new THREE.Vector3(
+            frame.normalX,
             0,
-            frame.tangentZ,
+            frame.normalZ,
           )
-          const facadeOffset = depth * .56 + .08
+          const phase = routeIndex * 1.17
+          const lateral = crossingRoute
+            ? Math.sin(t * Math.PI * 1.35 + phase) *
+              (28 + routeIndex * 1.5)
+            : (routeIndex % 2 === 0 ? 1 : -1) *
+                (25 + (routeIndex % 3) * 5) +
+              Math.sin(t * Math.PI * 2.2 + phase) * 9.5
 
-          for (let row = 0; row < 6; row += 1) {
-            for (let column = 0; column < 3; column += 1) {
-              const seed = index * 200 + sideIndex * 37 + row * 5 + column
-              if (seededUnit(seed + 1910, 2) < .28) continue
+          pathPoint.addScaledVector(normal, lateral)
+          pathPoint.y +=
+            11 +
+            (routeIndex % 4) * 3.8 +
+            Math.sin(t * Math.PI * 3.1 + phase) * 3.1 +
+            (crossingRoute ? 3.5 : 0)
+          curvePoints.push(pathPoint)
+        }
 
-              const windowPosition = center
-                .clone()
-                .addScaledVector(
-                  tangent,
-                  ((column + .5) / 3 - .5) * width * .58,
-                )
-                .addScaledVector(inward, facadeOffset)
-              windowPosition.y +=
-                -height * .3 + (row / 5) * height * .58
+        const curve = new THREE.CatmullRomCurve3(
+          curvePoints,
+          false,
+          'catmullrom',
+          .36,
+        )
+        const width = 2.8 + (routeIndex % 3) * .55
+        const {
+          ribbonGeometry,
+          leftGeometry,
+          rightGeometry,
+          centerGeometry,
+        } = buildSkywayRibbon(curve, width)
 
-              silhouetteDummy.position.copy(windowPosition)
-              silhouetteDummy.rotation.set(0, yaw, 0)
-              silhouetteDummy.scale.set(
-                Math.max(.28, width * .075),
-                Math.max(.16, height * .012),
-                .065,
-              )
-              silhouetteDummy.updateMatrix()
-              skylineWindowMatrices.push(
-                silhouetteDummy.matrix.clone(),
-              )
-
-              const secondaryColor =
-                seededUnit(seed + 1910, 4) > .55
-                  ? new THREE.Color(0x9cefff)
-                  : new THREE.Color(0xffd7a3)
-              skylineWindowColors.push(secondaryColor)
-            }
-          }
-
-          const secondaryCrown = center
-            .clone()
-            .addScaledVector(inward, facadeOffset + .03)
-          secondaryCrown.y += height * .47
-          silhouetteDummy.position.copy(secondaryCrown)
-          silhouetteDummy.rotation.set(0, yaw, 0)
-          silhouetteDummy.scale.set(width * .58, .07, .07)
-          silhouetteDummy.updateMatrix()
-          skylineNeonMatrices.push(
-            silhouetteDummy.matrix.clone(),
-          )
-          skylineNeonColors.push(
-            sideIndex === 0
-              ? new THREE.Color(0x63f5ff)
-              : new THREE.Color(0xa87cff),
-          )
+        const accent = new THREE.Color(
+          skywayColors[routeIndex % skywayColors.length],
+        )
+        const roadMaterial = new THREE.MeshBasicMaterial({
+          color: accent.clone().multiplyScalar(.22),
+          transparent: true,
+          opacity: .5,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+          blending: THREE.NormalBlending,
+          toneMapped: false,
+          fog: false,
         })
-      })
+        const edgeMaterial = new THREE.LineBasicMaterial({
+          color: accent,
+          transparent: true,
+          opacity: .62,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          toneMapped: false,
+          fog: false,
+        })
+        const laneMaterial = new THREE.LineBasicMaterial({
+          color: accent.clone().lerp(new THREE.Color(0xffffff), .46),
+          transparent: true,
+          opacity: .24,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          toneMapped: false,
+          fog: false,
+        })
 
-      librarySilhouettes = new THREE.InstancedMesh(
-        librarySilhouetteGeometry,
-        librarySilhouetteMaterial,
-        silhouetteMatrices.length,
-      )
-      silhouetteMatrices.forEach((matrix, index) => {
-        librarySilhouettes?.setMatrixAt(index, matrix)
-      })
-      librarySilhouettes.instanceMatrix.needsUpdate = true
-      librarySilhouettes.renderOrder = -3
-      farWorld.add(librarySilhouettes)
+        const group = new THREE.Group()
+        const road = new THREE.Mesh(ribbonGeometry, roadMaterial)
+        const leftEdge = new THREE.Line(leftGeometry, edgeMaterial)
+        const rightEdge = new THREE.Line(rightGeometry, edgeMaterial)
+        const lane = new THREE.Line(centerGeometry, laneMaterial)
 
-      librarySkylineWindows = new THREE.InstancedMesh(
-        librarySkylineWindowGeometry,
-        librarySkylineWindowMaterial,
-        skylineWindowMatrices.length,
-      )
-      skylineWindowMatrices.forEach((matrix, index) => {
-        librarySkylineWindows?.setMatrixAt(index, matrix)
-        const color = skylineWindowColors[index]
-        if (color) {
-          librarySkylineWindows?.setColorAt(index, color)
-        }
-      })
-      librarySkylineWindows.instanceMatrix.needsUpdate = true
-      if (librarySkylineWindows.instanceColor) {
-        librarySkylineWindows.instanceColor.needsUpdate = true
+        road.renderOrder = -4
+        leftEdge.renderOrder = -3
+        rightEdge.renderOrder = -3
+        lane.renderOrder = -2
+        road.userData.libraryDecorative = true
+        leftEdge.userData.libraryDecorative = true
+        rightEdge.userData.libraryDecorative = true
+        lane.userData.libraryDecorative = true
+
+        group.add(road, leftEdge, rightEdge, lane)
+        group.userData.librarySkyway = true
+        group.userData.libraryDecorative = true
+        farWorld.add(group)
+
+        librarySkyways.push({
+          group,
+          phase: routeIndex * 1.41,
+          laneMaterial,
+          edgeMaterial,
+        })
+        librarySkywayGeometries.push(
+          ribbonGeometry,
+          leftGeometry,
+          rightGeometry,
+          centerGeometry,
+        )
+        librarySkywayMaterials.push(
+          roadMaterial,
+          edgeMaterial,
+          laneMaterial,
+        )
       }
-      librarySkylineWindows.renderOrder = -2
-      farWorld.add(librarySkylineWindows)
-
-      librarySkylineNeon = new THREE.InstancedMesh(
-        librarySkylineNeonGeometry,
-        librarySkylineNeonMaterial,
-        skylineNeonMatrices.length,
-      )
-      skylineNeonMatrices.forEach((matrix, index) => {
-        librarySkylineNeon?.setMatrixAt(index, matrix)
-        const color = skylineNeonColors[index]
-        if (color) {
-          librarySkylineNeon?.setColorAt(index, color)
-        }
-      })
-      librarySkylineNeon.instanceMatrix.needsUpdate = true
-      if (librarySkylineNeon.instanceColor) {
-        librarySkylineNeon.instanceColor.needsUpdate = true
-      }
-      librarySkylineNeon.renderOrder = -1
-      farWorld.add(librarySkylineNeon)
     }
 
     const nebulaTextures = [
@@ -2263,7 +1963,12 @@ export default function DreamWorld3D({
                   )
                   shelfCoverTextures.push(texture)
                   coverMaterial.map = texture
-                  coverMaterial.color.setRGB(.4, .4, .43)
+                  // Texture color is multiplied by the material color.
+                  // Keep it white so real DEV covers are not crushed into
+                  // near-black rectangles under the shelf lighting.
+                  coverMaterial.color.setHex(0xffffff)
+                  coverMaterial.emissive.setHex(0x080b10)
+                  coverMaterial.emissiveIntensity = .055
                   coverMaterial.needsUpdate = true
                 },
                 undefined,
@@ -5074,20 +4779,24 @@ export default function DreamWorld3D({
         libraryFarParticles.position.y = Math.cos(elapsed * .017) * .16
       }
 
-      if (librarySilhouettes) {
-        const skylineYaw = Math.sin(elapsed * .008) * .018
-        const skylineLift = Math.sin(elapsed * .012) * .3
-        librarySilhouettes.rotation.y = skylineYaw
-        librarySilhouettes.position.y = skylineLift
-        if (librarySkylineWindows) {
-          librarySkylineWindows.rotation.y = skylineYaw
-          librarySkylineWindows.position.y = skylineLift
-        }
-        if (librarySkylineNeon) {
-          librarySkylineNeon.rotation.y = skylineYaw
-          librarySkylineNeon.position.y = skylineLift
-        }
-      }
+      librarySkyways.forEach((skyway, index) => {
+        skyway.group.position.y =
+          Math.sin(elapsed * .055 + skyway.phase) * .16
+        skyway.group.rotation.y =
+          Math.sin(elapsed * .014 + skyway.phase) * .004
+        skyway.edgeMaterial.opacity =
+          .54 +
+          Math.max(
+            0,
+            Math.sin(elapsed * .23 + skyway.phase),
+          ) * .16
+        skyway.laneMaterial.opacity =
+          .18 +
+          Math.max(
+            0,
+            Math.sin(elapsed * .38 + skyway.phase),
+          ) * .14
+      })
 
       nebulae.forEach((sprite, index) => {
         sprite.material.opacity = .22 + Math.sin(elapsed * .13 + index) * .06
@@ -5132,16 +4841,6 @@ export default function DreamWorld3D({
           (index === 0 ? 0.04 : 0.03) +
           Math.sin(elapsed * 0.16 + index) * 0.008
       })
-
-      if (librarySkylineWindowMaterial) {
-        librarySkylineWindowMaterial.opacity =
-          .96 + Math.sin(elapsed * .19) * .025
-      }
-      if (librarySkylineNeonMaterial) {
-        librarySkylineNeonMaterial.opacity =
-          .82 + Math.sin(elapsed * .31) * .055
-      }
-
 
       libraryAtmosphere?.update({
         elapsed,
@@ -6890,12 +6589,12 @@ export default function DreamWorld3D({
 
       libraryFarParticleGeometry?.dispose()
       libraryFarParticleMaterial?.dispose()
-      librarySilhouetteGeometry?.dispose()
-      librarySilhouetteMaterial?.dispose()
-      librarySkylineWindowGeometry?.dispose()
-      librarySkylineWindowMaterial?.dispose()
-      librarySkylineNeonGeometry?.dispose()
-      librarySkylineNeonMaterial?.dispose()
+      librarySkywayGeometries.forEach((geometry) =>
+        geometry.dispose(),
+      )
+      librarySkywayMaterials.forEach((material) =>
+        material.dispose(),
+      )
 
       starGeometry.dispose()
       starMaterial.dispose()
