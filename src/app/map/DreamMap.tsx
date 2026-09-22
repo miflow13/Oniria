@@ -1290,9 +1290,9 @@ export default function DreamMap({
                 ? {
                     step: 1,
                     eyebrow: 'First-person dream universe',
-                    title: 'Fly toward a bright memory.',
-                    body: 'WASD + mouse. The closer you get, the memory will wake. Press E when you want to inspect it.',
-                    action: 'E · inspect memory',
+                    title: 'Fly toward the waking memory.',
+                    body: 'WASD + mouse. Keep moving toward the brightest recurring memory; Oniria will open it when you get close.',
+                    action: 'Move forward · the memory will wake',
                   }
                 : {
                     step: 1,
@@ -1712,9 +1712,9 @@ export default function DreamMap({
                 </div>
                 <div className={styles.flightInstructions}>
                   <span>First-person travel</span>
-                  <strong>WASD · mouse · Shift boost · R ride tether</strong>
+                  <strong>WASD · mouse · Shift boost</strong>
                   <small>
-                    E inspect · F dive · Esc releases cursor · click world to resume
+                    Approach a memory to inspect · F enters · Esc releases cursor
                   </small>
                 </div>
               </div>
