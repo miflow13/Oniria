@@ -1,3 +1,8 @@
+import {
+  DEFAULT_LIBRARY_DISTRICTS,
+  type LibraryDistrictConfig,
+} from '@/lib/libraryWorldConfig'
+
 export const ARCHIVE_PATH_RENDER_BAYS = 72
 export const ARCHIVE_WALKWAY_HALF_WIDTH = 4.1
 export const ARCHIVE_WALKWAY_Y_OFFSET = -2.08
@@ -6,23 +11,10 @@ export const ARCHIVE_BAY_SPACING = 9.2
 const ARCHIVE_LANE_MIN = 8.15
 const ARCHIVE_LANE_VARIATION = .9
 
-export type ArchiveDistrict = {
-  id: string
-  label: string
-  code: string
-  bay: number
-}
+export type ArchiveDistrict = LibraryDistrictConfig
 
-export const ARCHIVE_DISTRICTS: ArchiveDistrict[] = [
-  {id: 'front-page', label: 'FRONT PAGE', code: 'A-01', bay: 1},
-  {id: 'web-dev', label: 'WEB DEV', code: 'A-08', bay: 7.5},
-  {id: 'ai', label: 'AI', code: 'A-18', bay: 17.5},
-  {id: 'linux', label: 'LINUX', code: 'A-28', bay: 27.5},
-  {id: 'javascript', label: 'JAVASCRIPT', code: 'A-38', bay: 37.5},
-  {id: 'archive-2026', label: 'ARCHIVE 2026', code: 'A-48', bay: 47.5},
-  {id: 'community', label: 'COMMUNITY', code: 'A-58', bay: 57.5},
-  {id: 'deep-stacks', label: 'DEEP STACKS', code: 'A-68', bay: 67.5},
-]
+export const ARCHIVE_DISTRICTS: ArchiveDistrict[] =
+  DEFAULT_LIBRARY_DISTRICTS
 
 function hashString(value: string) {
   let hash = 2166136261
@@ -86,9 +78,12 @@ export function archivePathFrame(bay: number) {
   }
 }
 
-export function archiveDistrictInfluence(bay: number) {
+export function archiveDistrictInfluence(
+  bay: number,
+  districts: ArchiveDistrict[] = ARCHIVE_DISTRICTS,
+) {
   let influence = 0
-  ARCHIVE_DISTRICTS.forEach((district) => {
+  districts.forEach((district) => {
     const distance = Math.abs(bay - district.bay)
     const local = 1 - smoothStep(.7, 1.85, distance)
     influence = Math.max(influence, local)
@@ -96,13 +91,16 @@ export function archiveDistrictInfluence(bay: number) {
   return influence
 }
 
-export function archiveWalkwayHalfWidthAtBay(bay: number) {
+export function archiveWalkwayHalfWidthAtBay(
+  bay: number,
+  districts: ArchiveDistrict[] = ARCHIVE_DISTRICTS,
+) {
   const welcomeInfluence =
     1 - smoothStep(.45, 2.25, bay)
 
   return (
     ARCHIVE_WALKWAY_HALF_WIDTH +
-    archiveDistrictInfluence(bay) * 2.4 +
+    archiveDistrictInfluence(bay, districts) * 2.4 +
     welcomeInfluence * 3.15
   )
 }
@@ -117,8 +115,11 @@ export function archiveBayFromWorldZ(z: number) {
   )
 }
 
-export function nearestArchiveDistrict(bay: number) {
-  return ARCHIVE_DISTRICTS.reduce((nearest, district) =>
+export function nearestArchiveDistrict(
+  bay: number,
+  districts: ArchiveDistrict[] = ARCHIVE_DISTRICTS,
+) {
+  return districts.reduce((nearest, district) =>
     Math.abs(district.bay - bay) < Math.abs(nearest.bay - bay)
       ? district
       : nearest,
@@ -148,6 +149,7 @@ export function archiveShelfPlacement(
   bay: number,
   side: -1 | 1,
   options: ArchiveShelfPlacementOptions = {},
+  districts: ArchiveDistrict[] = ARCHIVE_DISTRICTS,
 ): ArchiveShelfPlacement {
   const seed = hashString(key)
   const alongJitterScale = options.alongJitterScale ?? 1
@@ -188,7 +190,10 @@ export function archiveShelfPlacement(
     world,
     yaw,
     pathBay: fractionalBay,
-    districtId: nearestArchiveDistrict(fractionalBay).id,
+    districtId: nearestArchiveDistrict(
+      fractionalBay,
+      districts,
+    ).id,
   }
 }
 
@@ -204,6 +209,7 @@ function wrapAngle(angle: number) {
 function moveArchivePlacementToBay(
   placement: ArchiveShelfPlacement,
   nextBay: number,
+  districts: ArchiveDistrict[] = ARCHIVE_DISTRICTS,
 ): ArchiveShelfPlacement {
   const oldCenter = archivePathPoint(placement.pathBay)
   const oldFrame = archivePathFrame(placement.pathBay)
@@ -241,7 +247,7 @@ function moveArchivePlacementToBay(
     world,
     yaw: nextBaseYaw + yawOffset,
     pathBay: nextBay,
-    districtId: nearestArchiveDistrict(nextBay).id,
+    districtId: nearestArchiveDistrict(nextBay, districts).id,
   }
 }
 
@@ -255,6 +261,7 @@ function moveArchivePlacementToBay(
  */
 export function resolveArchiveShelfClearance(
   placements: ArchiveShelfPlacement[],
+  districts: ArchiveDistrict[] = ARCHIVE_DISTRICTS,
 ): ArchiveShelfPlacement[] {
   const resolved: ArchiveShelfPlacement[] = []
 
@@ -285,6 +292,7 @@ export function resolveArchiveShelfClearance(
       candidate = moveArchivePlacementToBay(
         candidate,
         candidate.pathBay + ARCHIVE_SHELF_CLEARANCE_STEP_BAYS,
+        districts,
       )
     }
 
