@@ -1,7 +1,7 @@
 import {NextResponse} from 'next/server'
 import {writeFile} from 'node:fs/promises'
 import path from 'node:path'
-import type {SurfLayoutConfig} from '@/app/surf/layout'
+import type {SurfLayoutConfig} from '@/app/surf/surfLayout'
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value)
