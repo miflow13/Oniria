@@ -465,6 +465,8 @@ export default function DevWebSurf3D({
     const collisionRects: Array<{
       minX: number
       maxX: number
+      minY: number
+      maxY: number
       minZ: number
       maxZ: number
     }> = []
@@ -635,11 +637,12 @@ export default function DevWebSurf3D({
       width: number,
       depth: number,
       material = floorMaterial,
+      baseY = 0,
     ) {
       const geometry = new THREE.BoxGeometry(width, .18, depth)
       architecturalGeometries.push(geometry)
       const mesh = new THREE.Mesh(geometry, material)
-      mesh.position.set(x, -.11, z)
+      mesh.position.set(x, baseY - .11, z)
       mesh.receiveShadow = true
       scene.add(mesh)
       return mesh
@@ -652,17 +655,20 @@ export default function DevWebSurf3D({
       depth: number,
       height: number,
       material = concrete,
+      baseY = 0,
     ) {
       const geometry = new THREE.BoxGeometry(width, height, depth)
       architecturalGeometries.push(geometry)
       const mesh = new THREE.Mesh(geometry, material)
-      mesh.position.set(x, height / 2 - .02, z)
+      mesh.position.set(x, baseY + height / 2 - .02, z)
       mesh.castShadow = true
       mesh.receiveShadow = true
       scene.add(mesh)
       collisionRects.push({
         minX: x - width / 2,
         maxX: x + width / 2,
+        minY: baseY,
+        maxY: baseY + height,
         minZ: z - depth / 2,
         maxZ: z + depth / 2,
       })
@@ -689,9 +695,10 @@ export default function DevWebSurf3D({
       z: number,
       width: number,
       rotationY = 0,
+      baseY = 0,
     ) {
       const group = new THREE.Group()
-      group.position.set(x, 0, z)
+      group.position.set(x, baseY, z)
       group.rotation.y = rotationY
 
       const sideGeometry = new THREE.BoxGeometry(.16, 3.56, .66)
@@ -750,7 +757,11 @@ export default function DevWebSurf3D({
         shelfAccentBars.push({
           mesh: accent,
           material: accentMaterial,
-          center: new THREE.Vector3(x, .245 + level * 1.1, z),
+          center: new THREE.Vector3(
+            x,
+            baseY + .245 + level * 1.1,
+            z,
+          ),
         })
       }
 
@@ -758,6 +769,8 @@ export default function DevWebSurf3D({
       collisionRects.push({
         minX: x - (rotated ? .33 : width / 2),
         maxX: x + (rotated ? .33 : width / 2),
+        minY: baseY,
+        maxY: baseY + 3.6,
         minZ: z - (rotated ? width / 2 : .33),
         maxZ: z + (rotated ? width / 2 : .33),
       })
@@ -1044,6 +1057,8 @@ export default function DevWebSurf3D({
     collisionRects.push({
       minX: -1.7,
       maxX: 1.7,
+      minY: 0,
+      maxY: 1.25,
       minZ: 5.3,
       maxZ: 8.7,
     })
