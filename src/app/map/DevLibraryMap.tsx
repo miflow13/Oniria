@@ -2,8 +2,10 @@
 
 import {
   FormEvent,
+  useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 import DreamWorld3D, {
@@ -22,6 +24,18 @@ import styles from './library.module.css'
 
 const DEFAULT_USERNAME = 'mikachu'
 const QUALITY: DreamQuality = 'cinematic'
+const CATALOG_PAGE_SIZE = 100
+const CATALOG_BOOKS_PER_SHELF = 9
+
+function catalogShelfWorld(index: number): [number, number, number] {
+  const angle = index * 1.17
+  const radius = 11 + (index % 4) * 2.4
+  return [
+    Math.sin(angle) * radius,
+    Math.cos(index * .71) * 7.2,
+    -26 - index * 6.4,
+  ]
+}
 
 const SHELF_ACCENTS: Record<LibraryShelfKind, string> = {
   featured: '#8c7cff',
@@ -95,6 +109,11 @@ function cleanMarkdown(markdown: string | undefined) {
 export default function DevLibraryMap() {
   const [bootstrap, setBootstrap] = useState<DevBootstrap | null>(null)
   const [catalog, setCatalog] = useState<DevArticleSummary[]>([])
+  const [catalogHasMore, setCatalogHasMore] = useState(true)
+  const [catalogLoading, setCatalogLoading] = useState(false)
+  const catalogNextPageRef = useRef(1)
+  const catalogLoadingRef = useRef(false)
+  const catalogHasMoreRef = useRef(true)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const [article, setArticle] = useState<DevArticle | null>(null)
@@ -114,19 +133,76 @@ export default function DevLibraryMap() {
     routeTargetId: null,
   })
 
+  const loadMoreCatalog = useCallback(async () => {
+    if (
+      catalogLoadingRef.current ||
+      !catalogHasMoreRef.current
+    ) {
+      return
+    }
+
+    catalogLoadingRef.current = true
+    setCatalogLoading(true)
+    const page = catalogNextPageRef.current
+
+    try {
+      const response = await fetch(
+        '/api/devto?mode=catalog&start_page=' +
+          page +
+          '&pages=1&per_page=' +
+          CATALOG_PAGE_SIZE,
+      )
+      if (!response.ok) {
+        throw new Error('Could not extend DEV catalogue')
+      }
+
+      const payload = (await response.json()) as {
+        articles?: DevArticleSummary[]
+        nextPage?: number
+        hasMore?: boolean
+      }
+      const incoming = payload.articles ?? []
+
+      setCatalog((current) => {
+        const seen = new Set(current.map((article) => article.id))
+        return [
+          ...current,
+          ...incoming.filter((article) => {
+            if (seen.has(article.id)) return false
+            seen.add(article.id)
+            return true
+          }),
+        ]
+      })
+
+      catalogNextPageRef.current =
+        payload.nextPage ?? page + 1
+      const hasMore =
+        Boolean(payload.hasMore) && incoming.length > 0
+      catalogHasMoreRef.current = hasMore
+      setCatalogHasMore(hasMore)
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : 'Could not extend DEV catalogue',
+      )
+    } finally {
+      catalogLoadingRef.current = false
+      setCatalogLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     let cancelled = false
 
     async function load() {
       try {
         setLoading(true)
-        const [bootstrapResponse, catalogResponse] = await Promise.all([
-          fetch(
-            '/api/devto?mode=bootstrap&username=' +
-              encodeURIComponent(DEFAULT_USERNAME),
-          ),
-          fetch('/api/devto?mode=catalog&pages=3&per_page=60'),
-        ])
+        const bootstrapResponse = await fetch(
+          '/api/devto?mode=bootstrap&username=' +
+            encodeURIComponent(DEFAULT_USERNAME),
+        )
 
         if (!bootstrapResponse.ok) {
           throw new Error('Could not load DEV library')
@@ -134,15 +210,10 @@ export default function DevLibraryMap() {
 
         const bootstrapPayload =
           (await bootstrapResponse.json()) as DevBootstrap
-        const catalogPayload = catalogResponse.ok
-          ? ((await catalogResponse.json()) as {
-              articles?: DevArticleSummary[]
-            })
-          : {articles: []}
 
         if (cancelled) return
         setBootstrap(bootstrapPayload)
-        setCatalog(catalogPayload.articles ?? [])
+        void loadMoreCatalog()
       } catch (caught) {
         if (cancelled) return
         setError(
@@ -159,7 +230,23 @@ export default function DevLibraryMap() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [loadMoreCatalog])
+
+  useEffect(() => {
+    if (!article) return
+
+    const closeBookWithE = (event: KeyboardEvent) => {
+      if (event.code !== 'KeyE') return
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+      setArticle(null)
+    }
+
+    window.addEventListener('keydown', closeBookWithE, true)
+    return () =>
+      window.removeEventListener('keydown', closeBookWithE, true)
+  }, [article])
 
   const creators = useMemo(() => {
     if (!bootstrap) return []
@@ -208,9 +295,9 @@ export default function DevLibraryMap() {
       return picked
     }
 
-    const featured = takeFresh(bootstrap.feed, 18)
-    const latest = takeFresh(bootstrap.latest, 18)
-    const mine = takeFresh(bootstrap.profileArticles, 18)
+    const featured = takeFresh(bootstrap.feed, 9)
+    const latest = takeFresh(bootstrap.latest, 9)
+    const mine = takeFresh(bootstrap.profileArticles, 9)
     const remaining = catalog.filter((item) => !used.has(item.id))
 
     const result: LibraryShelf[] = [
@@ -219,7 +306,7 @@ export default function DevLibraryMap() {
         'Featured',
         'popular this week',
         'featured',
-        [-10.5, 1.0, -7.0],
+        [-10.5, 1, -7],
         featured,
       ),
       makeShelf(
@@ -241,35 +328,11 @@ export default function DevLibraryMap() {
         mine,
       ),
       makeShelf(
-        'shelf:catalog:a',
-        'Deep Catalog I',
-        'long-tail DEV',
-        'catalog',
-        [-16.0, -5.5, -20.5],
-        remaining.slice(0, 18),
-      ),
-      makeShelf(
-        'shelf:catalog:b',
-        'Deep Catalog II',
-        'long-tail DEV',
-        'catalog',
-        [-2.0, .5, -28.0],
-        remaining.slice(18, 36),
-      ),
-      makeShelf(
-        'shelf:catalog:c',
-        'Deep Catalog III',
-        'long-tail DEV',
-        'catalog',
-        [15.5, -4.0, -24.5],
-        remaining.slice(36, 54),
-      ),
-      makeShelf(
         'shelf:topics',
         'Topics',
         'choose a DEV tag',
         'topics',
-        [-13.5, 8.5, -35.0],
+        [-14.5, 7.5, -20.5],
         dynamicTitle?.startsWith('#') ? dynamicArticles : [],
       ),
       makeShelf(
@@ -277,7 +340,7 @@ export default function DevLibraryMap() {
         'Creators',
         'browse author shelves',
         'creators',
-        [14.5, 10.5, -38.5],
+        [14.5, 8.8, -22.5],
         dynamicTitle?.startsWith('@') ? dynamicArticles : [],
       ),
     ]
@@ -289,8 +352,35 @@ export default function DevLibraryMap() {
           'Search',
           query || 'search results',
           'search',
-          [0, 13.0, -46.0],
-          searchResults,
+          [0, 11, -24],
+          searchResults.slice(0, CATALOG_BOOKS_PER_SHELF),
+        ),
+      )
+    }
+
+    for (
+      let offset = 0;
+      offset < remaining.length;
+      offset += CATALOG_BOOKS_PER_SHELF
+    ) {
+      const shelfIndex = Math.floor(
+        offset / CATALOG_BOOKS_PER_SHELF,
+      )
+      const shelfArticles = remaining.slice(
+        offset,
+        offset + CATALOG_BOOKS_PER_SHELF,
+      )
+      result.push(
+        makeShelf(
+          'shelf:catalog:' + shelfIndex,
+          'Catalog ' + String(shelfIndex + 1).padStart(3, '0'),
+          'DEV catalogue · articles ' +
+            String(offset + 1) +
+            '–' +
+            String(offset + shelfArticles.length),
+          'catalog',
+          catalogShelfWorld(shelfIndex),
+          shelfArticles,
         ),
       )
     }
@@ -362,6 +452,34 @@ export default function DevLibraryMap() {
     shelves.find((shelf) => shelf.id === navigation.nearestId) ?? null
   const routeShelf =
     shelves.find((shelf) => shelf.id === navigation.routeTargetId) ?? null
+  const catalogShelfCount = shelves.filter(
+    (shelf) => shelf.kind === 'catalog',
+  ).length
+
+  useEffect(() => {
+    if (!catalogHasMore || catalogLoading || catalogShelfCount === 0) {
+      return
+    }
+
+    const candidate =
+      navigation.routeTargetId ?? navigation.nearestId
+    if (!candidate?.startsWith('shelf:catalog:')) return
+
+    const index = Number(candidate.split(':').at(-1))
+    if (
+      Number.isFinite(index) &&
+      index >= catalogShelfCount - 3
+    ) {
+      void loadMoreCatalog()
+    }
+  }, [
+    catalogHasMore,
+    catalogLoading,
+    catalogShelfCount,
+    loadMoreCatalog,
+    navigation.nearestId,
+    navigation.routeTargetId,
+  ])
 
   async function openArticle(summary: DevArticleSummary) {
     try {
@@ -535,7 +653,14 @@ export default function DevLibraryMap() {
             </small>
           ) : (
             <small>
-              R · fly to next shelf · E · inspect book
+              R · fly to next shelf · E · inspect / close book
+              {catalogLoading
+                ? ' · extending catalogue…'
+                : catalogHasMore
+                  ? ' · ' +
+                    catalog.length +
+                    ' catalogue articles loaded'
+                  : ' · catalogue end reached'}
             </small>
           )}
         </div>
