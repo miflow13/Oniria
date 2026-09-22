@@ -450,25 +450,35 @@ export default function DevLibraryMap() {
   }, [])
 
   const refreshWorldConfig = useCallback(
-    async (applyDefaultMovement = false) => {
+    async (
+      applyDefaultMovement = false,
+      silent = false,
+    ) => {
       try {
-        setWorldSyncing(true)
+        if (!silent) setWorldSyncing(true)
         const response = await fetch(
           '/api/library-world?preview=1&_=' + Date.now(),
           {
             cache: 'no-store',
+            headers: {
+              'cache-control': 'no-cache',
+            },
           },
         )
         if (!response.ok) return
         const payload = (await response.json()) as LibraryWorldConfig
-        setWorldConfig(payload)
+        setWorldConfig((current) =>
+          JSON.stringify(current) === JSON.stringify(payload)
+            ? current
+            : payload,
+        )
         if (applyDefaultMovement) {
           setMovementMode(payload.defaultMovement)
         }
       } catch {
         // The fallback world config remains active if Sanity is unavailable.
       } finally {
-        setWorldSyncing(false)
+        if (!silent) setWorldSyncing(false)
       }
     },
     [],
@@ -514,6 +524,33 @@ export default function DevLibraryMap() {
       cancelled = true
     }
   }, [loadMoreCatalog, refreshWorldConfig])
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void refreshWorldConfig(false, true)
+      }
+    }, 4000)
+
+    const refreshOnFocus = () => {
+      void refreshWorldConfig(false, true)
+    }
+
+    window.addEventListener('focus', refreshOnFocus)
+    document.addEventListener(
+      'visibilitychange',
+      refreshOnFocus,
+    )
+
+    return () => {
+      window.clearInterval(interval)
+      window.removeEventListener('focus', refreshOnFocus)
+      document.removeEventListener(
+        'visibilitychange',
+        refreshOnFocus,
+      )
+    }
+  }, [refreshWorldConfig])
 
   useEffect(() => {
     let cancelled = false
