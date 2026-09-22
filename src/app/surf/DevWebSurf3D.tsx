@@ -80,6 +80,22 @@ const FLOOR_ACCENTS = [
   0x68d98a,
   0x8d9aad,
 ] as const
+const FLOOR_SURFACE_TINTS = [
+  0x444c52,
+  0x3b4055,
+  0x354b49,
+  0x463b50,
+  0x394b40,
+  0x41464e,
+] as const
+const FLOOR_WALKWAY_TINTS = [
+  0x5a666b,
+  0x505873,
+  0x486762,
+  0x5e4f69,
+  0x4d6656,
+  0x555d68,
+] as const
 const FLOOR_AISLES = [
   ['FEATURED', 'NEW', 'POPULAR'],
   ['WEBDEV', 'REACT', 'TYPESCRIPT'],
@@ -832,7 +848,18 @@ export default function DevWebSurf3D({
     const floorMaterial = concrete.clone()
     floorMaterial.color.setHex(0x3d4149)
     floorMaterial.roughness = .9
-    architecturalMaterials.push(concrete, floorMaterial)
+    const floorMaterials = FLOOR_SURFACE_TINTS.map((tint, floor) => {
+      const material = floorMaterial.clone()
+      material.color.setHex(tint)
+      material.emissive = new THREE.Color(FLOOR_ACCENTS[floor])
+      material.emissiveIntensity = floor === 0 ? .018 : .035
+      return material
+    })
+    architecturalMaterials.push(
+      concrete,
+      floorMaterial,
+      ...floorMaterials,
+    )
 
     const brass = new THREE.MeshStandardMaterial({
       color: 0x303a70,
@@ -850,7 +877,23 @@ export default function DevWebSurf3D({
       roughness: .78,
       metalness: .16,
     })
-    architecturalMaterials.push(shelfMaterial)
+    const floorShelfTopMaterials = FLOOR_ACCENTS.map((accent) => {
+      const material = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(0x30343c).lerp(
+          new THREE.Color(accent),
+          .22,
+        ),
+        emissive: accent,
+        emissiveIntensity: .12,
+        roughness: .52,
+        metalness: .4,
+      })
+      return material
+    })
+    architecturalMaterials.push(
+      shelfMaterial,
+      ...floorShelfTopMaterials,
+    )
 
     function addFloor(
       x: number,
@@ -862,7 +905,16 @@ export default function DevWebSurf3D({
     ) {
       const geometry = new THREE.BoxGeometry(width, .18, depth)
       architecturalGeometries.push(geometry)
-      const mesh = new THREE.Mesh(geometry, material)
+      const floorIndex = THREE.MathUtils.clamp(
+        Math.round(floorBase / LIBRARY_FLOOR_HEIGHT),
+        0,
+        LIBRARY_FLOOR_COUNT - 1,
+      )
+      const resolvedMaterial =
+        material === floorMaterial
+          ? floorMaterials[floorIndex] ?? floorMaterial
+          : material
+      const mesh = new THREE.Mesh(geometry, resolvedMaterial)
       mesh.position.set(x, floorBase - .11, z)
       mesh.receiveShadow = true
       scene.add(mesh)
@@ -872,11 +924,6 @@ export default function DevWebSurf3D({
       if (material === floorMaterial && floorBase > 0) {
         const edgeGeometry = new THREE.EdgesGeometry(geometry)
         architecturalGeometries.push(edgeGeometry)
-        const floorIndex = THREE.MathUtils.clamp(
-          Math.round(floorBase / LIBRARY_FLOOR_HEIGHT),
-          0,
-          LIBRARY_FLOOR_COUNT - 1,
-        )
         const edgeMaterial = new THREE.LineBasicMaterial({
           color: FLOOR_ACCENTS[floorIndex],
           transparent: true,
@@ -901,14 +948,19 @@ export default function DevWebSurf3D({
     ) {
       const geometry = new THREE.BoxGeometry(width, .024, depth)
       architecturalGeometries.push(geometry)
+      const floorIndex = THREE.MathUtils.clamp(
+        Math.round(floorBase / LIBRARY_FLOOR_HEIGHT),
+        0,
+        LIBRARY_FLOOR_COUNT - 1,
+      )
       const material = new THREE.MeshStandardMaterial({
-        color: 0x4b5059,
+        color: FLOOR_WALKWAY_TINTS[floorIndex],
         map: architecturalSurfaceTexture,
         roughnessMap: architecturalSurfaceRoughness,
         roughness: .88,
         metalness: .035,
         emissive: accent,
-        emissiveIntensity: .035,
+        emissiveIntensity: .065,
       })
       architecturalMaterials.push(material)
       const mesh = new THREE.Mesh(geometry, material)
@@ -949,6 +1001,7 @@ export default function DevWebSurf3D({
       mesh: THREE.Mesh
       material: THREE.MeshBasicMaterial
       center: THREE.Vector3
+      floorIndex: number
     }> = []
     const sectionFloorGlows: Array<{
       section: LibrarySection
@@ -970,6 +1023,11 @@ export default function DevWebSurf3D({
       const group = new THREE.Group()
       group.position.set(x, floorBase, z)
       group.rotation.y = rotationY
+      const shelfFloorIndex = THREE.MathUtils.clamp(
+        Math.round(floorBase / LIBRARY_FLOOR_HEIGHT),
+        0,
+        LIBRARY_FLOOR_COUNT - 1,
+      )
 
       const sideGeometry = new THREE.BoxGeometry(.16, 3.56, .66)
       const boardGeometry = new THREE.BoxGeometry(width, .1, .66)
@@ -1001,7 +1059,10 @@ export default function DevWebSurf3D({
         group.add(board)
       })
 
-      const top = new THREE.Mesh(boardGeometry, brass)
+      const top = new THREE.Mesh(
+        boardGeometry,
+        floorShelfTopMaterials[shelfFloorIndex] ?? brass,
+      )
       top.position.set(0, 3.48, 0)
       top.scale.y = 1.15
       group.add(top)
@@ -1014,9 +1075,9 @@ export default function DevWebSurf3D({
         )
         architecturalGeometries.push(accentGeometry)
         const accentMaterial = new THREE.MeshBasicMaterial({
-          color: 0x3b49df,
+          color: FLOOR_ACCENTS[shelfFloorIndex],
           transparent: true,
-          opacity: .045,
+          opacity: .09,
           blending: THREE.AdditiveBlending,
           depthWrite: false,
         })
@@ -1032,6 +1093,7 @@ export default function DevWebSurf3D({
             floorBase + .245 + level * 1.1,
             z,
           ),
+          floorIndex: shelfFloorIndex,
         })
       }
 
