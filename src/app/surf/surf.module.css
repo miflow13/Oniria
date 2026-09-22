@@ -2621,3 +2621,106 @@
     transform: none;
   }
 }
+
+
+/* ==========================================================================
+   Mega-library floors
+   ========================================================================== */
+
+.floorRail {
+  position: absolute;
+  z-index: 63;
+  right: 22px;
+  top: 108px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 7px;
+  color: #8f95a4;
+  background: rgba(14,16,22,.9);
+  border: 1px solid rgba(83,211,255,.09);
+  border-radius: 999px;
+  box-shadow:
+    0 10px 28px rgba(0,0,0,.22),
+    0 0 24px rgba(83,211,255,.035);
+  backdrop-filter: blur(14px);
+}
+
+.floorRail > span {
+  margin: 0 2px 0 3px;
+  color: #697080;
+  font-size: .48rem;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.floorRail button {
+  min-width: 29px;
+  height: 27px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  color: #9aa1af;
+  background: rgba(255,255,255,.025);
+  border: 1px solid rgba(255,255,255,.055);
+  border-radius: 999px;
+  font: inherit;
+  font-size: .5rem;
+  font-weight: 700;
+  transition:
+    color 140ms ease,
+    background 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.floorRail button:hover {
+  color: #fff;
+  border-color: rgba(83,211,255,.32);
+  background: rgba(83,211,255,.07);
+}
+
+.floorRailActive {
+  color: #fff !important;
+  background:
+    linear-gradient(135deg, #3b49df, #5267ff) !important;
+  border-color: rgba(138,232,255,.38) !important;
+  box-shadow:
+    0 0 16px rgba(59,73,223,.22),
+    0 0 10px rgba(83,211,255,.08);
+}
+
+.floorRail small {
+  margin-left: 4px;
+  color: #626978;
+  font-size: .46rem;
+  white-space: nowrap;
+}
+
+@media (max-width: 1050px) {
+  .floorRail {
+    right: 14px;
+    top: 106px;
+  }
+
+  .floorRail small {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .floorRail {
+    left: 12px;
+    right: auto;
+    top: 108px;
+  }
+
+  .directoryToggle {
+    top: 146px;
+  }
+
+  .directory {
+    top: 186px;
+  }
+}
