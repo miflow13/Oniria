@@ -918,6 +918,97 @@ export default function DevWebSurf3D({
     addDoorwayBeacon('search', -8.35, -21.1, Math.PI / 2)
     addDoorwayBeacon('archive', 0, -34.4, 0)
 
+    // Multi-level building shell. Upper floors are real slabs with a
+    // central lift void so vertical travel never clips through geometry.
+    const buildingHeight = LIBRARY_FLOOR_COUNT * LIBRARY_FLOOR_HEIGHT
+    addWall(-19, -15, .38, 60, buildingHeight, concrete, 0)
+    addWall(19, -15, .38, 60, buildingHeight, concrete, 0)
+    addWall(0, -44.7, 38, .38, buildingHeight, concrete, 0)
+    addWall(-10.4, 14.7, 17.2, .38, buildingHeight, concrete, 0)
+    addWall(10.4, 14.7, 17.2, .38, buildingHeight, concrete, 0)
+
+    function addUpperFloor(floor: number) {
+      const base = floor * LIBRARY_FLOOR_HEIGHT
+      addFloor(-10.35, -15, 17.3, 60, floorMaterial, base)
+      addFloor(10.35, -15, 17.3, 60, floorMaterial, base)
+      addFloor(0, -20, 3.4, 50, floorMaterial, base)
+      addFloor(0, 12, 3.4, 6, floorMaterial, base)
+
+      const railGeometry = new THREE.BoxGeometry(3.7, .055, .055)
+      const sideRailGeometry = new THREE.BoxGeometry(.055, .055, 4.4)
+      architecturalGeometries.push(railGeometry, sideRailGeometry)
+      const railMaterial = new THREE.MeshBasicMaterial({
+        color: 0x53d3ff,
+        transparent: true,
+        opacity: .2,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })
+      architecturalMaterials.push(railMaterial)
+
+      ;[5, 9].forEach((z) => {
+        const rail = new THREE.Mesh(railGeometry, railMaterial)
+        rail.position.set(0, base + 1.05, z)
+        scene.add(rail)
+      })
+      ;[-1.7, 1.7].forEach((x) => {
+        const rail = new THREE.Mesh(sideRailGeometry, railMaterial)
+        rail.position.set(x, base + 1.05, 7)
+        scene.add(rail)
+      })
+
+      const levelTexture = createTextTexture(
+        'LEVEL ' + String(floor + 1).padStart(2, '0'),
+        'DEEP DEV COLLECTION',
+        floor % 2 === 0 ? '#53d3ff' : '#7c83ff',
+        640,
+        160,
+      )
+      labelsToDispose.push(levelTexture)
+      const levelMaterial = new THREE.SpriteMaterial({
+        map: levelTexture,
+        transparent: true,
+        depthWrite: false,
+        toneMapped: false,
+      })
+      architecturalMaterials.push(levelMaterial)
+      const levelSprite = new THREE.Sprite(levelMaterial)
+      levelSprite.position.set(0, base + 2.7, 4.6)
+      levelSprite.scale.set(5.4, 1.35, 1)
+      scene.add(levelSprite)
+    }
+
+    for (let floor = 1; floor < LIBRARY_FLOOR_COUNT; floor += 1) {
+      addUpperFloor(floor)
+    }
+    addFloor(0, -15, 38, 60, concrete, buildingHeight)
+
+    // Central lift shaft ties every floor together visually and is also the
+    // route used by cross-floor travel.
+    const liftColumnGeometry = new THREE.BoxGeometry(.07, buildingHeight, .07)
+    const liftRingGeometry = new THREE.BoxGeometry(3.5, .045, 4.1)
+    architecturalGeometries.push(liftColumnGeometry, liftRingGeometry)
+    const liftMaterial = new THREE.MeshBasicMaterial({
+      color: 0x53d3ff,
+      transparent: true,
+      opacity: .22,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+    architecturalMaterials.push(liftMaterial)
+    ;[-1.65, 1.65].forEach((x) => {
+      ;[5.05, 8.95].forEach((z) => {
+        const column = new THREE.Mesh(liftColumnGeometry, liftMaterial)
+        column.position.set(x, buildingHeight / 2, z)
+        scene.add(column)
+      })
+    })
+    for (let floor = 0; floor <= LIBRARY_FLOOR_COUNT; floor += 1) {
+      const ring = new THREE.Mesh(liftRingGeometry, liftMaterial)
+      ring.position.set(0, floor * LIBRARY_FLOOR_HEIGHT + .04, 7)
+      scene.add(ring)
+    }
+
     // Main library architecture.
     addFloor(0, -15, 34, 58)
     addFloor(-13, -13, 16, 28)
@@ -969,6 +1060,46 @@ export default function DevWebSurf3D({
         rotation as number,
       ),
     )
+
+    // Upper floors only create shelf units that contain actual DEV articles.
+    // This keeps every visible shelf populated instead of scattering empty
+    // furniture around a huge building.
+    const catalogShelfUnits = new Map<
+      string,
+      {
+        x: number
+        z: number
+        rotationY: number
+        floorBase: number
+      }
+    >()
+    nodes.forEach((node) => {
+      if (
+        node.kind !== 'article' ||
+        !node.shelfKey ||
+        (node.floorIndex ?? 0) === 0
+      ) {
+        return
+      }
+
+      const physicalKey = node.shelfKey.replace(/:level-\d+$/, '')
+      if (catalogShelfUnits.has(physicalKey)) return
+
+      const rotationY = node.rotationY ?? 0
+      const slotOffset = ((node.shelfSlot ?? 1) - 1) * .96
+      const front = Math.abs(rotationY) < .1 ? .42 : -.42
+      catalogShelfUnits.set(physicalKey, {
+        x: node.position[0] - slotOffset,
+        z: node.position[2] - front,
+        rotationY,
+        floorBase:
+          (node.floorIndex ?? 0) * LIBRARY_FLOOR_HEIGHT,
+      })
+    })
+
+    catalogShelfUnits.forEach(({x, z, rotationY, floorBase}) => {
+      addShelf(x, z, 4.45, rotationY, floorBase)
+    })
 
     const ceilingRailGeometry = new THREE.BoxGeometry(.035, .035, 52)
     const ceilingRailMaterial = new THREE.MeshBasicMaterial({
