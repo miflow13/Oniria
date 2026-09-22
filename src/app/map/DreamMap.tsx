@@ -1667,9 +1667,11 @@ export default function DreamMap({
             <div className={styles.mapHint}>
               {focusedDream
                 ? 'Focused constellation · select a symbol to inspect it'
-                : observatoryMode
-                  ? 'Observatory · recurring concepts become stellar bodies · click any memory to descend'
-                  : 'Hover to hear · click to inspect · double-click or hold a selected orb to enter the dream'}
+                : flightMode
+                  ? 'First-person travel · WASD to move · mouse to look · Shift to boost · E to inspect'
+                  : observatoryMode
+                    ? 'Observatory · recurring concepts become stellar bodies · click any memory to descend'
+                    : 'Hover to hear · click to inspect · double-click or hold a selected orb to enter the dream'}
             </div>
 
             {selectedNode &&
