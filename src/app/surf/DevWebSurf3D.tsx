@@ -86,8 +86,8 @@ function createTextTexture(
   title: string,
   subtitle: string,
   accent: string,
-  width = 1024,
-  height = 256,
+  width = 768,
+  height = 192,
 ) {
   const canvas = document.createElement('canvas')
   canvas.width = width
@@ -102,24 +102,31 @@ function createTextTexture(
     gradient.addColorStop(.88, 'rgba(5,8,10,.88)')
     gradient.addColorStop(1, 'rgba(5,8,10,0)')
     context.fillStyle = gradient
-    context.fillRect(0, 26, width, height - 52)
+    context.fillRect(
+      0,
+      Math.round(height * .1),
+      width,
+      Math.round(height * .8),
+    )
 
     context.textAlign = 'center'
     context.textBaseline = 'middle'
     context.shadowColor = accent
     context.shadowBlur = 16
     context.fillStyle = '#f5f5f5'
-    context.font = '700 38px system-ui, sans-serif'
+    context.font =
+      '700 ' + Math.round(height * .15) + 'px system-ui, sans-serif'
     const cleanTitle =
       title.length > 42 ? title.slice(0, 41) + '…' : title
-    context.fillText(cleanTitle, width / 2, 105)
+    context.fillText(cleanTitle, width / 2, height * .41)
 
     context.shadowBlur = 0
     context.fillStyle = accent
-    context.font = '500 18px system-ui, sans-serif'
+    context.font =
+      '500 ' + Math.round(height * .072) + 'px system-ui, sans-serif'
     const cleanSubtitle =
       subtitle.length > 62 ? subtitle.slice(0, 61) + '…' : subtitle
-    context.fillText(cleanSubtitle, width / 2, 155)
+    context.fillText(cleanSubtitle, width / 2, height * .64)
   }
 
   const texture = new THREE.CanvasTexture(canvas)
@@ -134,8 +141,8 @@ function createBookTitleTexture(
   accent: string,
 ) {
   const canvas = document.createElement('canvas')
-  canvas.width = 1024
-  canvas.height = 460
+  canvas.width = 768
+  canvas.height = 345
   const context = canvas.getContext('2d')
 
   if (context) {
@@ -148,21 +155,21 @@ function createBookTitleTexture(
     glow.addColorStop(.5, '#53d3ff')
     glow.addColorStop(1, '#ae7bff')
     context.fillStyle = glow
-    context.fillRect(0, 0, canvas.width, 16)
+    context.fillRect(0, 0, canvas.width, 12)
 
     context.fillStyle = 'rgba(255,255,255,.045)'
-    for (let x = 40; x < canvas.width; x += 72) {
-      context.fillRect(x, 36, 1, canvas.height - 72)
+    for (let x = 30; x < canvas.width; x += 54) {
+      context.fillRect(x, 27, 1, canvas.height - 54)
     }
 
     const words = title.trim().split(/\s+/)
     const lines: string[] = []
     let line = ''
 
-    context.font = '800 58px system-ui, sans-serif'
+    context.font = '800 43px system-ui, sans-serif'
     for (const word of words) {
       const next = line ? line + ' ' + word : word
-      if (context.measureText(next).width > 860 && line) {
+      if (context.measureText(next).width > 645 && line) {
         lines.push(line)
         line = word
         if (lines.length === 2) break
@@ -182,17 +189,17 @@ function createBookTitleTexture(
         index === 2 && words.join(' ').length > lines.join(' ').length
           ? item.replace(/[.…]*$/, '') + '…'
           : item
-      context.fillText(rendered, 64, 66 + index * 72)
+      context.fillText(rendered, 48, 50 + index * 54)
     })
 
     context.shadowBlur = 0
     context.fillStyle = '#98a2ff'
-    context.font = '600 28px system-ui, sans-serif'
-    context.fillText(subtitle, 64, 344)
+    context.font = '600 21px system-ui, sans-serif'
+    context.fillText(subtitle, 48, 258)
 
     context.fillStyle = '#6d7280'
-    context.font = '500 20px system-ui, sans-serif'
-    context.fillText('DEV // ARTICLE', 64, 392)
+    context.font = '500 15px system-ui, sans-serif'
+    context.fillText('DEV // ARTICLE', 48, 294)
   }
 
   const texture = new THREE.CanvasTexture(canvas)
