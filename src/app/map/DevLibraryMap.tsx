@@ -994,7 +994,10 @@ export default function DevLibraryMap() {
             disabled={worldSyncing}
             title={
               worldConfig.syncMode === 'drafts'
-                ? 'Reload saved Sanity drafts into the spatial archive'
+                ? 'Reload saved Sanity drafts into the spatial archive' +
+                  (worldConfig.sanityRevision
+                    ? ' · latest ' + worldConfig.sanityRevision
+                    : '')
                 : 'Reload the published spatial archive configuration from Sanity'
             }
           >
