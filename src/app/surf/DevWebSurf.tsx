@@ -261,7 +261,7 @@ function megaShelfPlacement(index: number): ShelfPlacement {
   const level = Math.floor(localIndex / 3)
   const slot = localIndex % 3
 
-  const columns = [-13.5, -8.1, -2.7, 2.7, 8.1, 13.5]
+  const columns = [-12, -4, 4, 12]
   const rows = [-9.5, -15.2, -20.9, -26.6, -32.3, -38]
   const columnIndex = shelfIndex % columns.length
   const rowIndex = Math.floor(shelfIndex / columns.length) % rows.length
