@@ -3553,10 +3553,74 @@ export default function DreamWorld3D({
         ? now / 1000 - openingBook.startedAt
         : 0
       const openingProgress = openingBook
-        ? THREE.MathUtils.clamp(openingSeconds / .78, 0, 1)
+        ? THREE.MathUtils.clamp(openingSeconds / .92, 0, 1)
         : 0
       const openingEase =
         1 - Math.pow(1 - openingProgress, 3)
+
+      if (
+        openingBook &&
+        openingProgress >= .72 &&
+        !openingBook.fired
+      ) {
+        openingBook.fired = true
+        openingBook.visual.bookmark.visible = true
+        onBookSelectRef.current?.(
+          openingBook.visual.nodeId,
+          openingBook.visual.index,
+        )
+      }
+
+      if (
+        openingBook?.fired &&
+        openingSeconds >= 1.05 &&
+        openingBook.returningAt === null
+      ) {
+        const readingBook = libraryReadingBookRef.current
+        const stillReading =
+          readingBook?.nodeId === openingBook.visual.nodeId &&
+          readingBook?.index === openingBook.visual.index
+
+        if (!stillReading) {
+          openingBook.returningAt = now / 1000
+        }
+      }
+
+      const returnSeconds =
+        openingBook?.returningAt !== null &&
+        openingBook?.returningAt !== undefined
+          ? now / 1000 - openingBook.returningAt
+          : 0
+      const returnProgress =
+        openingBook?.returningAt !== null &&
+        openingBook?.returningAt !== undefined
+          ? THREE.MathUtils.clamp(returnSeconds / .82, 0, 1)
+          : 0
+      const returnEase =
+        returnProgress > 0
+          ? 1 - Math.pow(1 - returnProgress, 3)
+          : 0
+      const ritualAmount = openingBook
+        ? openingBook.returningAt !== null
+          ? 1 - returnEase
+          : openingEase
+        : 0
+
+      const ritualForward = new THREE.Vector3()
+      const ritualRight = new THREE.Vector3()
+      const ritualUp = new THREE.Vector3(0, 1, 0)
+      const ritualWorldTarget = new THREE.Vector3()
+      const parentWorldQuaternion = new THREE.Quaternion()
+      const ritualWorldQuaternion = new THREE.Quaternion()
+      const ritualLocalQuaternion = new THREE.Quaternion()
+      const ritualFacingOffset = new THREE.Quaternion().setFromEuler(
+        new THREE.Euler(0, Math.PI, 0),
+      )
+
+      camera.getWorldDirection(ritualForward)
+      ritualRight
+        .crossVectors(ritualForward, ritualUp)
+        .normalize()
 
       libraryBookVisuals.forEach((bookVisual) => {
         const shelfVisual = nodeVisuals.get(bookVisual.nodeId)
@@ -3578,22 +3642,53 @@ export default function DreamWorld3D({
         bookVisual.coverHinge.visible = showFullDetail
 
         const positionTarget = bookVisual.basePosition.clone()
-        positionTarget.z += isOpening
-          ? .72 * openingEase
-          : isHovered
+
+        if (isOpening && bookVisual.group.parent) {
+          ritualWorldTarget
+            .copy(camera.position)
+            .addScaledVector(ritualForward, 1.18)
+            .addScaledVector(ritualRight, .18)
+            .addScaledVector(ritualUp, -.08)
+
+          const localTarget = bookVisual.group.parent.worldToLocal(
+            ritualWorldTarget.clone(),
+          )
+          positionTarget.lerp(localTarget, ritualAmount)
+
+          bookVisual.group.parent.getWorldQuaternion(
+            parentWorldQuaternion,
+          )
+          ritualWorldQuaternion
+            .copy(camera.quaternion)
+            .multiply(ritualFacingOffset)
+          ritualLocalQuaternion
+            .copy(parentWorldQuaternion)
+            .invert()
+            .multiply(ritualWorldQuaternion)
+
+          bookVisual.group.quaternion.slerp(
+            ritualLocalQuaternion,
+            .16,
+          )
+        } else {
+          positionTarget.z += isHovered
             ? .2
             : isApproachedShelf
               ? .075
               : 0
-        positionTarget.y += isOpening ? .08 * openingEase : 0
+          bookVisual.group.quaternion.slerp(
+            new THREE.Quaternion(),
+            .14,
+          )
+        }
 
         bookVisual.group.position.lerp(
           positionTarget,
-          isOpening ? .2 : .12,
+          isOpening ? .18 : .12,
         )
 
         const targetScale = isOpening
-          ? 1 + .13 * openingEase
+          ? 1 + .42 * ritualAmount
           : isHovered
             ? 1.045
             : isApproachedShelf
@@ -3605,38 +3700,29 @@ export default function DreamWorld3D({
             targetScale,
             targetScale,
           ),
-          isOpening ? .18 : .1,
+          isOpening ? .16 : .1,
         )
 
-        const targetYaw = isOpening
-          ? .07 * openingEase
-          : isHovered
-            ? .025
-            : isApproachedShelf
-              ? .012
-              : 0
-        bookVisual.group.rotation.y +=
-          (targetYaw - bookVisual.group.rotation.y) * .14
-
         const targetCoverAngle = isOpening
-          ? -Math.PI * .72 * openingEase
+          ? -Math.PI * .84 * ritualAmount
           : 0
         bookVisual.coverHinge.rotation.y +=
           (targetCoverAngle - bookVisual.coverHinge.rotation.y) *
-          (isOpening ? .2 : .15)
+          (isOpening ? .18 : .15)
       })
 
-      if (openingBook) {
-        if (openingProgress >= .68 && !openingBook.fired) {
-          openingBook.fired = true
-          onBookSelectRef.current?.(
-            openingBook.visual.nodeId,
-            openingBook.visual.index,
-          )
-        }
-        if (openingSeconds >= 1.15) {
-          openingBook = null
-        }
+      if (
+        openingBook &&
+        openingBook.returningAt !== null &&
+        returnProgress >= 1
+      ) {
+        openingBook.visual.group.position.copy(
+          openingBook.visual.basePosition,
+        )
+        openingBook.visual.group.quaternion.identity()
+        openingBook.visual.group.scale.setScalar(1)
+        openingBook.visual.coverHinge.rotation.y = 0
+        openingBook = null
       }
 
       for (const node of nodeRef.current) {
@@ -5053,14 +5139,17 @@ export default function DreamWorld3D({
           ((selectedVisual ? .12 : 0) - dreamPost.uniforms.uTravel.value) *
           .03
       }
+      const readingRitualActive = Boolean(openingBook)
       renderer.toneMappingExposure +=
-        ((selectedVisual?.group.userData.libraryKind === 'shelf'
-          ? .78
-          : selectedVisual
-            ? .84
-            : .86) -
+        (((readingRitualActive
+          ? .62
+          : selectedVisual?.group.userData.libraryKind === 'shelf'
+            ? .78
+            : selectedVisual
+              ? .84
+              : .86)) -
           renderer.toneMappingExposure) *
-        .03
+        .045
 
       if (scene.fog instanceof THREE.FogExp2) {
         const sceneReveal = Math.min(1, elapsed / 1.7)
@@ -5581,6 +5670,8 @@ export default function DreamWorld3D({
       shelfCoverGeometry.dispose()
       shelfAccentGeometry.dispose()
       shelfPickGeometry.dispose()
+      shelfBookmarkGeometry.dispose()
+      shelfBookmarkMaterial.dispose()
       shelfFrameMaterial.dispose()
       shelfBoardMaterial.dispose()
       shelfBookMaterials.forEach((material) => material.dispose())
@@ -5592,6 +5683,7 @@ export default function DreamWorld3D({
       libraryShelfSparkleMaterial?.dispose()
       if (libraryShelfSparkles) world.remove(libraryShelfSparkles)
       if (libraryShelfLight) scene.remove(libraryShelfLight)
+      if (libraryReadingLight) scene.remove(libraryReadingLight)
 
       nodeVisuals.forEach((visual) => {
         ;(visual.shell.geometry as THREE.BufferGeometry).dispose()
