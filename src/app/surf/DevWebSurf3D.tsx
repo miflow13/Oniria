@@ -1439,6 +1439,10 @@ export default function DevWebSurf3D({
       section: LibrarySection
       material: THREE.MeshBasicMaterial
     }> = []
+    const uiSensitiveSignMaterials: Array<{
+      material: THREE.Material
+      baseOpacity: number
+    }> = []
 
     function addShelf(
       x: number,
@@ -1613,6 +1617,11 @@ export default function DevWebSurf3D({
         depthWrite: false,
       })
       architecturalMaterials.push(faceMaterial)
+      uiSensitiveSignMaterials.push(
+        {material: faceMaterial, baseOpacity: 1},
+        {material: edgeMaterial, baseOpacity: .22},
+        {material: underGlowMaterial, baseOpacity: .45},
+      )
       const face = new THREE.Mesh(faceGeometry, faceMaterial)
       face.position.z = .061
       face.renderOrder = 7
@@ -1724,6 +1733,10 @@ export default function DevWebSurf3D({
         toneMapped: false,
       })
       architecturalMaterials.push(doorwayMaterial)
+      uiSensitiveSignMaterials.push({
+        material: doorwayMaterial,
+        baseOpacity: 1,
+      })
       const doorwayLabel = new THREE.Sprite(doorwayMaterial)
       doorwayLabel.position.set(0, 1.82, .08)
       doorwayLabel.scale.set(3.8, .9, 1)
@@ -4580,6 +4593,14 @@ export default function DevWebSurf3D({
           tempScale.set(targetScale, targetScale, targetScale),
           1 - Math.exp(-delta * 3.5),
         )
+      })
+
+      const uiSignFactor = uiOverlayRef.current ? .08 : 1
+      uiSensitiveSignMaterials.forEach(({material, baseOpacity}) => {
+        material.transparent = true
+        material.opacity +=
+          (baseOpacity * uiSignFactor - material.opacity) *
+          (1 - Math.exp(-delta * 8))
       })
 
       wayfindingPaths.forEach(({section, material}) => {
