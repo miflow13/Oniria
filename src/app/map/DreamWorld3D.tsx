@@ -2164,9 +2164,29 @@ export default function DreamWorld3D({
         if (node) onNodeSelectRef.current(node)
       }
 
+      if (event.code === 'KeyF') {
+        event.preventDefault()
+        const selectedNode = selectedRef.current
+          ? nodeRef.current.find(
+              (node) => node._id === selectedRef.current,
+            ) ?? null
+          : null
+        const node =
+          pickCenterNode() ??
+          selectedNode ??
+          nearestFlightNode(3.2)
+
+        if (node) {
+          beginDreamDive(node)
+        }
+      }
+
       if (event.code === 'Escape') {
-        document.exitPointerLock?.()
-        onFlightModeChangeRef.current(false)
+        if (document.pointerLockElement === renderer.domElement) {
+          document.exitPointerLock?.()
+        } else {
+          onFlightModeChangeRef.current(false)
+        }
       }
     }
 
