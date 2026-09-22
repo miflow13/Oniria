@@ -268,9 +268,15 @@ export function createImpossibleSpace({
       color.clone().multiplyScalar(.48),
       .62,
     )
-    const portalMaterial = (cell.portal.material as THREE.SpriteMaterial).clone()
-    portalMaterial.opacity = .94
-    portalMaterial.depthWrite = false
+    const previewTexture = (cell.portal.material as THREE.SpriteMaterial).map
+    const portalMaterial = new THREE.MeshBasicMaterial({
+      map: previewTexture,
+      transparent: true,
+      opacity: .94,
+      side: THREE.DoubleSide,
+      toneMapped: false,
+      depthWrite: false,
+    })
 
     const leftGeometry = new THREE.BoxGeometry(.12, 2.9, .12)
     const rightGeometry = leftGeometry.clone()
