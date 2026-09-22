@@ -1207,7 +1207,7 @@ export default function DreamWorld3D({
     function installDive(
       dream: Dream,
       depth: number,
-      options: {resetStack?: boolean} = {},
+      options: {resetStack?: boolean; fromPortal?: boolean} = {},
     ) {
       disposeDive({restoreListener: false, clearMode: false})
 
@@ -1295,7 +1295,7 @@ export default function DreamWorld3D({
         diveStack = [...diveStack, dream._id].slice(-3)
       }
 
-      diveMode = 'entering'
+      diveMode = options.fromPortal ? 'inside' : 'entering'
       diveTransitionStartedAt = performance.now() / 1000
       onProjectionChangeRef.current(null)
       onDiveStateChangeRef.current(true, profile.title)
@@ -1547,12 +1547,21 @@ export default function DreamWorld3D({
         requestDiveExit()
       }
 
-      if (activeDive && (diveMode === 'inside' || diveMode === 'exiting')) {
+      if (
+        activeDive &&
+        (diveMode === 'inside' ||
+          diveMode === 'portal' ||
+          diveMode === 'exiting')
+      ) {
         activeDive.setLookTarget(pointerTarget.x, pointerTarget.y)
+        activeDive.setTimeline(diveTimelineProgressRef.current)
         activeDive.update(elapsed, delta)
+        activeDive.renderPreviews(renderer, elapsed)
 
         if (diveAudio) {
-          diveAudio.setFocus(diveMode === 'exiting' ? .45 : 1)
+          diveAudio.setFocus(
+            diveMode === 'exiting' ? .35 : diveMode === 'portal' ? .72 : 1,
+          )
           if (soundEnabledRef.current && !diveAudioStarted) {
             diveAudioStarted = true
             void diveAudio.ensurePlaying().catch(() => {
@@ -1564,18 +1573,73 @@ export default function DreamWorld3D({
           }
         }
 
+        if (diveMusic) {
+          const intensity =
+            diveMode === 'portal'
+              ? .92
+              : diveMode === 'exiting'
+                ? .28
+                : .72
+          diveMusic.setIntensity(intensity)
+
+          if (soundEnabledRef.current && !diveMusicStarted) {
+            diveMusicStarted = true
+            void diveMusic.ensurePlaying().catch(() => {
+              diveMusicStarted = false
+            })
+          } else if (!soundEnabledRef.current && diveMusicStarted) {
+            if (diveMusic.audio.isPlaying) diveMusic.audio.pause()
+            diveMusicStarted = false
+          }
+        }
+
         const exitProgress =
           diveMode === 'exiting'
             ? Math.min(1, (elapsed - diveTransitionStartedAt) / .78)
+            : 0
+        const portalProgress =
+          diveMode === 'portal'
+            ? Math.min(1, (elapsed - diveTransitionStartedAt) / .72)
             : 0
 
         if (divePost) {
           divePost.uniforms.uTime.value = elapsed
           divePost.uniforms.uTravel.value =
-            diveMode === 'exiting' ? exitProgress : .06
+            diveMode === 'exiting'
+              ? exitProgress
+              : diveMode === 'portal'
+                ? portalProgress
+                : .06
           divePost.uniforms.uFlarePosition.value.set(.62, .34)
           divePost.uniforms.uFlareStrength.value =
-            qualityRef.current === 'cinematic' ? .22 : .08
+            qualityRef.current === 'cinematic'
+              ? diveMode === 'portal'
+                ? .42
+                : .22
+              : diveMode === 'portal'
+                ? .18
+                : .08
+        }
+
+        if (
+          diveMode === 'portal' &&
+          portalProgress >= 1 &&
+          pendingPortal
+        ) {
+          const destination = dreamsRef.current.find(
+            (dream) => dream._id === pendingPortal?.dreamId,
+          )
+          const depth = pendingPortal.depth
+          pendingPortal = null
+
+          if (destination) {
+            installDive(destination, depth, {fromPortal: true})
+            pointerTarget.set(0, 0)
+            renderer.domElement.style.cursor = 'crosshair'
+            return
+          }
+
+          diveMode = 'inside'
         }
 
         if (diveMode === 'exiting' && exitProgress >= 1) {
@@ -1589,6 +1653,7 @@ export default function DreamWorld3D({
           }
 
           disposeDive()
+          diveStack = []
           onDiveStateChangeRef.current(false)
           pointerTarget.set(0, 0)
           pointerParallax.set(0, 0)
