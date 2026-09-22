@@ -1138,7 +1138,7 @@ At minimum verify:
 - [x] move fog/haze resource disposal
 - [x] remove renderer-owned haze/fog arrays
 - [x] source-level stale-reference audit
-- [ ] CI verification
+- [x] CI verification — Cinematic branch checks #327 passed
 - [ ] manual browser smoke test
 
 ## Phase 4 — Shelf renderer
