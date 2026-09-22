@@ -4878,12 +4878,17 @@ export default function DreamWorld3D({
         }
 
         libraryBookVisuals.forEach((bookVisual) => {
+          const shelfVisual = nodeVisuals.get(bookVisual.nodeId)
+          const shelfDistance = shelfVisual
+            ? camera.position.distanceTo(shelfVisual.group.position)
+            : Infinity
           const awake =
             bookVisual.nodeId === nearestLibraryShelfId
               ? focusStrength
               : 0
           const presented =
             openingBook?.visual === bookVisual
+
           bookVisual.coverMaterial.emissive.setHex(
             presented ? 0x6d2f73 : 0x163744,
           )
@@ -4894,6 +4899,21 @@ export default function DreamWorld3D({
             (targetEmissive -
               bookVisual.coverMaterial.emissiveIntensity) *
             .1
+
+          const distanceWake =
+            1 -
+            THREE.MathUtils.smoothstep(
+              shelfDistance,
+              10,
+              42,
+            )
+          const targetTint = presented
+            ? .76
+            : .22 + Math.max(awake, distanceWake * .45) * .34
+          const tint = bookVisual.coverMaterial.color
+          tint.r += (targetTint - tint.r) * .08
+          tint.g += (targetTint - tint.g) * .08
+          tint.b += ((targetTint * 1.04) - tint.b) * .08
         })
 
         if (libraryReadingLight && openingBook) {
