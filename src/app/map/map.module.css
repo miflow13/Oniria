@@ -4021,3 +4021,65 @@
     animation: none !important;
   }
 }
+
+
+.journalParticles {
+  position: absolute;
+  z-index: 30;
+  inset: -40px;
+  pointer-events: none;
+}
+
+.journalParticles i {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--node-accent);
+  box-shadow: 0 0 10px var(--node-glow);
+  opacity: 0;
+}
+
+.noteClusterClosing .journalParticles i {
+  animation: journalParticleScatter 520ms ease-out forwards;
+}
+
+.journalParticles i:nth-child(1) { --px: -170px; --py: -82px; animation-delay: 0ms; }
+.journalParticles i:nth-child(2) { --px: 148px; --py: -118px; animation-delay: 20ms; }
+.journalParticles i:nth-child(3) { --px: -128px; --py: 104px; animation-delay: 40ms; }
+.journalParticles i:nth-child(4) { --px: 188px; --py: 74px; animation-delay: 55ms; }
+.journalParticles i:nth-child(5) { --px: -78px; --py: -152px; animation-delay: 70ms; }
+.journalParticles i:nth-child(6) { --px: 94px; --py: 142px; animation-delay: 85ms; }
+.journalParticles i:nth-child(7) { --px: -214px; --py: 18px; animation-delay: 100ms; }
+.journalParticles i:nth-child(8) { --px: 216px; --py: -18px; animation-delay: 115ms; }
+.journalParticles i:nth-child(9) { --px: -38px; --py: 176px; animation-delay: 125ms; }
+.journalParticles i:nth-child(10) { --px: 42px; --py: -188px; animation-delay: 135ms; }
+.journalParticles i:nth-child(11) { --px: -154px; --py: 146px; animation-delay: 145ms; }
+.journalParticles i:nth-child(12) { --px: 166px; --py: 126px; animation-delay: 155ms; }
+
+@keyframes journalParticleScatter {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(.5);
+  }
+  18% {
+    opacity: .9;
+  }
+  100% {
+    opacity: 0;
+    transform:
+      translate(
+        calc(-50% + var(--px)),
+        calc(-50% + var(--py))
+      )
+      scale(.1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .journalParticles {
+    display: none;
+  }
+}
