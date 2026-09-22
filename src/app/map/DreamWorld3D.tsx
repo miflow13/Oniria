@@ -4185,6 +4185,9 @@ export default function DreamWorld3D({
       }
     }
 
+    renderer.domElement.dataset.oniriaLibraryFps = 'true'
+    renderer.domElement.tabIndex = -1
+
     renderer.domElement.addEventListener('pointermove', handlePointerMove)
     renderer.domElement.addEventListener('pointerdown', handlePointerDown)
     renderer.domElement.addEventListener('pointerup', handlePointerUp)
@@ -4341,28 +4344,9 @@ export default function DreamWorld3D({
       flightKeys.delete(event.code)
     }
 
-    function handleLibraryResumeFps() {
-      if (
-        !libraryMode ||
-        !flightModeRef.current ||
-        diveMode !== 'none'
-      ) {
-        return
-      }
-
-      flightKeys.clear()
-      if (document.pointerLockElement !== renderer.domElement) {
-        void renderer.domElement.requestPointerLock()
-      }
-    }
-
     document.addEventListener('mousemove', handleFlightMouse)
     window.addEventListener('keydown', handleFlightKeyDown)
     window.addEventListener('keyup', handleFlightKeyUp)
-    window.addEventListener(
-      'oniria:library-resume-fps',
-      handleLibraryResumeFps,
-    )
 
     const cameraTarget = new THREE.Vector3()
     const lookTarget = new THREE.Vector3(0, 0, 0)
@@ -6180,10 +6164,6 @@ export default function DreamWorld3D({
       document.removeEventListener('mousemove', handleFlightMouse)
       window.removeEventListener('keydown', handleFlightKeyDown)
       window.removeEventListener('keyup', handleFlightKeyUp)
-      window.removeEventListener(
-        'oniria:library-resume-fps',
-        handleLibraryResumeFps,
-      )
       if (document.pointerLockElement === renderer.domElement) {
         document.exitPointerLock?.()
       }
