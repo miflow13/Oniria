@@ -15,6 +15,12 @@ import DreamWorld3D, {
   type LibraryReadingBook,
 } from './DreamWorld3D'
 import type {DreamQuality} from './dreamworld/quality'
+import {
+  DEFAULT_LIBRARY_WORLD_CONFIG,
+  districtForTags,
+  type LibraryDistrictConfig,
+  type LibraryWorldConfig,
+} from '@/lib/libraryWorldConfig'
 import type {
   DevArticle,
   DevArticleSummary,
@@ -36,6 +42,7 @@ const CATALOG_BOOKS_PER_SHELF = 9
 
 function catalogShelfPlacement(
   index: number,
+  districts: LibraryDistrictConfig[],
 ): ArchiveShelfPlacement {
   const block = Math.floor(index / 20)
   const within = index % 20
@@ -45,7 +52,7 @@ function catalogShelfPlacement(
   if (within < 8) {
     const bay = blockStartBay + Math.floor(within / 2)
     const side: -1 | 1 = within % 2 === 0 ? -1 : 1
-    return archiveShelfPlacement(key, bay, side)
+    return archiveShelfPlacement(key, bay, side, {}, districts)
   }
 
   if (within < 12) {
@@ -62,13 +69,14 @@ function catalogShelfPlacement(
         alongJitterScale: .08,
         yawJitterScale: .16,
       },
+      districts,
     )
   }
 
   const local = within - 12
   const bay = blockStartBay + 5 + Math.floor(local / 2)
   const side: -1 | 1 = local % 2 === 0 ? -1 : 1
-  return archiveShelfPlacement(key, bay, side)
+  return archiveShelfPlacement(key, bay, side, {}, districts)
 }
 
 const SHELF_ACCENTS: Record<LibraryShelfKind, string> = {
@@ -165,6 +173,8 @@ export default function DevLibraryMap() {
   const [movementMode, setMovementMode] =
     useState<LibraryMovementMode>('walk')
   const [soundEnabled, setSoundEnabled] = useState(false)
+  const [worldConfig, setWorldConfig] =
+    useState<LibraryWorldConfig>(DEFAULT_LIBRARY_WORLD_CONFIG)
   const [readingBook, setReadingBook] =
     useState<LibraryReadingBook | null>(null)
   const [navigation, setNavigation] = useState<{
@@ -237,6 +247,21 @@ export default function DevLibraryMap() {
 
   useEffect(() => {
     let cancelled = false
+
+    async function loadWorldConfig() {
+      try {
+        const response = await fetch('/api/library-world')
+        if (!response.ok) return
+        const payload = (await response.json()) as LibraryWorldConfig
+        if (cancelled) return
+        setWorldConfig(payload)
+        setMovementMode(payload.defaultMovement)
+      } catch {
+        // The fallback world config remains active if Sanity is unavailable.
+      }
+    }
+
+    void loadWorldConfig()
 
     async function load() {
       try {
@@ -375,10 +400,32 @@ export default function DevLibraryMap() {
       return picked
     }
 
-    const featured = takeFresh(bootstrap.feed, 9)
+    const curatorIds = new Set(
+      worldConfig.curatedArticles
+        .filter((item) => item.featured)
+        .map((item) => item.devArticleId),
+    )
+    const allKnownArticles = uniqueArticles(
+      bootstrap.feed,
+      bootstrap.latest,
+      bootstrap.profileArticles,
+      catalog,
+    )
+    const curatorPicks = allKnownArticles.filter((item) =>
+      curatorIds.has(item.id),
+    )
+
+    const featured = takeFresh(
+      [...curatorPicks, ...bootstrap.feed],
+      9,
+    )
     const latest = takeFresh(bootstrap.latest, 9)
     const mine = takeFresh(bootstrap.profileArticles, 9)
     const remaining = catalog.filter((item) => !used.has(item.id))
+    const districts =
+      worldConfig.districts.length > 0
+        ? worldConfig.districts
+        : DEFAULT_LIBRARY_WORLD_CONFIG.districts
 
     const result: LibraryShelf[] = [
       makeShelf(
@@ -386,7 +433,7 @@ export default function DevLibraryMap() {
         'Featured',
         'popular this week',
         'featured',
-        archiveShelfPlacement('shelf:featured', 0, -1),
+        archiveShelfPlacement('shelf:featured', 0, -1, {}, districts),
         featured,
       ),
       makeShelf(
@@ -394,7 +441,7 @@ export default function DevLibraryMap() {
         'New',
         'freshly published',
         'latest',
-        archiveShelfPlacement('shelf:new', 0, 1),
+        archiveShelfPlacement('shelf:new', 0, 1, {}, districts),
         latest,
       ),
       makeShelf(
@@ -404,7 +451,7 @@ export default function DevLibraryMap() {
           : 'My DEV',
         'creator shelf',
         'mine',
-        archiveShelfPlacement('shelf:mine', 1, -1),
+        archiveShelfPlacement('shelf:mine', 1, -1, {}, districts),
         mine,
       ),
       makeShelf(
@@ -412,7 +459,7 @@ export default function DevLibraryMap() {
         'Topics',
         'choose a DEV tag',
         'topics',
-        archiveShelfPlacement('shelf:topics', 1, 1),
+        archiveShelfPlacement('shelf:topics', 1, 1, {}, districts),
         dynamicTitle?.startsWith('#') ? dynamicArticles : [],
       ),
       makeShelf(
@@ -420,7 +467,7 @@ export default function DevLibraryMap() {
         'Creators',
         'browse author shelves',
         'creators',
-        archiveShelfPlacement('shelf:creators', 2, -1),
+        archiveShelfPlacement('shelf:creators', 2, -1, {}, districts),
         dynamicTitle?.startsWith('@')
           ? dynamicArticles
           : creatorPreview,
@@ -434,38 +481,90 @@ export default function DevLibraryMap() {
           'Search',
           query || 'search results',
           'search',
-          archiveShelfPlacement('shelf:search', 2, 1),
+          archiveShelfPlacement('shelf:search', 2, 1, {}, districts),
           searchResults.slice(0, CATALOG_BOOKS_PER_SHELF),
         ),
       )
     }
 
-    for (
-      let offset = 0;
-      offset < remaining.length;
-      offset += CATALOG_BOOKS_PER_SHELF
-    ) {
-      const shelfIndex = Math.floor(
-        offset / CATALOG_BOOKS_PER_SHELF,
-      )
-      const shelfArticles = remaining.slice(
-        offset,
-        offset + CATALOG_BOOKS_PER_SHELF,
-      )
-      result.push(
-        makeShelf(
-          'shelf:catalog:' + shelfIndex,
-          'Catalog ' + String(shelfIndex + 1).padStart(3, '0'),
-          'DEV catalogue · articles ' +
-            String(offset + 1) +
-            '–' +
-            String(offset + shelfArticles.length),
+    const fallbackDistrict =
+      districts.find((district) => district.id === 'deep-stacks') ??
+      districts.find((district) => district.id === 'archive-2026') ??
+      districts.at(-1) ??
+      DEFAULT_LIBRARY_WORLD_CONFIG.districts[0]
+
+    const articlesByDistrict = new Map<
+      string,
+      DevArticleSummary[]
+    >()
+    districts.forEach((district) => {
+      articlesByDistrict.set(district.id, [])
+    })
+
+    remaining.forEach((article) => {
+      const district =
+        districtForTags(article.tag_list ?? [], districts) ??
+        fallbackDistrict
+      const bucket = articlesByDistrict.get(district.id)
+      if (bucket) bucket.push(article)
+    })
+
+    let catalogShelfIndex = 0
+    districts.forEach((district) => {
+      const districtArticles =
+        articlesByDistrict.get(district.id) ?? []
+
+      for (
+        let offset = 0;
+        offset < districtArticles.length;
+        offset += CATALOG_BOOKS_PER_SHELF
+      ) {
+        const shelfArticles = districtArticles.slice(
+          offset,
+          offset + CATALOG_BOOKS_PER_SHELF,
+        )
+        const localIndex = Math.floor(
+          offset / CATALOG_BOOKS_PER_SHELF,
+        )
+        const side: -1 | 1 =
+          localIndex % 2 === 0 ? -1 : 1
+        const bay =
+          district.bay +
+          1.35 +
+          Math.floor(localIndex / 2) * .82
+        const shelfId = 'shelf:catalog:' + catalogShelfIndex
+        const shelf = makeShelf(
+          shelfId,
+          district.label +
+            ' ' +
+            String(localIndex + 1).padStart(2, '0'),
+          'DEV district · ' +
+            (district.devTags.length
+              ? district.devTags
+                  .slice(0, 3)
+                  .map((tag) => '#' + tag)
+                  .join(' · ')
+              : 'long-tail archive'),
           'catalog',
-          catalogShelfPlacement(shelfIndex),
+          archiveShelfPlacement(
+            shelfId,
+            bay,
+            side,
+            {
+              laneBias: .12,
+              alongJitterScale: .26,
+              yawJitterScale: .45,
+            },
+            districts,
+          ),
           shelfArticles,
-        ),
-      )
-    }
+        )
+        shelf.accent = district.accent
+        shelf.districtId = district.id
+        result.push(shelf)
+        catalogShelfIndex += 1
+      }
+    })
 
     const resolvedPlacements = resolveArchiveShelfClearance(
       result.map((shelf) => ({
@@ -474,6 +573,7 @@ export default function DevLibraryMap() {
         pathBay: shelf.pathBay,
         districtId: shelf.districtId,
       })),
+      districts,
     )
 
     return result.map((shelf, index) => {
@@ -496,6 +596,7 @@ export default function DevLibraryMap() {
     dynamicTitle,
     query,
     searchResults,
+    worldConfig,
   ])
 
   const nodes = useMemo<DreamWorldNode[]>(
@@ -704,6 +805,7 @@ export default function DevLibraryMap() {
         observatoryMode={false}
         flightMode={flightMode}
         libraryMovementMode={movementMode}
+        libraryWorldConfig={worldConfig}
         libraryReadingBook={readingBook}
         inputBlocked={Boolean(article) || Boolean(readingBook)}
         onZoomChange={() => {}}
