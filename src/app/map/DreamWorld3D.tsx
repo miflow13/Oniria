@@ -2263,6 +2263,24 @@ export default function DreamWorld3D({
 
       if (flightActive && !previousFlightMode) {
         flightPosition.copy(camera.position)
+
+        const entryNode = [...nodeRef.current].sort(
+          (a, b) =>
+            b.frequency - a.frequency ||
+            b.dreamIds.length - a.dreamIds.length ||
+            hashString(a._id) - hashString(b._id),
+        )[0]
+        const entryVisual = entryNode
+          ? nodeVisuals.get(entryNode._id)
+          : null
+
+        if (entryVisual) {
+          const entryTarget = entryVisual.group.getWorldPosition(
+            new THREE.Vector3(),
+          )
+          camera.lookAt(entryTarget)
+        }
+
         flightEuler.setFromQuaternion(camera.quaternion, 'YXZ')
         flightYaw = flightEuler.y
         flightPitch = flightEuler.x
