@@ -797,6 +797,130 @@ export default function DreamWorld3D({
         : null
     }
 
+    const secretArtifacts: Array<{
+      group: THREE.Group
+      nodeId: string
+      geometries: THREE.BufferGeometry[]
+      materials: THREE.Material[]
+      phase: number
+    }> = []
+
+    for (const node of nodeRef.current) {
+      const profile = getProfileForNode(node)
+      const visual = nodeVisuals.get(node._id)
+      if (!profile?.secret || !visual) continue
+
+      const group = new THREE.Group()
+      const geometries: THREE.BufferGeometry[] = []
+      const materials: THREE.Material[] = []
+      const accent = new THREE.Color(CATEGORY_COLORS[node.category])
+      const phase = seededUnit(hashString(`secret:${node._id}`), 55) * Math.PI * 2
+
+      if (profile.secret === 'black-monolith') {
+        const geometry = new THREE.BoxGeometry(.18, .92, .12)
+        const material = new THREE.MeshStandardMaterial({
+          color: 0x010104,
+          emissive: accent.clone().multiplyScalar(.04),
+          emissiveIntensity: .24,
+          roughness: .08,
+          metalness: .84,
+        })
+        const monolith = new THREE.Mesh(geometry, material)
+        group.add(monolith)
+        geometries.push(geometry)
+        materials.push(material)
+      } else if (profile.secret === 'eclipse') {
+        const coronaGeometry = new THREE.TorusGeometry(.34, .028, 8, 56)
+        const coronaMaterial = new THREE.MeshBasicMaterial({
+          color: accent.clone().lerp(new THREE.Color(0xffffff), .35),
+          transparent: true,
+          opacity: .32,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        })
+        const darkGeometry = new THREE.SphereGeometry(.28, 24, 24)
+        const darkMaterial = new THREE.MeshBasicMaterial({color: 0x000106})
+        group.add(
+          new THREE.Mesh(coronaGeometry, coronaMaterial),
+          new THREE.Mesh(darkGeometry, darkMaterial),
+        )
+        geometries.push(coronaGeometry, darkGeometry)
+        materials.push(coronaMaterial, darkMaterial)
+      } else if (profile.secret === 'impossible-door') {
+        const material = new THREE.MeshStandardMaterial({
+          color: accent.clone().multiplyScalar(.45),
+          emissive: accent.clone().multiplyScalar(.12),
+          emissiveIntensity: .72,
+          roughness: .52,
+          transparent: true,
+          opacity: .62,
+        })
+        materials.push(material)
+        const leftGeometry = new THREE.BoxGeometry(.045, .58, .045)
+        const rightGeometry = leftGeometry.clone()
+        const topGeometry = new THREE.BoxGeometry(.42, .045, .045)
+        const left = new THREE.Mesh(leftGeometry, material)
+        const right = new THREE.Mesh(rightGeometry, material)
+        const top = new THREE.Mesh(topGeometry, material)
+        left.position.x = -.19
+        right.position.x = .19
+        top.position.y = .27
+        group.add(left, right, top)
+        geometries.push(leftGeometry, rightGeometry, topGeometry)
+      } else {
+        const material = new THREE.MeshBasicMaterial({
+          color: accent,
+          transparent: true,
+          opacity: .34,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        })
+        materials.push(material)
+        const animalPoints = [
+          [-.34, 0, 0],
+          [-.16, .24, -.03],
+          [.05, .1, .02],
+          [.24, .28, -.04],
+          [.36, .02, 0],
+          [.1, -.22, .02],
+          [-.12, -.24, -.02],
+        ]
+        const lineGeometry = new THREE.BufferGeometry().setFromPoints(
+          animalPoints.map(
+            ([x, y, z]) => new THREE.Vector3(x, y, z),
+          ),
+        )
+        group.add(new THREE.Line(lineGeometry, new THREE.LineBasicMaterial({
+          color: accent,
+          transparent: true,
+          opacity: .22,
+        })))
+        geometries.push(lineGeometry)
+        for (const [x, y, z] of animalPoints) {
+          const geometry = new THREE.SphereGeometry(.025, 10, 10)
+          const star = new THREE.Mesh(geometry, material)
+          star.position.set(x, y, z)
+          group.add(star)
+          geometries.push(geometry)
+        }
+      }
+
+      group.position.set(
+        1.15 + seededUnit(hashString(node._id), 61) * .75,
+        .4 + seededUnit(hashString(node._id), 62) * .8,
+        -.4,
+      )
+      group.scale.setScalar(.78)
+      visual.group.add(group)
+      secretArtifacts.push({
+        group,
+        nodeId: node._id,
+        geometries,
+        materials,
+        phase,
+      })
+    }
+
     const clusterAudios = [...nodeRef.current]
       .filter((node) => node.frequency >= 2)
       .sort((a, b) => b.frequency - a.frequency)
@@ -1333,6 +1457,25 @@ export default function DreamWorld3D({
         landmark.position.y += Math.sin(elapsed * 0.11 + index * 1.7) * 0.00035
       })
 
+      secretArtifacts.forEach((secret) => {
+        secret.group.rotation.y += .0014
+        secret.group.rotation.z =
+          Math.sin(elapsed * .18 + secret.phase) * .08
+        secret.group.position.y +=
+          Math.sin(elapsed * .22 + secret.phase) * .0008
+        const focused =
+          selectedRef.current === secret.nodeId ||
+          hoveredId === secret.nodeId
+        secret.group.scale.lerp(
+          new THREE.Vector3(
+            focused ? .92 : .72,
+            focused ? .92 : .72,
+            focused ? .92 : .72,
+          ),
+          .04,
+        )
+      })
+
       foregroundFog.forEach((sprite, index) => {
         sprite.position.x += Math.sin(elapsed * 0.08 + index * 2.1) * 0.0014
         sprite.position.y += Math.cos(elapsed * 0.06 + index * 1.2) * 0.001
@@ -1809,6 +1952,11 @@ export default function DreamWorld3D({
 
       landmarkGeometries.forEach((geometry) => geometry.dispose())
       landmarkMaterials.forEach((material) => material.dispose())
+
+      secretArtifacts.forEach((secret) => {
+        secret.geometries.forEach((geometry) => geometry.dispose())
+        secret.materials.forEach((material) => material.dispose())
+      })
 
       foregroundFog.forEach((sprite) => {
         const material = sprite.material as THREE.SpriteMaterial
