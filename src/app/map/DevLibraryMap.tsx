@@ -274,6 +274,20 @@ export default function DevLibraryMap() {
     }
   }, [loadMoreCatalog])
 
+  const resumeFirstPersonControls = useCallback(() => {
+    window.dispatchEvent(
+      new Event('oniria:library-resume-fps'),
+    )
+  }, [])
+
+  const closeArticleReader = useCallback(() => {
+    // Request pointer lock synchronously from the user's key/click gesture.
+    // The Three.js listener handles the actual canvas lock.
+    resumeFirstPersonControls()
+    setArticle(null)
+    setReadingBook(null)
+  }, [resumeFirstPersonControls])
+
   useEffect(() => {
     if (!article) return
 
@@ -282,14 +296,13 @@ export default function DevLibraryMap() {
       event.preventDefault()
       event.stopPropagation()
       event.stopImmediatePropagation()
-      setArticle(null)
-      setReadingBook(null)
+      closeArticleReader()
     }
 
     window.addEventListener('keydown', closeBookWithE, true)
     return () =>
       window.removeEventListener('keydown', closeBookWithE, true)
-  }, [article])
+  }, [article, closeArticleReader])
 
   const creators = useMemo(() => {
     if (!bootstrap) return []
@@ -888,10 +901,7 @@ export default function DevLibraryMap() {
           <div className={styles.readerCard}>
             <button
               className={styles.close}
-              onClick={() => {
-                setArticle(null)
-                setReadingBook(null)
-              }}
+              onClick={closeArticleReader}
               aria-label="Close article"
             >
               ×
