@@ -104,6 +104,7 @@ type Props = {
   diveTimelineProgress: number
   observatoryMode: boolean
   flightMode: boolean
+  guidedNodeId: string | null
   onZoomChange: (zoom: number) => void
   onPanChange: (pan: Pan) => void
   onNodeHover: (node: DreamWorldNode | null) => void
@@ -315,6 +316,7 @@ export default function DreamWorld3D({
   diveTimelineProgress,
   observatoryMode,
   flightMode,
+  guidedNodeId,
   onZoomChange,
   onPanChange,
   onNodeHover,
@@ -350,6 +352,7 @@ export default function DreamWorld3D({
   const diveTimelineProgressRef = useRef(diveTimelineProgress)
   const observatoryModeRef = useRef(observatoryMode)
   const flightModeRef = useRef(flightMode)
+  const guidedNodeIdRef = useRef(guidedNodeId)
   const onDiveStateChangeRef = useRef(onDiveStateChange)
   const onDiveDreamChangeRef = useRef(onDiveDreamChange)
   const onFlightModeChangeRef = useRef(onFlightModeChange)
@@ -378,6 +381,7 @@ export default function DreamWorld3D({
   diveTimelineProgressRef.current = diveTimelineProgress
   observatoryModeRef.current = observatoryMode
   flightModeRef.current = flightMode
+  guidedNodeIdRef.current = guidedNodeId
   onDiveStateChangeRef.current = onDiveStateChange
   onDiveDreamChangeRef.current = onDiveDreamChange
   onFlightModeChangeRef.current = onFlightModeChange
@@ -1346,6 +1350,7 @@ export default function DreamWorld3D({
     let flightInitialized = false
     let previousFlightMode = false
     let flightNearestId: string | null = null
+    let guidedAutoSelectedId: string | null = null
     let flightRoute:
       | {
           source: THREE.Vector3
@@ -2755,18 +2760,26 @@ export default function DreamWorld3D({
                     : .015
                   : .006
 
+        const guided =
+          flightActive &&
+          guidedNodeIdRef.current === node._id &&
+          selectedRef.current !== node._id
         const proximityDistance = flightActive
           ? visual.group
               .getWorldPosition(proximityPoint)
               .distanceTo(camera.position)
           : Number.POSITIVE_INFINITY
-        const proximityWake = flightActive
+        const rawProximityWake = flightActive
           ? THREE.MathUtils.clamp(
               (4.8 - proximityDistance) / 3.4,
               0,
               1,
             )
           : 0
+        const proximityWake = Math.max(
+          rawProximityWake,
+          guided ? .22 : 0,
+        )
 
         const scaleBoost = selected
           ? 1.32
@@ -2854,14 +2867,22 @@ export default function DreamWorld3D({
             coreMaterial.emissiveIntensity) *
           .07
         orbitMaterial.opacity +=
-          ((selected ? .68 : hoveredId === node._id ? .42 : .13) -
+          ((selected
+            ? .68
+            : hoveredId === node._id
+              ? .42
+              : guided
+                ? .3
+                : .13) -
             orbitMaterial.opacity) *
           .08
         const labelTarget =
           selected || hoveredId === node._id
             ? .9
-            : proximityWake > .12
-              ? .08 + proximityWake * .68
+            : guided
+              ? .76
+              : proximityWake > .12
+                ? .08 + proximityWake * .68
               : observatoryModeRef.current
                 ? node.frequency >= 4
                   ? .24
@@ -3219,6 +3240,29 @@ export default function DreamWorld3D({
           flightNearestId = nearestId
           hoveredId = nearestId
           onNodeHoverRef.current(nearest)
+        }
+
+        const guidedId = guidedNodeIdRef.current
+        if (guidedId && guidedAutoSelectedId !== guidedId) {
+          const guidedNode = nodeRef.current.find(
+            (node) => node._id === guidedId,
+          )
+          const guidedVisual = guidedNode
+            ? nodeVisuals.get(guidedNode._id)
+            : null
+
+          if (guidedNode && guidedVisual) {
+            const guidedDistance = guidedVisual.group
+              .getWorldPosition(proximityPoint)
+              .distanceTo(camera.position)
+
+            if (guidedDistance <= 2.05) {
+              guidedAutoSelectedId = guidedId
+              onNodeSelectRef.current(guidedNode)
+            }
+          }
+        } else if (!guidedId) {
+          guidedAutoSelectedId = null
         }
 
         depthOfField.enabled = false
