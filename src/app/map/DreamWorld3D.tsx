@@ -710,6 +710,15 @@ export default function DreamWorld3D({
     }
 
     const nodeDataById = new Map(nodeRef.current.map((node) => [node._id, node]))
+    const introWakeOrder = new Map(
+      [...nodeRef.current]
+        .sort(
+          (a, b) =>
+            b.frequency - a.frequency ||
+            hashString(a._id) - hashString(b._id),
+        )
+        .map((node, index) => [node._id, index]),
+    )
 
     const gravityParents = new Map<
       string,
@@ -1111,6 +1120,26 @@ export default function DreamWorld3D({
           Math.cos(elapsed * .29 + visual.phase) * .05 +
           Math.sin(elapsed * .12) * .07
 
+        const gravity = gravityParents.get(node._id)
+        if (gravity) {
+          const parentVisual = nodeVisuals.get(gravity.parentId)
+          if (parentVisual) {
+            const orbitAngle =
+              elapsed * (0.035 + Math.min(node.frequency, 3) * 0.004) +
+              gravity.phase
+            const orbitTarget = parentVisual.group.position
+              .clone()
+              .add(
+                new THREE.Vector3(
+                  Math.cos(orbitAngle) * gravity.radius,
+                  Math.sin(orbitAngle * 0.73) * gravity.radius * 0.58,
+                  Math.sin(orbitAngle) * gravity.radius * 0.34,
+                ),
+              )
+            target.lerp(orbitTarget, gravity.influence)
+          }
+        }
+
         visual.group.position.lerp(target, .08)
 
         const selected = selectedRef.current === node._id
@@ -1126,6 +1155,24 @@ export default function DreamWorld3D({
               (edge.source === node._id || edge.target === node._id),
           )
         const visible = inFocusedDream && connected
+        const wakeRank = introWakeOrder.get(node._id) ?? 999
+        const stage = introStageRef.current
+        const introVisibility =
+          stage >= 4
+            ? 1
+            : stage === 3
+              ? wakeRank < Math.max(4, Math.ceil(nodeRef.current.length * .62))
+                ? 1
+                : .08
+              : stage === 2
+                ? wakeRank < Math.min(3, nodeRef.current.length)
+                  ? 1
+                  : .035
+                : stage === 1
+                  ? wakeRank === 0
+                    ? 1
+                    : .015
+                  : .006
 
         const scaleBoost = selected ? 1.32 : hoveredId === node._id ? 1.14 : 1
         const desiredScale = visual.baseScale * scaleBoost
@@ -1152,7 +1199,8 @@ export default function DreamWorld3D({
             shellMaterial.uniforms.uFocus.value) *
           0.08
         shellMaterial.uniforms.uOpacity.value +=
-          ((visible ? 0.94 : 0.18) - shellMaterial.uniforms.uOpacity.value) *
+          (((visible ? 0.94 : 0.18) * introVisibility) -
+            shellMaterial.uniforms.uOpacity.value) *
           0.08
         visual.miniWorld.update(
           elapsed,
@@ -1174,7 +1222,16 @@ export default function DreamWorld3D({
           ((selected ? .68 : hoveredId === node._id ? .42 : .13) -
             orbitMaterial.opacity) *
           .08
-        labelMaterial.opacity += ((visible ? .88 : .15) - labelMaterial.opacity) * .08
+        const labelTarget =
+          selected || hoveredId === node._id
+            ? .9
+            : node.frequency >= 3
+              ? .42
+              : .07
+        labelMaterial.opacity +=
+          (((visible ? labelTarget : .04) * introVisibility) -
+            labelMaterial.opacity) *
+          .08
 
         visual.orbit.rotation.z += selected ? .014 : .004
         visual.core.rotation.x += .006
@@ -1218,14 +1275,23 @@ export default function DreamWorld3D({
         const touchesSelected =
           currentSelectedId === edgeVisual.source ||
           currentSelectedId === edgeVisual.target
+        const introEdgeFactor =
+          introStageRef.current >= 4
+            ? 1
+            : introStageRef.current === 3
+              ? .72
+              : introStageRef.current === 2
+                ? .12
+                : .015
         const desiredOpacity = edgeHighlighted
           ? Math.min(
               .5,
-              .1 +
+              (.1 +
                 edgeVisual.weight * .07 +
-                (touchesSelected ? selectionPulseStrength * .22 : 0),
+                (touchesSelected ? selectionPulseStrength * .22 : 0)) *
+                introEdgeFactor,
             )
-          : .028
+          : .028 * introEdgeFactor
         edgeVisual.material.opacity +=
           (desiredOpacity - edgeVisual.material.opacity) * .08
 
@@ -1296,6 +1362,14 @@ export default function DreamWorld3D({
           : settings.bloomStrength) -
           bloom.strength) *
         0.035
+
+      dreamPost.uniforms.uTime.value = elapsed
+      dreamPost.uniforms.uTravel.value +=
+        ((selectedVisual ? .18 : 0) - dreamPost.uniforms.uTravel.value) *
+        .03
+      renderer.toneMappingExposure +=
+        ((selectedVisual ? 0.9 : 0.94) - renderer.toneMappingExposure) *
+        .025
 
       if (scene.fog instanceof THREE.FogExp2) {
         scene.fog.density +=
