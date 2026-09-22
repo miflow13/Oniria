@@ -3013,3 +3013,120 @@
     display: none;
   }
 }
+
+
+/* ==========================================================================
+   First-visit guidance + collapsible controls
+   ========================================================================== */
+
+.guidedPulse {
+  animation: guidedPulse 1.15s ease-in-out infinite;
+}
+
+@keyframes guidedPulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 0 rgba(83,211,255,.0),
+      0 10px 28px rgba(0,0,0,.22);
+  }
+
+  50% {
+    box-shadow:
+      0 0 0 4px rgba(83,211,255,.08),
+      0 0 28px rgba(83,211,255,.24),
+      0 10px 28px rgba(0,0,0,.3);
+  }
+}
+
+.controlsDock {
+  position: absolute;
+  z-index: 46;
+  left: 50%;
+  bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  transform: translateX(-50%);
+}
+
+.controlsToggle {
+  flex: 0 0 auto;
+  height: 31px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  color: #a7adb8;
+  background: rgba(20,22,27,.9);
+  border: 1px solid rgba(255,255,255,.075);
+  border-radius: 999px;
+  padding: 0 10px;
+  font: inherit;
+  font-size: .49rem;
+  font-weight: 700;
+  backdrop-filter: blur(14px);
+  transition:
+    color 150ms ease,
+    border-color 150ms ease,
+    background 150ms ease;
+}
+
+.controlsToggle span {
+  color: #d8dde6;
+  font-size: .72rem;
+}
+
+.controlsDock:hover .controlsToggle,
+.controlsDock:focus-within .controlsToggle,
+.controlsDockExpanded .controlsToggle {
+  color: #f4f7fb;
+  border-color: rgba(83,211,255,.22);
+  background: rgba(26,29,35,.96);
+}
+
+.controlsDock .controls {
+  position: static;
+  left: auto;
+  bottom: auto;
+  max-width: 0;
+  padding-left: 0;
+  padding-right: 0;
+  transform: none;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  white-space: nowrap;
+  transition:
+    max-width 240ms ease,
+    opacity 180ms ease,
+    padding 240ms ease;
+}
+
+.controlsDock:hover .controls,
+.controlsDock:focus-within .controls,
+.controlsDockExpanded .controls {
+  max-width: 720px;
+  padding-left: 11px;
+  padding-right: 11px;
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .guidedPulse {
+    animation: none;
+    outline: 2px solid rgba(83,211,255,.3);
+    outline-offset: 3px;
+  }
+}
+
+@media (max-width: 720px) {
+  .controlsDock {
+    left: 12px;
+    transform: none;
+  }
+
+  .controlsDock .controls {
+    display: none;
+  }
+}
