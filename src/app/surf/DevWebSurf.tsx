@@ -1136,6 +1136,8 @@ export default function DevWebSurf() {
     ? graph.nodes.find((node) => node.id === routeTargetId) ?? null
     : null
 
+  const routeTargetFloor = routeTarget?.floorIndex ?? 0
+
   const relatedArticles = article
     ? [
         ...bootstrap.feed,
@@ -1427,19 +1429,27 @@ export default function DevWebSurf() {
           <span>Route ready · follow cyan light</span>
           <strong>{routeTarget.title}</strong>
           <p>
-            Follow the floor strips through the lit doorway.
+            {routeTargetFloor !== currentFloor
+              ? 'Take the central lift, then follow the cyan floor strips.'
+              : 'Follow the floor strips through the lit doorway.'}
           </p>
           <div>
             <button
               type="button"
               onClick={() => {
+                if (routeTargetFloor !== currentFloor) {
+                  requestFloor(routeTargetFloor)
+                  return
+                }
                 const canvas = document.querySelector('canvas')
                 if (canvas instanceof HTMLCanvasElement) {
                   void canvas.requestPointerLock()
                 }
               }}
             >
-              Walk route
+              {routeTargetFloor !== currentFloor
+                ? 'Take lift'
+                : 'Walk route'}
             </button>
             <button type="button" onClick={() => jumpTo(routeTarget.id)}>
               Jump there
