@@ -1108,7 +1108,7 @@ export default function DreamWorld3D({
     function handlePointerMove(event: PointerEvent) {
       normalizedPointer(event)
 
-      if (diveMode === 'inside' || diveMode === 'exiting') {
+      if (diveMode !== 'none') {
         activeDive?.setLookTarget(pointer.x, pointer.y)
         renderer.domElement.style.cursor = 'crosshair'
         return
@@ -1145,7 +1145,7 @@ export default function DreamWorld3D({
     }
 
     function handlePointerDown(event: PointerEvent) {
-      if (diveMode === 'inside' || diveMode === 'exiting') {
+      if (diveMode !== 'none') {
         normalizedPointer(event)
         activeDive?.setLookTarget(pointer.x, pointer.y)
         return
@@ -1183,7 +1183,7 @@ export default function DreamWorld3D({
         holdNodeId = null
       }
 
-      if (diveMode === 'inside' || diveMode === 'exiting') {
+      if (diveMode !== 'none') {
         return
       }
 
@@ -1218,7 +1218,7 @@ export default function DreamWorld3D({
 
     function handleWheel(event: WheelEvent) {
       event.preventDefault()
-      if (diveMode === 'inside' || diveMode === 'exiting') return
+      if (diveMode !== 'none') return
 
       const next = Math.min(
         2.8,
