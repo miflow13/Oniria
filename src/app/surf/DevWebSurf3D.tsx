@@ -551,7 +551,7 @@ export default function DevWebSurf3D({
     renderer.toneMappingExposure = 1.06
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.shadowMap.enabled = true
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap
+    renderer.shadowMap.type = THREE.PCFShadowMap
     renderer.shadowMap.autoUpdate = false
     renderer.shadowMap.needsUpdate = true
     renderer.domElement.className = styles.canvas
@@ -1187,7 +1187,7 @@ export default function DevWebSurf3D({
     })
     scene.add(netGrid)
 
-    const rainCount = 280
+    const rainCount = 160
     const rainPositions = new Float32Array(rainCount * 3)
     for (let index = 0; index < rainCount; index += 1) {
       const offset = index * 3
@@ -1204,7 +1204,7 @@ export default function DevWebSurf3D({
       color: 0x53d3ff,
       size: .021,
       transparent: true,
-      opacity: .2,
+      opacity: .07,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     })
@@ -1221,7 +1221,7 @@ export default function DevWebSurf3D({
       const material = new THREE.MeshBasicMaterial({
         color: index % 2 ? 0xae7bff : 0x53d3ff,
         transparent: true,
-        opacity: .018,
+        opacity: .006,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
         side: THREE.DoubleSide,
@@ -1262,6 +1262,9 @@ export default function DevWebSurf3D({
 
     function addUpperFloor(floor: number) {
       const base = floor * LIBRARY_FLOOR_HEIGHT
+      const floorAccent = FLOOR_ACCENTS[floor]
+      const floorAccentHex =
+        '#' + new THREE.Color(floorAccent).getHexString()
 
       // Wide side balconies leave a continuous central void. From any level
       // the player can read the floors above and below as one megastructure.
@@ -1275,9 +1278,9 @@ export default function DevWebSurf3D({
       // Balcony rails stop at bridge entrances instead of slicing across
       // them, so the cross-floor circulation reads as physically plausible.
       const balconyRailMaterial = new THREE.MeshBasicMaterial({
-        color: floor % 2 === 0 ? 0x53d3ff : 0x7c83ff,
+        color: floorAccent,
         transparent: true,
-        opacity: .24,
+        opacity: .18,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
       })
@@ -1308,9 +1311,9 @@ export default function DevWebSurf3D({
       const bridgeLightGeometry = new THREE.BoxGeometry(8.8, .024, .05)
       architecturalGeometries.push(bridgeLightGeometry)
       const bridgeLightMaterial = new THREE.MeshBasicMaterial({
-        color: floor % 2 === 0 ? 0x53d3ff : 0xae7bff,
+        color: floorAccent,
         transparent: true,
-        opacity: .26,
+        opacity: .34,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
       })
@@ -1340,7 +1343,7 @@ export default function DevWebSurf3D({
       const levelTexture = createTextTexture(
         'LEVEL ' + String(floor + 1).padStart(2, '0'),
         FLOOR_IDENTITIES[floor] ?? 'DEEP DEV COLLECTION',
-        floor % 2 === 0 ? '#53d3ff' : '#7c83ff',
+        floorAccentHex,
         760,
         180,
       )
@@ -1356,6 +1359,40 @@ export default function DevWebSurf3D({
       levelSprite.position.set(0, base + 2.75, 4.45)
       levelSprite.scale.set(7.2, 1.7, 1)
       scene.add(levelSprite)
+
+      // Human-height aisle markers make the current collection readable while
+      // walking, instead of forcing the player to read giant atrium signage.
+      ;[-10, -27, -45].forEach((z, aisleIndex) => {
+        const aisleName =
+          FLOOR_AISLES[floor][aisleIndex] ?? 'COLLECTION'
+        const aisleTexture = createTextTexture(
+          'AISLE ' +
+            String(floor + 1).padStart(2, '0') +
+            String.fromCharCode(65 + aisleIndex) +
+            ' · ' +
+            aisleName,
+          'DEV LIBRARY · REAL ARTICLES',
+          floorAccentHex,
+          620,
+          142,
+        )
+        labelsToDispose.push(aisleTexture)
+        const aisleMaterial = new THREE.SpriteMaterial({
+          map: aisleTexture,
+          transparent: true,
+          depthWrite: false,
+          toneMapped: false,
+        })
+        architecturalMaterials.push(aisleMaterial)
+        const aisleSprite = new THREE.Sprite(aisleMaterial)
+        aisleSprite.position.set(
+          aisleIndex % 2 === 0 ? -5.8 : 5.8,
+          base + 1.95,
+          z,
+        )
+        aisleSprite.scale.set(4.8, 1.1, 1)
+        scene.add(aisleSprite)
+      })
 
       // A visible emergency stairwell makes the vertical circulation legible
       // even though the central lift remains the fast traversal mechanic.
@@ -1579,11 +1616,11 @@ export default function DevWebSurf3D({
     const distantBackGeometry = new THREE.BoxGeometry(1, 1, .12)
     const distantBoardGeometry = new THREE.BoxGeometry(1, .09, .64)
     const distantShelfMaterial = new THREE.MeshStandardMaterial({
-      color: 0x2c3037,
+      color: 0x202329,
       map: architecturalSurfaceTexture,
       roughnessMap: architecturalSurfaceRoughness,
-      emissive: 0x10152a,
-      emissiveIntensity: .16,
+      emissive: 0x0b0e16,
+      emissiveIntensity: .07,
       roughness: .82,
       metalness: .12,
     })
@@ -1653,9 +1690,9 @@ export default function DevWebSurf3D({
     const fillerBookMaterial = new THREE.MeshStandardMaterial({
       color: 0xffffff,
       vertexColors: true,
-      emissive: 0x10162d,
-      emissiveIntensity: .18,
-      roughness: .62,
+      emissive: 0x080b12,
+      emissiveIntensity: .07,
+      roughness: .72,
       metalness: .16,
     })
     architecturalGeometries.push(fillerBookGeometry)
@@ -1668,14 +1705,14 @@ export default function DevWebSurf3D({
       fillerBookCount,
     )
     const fillerPalette = [
-      0x24304b,
-      0x35477a,
-      0x243b57,
-      0x4b356f,
-      0x21516a,
-      0x3b49df,
-      0x5965e8,
-      0x2c3345,
+      0x1a2230,
+      0x222b3c,
+      0x182833,
+      0x2c2338,
+      0x17313a,
+      0x252d58,
+      0x30365a,
+      0x20242c,
     ]
 
     let fillerIndex = 0
@@ -1737,7 +1774,7 @@ export default function DevWebSurf3D({
     const ceilingRailMaterial = new THREE.MeshBasicMaterial({
       color: 0x3148b5,
       transparent: true,
-      opacity: .28,
+      opacity: .065,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     })
@@ -2133,9 +2170,9 @@ export default function DevWebSurf3D({
     const articleProxyMaterial = new THREE.MeshStandardMaterial({
       color: 0xffffff,
       vertexColors: true,
-      emissive: 0x121a35,
-      emissiveIntensity: .28,
-      roughness: .58,
+      emissive: 0x0c1020,
+      emissiveIntensity: .12,
+      roughness: .68,
       metalness: .18,
     })
     architecturalGeometries.push(articleProxyGeometry)
@@ -2185,8 +2222,8 @@ export default function DevWebSurf3D({
         mesh.setColorAt(
           index,
           new THREE.Color(node.accent).lerp(
-            new THREE.Color(0x20283d),
-            .58,
+            new THREE.Color(0x161a21),
+            .72,
           ),
         )
       })
