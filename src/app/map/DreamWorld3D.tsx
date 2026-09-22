@@ -821,7 +821,7 @@ export default function DreamWorld3D({
       depthWrite: false,
       toneMapped: true,
     })
-    const shelfCoverMaterials: THREE.MeshBasicMaterial[] = []
+    const shelfCoverMaterials: THREE.MeshStandardMaterial[] = []
     const shelfCoverTextures: THREE.Texture[] = []
     const shelfTextureLoader = new THREE.TextureLoader()
     shelfTextureLoader.setCrossOrigin('anonymous')
