@@ -1601,7 +1601,45 @@ Those quotes demonstrate the project’s evolution better than a sanitized featu
 
 ---
 
-# 44. Final takeaway at this stage
+# 44. Cleanup pass: extracting ownership exposed a real timing bug
+
+The cleanup pass was intentionally started before adding more showcase features.
+
+The first three extracted ownership boundaries were:
+
+- procedural library audio
+- physical book reading ritual
+- continuous archive haze / fog atmosphere
+
+The goal was not to create lots of small files. It was to make each runtime system responsible for creating, updating, and disposing its own resources.
+
+A particularly useful bug surfaced during the reading-ritual extraction.
+
+The old physical-book animation recorded its start with `performance.now()`, but later progress calculations were accidentally reading a separate scene-start `Date.now()` value that existed for recent-dream calculations.
+
+Those clocks have different origins.
+
+The code typechecked and the variables looked reasonable in isolation, but combining them could make the book animation jump through its timing almost instantly.
+
+Moving the ritual into its own controller made the mismatch obvious.
+
+The extracted system now receives one consistent animation-clock value.
+
+This is a useful engineering story for the final article:
+
+> Refactoring did not just make the file smaller. Giving behavior a clear owner exposed a bug that was hidden by unrelated state living in the same scope.
+
+After the next atmosphere extraction, the same ownership rule was applied to the archive haze:
+
+- create haze/fog resources in one module
+- update them from visitor + district state
+- dispose them from the same module
+
+Both phases passed the Cinematic branch TypeScript + Next build checks.
+
+---
+
+# 45. Final takeaway at this stage
 
 The DEV Library is now interesting for a reason that has little to do with polygon count.
 
