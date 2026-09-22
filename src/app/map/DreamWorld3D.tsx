@@ -3010,59 +3010,135 @@ export default function DreamWorld3D({
           district.bay,
           activeDistricts,
         )
+
+        // Keep landmarks on the district plaza itself. The previous placement
+        // pushed them beyond the widened path edge, directly behind shelf
+        // clusters, which made them effectively invisible in first person.
         const landmarkPosition = pathCenter
           .clone()
-          .addScaledVector(side, sideSign * (halfWidth + 2.35))
-        landmarkPosition.y += ARCHIVE_WALKWAY_Y_OFFSET + 1.2
+          .addScaledVector(
+            side,
+            sideSign * Math.max(2.1, halfWidth - 1.25),
+          )
 
         let landmarkGeometry: THREE.BufferGeometry
+        let landmarkHeight = 3.4
         switch (district.landmarkType) {
           case 'neural-lattice':
-            landmarkGeometry = new THREE.IcosahedronGeometry(1.15, 1)
+            landmarkGeometry = new THREE.IcosahedronGeometry(1.85, 1)
+            landmarkHeight = 3.7
             break
           case 'terminal-wall':
-            landmarkGeometry = new THREE.BoxGeometry(2.35, 1.45, .16)
+            landmarkGeometry = new THREE.BoxGeometry(3.5, 2.7, .28)
+            landmarkHeight = 2.7
             break
           case 'syntax-tree':
-            landmarkGeometry = new THREE.ConeGeometry(1.05, 2.3, 6)
+            landmarkGeometry = new THREE.ConeGeometry(1.65, 4.2, 6)
+            landmarkHeight = 4.2
             break
           case 'dev-monument':
-            landmarkGeometry = new THREE.BoxGeometry(1.65, 1.65, 1.65)
+            landmarkGeometry = new THREE.BoxGeometry(2.7, 2.7, 2.7)
+            landmarkHeight = 2.7
             break
           case 'archive-tower':
-            landmarkGeometry = new THREE.CylinderGeometry(.72, 1, 2.8, 8)
+            landmarkGeometry = new THREE.CylinderGeometry(
+              1.05,
+              1.45,
+              4.8,
+              8,
+            )
+            landmarkHeight = 4.8
             break
           case 'index':
           default:
-            landmarkGeometry = new THREE.TorusGeometry(.95, .16, 8, 36)
+            landmarkGeometry = new THREE.TorusGeometry(1.6, .24, 10, 48)
+            landmarkHeight = 3.2
             break
         }
 
-        const landmarkMaterial = new THREE.MeshBasicMaterial({
+        landmarkPosition.y +=
+          ARCHIVE_WALKWAY_Y_OFFSET +
+          .34 +
+          landmarkHeight * .5
+
+        const landmarkCoreMaterial = new THREE.MeshBasicMaterial({
           color: district.accent,
           transparent: true,
-          opacity: .54,
-          wireframe: district.landmarkType !== 'archive-tower',
+          opacity: .26,
+          depthWrite: false,
+          blending: THREE.NormalBlending,
+          toneMapped: false,
+          side: THREE.DoubleSide,
+        })
+        const landmarkWireMaterial = new THREE.MeshBasicMaterial({
+          color: district.accent,
+          transparent: true,
+          opacity: .96,
+          wireframe: true,
           depthWrite: false,
           blending: THREE.AdditiveBlending,
           toneMapped: false,
         })
-        const landmark = new THREE.Mesh(
-          landmarkGeometry,
-          landmarkMaterial,
-        )
-        landmark.position.copy(landmarkPosition)
-        landmark.rotation.y =
+
+        const landmarkGroup = new THREE.Group()
+        landmarkGroup.position.copy(landmarkPosition)
+        landmarkGroup.rotation.y =
           Math.atan2(frame.tangentX, frame.tangentZ) +
           (district.landmarkType === 'dev-monument'
             ? Math.PI / 4
             : 0)
-        landmark.renderOrder = 3
-        landmark.userData.libraryDecorative = true
-        world.add(landmark)
-        libraryRouteObjects.push(landmark)
-        libraryDistrictLandmarkGeometries.push(landmarkGeometry)
-        libraryDistrictLandmarkMaterials.push(landmarkMaterial)
+
+        const landmarkCore = new THREE.Mesh(
+          landmarkGeometry,
+          landmarkCoreMaterial,
+        )
+        landmarkCore.renderOrder = 4
+        landmarkCore.userData.libraryDecorative = true
+        landmarkGroup.add(landmarkCore)
+
+        const landmarkWire = new THREE.Mesh(
+          landmarkGeometry,
+          landmarkWireMaterial,
+        )
+        landmarkWire.scale.setScalar(1.035)
+        landmarkWire.renderOrder = 5
+        landmarkWire.userData.libraryDecorative = true
+        landmarkGroup.add(landmarkWire)
+
+        const pedestalGeometry = new THREE.CylinderGeometry(
+          1.75,
+          2.05,
+          .42,
+          20,
+        )
+        const pedestalMaterial = new THREE.MeshBasicMaterial({
+          color: district.accent,
+          transparent: true,
+          opacity: .32,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          toneMapped: false,
+        })
+        const pedestal = new THREE.Mesh(
+          pedestalGeometry,
+          pedestalMaterial,
+        )
+        pedestal.position.y = -.5 * landmarkHeight - .12
+        pedestal.renderOrder = 3
+        pedestal.userData.libraryDecorative = true
+        landmarkGroup.add(pedestal)
+
+        world.add(landmarkGroup)
+        libraryRouteObjects.push(landmarkGroup)
+        libraryDistrictLandmarkGeometries.push(
+          landmarkGeometry,
+          pedestalGeometry,
+        )
+        libraryDistrictLandmarkMaterials.push(
+          landmarkCoreMaterial,
+          landmarkWireMaterial,
+          pedestalMaterial,
+        )
 
         const atmosphereColor =
           district.atmosphere === 'crystalline'
@@ -3072,16 +3148,16 @@ export default function DreamWorld3D({
               : district.atmosphere === 'deep-void'
                 ? 0x8c63d8
                 : 0xd782e8
-        const auraGeometry = new THREE.RingGeometry(1.35, 1.7, 36)
+        const auraGeometry = new THREE.RingGeometry(2.05, 2.75, 48)
         const auraMaterial = new THREE.MeshBasicMaterial({
           color: atmosphereColor,
           transparent: true,
           opacity:
             district.atmosphere === 'deep-void'
-              ? .12
+              ? .24
               : district.atmosphere === 'industrial'
-                ? .16
-                : .24,
+                ? .3
+                : .42,
           side: THREE.DoubleSide,
           depthWrite: false,
           blending: THREE.AdditiveBlending,
@@ -3090,9 +3166,9 @@ export default function DreamWorld3D({
         const aura = new THREE.Mesh(auraGeometry, auraMaterial)
         aura.position.copy(landmarkPosition)
         aura.position.y =
-          pathCenter.y + ARCHIVE_WALKWAY_Y_OFFSET + .055
+          pathCenter.y + ARCHIVE_WALKWAY_Y_OFFSET + .065
         aura.rotation.x = -Math.PI / 2
-        aura.renderOrder = 2
+        aura.renderOrder = 3
         aura.userData.libraryDecorative = true
         world.add(aura)
         libraryRouteObjects.push(aura)
