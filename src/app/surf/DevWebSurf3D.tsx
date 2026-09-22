@@ -63,11 +63,21 @@ const SECTION_DOORWAYS: Record<LibrarySection, THREE.Vector3> = {
   archive: new THREE.Vector3(0, .09, -34.4),
 }
 
+const SECTION_ACCENTS: Record<LibrarySection, number> = {
+  atrium: 0xf5f5f5,
+  featured: 0x3b49df,
+  latest: 0x5b6cff,
+  topics: 0x53d3ff,
+  creators: 0xae7bff,
+  search: 0xff4fd8,
+  archive: 0x8b96a8,
+}
+
 const KIND_GEOMETRY: Record<SurfNodeKind, () => THREE.BufferGeometry> = {
   home: () => new THREE.CylinderGeometry(.8, 1.05, .72, 8),
   section: () => new THREE.BoxGeometry(1.6, 2.5, .18),
   profile: () => new THREE.BoxGeometry(1.42, 1.8, .16),
-  article: () => new THREE.BoxGeometry(.78, 1.12, .18),
+  article: () => new THREE.BoxGeometry(.68, .82, .16),
   tag: () => new THREE.BoxGeometry(1.35, 2.15, .14),
   search: () => new THREE.BoxGeometry(1.45, 1.15, .26),
 }
@@ -76,8 +86,8 @@ function createTextTexture(
   title: string,
   subtitle: string,
   accent: string,
-  width = 1024,
-  height = 256,
+  width = 768,
+  height = 192,
 ) {
   const canvas = document.createElement('canvas')
   canvas.width = width
@@ -92,24 +102,31 @@ function createTextTexture(
     gradient.addColorStop(.88, 'rgba(5,8,10,.88)')
     gradient.addColorStop(1, 'rgba(5,8,10,0)')
     context.fillStyle = gradient
-    context.fillRect(0, 26, width, height - 52)
+    context.fillRect(
+      0,
+      Math.round(height * .1),
+      width,
+      Math.round(height * .8),
+    )
 
     context.textAlign = 'center'
     context.textBaseline = 'middle'
     context.shadowColor = accent
     context.shadowBlur = 16
     context.fillStyle = '#f5f5f5'
-    context.font = '700 38px system-ui, sans-serif'
+    context.font =
+      '700 ' + Math.round(height * .15) + 'px system-ui, sans-serif'
     const cleanTitle =
       title.length > 42 ? title.slice(0, 41) + '…' : title
-    context.fillText(cleanTitle, width / 2, 105)
+    context.fillText(cleanTitle, width / 2, height * .41)
 
     context.shadowBlur = 0
     context.fillStyle = accent
-    context.font = '500 18px system-ui, sans-serif'
+    context.font =
+      '500 ' + Math.round(height * .072) + 'px system-ui, sans-serif'
     const cleanSubtitle =
       subtitle.length > 62 ? subtitle.slice(0, 61) + '…' : subtitle
-    context.fillText(cleanSubtitle, width / 2, 155)
+    context.fillText(cleanSubtitle, width / 2, height * .64)
   }
 
   const texture = new THREE.CanvasTexture(canvas)
@@ -124,8 +141,8 @@ function createBookTitleTexture(
   accent: string,
 ) {
   const canvas = document.createElement('canvas')
-  canvas.width = 1024
-  canvas.height = 460
+  canvas.width = 768
+  canvas.height = 345
   const context = canvas.getContext('2d')
 
   if (context) {
@@ -138,21 +155,21 @@ function createBookTitleTexture(
     glow.addColorStop(.5, '#53d3ff')
     glow.addColorStop(1, '#ae7bff')
     context.fillStyle = glow
-    context.fillRect(0, 0, canvas.width, 16)
+    context.fillRect(0, 0, canvas.width, 12)
 
     context.fillStyle = 'rgba(255,255,255,.045)'
-    for (let x = 40; x < canvas.width; x += 72) {
-      context.fillRect(x, 36, 1, canvas.height - 72)
+    for (let x = 30; x < canvas.width; x += 54) {
+      context.fillRect(x, 27, 1, canvas.height - 54)
     }
 
     const words = title.trim().split(/\s+/)
     const lines: string[] = []
     let line = ''
 
-    context.font = '800 58px system-ui, sans-serif'
+    context.font = '800 43px system-ui, sans-serif'
     for (const word of words) {
       const next = line ? line + ' ' + word : word
-      if (context.measureText(next).width > 860 && line) {
+      if (context.measureText(next).width > 645 && line) {
         lines.push(line)
         line = word
         if (lines.length === 2) break
@@ -172,17 +189,17 @@ function createBookTitleTexture(
         index === 2 && words.join(' ').length > lines.join(' ').length
           ? item.replace(/[.…]*$/, '') + '…'
           : item
-      context.fillText(rendered, 64, 66 + index * 72)
+      context.fillText(rendered, 48, 50 + index * 54)
     })
 
     context.shadowBlur = 0
     context.fillStyle = '#98a2ff'
-    context.font = '600 28px system-ui, sans-serif'
-    context.fillText(subtitle, 64, 344)
+    context.font = '600 21px system-ui, sans-serif'
+    context.fillText(subtitle, 48, 258)
 
     context.fillStyle = '#6d7280'
-    context.font = '500 20px system-ui, sans-serif'
-    context.fillText('DEV // ARTICLE', 64, 392)
+    context.font = '500 15px system-ui, sans-serif'
+    context.fillText('DEV // ARTICLE', 48, 294)
   }
 
   const texture = new THREE.CanvasTexture(canvas)
@@ -308,10 +325,10 @@ export default function DevWebSurf3D({
     const container = host
 
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color(0x0d0d0d)
-    scene.fog = new THREE.FogExp2(0x111111, .014)
+    scene.background = new THREE.Color(0x090a0f)
+    scene.fog = new THREE.FogExp2(0x0c0e16, .0115)
 
-    const camera = new THREE.PerspectiveCamera(68, 1, .05, 140)
+    const camera = new THREE.PerspectiveCamera(62, 1, .07, 140)
     camera.position.set(0, 1.62, 13)
 
     const renderer = new THREE.WebGLRenderer({
@@ -320,7 +337,7 @@ export default function DevWebSurf3D({
     })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5))
     renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = 1
+    renderer.toneMappingExposure = 1.06
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.shadowMap.enabled = true
     renderer.shadowMap.type = THREE.PCFSoftShadowMap
@@ -503,9 +520,9 @@ export default function DevWebSurf3D({
     }
 
     const floorMaterial = new THREE.MeshStandardMaterial({
-      color: 0x171717,
-      roughness: .78,
-      metalness: .12,
+      color: 0x14161d,
+      roughness: .72,
+      metalness: .18,
     })
     architecturalMaterials.push(floorMaterial)
 
@@ -519,16 +536,16 @@ export default function DevWebSurf3D({
     architecturalMaterials.push(brass)
 
     const shelfMaterial = new THREE.MeshStandardMaterial({
-      color: 0x202020,
-      roughness: .7,
-      metalness: .22,
+      color: 0x1d2028,
+      roughness: .62,
+      metalness: .28,
     })
     architecturalMaterials.push(shelfMaterial)
 
     const concrete = new THREE.MeshStandardMaterial({
-      color: 0x181818,
-      roughness: .92,
-      metalness: .04,
+      color: 0x15171d,
+      roughness: .88,
+      metalness: .08,
     })
     architecturalMaterials.push(concrete)
 
@@ -577,6 +594,15 @@ export default function DevWebSurf3D({
       material: THREE.MeshBasicMaterial
       center: THREE.Vector3
     }> = []
+    const sectionFloorGlows: Array<{
+      section: LibrarySection
+      mesh: THREE.Mesh
+      material: THREE.MeshBasicMaterial
+    }> = []
+    const sectionBeacons: Array<{
+      section: LibrarySection
+      materials: THREE.MeshBasicMaterial[]
+    }> = []
 
     function addShelf(
       x: number,
@@ -588,35 +614,46 @@ export default function DevWebSurf3D({
       group.position.set(x, 0, z)
       group.rotation.y = rotationY
 
-      const sideGeometry = new THREE.BoxGeometry(.18, 3.15, .72)
-      const boardGeometry = new THREE.BoxGeometry(width, .12, .72)
-      architecturalGeometries.push(sideGeometry, boardGeometry)
+      const sideGeometry = new THREE.BoxGeometry(.16, 3.56, .66)
+      const boardGeometry = new THREE.BoxGeometry(width, .1, .66)
+      const backGeometry = new THREE.BoxGeometry(width, 3.46, .055)
+      architecturalGeometries.push(
+        sideGeometry,
+        boardGeometry,
+        backGeometry,
+      )
 
       const left = new THREE.Mesh(sideGeometry, shelfMaterial)
       const right = new THREE.Mesh(sideGeometry, shelfMaterial)
-      left.position.set(-width / 2, 1.5, 0)
-      right.position.set(width / 2, 1.5, 0)
+      left.position.set(-width / 2, 1.76, 0)
+      right.position.set(width / 2, 1.76, 0)
       left.castShadow = right.castShadow = true
       group.add(left, right)
 
-      for (let level = 0; level < 3; level += 1) {
+      const back = new THREE.Mesh(backGeometry, concrete)
+      back.position.set(0, 1.74, -.3)
+      back.receiveShadow = true
+      group.add(back)
+
+      const boardLevels = [.18, 1.28, 2.38]
+      boardLevels.forEach((boardY) => {
         const board = new THREE.Mesh(boardGeometry, shelfMaterial)
-        board.position.set(0, .48 + level * 1.05, 0)
+        board.position.set(0, boardY, 0)
         board.castShadow = true
         board.receiveShadow = true
         group.add(board)
-      }
+      })
 
       const top = new THREE.Mesh(boardGeometry, brass)
-      top.position.set(0, 3.06, 0)
-      top.scale.y = 1.2
+      top.position.set(0, 3.48, 0)
+      top.scale.y = 1.15
       group.add(top)
 
       for (let level = 0; level < 3; level += 1) {
         const accentGeometry = new THREE.BoxGeometry(
-          width - .28,
-          .025,
-          .035,
+          width - .24,
+          .024,
+          .032,
         )
         architecturalGeometries.push(accentGeometry)
         const accentMaterial = new THREE.MeshBasicMaterial({
@@ -628,14 +665,22 @@ export default function DevWebSurf3D({
         })
         architecturalMaterials.push(accentMaterial)
         const accent = new THREE.Mesh(accentGeometry, accentMaterial)
-        accent.position.set(0, .57 + level * 1.05, .385)
+        accent.position.set(0, .245 + level * 1.1, .35)
         group.add(accent)
         shelfAccentBars.push({
           mesh: accent,
           material: accentMaterial,
-          center: new THREE.Vector3(x, .57 + level * 1.05, z),
+          center: new THREE.Vector3(x, .245 + level * 1.1, z),
         })
       }
+
+      const rotated = Math.abs(Math.sin(rotationY)) > .5
+      collisionRects.push({
+        minX: x - (rotated ? .33 : width / 2),
+        maxX: x + (rotated ? .33 : width / 2),
+        minZ: z - (rotated ? width / 2 : .33),
+        maxZ: z + (rotated ? width / 2 : .33),
+      })
 
       scene.add(group)
       return group
@@ -670,6 +715,78 @@ export default function DevWebSurf3D({
       return sprite
     }
 
+    function addSectionFloorGlow(
+      section: LibrarySection,
+      x: number,
+      z: number,
+      radius: number,
+    ) {
+      const geometry = new THREE.CircleGeometry(radius, 48)
+      architecturalGeometries.push(geometry)
+      const material = new THREE.MeshBasicMaterial({
+        color: SECTION_ACCENTS[section],
+        transparent: true,
+        opacity: .018,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      })
+      architecturalMaterials.push(material)
+      const mesh = new THREE.Mesh(geometry, material)
+      mesh.rotation.x = -Math.PI / 2
+      mesh.position.set(x, .012, z)
+      scene.add(mesh)
+      sectionFloorGlows.push({section, mesh, material})
+    }
+
+    function addDoorwayBeacon(
+      section: LibrarySection,
+      x: number,
+      z: number,
+      rotationY = 0,
+    ) {
+      const group = new THREE.Group()
+      group.position.set(x, 0, z)
+      group.rotation.y = rotationY
+
+      const materials: THREE.MeshBasicMaterial[] = []
+      const makeMaterial = (opacity: number) => {
+        const material = new THREE.MeshBasicMaterial({
+          color: SECTION_ACCENTS[section],
+          transparent: true,
+          opacity,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        })
+        architecturalMaterials.push(material)
+        materials.push(material)
+        return material
+      }
+
+      const thresholdGeometry = new THREE.BoxGeometry(2.35, .018, .075)
+      const pylonGeometry = new THREE.BoxGeometry(.035, 2.45, .045)
+      architecturalGeometries.push(thresholdGeometry, pylonGeometry)
+
+      const threshold = new THREE.Mesh(
+        thresholdGeometry,
+        makeMaterial(.12),
+      )
+      threshold.position.set(0, .026, 0)
+      group.add(threshold)
+
+      ;[-1.06, 1.06].forEach((offset) => {
+        const pylon = new THREE.Mesh(
+          pylonGeometry,
+          makeMaterial(.065),
+        )
+        pylon.position.set(offset, 1.22, 0)
+        group.add(pylon)
+      })
+
+      scene.add(group)
+      sectionBeacons.push({section, materials})
+    }
+
     // Netspace underlay: the library still reads as DEV, but the floor
     // behaves like a data plane rather than a conventional building.
     const netGrid = new THREE.GridHelper(82, 82, 0x3b49df, 0x1d223b)
@@ -685,7 +802,7 @@ export default function DevWebSurf3D({
     })
     scene.add(netGrid)
 
-    const rainCount = 420
+    const rainCount = 280
     const rainPositions = new Float32Array(rainCount * 3)
     for (let index = 0; index < rainCount; index += 1) {
       const offset = index * 3
@@ -700,9 +817,9 @@ export default function DevWebSurf3D({
     )
     const rainMaterial = new THREE.PointsMaterial({
       color: 0x53d3ff,
-      size: .025,
+      size: .021,
       transparent: true,
-      opacity: .3,
+      opacity: .2,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     })
@@ -732,6 +849,21 @@ export default function DevWebSurf3D({
     })
     architecturalGeometries.push(scanGateGeometry)
 
+    addSectionFloorGlow('atrium', 0, 7, 4.2)
+    addSectionFloorGlow('featured', 0, -12.5, 5.4)
+    addSectionFloorGlow('latest', -13, -14, 4.8)
+    addSectionFloorGlow('topics', 13, -14, 4.8)
+    addSectionFloorGlow('creators', 13, -25.5, 4.4)
+    addSectionFloorGlow('search', -13, -25.5, 4.4)
+    addSectionFloorGlow('archive', 0, -39.5, 4.3)
+
+    addDoorwayBeacon('featured', 0, -5.4, 0)
+    addDoorwayBeacon('latest', -8.35, -5.2, Math.PI / 2)
+    addDoorwayBeacon('topics', 8.35, -5.2, Math.PI / 2)
+    addDoorwayBeacon('creators', 8.35, -21.1, Math.PI / 2)
+    addDoorwayBeacon('search', -8.35, -21.1, Math.PI / 2)
+    addDoorwayBeacon('archive', 0, -34.4, 0)
+
     // Main library architecture.
     addFloor(0, -15, 34, 58)
     addFloor(-13, -13, 16, 28)
@@ -757,24 +889,24 @@ export default function DevWebSurf3D({
 
     // Shelves define readable aisles instead of an open node cloud.
     ;[
-      [-4.9, -10, 6.6, 0],
-      [4.9, -10, 6.6, 0],
-      [-4.9, -17, 6.6, 0],
-      [4.9, -17, 6.6, 0],
-      [-14.8, -10, 5.8, Math.PI / 2],
-      [-11.1, -10, 5.8, Math.PI / 2],
-      [-14.8, -18, 5.8, Math.PI / 2],
-      [-11.1, -18, 5.8, Math.PI / 2],
-      [11.1, -10, 5.8, Math.PI / 2],
-      [14.8, -10, 5.8, Math.PI / 2],
-      [11.1, -18, 5.8, Math.PI / 2],
-      [14.8, -18, 5.8, Math.PI / 2],
-      [11.1, -25.5, 5.8, Math.PI / 2],
-      [14.8, -25.5, 5.8, Math.PI / 2],
-      [-14.8, -25.5, 5.8, Math.PI / 2],
-      [-11.1, -25.5, 5.8, Math.PI / 2],
-      [-4.6, -39.5, 6.2, 0],
-      [4.6, -39.5, 6.2, 0],
+      [-4.9, -10, 4.5, 0],
+      [4.9, -10, 4.5, 0],
+      [-4.9, -17, 4.5, 0],
+      [4.9, -17, 4.5, 0],
+      [-14.8, -10, 4.5, Math.PI / 2],
+      [-11.1, -10, 4.5, Math.PI / 2],
+      [-14.8, -18, 4.5, Math.PI / 2],
+      [-11.1, -18, 4.5, Math.PI / 2],
+      [11.1, -10, 4.5, Math.PI / 2],
+      [14.8, -10, 4.5, Math.PI / 2],
+      [11.1, -18, 4.5, Math.PI / 2],
+      [14.8, -18, 4.5, Math.PI / 2],
+      [11.1, -25.5, 4.5, Math.PI / 2],
+      [14.8, -25.5, 4.5, Math.PI / 2],
+      [-14.8, -25.5, 4.5, Math.PI / 2],
+      [-11.1, -25.5, 4.5, Math.PI / 2],
+      [-4.6, -39.5, 4.8, 0],
+      [4.6, -39.5, 4.8, 0],
     ].forEach(([x, z, width, rotation]) =>
       addShelf(
         x as number,
@@ -783,6 +915,36 @@ export default function DevWebSurf3D({
         rotation as number,
       ),
     )
+
+    const ceilingRailGeometry = new THREE.BoxGeometry(.035, .035, 52)
+    const ceilingRailMaterial = new THREE.MeshBasicMaterial({
+      color: 0x3148b5,
+      transparent: true,
+      opacity: .28,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+    architecturalGeometries.push(ceilingRailGeometry)
+    architecturalMaterials.push(ceilingRailMaterial)
+    ;[-2.25, 2.25].forEach((x) => {
+      const rail = new THREE.Mesh(
+        ceilingRailGeometry,
+        ceilingRailMaterial,
+      )
+      rail.position.set(x, 4.72, -15)
+      scene.add(rail)
+    })
+
+    const wingRailGeometry = new THREE.BoxGeometry(.03, .03, 22)
+    architecturalGeometries.push(wingRailGeometry)
+    ;[-13, 13].forEach((x) => {
+      const rail = new THREE.Mesh(
+        wingRailGeometry,
+        ceilingRailMaterial,
+      )
+      rail.position.set(x, 4.15, -15.5)
+      scene.add(rail)
+    })
 
     addSectionSign('atrium', 0, 4.6, 5.5, '#f5f5f5')
     addSectionSign('featured', 0, 4.1, -5.8, '#3b49df')
@@ -799,6 +961,12 @@ export default function DevWebSurf3D({
     desk.position.set(0, .48, 7)
     desk.castShadow = true
     scene.add(desk)
+    collisionRects.push({
+      minX: -1.7,
+      maxX: 1.7,
+      minZ: 5.3,
+      maxZ: 8.7,
+    })
 
     const deskGlowGeometry = new THREE.TorusGeometry(1.15, .028, 8, 72)
     const deskGlowMaterial = new THREE.MeshBasicMaterial({
@@ -864,7 +1032,7 @@ export default function DevWebSurf3D({
         material.metalness = .2
         material.clearcoat = .62
 
-        const spineGeometry = new THREE.BoxGeometry(.085, 1.08, .205)
+        const spineGeometry = new THREE.BoxGeometry(.07, .8, .185)
         architecturalGeometries.push(spineGeometry)
         const spineMaterial = new THREE.MeshStandardMaterial({
           color: 0x3b49df,
@@ -878,7 +1046,7 @@ export default function DevWebSurf3D({
         spine.position.set(-.39, 0, 0)
         group.add(spine)
 
-        const coverGeometry = new THREE.PlaneGeometry(.66, .63)
+        const coverGeometry = new THREE.PlaneGeometry(.56, .44)
         architecturalGeometries.push(coverGeometry)
         const coverMaterial = new THREE.MeshBasicMaterial({
           color: 0x161a27,
@@ -888,7 +1056,7 @@ export default function DevWebSurf3D({
         })
         architecturalMaterials.push(coverMaterial)
         const cover = new THREE.Mesh(coverGeometry, coverMaterial)
-        cover.position.set(.015, .19, .096)
+        cover.position.set(.012, .12, .086)
         group.add(cover)
 
         const remoteCover =
@@ -910,13 +1078,13 @@ export default function DevWebSurf3D({
           depthWrite: false,
         })
         architecturalMaterials.push(bookTitleMaterial)
-        const titleGeometry = new THREE.PlaneGeometry(.67, .31)
+        const titleGeometry = new THREE.PlaneGeometry(.58, .22)
         architecturalGeometries.push(titleGeometry)
         const titlePanel = new THREE.Mesh(titleGeometry, bookTitleMaterial)
-        titlePanel.position.set(.015, -.31, .1)
+        titlePanel.position.set(.012, -.26, .09)
         group.add(titlePanel)
 
-        const glowGeometry = new THREE.PlaneGeometry(.86, 1.22)
+        const glowGeometry = new THREE.PlaneGeometry(.76, .92)
         architecturalGeometries.push(glowGeometry)
         bookGlowMaterial = new THREE.MeshBasicMaterial({
           color: color.clone().lerp(new THREE.Color(0x53d3ff), .3),
@@ -928,7 +1096,7 @@ export default function DevWebSurf3D({
         })
         architecturalMaterials.push(bookGlowMaterial)
         const glow = new THREE.Mesh(glowGeometry, bookGlowMaterial)
-        glow.position.z = -.105
+        glow.position.z = -.095
         group.add(glow)
 
         const edgeGeometry = new THREE.EdgesGeometry(body.geometry, 28)
@@ -1005,15 +1173,15 @@ export default function DevWebSurf3D({
       label.position.set(
         0,
         node.kind === 'article'
-          ? 1.08
+          ? .86
           : node.kind === 'profile'
             ? 1.5
             : 1.75,
         0,
       )
       label.scale.set(
-        node.kind === 'article' ? 3.55 : 4.7,
-        node.kind === 'article' ? .9 : 1.12,
+        node.kind === 'article' ? 2.8 : 4.7,
+        node.kind === 'article' ? .66 : 1.12,
         1,
       )
       group.add(label)
@@ -1243,6 +1411,12 @@ export default function DevWebSurf3D({
     const up = new THREE.Vector3(0, 1, 0)
     const move = new THREE.Vector3()
     const tempWorldPosition = new THREE.Vector3()
+    const tempDirection = new THREE.Vector3()
+    const tempTargetPosition = new THREE.Vector3()
+    const tempScale = new THREE.Vector3()
+    const reducedMotion = window.matchMedia(
+      '(prefers-reduced-motion: reduce)',
+    ).matches
     const euler = new THREE.Euler(0, 0, 0, 'YXZ')
     let yaw = 0
     let pitch = 0
@@ -1254,8 +1428,7 @@ export default function DevWebSurf3D({
 
     let travel:
       | {
-          source: THREE.Vector3
-          control: THREE.Vector3
+          curve: THREE.Curve<THREE.Vector3>
           target: THREE.Vector3
           node: SurfNode
           startedAt: number
@@ -1280,38 +1453,46 @@ export default function DevWebSurf3D({
       if (!visual) return
 
       const source = camera.position.clone()
-      const destination = visual.group
-        .getWorldPosition(new THREE.Vector3())
-        .add(
-          new THREE.Vector3(
-            node.kind === 'article' ? 0 : 0,
-            0,
-            node.kind === 'section' ? 2.5 : 1.75,
-          ),
-        )
+      const destination = visual.group.getWorldPosition(
+        new THREE.Vector3(),
+      )
+      const standOff =
+        node.kind === 'section'
+          ? 2.35
+          : node.kind === 'article'
+            ? 1.38
+            : 1.65
+      tempDirection
+        .set(0, 0, 1)
+        .applyAxisAngle(up, node.rotationY ?? 0)
+      destination.addScaledVector(tempDirection, standOff)
       destination.y = 1.62
 
-      const control = source.clone().lerp(destination, .5)
-      control.y = 1.9
-      control.x += Math.sin(destination.z * .19) * .65
+      const curve = makeArchitecturalGuide(
+        source,
+        destination,
+        currentSection,
+        node.section ?? currentSection,
+      )
 
       travel = {
-        source,
-        control,
+        curve,
         target: destination,
         node,
         startedAt: performance.now() / 1000,
         duration: THREE.MathUtils.clamp(
-          source.distanceTo(destination) / 7,
-          .75,
-          2.3,
+          curve.getLength() / 4.9,
+          1,
+          3.4,
         ),
         inspectOnArrival,
       }
     }
 
-    function collides(next: THREE.Vector3) {
-      const radius = .28
+    function collides(
+      next: THREE.Vector3,
+      radius = .31,
+    ) {
       return collisionRects.some(
         (rect) =>
           next.x + radius > rect.minX &&
@@ -1321,11 +1502,37 @@ export default function DevWebSurf3D({
       )
     }
 
+    function moveWithSliding(deltaMove: THREE.Vector3) {
+      const nextX = position.clone()
+      nextX.x = THREE.MathUtils.clamp(
+        nextX.x + deltaMove.x,
+        -19.55,
+        19.55,
+      )
+      if (!collides(nextX)) {
+        position.x = nextX.x
+      } else {
+        velocity.x *= .12
+      }
+
+      const nextZ = position.clone()
+      nextZ.z = THREE.MathUtils.clamp(
+        nextZ.z + deltaMove.z,
+        -43.15,
+        13.65,
+      )
+      if (!collides(nextZ)) {
+        position.z = nextZ.z
+      } else {
+        velocity.z *= .12
+      }
+    }
+
     function onMouseMove(event: MouseEvent) {
       if (document.pointerLockElement !== renderer.domElement || travel) return
-      yaw -= event.movementX * .00165
-      pitch -= event.movementY * .0014
-      pitch = THREE.MathUtils.clamp(pitch, -.46, .46)
+      yaw -= event.movementX * .00132
+      pitch -= event.movementY * .00116
+      pitch = THREE.MathUtils.clamp(pitch, -.52, .52)
     }
 
     function onKeyDown(event: KeyboardEvent) {
@@ -1333,9 +1540,9 @@ export default function DevWebSurf3D({
 
       if (event.code === 'KeyE') {
         event.preventDefault()
-        const selectedNode = nodes.find(
-          (candidate) => candidate.id === selectedRef.current,
-        )
+        const selectedNode = selectedRef.current
+          ? nodeById.get(selectedRef.current)
+          : undefined
         if (selectedNode?.kind === 'article') {
           putBackRef.current()
           return
@@ -1348,8 +1555,9 @@ export default function DevWebSurf3D({
       if (event.code === 'KeyF') {
         event.preventDefault()
         const node =
-          nodes.find((candidate) => candidate.id === selectedRef.current) ??
-          pickCenter()
+          (selectedRef.current
+            ? nodeById.get(selectedRef.current)
+            : undefined) ?? pickCenter()
         if (node) {
           startTravel(node, true)
         }
@@ -1456,24 +1664,32 @@ export default function DevWebSurf3D({
           visual.baseScale *
           (selected ? 1.13 : hovered ? 1.075 : routed ? 1.05 : 1)
 
+        tempScale.set(targetScale, targetScale, targetScale)
         visual.group.scale.lerp(
-          new THREE.Vector3(targetScale, targetScale, targetScale),
-          .08,
+          tempScale,
+          1 - Math.exp(-delta * 8.5),
         )
 
         if (node?.kind === 'article') {
-          const toCamera = camera.position
-            .clone()
+          tempDirection
+            .copy(camera.position)
             .sub(visual.basePosition)
-          toCamera.y = 0
-          if (toCamera.lengthSq() > .0001) toCamera.normalize()
+          tempDirection.y = 0
+          if (tempDirection.lengthSq() > .0001) {
+            tempDirection.normalize()
+          }
 
-          const pull = selected ? .46 : hovered ? .3 : routed ? .16 : 0
-          const targetPosition = visual.basePosition
-            .clone()
-            .addScaledVector(toCamera, pull)
-          targetPosition.y += selected ? .06 : hovered ? .035 : 0
-          visual.group.position.lerp(targetPosition, .12)
+          const pull =
+            selected ? .34 : hovered ? .22 : routed ? .12 : 0
+          tempTargetPosition
+            .copy(visual.basePosition)
+            .addScaledVector(tempDirection, pull)
+          tempTargetPosition.y +=
+            selected ? .035 : hovered ? .02 : 0
+          visual.group.position.lerp(
+            tempTargetPosition,
+            1 - Math.exp(-delta * 10),
+          )
 
           const cameraYaw = Math.atan2(
             camera.position.x - visual.group.position.x,
@@ -1484,7 +1700,7 @@ export default function DevWebSurf3D({
             Math.sin(yawDelta),
             Math.cos(yawDelta),
           )
-          const turnAmount = selected ? .24 : hovered ? .16 : .045
+          const turnAmount = selected ? .18 : hovered ? .12 : .03
           const targetYaw =
             visual.baseRotationY +
             THREE.MathUtils.clamp(
@@ -1496,7 +1712,7 @@ export default function DevWebSurf3D({
           visual.group.rotation.y = THREE.MathUtils.lerp(
             visual.group.rotation.y,
             targetYaw,
-            .11,
+            1 - Math.exp(-delta * 9),
           )
 
           visual.group.getWorldPosition(tempWorldPosition)
@@ -1555,18 +1771,23 @@ export default function DevWebSurf3D({
             .1
         }
 
-        visual.labelMaterial.opacity +=
-          ((selected || hovered || routed
+        const labelTarget =
+          selected || hovered || routed
             ? 1
             : id.startsWith('section:')
               ? .98
               : id.startsWith('profile:') || id.startsWith('tag:')
                 ? .82
-                : unrelatedShelf
-                  ? .24
-                  : .7) -
-            visual.labelMaterial.opacity) *
-          .1
+                : node?.kind === 'article'
+                  ? sameShelf
+                    ? .46
+                    : unrelatedShelf
+                      ? .08
+                      : .16
+                  : .7
+        visual.labelMaterial.opacity +=
+          (labelTarget - visual.labelMaterial.opacity) *
+          (1 - Math.exp(-delta * 9))
 
         if (visual.archMaterial) {
           const archActive =
@@ -1619,6 +1840,42 @@ export default function DevWebSurf3D({
 
       trimCoverCache(now)
 
+      sectionFloorGlows.forEach(({section, mesh, material}) => {
+        const isCurrent = section === currentSection
+        const isRouted = section === routedSection
+        material.opacity +=
+          ((isRouted ? .1 : isCurrent ? .055 : .018) -
+            material.opacity) *
+          (1 - Math.exp(-delta * 3.8))
+        const targetScale = isRouted ? 1.08 : isCurrent ? 1.03 : 1
+        mesh.scale.lerp(
+          tempScale.set(targetScale, targetScale, targetScale),
+          1 - Math.exp(-delta * 3.5),
+        )
+      })
+
+      sectionBeacons.forEach(({section, materials}) => {
+        const isCurrent = section === currentSection
+        const isRouted = section === routedSection
+        materials.forEach((material, index) => {
+          const target =
+            isRouted
+              ? index === 0
+                ? .82
+                : .54
+              : isCurrent
+                ? index === 0
+                  ? .3
+                  : .18
+                : index === 0
+                  ? .12
+                  : .065
+          material.opacity +=
+            (target - material.opacity) *
+            (1 - Math.exp(-delta * 6))
+        })
+      })
+
       routeVisuals.forEach((routeVisual) => {
         const touchesSelected =
           routeVisual.edge.source === selectedRef.current ||
@@ -1642,16 +1899,16 @@ export default function DevWebSurf3D({
           ((active
             ? .82
             : routeVisual.edge.kind === 'corridor'
-              ? .34
-              : .24) -
+              ? .16
+              : .1) -
             routeVisual.material.opacity) *
           .1
         routeVisual.glowMaterial.opacity +=
-          ((active ? .22 : routeVisual.edge.kind === 'corridor' ? .05 : .03) -
+          ((active ? .2 : routeVisual.edge.kind === 'corridor' ? .026 : .012) -
             routeVisual.glowMaterial.opacity) *
           .1
         routeVisual.packetMaterial.opacity =
-          active ? .98 : .72
+          active ? .98 : .34
 
         routeVisual.packets.forEach((packet, packetIndex) => {
           const t =
@@ -1786,18 +2043,24 @@ export default function DevWebSurf3D({
       rainAttribute.needsUpdate = true
       dataRain.rotation.y = Math.sin(now * .05) * .018
       rainMaterial.opacity =
-        .23 + Math.max(0, Math.sin(now * .72)) * .12
+        reducedMotion
+          ? .1
+          : .13 + Math.max(0, Math.sin(now * .52)) * .07
 
       scanGates.forEach(({mesh, material, phase}) => {
         material.opacity =
-          .012 + Math.max(0, Math.sin(now * 1.25 + phase)) * .028
-        mesh.position.x = Math.sin(now * .18 + phase) * .14
+          reducedMotion
+            ? .008
+            : .008 +
+              Math.max(0, Math.sin(now * .82 + phase)) * .016
+        mesh.position.x =
+          reducedMotion ? 0 : Math.sin(now * .12 + phase) * .08
       })
 
       netCyan.intensity =
-        6.8 + Math.max(0, Math.sin(now * .63)) * 2.2
+        6.2 + Math.max(0, Math.sin(now * .46)) * 1.35
       netMagenta.intensity =
-        3.2 + Math.max(0, Math.sin(now * .47 + 1.1)) * 1.8
+        2.7 + Math.max(0, Math.sin(now * .38 + 1.1)) * 1.05
 
       if (travel) {
         const progress = THREE.MathUtils.clamp(
@@ -1805,38 +2068,31 @@ export default function DevWebSurf3D({
           0,
           1,
         )
-        const eased = 1 - Math.pow(1 - progress, 3)
-        const oneMinus = 1 - eased
-
-        const point = new THREE.Vector3()
-          .copy(travel.source)
-          .multiplyScalar(oneMinus * oneMinus)
-          .addScaledVector(
-            travel.control,
-            2 * oneMinus * eased,
-          )
-          .addScaledVector(travel.target, eased * eased)
-
-        const lookProgress = Math.min(1, eased + .025)
-        const lookOneMinus = 1 - lookProgress
-        const look = new THREE.Vector3()
-          .copy(travel.source)
-          .multiplyScalar(lookOneMinus * lookOneMinus)
-          .addScaledVector(
-            travel.control,
-            2 * lookOneMinus * lookProgress,
-          )
-          .addScaledVector(
-            travel.target,
-            lookProgress * lookProgress,
-          )
+        const eased =
+          progress * progress * (3 - 2 * progress)
+        const point = travel.curve.getPoint(eased)
+        const lookProgress = Math.min(
+          1,
+          eased + (reducedMotion ? .012 : .026),
+        )
+        const look = travel.curve.getPoint(lookProgress)
+        look.y = THREE.MathUtils.lerp(
+          point.y,
+          travel.target.y,
+          .65,
+        )
 
         position.copy(point)
         camera.position.copy(point)
         camera.lookAt(look)
+        const travelFov =
+          62 +
+          (reducedMotion
+            ? 0
+            : Math.sin(progress * Math.PI) * 3.2)
         camera.fov +=
-          ((68 + Math.sin(progress * Math.PI) * 7) - camera.fov) *
-          .1
+          (travelFov - camera.fov) *
+          (1 - Math.exp(-delta * 7.5))
         camera.updateProjectionMatrix()
 
         if (progress >= 1) {
@@ -1864,21 +2120,21 @@ export default function DevWebSurf3D({
         if (keys.has('KeyA')) move.sub(right)
         if (move.lengthSq() > 0) move.normalize()
 
-        const speed =
-          keys.has('ShiftLeft') || keys.has('ShiftRight') ? 6.6 : 3.25
+        const hurrying =
+          keys.has('ShiftLeft') || keys.has('ShiftRight')
+        const speed = hurrying ? 3.8 : 1.9
         const desired = move.multiplyScalar(speed)
-        velocity.lerp(desired, 1 - Math.exp(-delta * 8))
+        const response = move.lengthSq() > 0 ? 9.5 : 12
+        velocity.lerp(
+          desired,
+          1 - Math.exp(-delta * response),
+        )
 
-        const proposed = position.clone().addScaledVector(velocity, delta)
-        proposed.y = 1.62
-        proposed.x = THREE.MathUtils.clamp(proposed.x, -20, 20)
-        proposed.z = THREE.MathUtils.clamp(proposed.z, -43.5, 14)
-
-        if (!collides(proposed)) {
-          position.copy(proposed)
-        } else {
-          velocity.multiplyScalar(.2)
-        }
+        const deltaMove = tempTargetPosition
+          .copy(velocity)
+          .multiplyScalar(delta)
+        moveWithSliding(deltaMove)
+        position.y = 1.62
 
         camera.position.copy(position)
         camera.rotation.order = 'YXZ'
@@ -1886,13 +2142,19 @@ export default function DevWebSurf3D({
         camera.rotation.x = pitch
         camera.rotation.z = THREE.MathUtils.lerp(
           camera.rotation.z,
-          -velocity.dot(right) * .0035,
-          .08,
+          0,
+          1 - Math.exp(-delta * 12),
         )
+        const speedRatio = THREE.MathUtils.clamp(
+          velocity.length() / 3.8,
+          0,
+          1,
+        )
+        const targetFov =
+          62 + (reducedMotion ? 0 : speedRatio * 1.4)
         camera.fov +=
-          ((68 + Math.min(1, velocity.length() / 6.6) * 3) -
-            camera.fov) *
-          .06
+          (targetFov - camera.fov) *
+          (1 - Math.exp(-delta * 5.5))
         camera.updateProjectionMatrix()
       }
 

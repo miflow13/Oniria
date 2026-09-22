@@ -223,7 +223,7 @@ function shelfPlacement(
   const anchor = anchors[shelfIndex]
 
   const localOffset = (slot - 1) * 1.02
-  const y = .78 + level * 1.05
+  const y = .7 + level * 1.1
 
   let x = anchor.x
   let z = anchor.z + anchor.front
@@ -1239,9 +1239,11 @@ export default function DevWebSurf() {
 
       {routeTarget && (
         <aside className={styles.routeCard}>
-          <span>Floor route illuminated</span>
+          <span>Route ready · follow cyan light</span>
           <strong>{routeTarget.title}</strong>
-          <p>{routeTarget.subtitle}</p>
+          <p>
+            Follow the floor strips through the lit doorway.
+          </p>
           <div>
             <button
               type="button"
@@ -1252,7 +1254,7 @@ export default function DevWebSurf() {
                 }
               }}
             >
-              Walk there
+              Walk route
             </button>
             <button type="button" onClick={() => jumpTo(routeTarget.id)}>
               Jump there
