@@ -181,6 +181,10 @@ export async function GET(request: NextRequest) {
     )
     world.syncMode = syncMode
     world.sanityRevision = revision
+    world.sanityPreviewAvailable = Boolean(previewToken)
+    if (previewRequested && !previewToken) {
+      world.sanitySyncIssue = 'missing-preview-token'
+    }
 
     return NextResponse.json(world, {
       headers: {
@@ -199,6 +203,8 @@ export async function GET(request: NextRequest) {
         ...DEFAULT_LIBRARY_WORLD_CONFIG,
         source: 'fallback',
         syncMode: 'local',
+        sanityPreviewAvailable: false,
+        sanitySyncIssue: 'fetch-failed',
       },
       {
         headers: {'cache-control': 'no-store, max-age=0'},
