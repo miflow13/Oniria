@@ -1828,27 +1828,9 @@ export default function DevWebSurf3D({
         group.add(pylon)
       })
 
-      const doorwayAccent =
-        '#' + new THREE.Color(SECTION_ACCENTS[section]).getHexString()
-      const doorwayTexture = createTextTexture(
-        sectionLabel(section).toUpperCase(),
-        'ENTER · DEV LIBRARY',
-        doorwayAccent,
-        560,
-        132,
-      )
-      labelsToDispose.push(doorwayTexture)
-      const doorwayMaterial = new THREE.SpriteMaterial({
-        map: doorwayTexture,
-        transparent: true,
-        depthWrite: false,
-        toneMapped: false,
-      })
-      architecturalMaterials.push(doorwayMaterial)
-      const doorwayLabel = new THREE.Sprite(doorwayMaterial)
-      doorwayLabel.position.set(0, 1.82, .08)
-      doorwayLabel.scale.set(3.8, .9, 1)
-      group.add(doorwayLabel)
+      // The floating section card is the named source of truth.
+      // Doorways stay environmental: threshold + pylons only, with no
+      // duplicate full wing name competing for attention.
 
       scene.add(group)
       sectionBeacons.push({section, materials})
