@@ -1238,6 +1238,7 @@ export default function DevWebSurf() {
         onPutBack={putBackArticle}
         onTravel={(node, inspectOnArrival) => {
           setRouteTargetId(null)
+          setCurrentFloor(node.floorIndex ?? currentFloor)
           if (inspectOnArrival) {
             inspectNode(node)
           } else {
@@ -1247,6 +1248,9 @@ export default function DevWebSurf() {
         onHover={setHovered}
         onPointerLockChange={setLocked}
         onZoneChange={setCurrentSection}
+        currentFloor={currentFloor}
+        floorRequest={floorRequest}
+        onFloorChange={setCurrentFloor}
       />
 
       <header className={styles.chrome}>
@@ -1314,6 +1318,29 @@ export default function DevWebSurf() {
             {item.label}
           </button>
         ))}
+      </nav>
+
+      <nav className={styles.floorRail} aria-label="Library floors">
+        <span>Floor</span>
+        {Array.from({length: LIBRARY_FLOOR_COUNT}, (_, floor) => (
+          <button
+            type="button"
+            key={floor}
+            className={
+              currentFloor === floor
+                ? styles.floorRailActive
+                : ''
+            }
+            onClick={() => requestFloor(floor)}
+          >
+            {String(floor + 1).padStart(2, '0')}
+          </button>
+        ))}
+        <small>
+          {catalogLoading
+            ? 'cataloging…'
+            : catalogArticles.length + ' deep-catalog books'}
+        </small>
       </nav>
 
       <button
@@ -1500,6 +1527,13 @@ export default function DevWebSurf() {
                 <span><b>{bootstrap.feed.length}</b> featured pages</span>
                 <span><b>{bootstrap.latest.length}</b> new arrivals</span>
                 <span><b>{bootstrap.tags.length}</b> cataloged topics</span>
+                <span>
+                  <b>{catalogArticles.length}</b>{' '}
+                  deep-catalog books
+                </span>
+                <span>
+                  <b>{LIBRARY_FLOOR_COUNT}</b> physical floors
+                </span>
               </div>
               <div className={styles.pageActions}>
                 <button
