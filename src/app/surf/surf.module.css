@@ -994,3 +994,66 @@
     animation: none;
   }
 }
+
+
+.relatedShelf {
+  margin-top: 18px;
+  padding-top: 13px;
+  border-top: 1px solid rgba(192, 171, 136, .07);
+}
+
+.relatedShelf > span {
+  display: block;
+  margin-bottom: 8px;
+  color: #8a7657;
+  font-size: .5rem;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.relatedShelf > div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+}
+
+.relatedShelf button {
+  min-height: 64px;
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  cursor: pointer;
+  text-align: left;
+  color: #d1c6b1;
+  background:
+    linear-gradient(145deg, rgba(117, 90, 47, .065), rgba(255,255,255,.012));
+  border: 1px solid rgba(202, 173, 119, .075);
+  border-radius: 7px;
+  padding: 8px 9px;
+}
+
+.relatedShelf button:hover {
+  border-color: rgba(220, 183, 116, .17);
+  background:
+    linear-gradient(145deg, rgba(135, 100, 49, .11), rgba(255,255,255,.016));
+}
+
+.relatedShelf b {
+  overflow: hidden;
+  font-family: Georgia, serif;
+  font-size: .58rem;
+  font-weight: 560;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+}
+
+.relatedShelf small {
+  color: #746c5e;
+  font-size: .48rem;
+}
+
+@media (max-width: 620px) {
+  .relatedShelf > div {
+    grid-template-columns: 1fr;
+  }
+}
