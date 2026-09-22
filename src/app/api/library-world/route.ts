@@ -62,7 +62,6 @@ export async function GET(request: NextRequest) {
 
     if (
       previewRequested &&
-      process.env.NODE_ENV !== 'production' &&
       previewToken
     ) {
       const raw = (await client
@@ -184,6 +183,11 @@ export async function GET(request: NextRequest) {
     world.sanityPreviewAvailable = Boolean(previewToken)
     if (previewRequested && !previewToken) {
       world.sanitySyncIssue = 'missing-preview-token'
+    } else if (previewRequested && previewToken) {
+      // Vercel preview/production builds also run with NODE_ENV=production.
+      // A valid server-side Sanity token is the authority for draft preview;
+      // NODE_ENV must not silently downgrade the browser to published data.
+      world.sanitySyncIssue = undefined
     }
 
     return NextResponse.json(world, {
