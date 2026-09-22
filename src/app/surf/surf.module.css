@@ -2633,7 +2633,8 @@
   right: 22px;
   top: 108px;
   display: grid;
-  grid-template-columns: auto repeat(4, auto);
+  grid-auto-flow: column;
+  grid-auto-columns: max-content;
   align-items: center;
   gap: 5px;
   padding: 5px;
@@ -2744,7 +2745,8 @@
     left: 22px;
     right: auto;
     top: 145px;
-    grid-template-columns: repeat(4, auto);
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
   }
 
   .floorRail > span {
@@ -2762,7 +2764,8 @@
     right: 12px;
     top: 143px;
     overflow-x: auto;
-    grid-template-columns: repeat(4, minmax(max-content, 1fr));
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(max-content, 1fr);
     scrollbar-width: none;
   }
 
@@ -2782,5 +2785,64 @@
 @media (prefers-reduced-motion: reduce) {
   .floorRail button {
     transition: none;
+  }
+}
+
+
+/* Multi-level library clarity */
+.floorRail {
+  max-width: min(760px, calc(100vw - 44px));
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.floorRail::-webkit-scrollbar {
+  display: none;
+}
+
+.floorRail button {
+  position: relative;
+}
+
+.floorRail button::after {
+  content: '';
+  position: absolute;
+  left: 9px;
+  right: 9px;
+  bottom: 3px;
+  height: 1px;
+  background: #53d3ff;
+  opacity: 0;
+  transform: scaleX(.4);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+
+.floorRail button:hover::after,
+.floorRailActive::after {
+  opacity: .72;
+  transform: scaleX(1);
+}
+
+.stackDirectory {
+  box-shadow:
+    inset 0 1px rgba(255,255,255,.025),
+    0 14px 34px rgba(0,0,0,.16);
+}
+
+.stackDirectory > strong {
+  color: #e7ecf7;
+}
+
+@media (max-width: 1040px) {
+  .floorRail {
+    max-width: calc(100vw - 44px);
+  }
+}
+
+@media (max-width: 700px) {
+  .floorRail {
+    max-width: none;
   }
 }
