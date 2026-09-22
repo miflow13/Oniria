@@ -277,14 +277,20 @@ function validHex(value: unknown, fallback: string) {
 }
 
 function sanitizeDistrict(
-  district: Partial<LibraryDistrictConfig>,
+  district: Partial<LibraryDistrictConfig> & {title?: unknown},
   fallback?: LibraryDistrictConfig,
 ): LibraryDistrictConfig | null {
+  const resolvedLabel =
+    typeof district.label === 'string'
+      ? district.label
+      : typeof district.title === 'string'
+        ? district.title
+        : ''
+
   if (
     typeof district.id !== 'string' ||
     district.id.trim().length === 0 ||
-    typeof district.label !== 'string' ||
-    district.label.trim().length === 0 ||
+    resolvedLabel.trim().length === 0 ||
     typeof district.code !== 'string' ||
     typeof district.bay !== 'number'
   ) {
@@ -293,7 +299,7 @@ function sanitizeDistrict(
 
   return {
     id: district.id,
-    label: district.label,
+    label: resolvedLabel,
     code: district.code,
     bay: Math.max(0, Math.min(72, district.bay)),
     description:
