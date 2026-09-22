@@ -60,9 +60,18 @@ type Visual = {
   phase: number
 }
 
-const LIBRARY_FLOOR_COUNT = 4
+const LIBRARY_FLOOR_COUNT = 6
 const LIBRARY_FLOOR_HEIGHT = 5.2
 const CAMERA_HEIGHT = 1.62
+const REAL_BOOK_DISTANCE = 17
+const FLOOR_IDENTITIES = [
+  'ATRIUM / FEATURED / NEW',
+  'WEBDEV / REACT / TYPESCRIPT',
+  'BACKEND / PYTHON / DATABASES',
+  'AI / DATA / AUTOMATION',
+  'LINUX / DEVOPS / OPEN SOURCE',
+  'DEEP ARCHIVE / LONG-TAIL DEV',
+] as const
 
 const SECTION_CENTERS: Record<LibrarySection, THREE.Vector3> = {
   atrium: new THREE.Vector3(0, 1.6, 8),
@@ -464,7 +473,7 @@ export default function DevWebSurf3D({
 
     const scene = new THREE.Scene()
     scene.background = new THREE.Color(0x090a0f)
-    scene.fog = new THREE.FogExp2(0x0c0e16, .0115)
+    scene.fog = new THREE.FogExp2(0x0c0e16, .0095)
 
     const camera = new THREE.PerspectiveCamera(62, 1, .07, 140)
     camera.position.set(
@@ -2162,7 +2171,9 @@ export default function DevWebSurf3D({
           event.code === 'Digit1' ||
           event.code === 'Digit2' ||
           event.code === 'Digit3' ||
-          event.code === 'Digit4'
+          event.code === 'Digit4' ||
+          event.code === 'Digit5' ||
+          event.code === 'Digit6'
         )
       ) {
         event.preventDefault()
