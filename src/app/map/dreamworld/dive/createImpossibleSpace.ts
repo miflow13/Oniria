@@ -286,12 +286,21 @@ export function createImpossibleSpace({
     const right = new THREE.Mesh(rightGeometry, frameMaterial)
     const top = new THREE.Mesh(topGeometry, frameMaterial)
     const portal = new THREE.Mesh(portalGeometry, portalMaterial)
-    portal.userData.diveInteraction = {
+    const interaction = {
       kind: 'portal',
       dreamId: destination._id,
       title: destination.title?.trim() || 'Untitled dream',
       depth: depth + 1,
     } satisfies Exclude<DiveInteraction, null>
+
+    if (depth < maxDepth) {
+      portal.userData.diveInteraction = interaction
+      pickables.push(portal)
+    } else {
+      portalMaterial.opacity = .28
+      portalMaterial.color.set(0x667080)
+    }
+
     left.position.x = -1
     right.position.x = 1
     top.position.y = 1.39
@@ -304,11 +313,10 @@ export function createImpossibleSpace({
     )
     frame.rotation.y = index === 0 ? .16 : -.18
     group.add(frame)
-    pickables.push(portal)
     previews.push({
       cell,
       dream: destination,
-      interaction: portal.userData.diveInteraction,
+      interaction,
       object: frame,
     })
     disposables.push(
