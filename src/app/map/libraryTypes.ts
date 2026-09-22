@@ -68,5 +68,6 @@ export type LibraryShelf = {
   world: [number, number, number]
   yaw: number
   pathBay: number
+  districtId: string
   articles: DevArticleSummary[]
 }
