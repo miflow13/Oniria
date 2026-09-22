@@ -655,6 +655,26 @@ export default function DreamMap({
   }, [quality])
 
   useEffect(() => {
+    const context = audioContextRef.current
+    const ambient = ambientRef.current
+    if (!context || !ambient || context.state === 'closed') return
+
+    const now = context.currentTime
+    const target = diveActive ? 0.009 : 0.032
+
+    try {
+      ambient.gain.gain.cancelScheduledValues(now)
+      ambient.gain.gain.setValueAtTime(
+        Math.max(0.0001, ambient.gain.gain.value),
+        now,
+      )
+      ambient.gain.gain.exponentialRampToValueAtTime(target, now + 0.8)
+    } catch {
+      // Audio may be transitioning between contexts.
+    }
+  }, [diveActive])
+
+  useEffect(() => {
     try {
       window.localStorage.setItem(
         'oniria-map-sidebar',
@@ -666,12 +686,19 @@ export default function DreamMap({
   }, [sidebarCollapsed])
 
   useEffect(() => {
-    if (introStage >= 4) return
+    try {
+      if (window.sessionStorage.getItem('oniria-map-intro-seen') === 'yes') {
+        setIntroStage(4)
+        return
+      }
+    } catch {
+      // Continue with the intro when session storage is unavailable.
+    }
 
     const schedule = [
-      window.setTimeout(() => setIntroStage((stage) => Math.max(stage, 1)), 450),
-      window.setTimeout(() => setIntroStage((stage) => Math.max(stage, 2)), 1650),
-      window.setTimeout(() => setIntroStage((stage) => Math.max(stage, 3)), 3100),
+      window.setTimeout(() => setIntroStage(1), 450),
+      window.setTimeout(() => setIntroStage(2), 1650),
+      window.setTimeout(() => setIntroStage(3), 3100),
       window.setTimeout(() => {
         setIntroStage(4)
         try {
@@ -683,7 +710,7 @@ export default function DreamMap({
     ]
 
     return () => schedule.forEach((timer) => window.clearTimeout(timer))
-  }, [introStage])
+  }, [])
 
   function skipIntro() {
     setIntroStage(4)
