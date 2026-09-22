@@ -784,7 +784,7 @@ export default function DreamWorld3D({
       libraryMode ? libraryFogColor : 0x07101f,
       settings.fogDensity *
         (libraryMode
-          ? .9 + activeLibraryConfig.hazeIntensity * .4
+          ? .68 + activeLibraryConfig.hazeIntensity * .24
           : 1),
     )
 
@@ -1263,21 +1263,21 @@ export default function DreamWorld3D({
           color: 'rgba(73, 132, 176, 0.36)',
           position: [-28, 7, -72] as const,
           scale: [92, 42] as const,
-          opacity: .052,
+          opacity: .036,
           rotation: -.035,
         },
         {
           color: 'rgba(111, 82, 176, 0.36)',
           position: [32, -4, -145] as const,
           scale: [126, 54] as const,
-          opacity: .045,
+          opacity: .031,
           rotation: .045,
         },
         {
           color: 'rgba(52, 153, 157, 0.36)',
           position: [-18, 13, -228] as const,
           scale: [158, 64] as const,
-          opacity: .038,
+          opacity: .027,
           rotation: -.02,
         },
       ]
@@ -1313,12 +1313,12 @@ export default function DreamWorld3D({
       // colliders, raycast targets, or per-object animation.
       librarySilhouetteGeometry = new THREE.BoxGeometry(1, 1, 1)
       librarySilhouetteMaterial = new THREE.MeshBasicMaterial({
-        color: 0x263653,
+        color: 0x385279,
         transparent: true,
-        opacity: .16,
+        opacity: .3,
         depthWrite: false,
         blending: THREE.NormalBlending,
-        toneMapped: true,
+        toneMapped: false,
       })
 
       librarySkylineWindowGeometry = new THREE.BoxGeometry(1, 1, 1)
@@ -1326,10 +1326,11 @@ export default function DreamWorld3D({
         color: 0xffffff,
         vertexColors: true,
         transparent: true,
-        opacity: .82,
+        opacity: .97,
         depthWrite: false,
         blending: THREE.AdditiveBlending,
         toneMapped: false,
+        fog: false,
       })
 
       const silhouetteMatrices: THREE.Matrix4[] = []
@@ -1435,7 +1436,7 @@ export default function DreamWorld3D({
                 sideIndex * 41 +
                 row * 7 +
                 column
-              if (seededUnit(lightSeed + 811, 3) < .32) continue
+              if (seededUnit(lightSeed + 811, 3) < .16) continue
 
               const vertical =
                 -height * .38 +
@@ -1463,9 +1464,9 @@ export default function DreamWorld3D({
               silhouetteDummy.position.copy(windowPosition)
               silhouetteDummy.rotation.set(0, tangentYaw, 0)
               silhouetteDummy.scale.set(
-                Math.max(.26, width / columns * .28),
-                Math.max(.15, height / rows * .055),
-                .055,
+                Math.max(.34, width / columns * .34),
+                Math.max(.2, height / rows * .07),
+                .07,
               )
               silhouetteDummy.updateMatrix()
               skylineWindowMatrices.push(
@@ -1489,15 +1490,76 @@ export default function DreamWorld3D({
           crownPosition.addScaledVector(inward, facadeOffset)
           silhouetteDummy.position.copy(crownPosition)
           silhouetteDummy.rotation.set(0, tangentYaw, 0)
-          silhouetteDummy.scale.set(width * .62, .08, .07)
+          silhouetteDummy.scale.set(width * .78, .13, .09)
           silhouetteDummy.updateMatrix()
           skylineWindowMatrices.push(silhouetteDummy.matrix.clone())
           skylineWindowColors.push(
             new THREE.Color(district.accent).lerp(
-              new THREE.Color(0xd9f7ff),
-              .42,
+              new THREE.Color(0xe6fbff),
+              .56,
             ),
           )
+
+          // Large architectural light seams remain readable when the small
+          // windows collapse to sub-pixel detail in the distance.
+          const seamPosition = center
+            .clone()
+            .addScaledVector(
+              new THREE.Vector3(
+                frame.tangentX,
+                0,
+                frame.tangentZ,
+              ),
+              width * (sideIndex === 0 ? .29 : -.29),
+            )
+            .addScaledVector(inward, facadeOffset + .025)
+          seamPosition.y += height * .06
+          silhouetteDummy.position.copy(seamPosition)
+          silhouetteDummy.rotation.set(0, tangentYaw, 0)
+          silhouetteDummy.scale.set(
+            .11,
+            height * (.34 + seededUnit(index + 1200, sideIndex + 1) * .12),
+            .085,
+          )
+          silhouetteDummy.updateMatrix()
+          skylineWindowMatrices.push(silhouetteDummy.matrix.clone())
+          skylineWindowColors.push(
+            new THREE.Color(district.accent).lerp(
+              new THREE.Color(0xbff6ff),
+              .38,
+            ),
+          )
+
+          if ((index + sideIndex) % 2 === 0) {
+            const billboardPosition = center
+              .clone()
+              .addScaledVector(inward, facadeOffset + .04)
+            billboardPosition.y += height * .23
+            silhouetteDummy.position.copy(billboardPosition)
+            silhouetteDummy.rotation.set(0, tangentYaw, 0)
+            silhouetteDummy.scale.set(
+              width * .44,
+              Math.max(.22, height * .018),
+              .09,
+            )
+            silhouetteDummy.updateMatrix()
+            skylineWindowMatrices.push(silhouetteDummy.matrix.clone())
+            skylineWindowColors.push(
+              new THREE.Color(0xffe0ad).lerp(
+                new THREE.Color(district.accent),
+                .24,
+              ),
+            )
+
+            const beaconPosition = center.clone()
+            beaconPosition.y += height * .54
+            silhouetteDummy.position.copy(beaconPosition)
+            silhouetteDummy.rotation.set(0, tangentYaw, 0)
+            silhouetteDummy.scale.set(.24, .24, .24)
+            silhouetteDummy.updateMatrix()
+            skylineWindowMatrices.push(silhouetteDummy.matrix.clone())
+            skylineWindowColors.push(new THREE.Color(0xffd7a0))
+          }
 
           ;[-.28, -.04, .2, .42].forEach((heightRatio, ribIndex) => {
             const ribCenter = center.clone()
@@ -1595,7 +1657,7 @@ export default function DreamWorld3D({
         librarySilhouettes?.setMatrixAt(index, matrix)
       })
       librarySilhouettes.instanceMatrix.needsUpdate = true
-      librarySilhouettes.renderOrder = -5
+      librarySilhouettes.renderOrder = -3
       farWorld.add(librarySilhouettes)
 
       librarySkylineWindows = new THREE.InstancedMesh(
@@ -1614,7 +1676,7 @@ export default function DreamWorld3D({
       if (librarySkylineWindows.instanceColor) {
         librarySkylineWindows.instanceColor.needsUpdate = true
       }
-      librarySkylineWindows.renderOrder = -4
+      librarySkylineWindows.renderOrder = -2
       farWorld.add(librarySkylineWindows)
     }
 
@@ -4821,8 +4883,14 @@ export default function DreamWorld3D({
           (.9 + Math.sin(elapsed * .032 + phase) * .1)
       })
       if (librarySilhouettes) {
-        librarySilhouettes.rotation.y = Math.sin(elapsed * .008) * .018
-        librarySilhouettes.position.y = Math.sin(elapsed * .012) * .3
+        const skylineYaw = Math.sin(elapsed * .008) * .018
+        const skylineLift = Math.sin(elapsed * .012) * .3
+        librarySilhouettes.rotation.y = skylineYaw
+        librarySilhouettes.position.y = skylineLift
+        if (librarySkylineWindows) {
+          librarySkylineWindows.rotation.y = skylineYaw
+          librarySkylineWindows.position.y = skylineLift
+        }
       }
 
       nebulae.forEach((sprite, index) => {
@@ -4871,7 +4939,7 @@ export default function DreamWorld3D({
 
       if (librarySkylineWindowMaterial) {
         librarySkylineWindowMaterial.opacity =
-          .78 + Math.sin(elapsed * .19) * .055
+          .94 + Math.sin(elapsed * .19) * .035
       }
 
 
