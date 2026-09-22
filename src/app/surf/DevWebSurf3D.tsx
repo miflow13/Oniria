@@ -370,7 +370,11 @@ export default function DevWebSurf3D({
     scene.fog = new THREE.FogExp2(0x0c0e16, .0115)
 
     const camera = new THREE.PerspectiveCamera(62, 1, .07, 140)
-    camera.position.set(0, 1.62, 13)
+    camera.position.set(
+      0,
+      currentFloorRef.current * LIBRARY_FLOOR_HEIGHT + CAMERA_HEIGHT,
+      13,
+    )
 
     const renderer = new THREE.WebGLRenderer({
       antialias: true,
@@ -1612,6 +1616,8 @@ export default function DevWebSurf3D({
     let lastTime = performance.now()
     let frame = 0
     let lastTravelNonce = travelRequestRef.current?.nonce ?? -1
+    let lastFloorNonce = floorRequestRef.current?.nonce ?? -1
+    let currentFloorIndex = currentFloorRef.current
 
     let travel:
       | {
@@ -1623,6 +1629,46 @@ export default function DevWebSurf3D({
           inspectOnArrival: boolean
         }
       | null = null
+
+    let floorTravel:
+      | {
+          curve: THREE.Curve<THREE.Vector3>
+          targetFloor: number
+          startedAt: number
+          duration: number
+        }
+      | null = null
+
+    function startFloorTravel(targetFloor: number) {
+      const clamped = THREE.MathUtils.clamp(
+        targetFloor,
+        0,
+        LIBRARY_FLOOR_COUNT - 1,
+      )
+      if (clamped === currentFloorIndex) return
+
+      const targetY =
+        clamped * LIBRARY_FLOOR_HEIGHT + CAMERA_HEIGHT
+      const points = [
+        camera.position.clone(),
+        new THREE.Vector3(0, camera.position.y, 7),
+        new THREE.Vector3(0, targetY, 7),
+        new THREE.Vector3(0, targetY, 5.2),
+      ]
+      floorTravel = {
+        curve: new THREE.CatmullRomCurve3(
+          points,
+          false,
+          'centripetal',
+          .35,
+        ),
+        targetFloor: clamped,
+        startedAt: performance.now() / 1000,
+        duration: reducedMotion ? 1.1 : 1.65,
+      }
+      travel = null
+      velocity.set(0, 0, 0)
+    }
 
     function pickCenter() {
       raycaster.setFromCamera(center, camera)
@@ -1653,7 +1699,10 @@ export default function DevWebSurf3D({
         .set(0, 0, 1)
         .applyAxisAngle(up, node.rotationY ?? 0)
       destination.addScaledVector(tempDirection, standOff)
-      destination.y = 1.62
+      destination.y =
+        (node.floorIndex ?? currentFloorIndex) *
+          LIBRARY_FLOOR_HEIGHT +
+        CAMERA_HEIGHT
 
       const curve = makeArchitecturalGuide(
         source,
@@ -1682,6 +1731,8 @@ export default function DevWebSurf3D({
     ) {
       return collisionRects.some(
         (rect) =>
+          next.y >= rect.minY - .2 &&
+          next.y <= rect.maxY + .2 &&
           next.x + radius > rect.minX &&
           next.x - radius < rect.maxX &&
           next.z + radius > rect.minZ &&
@@ -1800,6 +1851,15 @@ export default function DevWebSurf3D({
         Math.max(.001, (nowMs - lastTime) / 1000),
       )
       lastTime = nowMs
+
+      const floorRequest = floorRequestRef.current
+      if (
+        floorRequest &&
+        floorRequest.nonce !== lastFloorNonce
+      ) {
+        lastFloorNonce = floorRequest.nonce
+        startFloorTravel(floorRequest.floor)
+      }
 
       const request = travelRequestRef.current
       if (request && request.nonce !== lastTravelNonce) {
@@ -2321,7 +2381,9 @@ export default function DevWebSurf3D({
           .copy(velocity)
           .multiplyScalar(delta)
         moveWithSliding(deltaMove)
-        position.y = 1.62
+        position.y =
+          currentFloorIndex * LIBRARY_FLOOR_HEIGHT +
+          CAMERA_HEIGHT
 
         camera.position.copy(position)
         camera.rotation.order = 'YXZ'
