@@ -1355,6 +1355,7 @@ export default function DreamWorld3D({
     const flightRight = new THREE.Vector3()
     const flightMove = new THREE.Vector3()
     const flightUp = new THREE.Vector3(0, 1, 0)
+    const flightEuler = new THREE.Euler(0, 0, 0, 'YXZ')
     const flightCollisionPoint = new THREE.Vector3()
     const flightCollisionDelta = new THREE.Vector3()
     let flightYaw = 0
@@ -2122,9 +2123,9 @@ export default function DreamWorld3D({
 
       if (flightActive && !previousFlightMode) {
         flightPosition.copy(camera.position)
-        camera.rotation.order = 'YXZ'
-        flightYaw = camera.rotation.y
-        flightPitch = camera.rotation.x
+        flightEuler.setFromQuaternion(camera.quaternion, 'YXZ')
+        flightYaw = flightEuler.y
+        flightPitch = flightEuler.x
         flightVelocity.set(0, 0, 0)
         flightInitialized = true
         previousFlightMode = true
@@ -2915,6 +2916,9 @@ export default function DreamWorld3D({
               hoveredId = arrived._id
               onNodeHoverRef.current(arrived)
             }
+            flightEuler.setFromQuaternion(camera.quaternion, 'YXZ')
+            flightYaw = flightEuler.y
+            flightPitch = flightEuler.x
             flightRoute = null
             flightVelocity.set(0, 0, 0)
           }
