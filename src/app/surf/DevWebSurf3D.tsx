@@ -3716,9 +3716,9 @@ export default function DevWebSurf3D({
         addDevStroke(.15, .575, .54, .13)
         addDevStroke(.1, .08, .44, .13)
         addDevStroke(.15, -.415, .54, .13)
-        // V
-        addDevStroke(.69, .08, .13, 1.08, -.31)
-        addDevStroke(1.06, .08, .13, 1.08, .31)
+        // V — top strokes spread outward and converge at the baseline.
+        addDevStroke(.69, .08, .13, 1.08, .31)
+        addDevStroke(1.06, .08, .13, 1.08, -.31)
 
         collisionRects.push({
           minX: -1.7,
