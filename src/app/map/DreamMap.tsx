@@ -257,6 +257,7 @@ export default function DreamMap({
   const [closingJournal, setClosingJournal] = useState(false)
   const [flightCaptured, setFlightCaptured] = useState(false)
   const [demoGuideDismissed, setDemoGuideDismissed] = useState(false)
+  const [guideStarted, setGuideStarted] = useState(!demoMode)
   const [demoHasDived, setDemoHasDived] = useState(false)
   const [demoHasCrossedPortal, setDemoHasCrossedPortal] = useState(false)
   const [motionPositions, setMotionPositions] = useState<Record<string, {x: number; y: number}>>({})
@@ -859,6 +860,17 @@ export default function DreamMap({
     [visibleDreams],
   )
 
+  const guidedTargetNode = useMemo(
+    () =>
+      [...nodes].sort(
+        (a, b) =>
+          b.frequency - a.frequency ||
+          b.dreamIds.length - a.dreamIds.length ||
+          hashString(a._id) - hashString(b._id),
+      )[0] ?? null,
+    [nodes],
+  )
+
   useEffect(() => {
     const liveIds = new Set(nodes.map((node) => node._id))
 
@@ -1222,9 +1234,13 @@ export default function DreamMap({
   }
 
   const demoGuide =
-    demoMode && !demoGuideDismissed && introStage >= 4
+    demoMode &&
+    guideStarted &&
+    !demoGuideDismissed &&
+    introStage >= 4
       ? observatoryMode
         ? {
+            step: 5,
             eyebrow: '90-second path · complete',
             title: 'This is your entire dream history.',
             body: 'Clusters become regions. Recurring ideas become gravity. Every light can be entered again.',
@@ -1233,12 +1249,14 @@ export default function DreamMap({
         : diveActive
           ? diveDepth > 0
             ? {
+                step: 4,
                 eyebrow: 'Memory relationship crossed',
                 title: 'You moved directly into another dream.',
                 body: 'The doorway existed because these memories share real symbols. Return to the universe when you are ready.',
                 action: 'Return, then reveal Observatory',
               }
             : {
+                step: 3,
                 eyebrow: 'Inside the dream',
                 title: 'Find the impossible doorway.',
                 body: 'Related memories are already alive beyond its surface. Look around, then click a glowing portal.',
@@ -1246,6 +1264,7 @@ export default function DreamMap({
               }
           : demoHasCrossedPortal
             ? {
+                step: 5,
                 eyebrow: 'Final reveal',
                 title: 'Pull all the way back.',
                 body: 'You have seen a memory from the inside. Now reveal the shape of the whole history.',
@@ -1253,6 +1272,7 @@ export default function DreamMap({
               }
             : demoHasDived && flightMode
               ? {
+                  step: 3,
                   eyebrow: 'One relationship remains',
                   title: 'Go back in and take the doorway.',
                   body: 'The strongest related memory is rendered live beyond the portal. Crossing it is the core Oniria moment.',
@@ -1260,6 +1280,7 @@ export default function DreamMap({
                 }
             : openDream && flightMode
               ? {
+                  step: 2,
                   eyebrow: 'Memory found',
                   title: openDream.title?.trim() || 'Untitled dream',
                   body: 'The Memory Lens stays small on purpose. Press F and move through the memory instead of opening another screen.',
@@ -1267,12 +1288,14 @@ export default function DreamMap({
                 }
               : flightMode
                 ? {
+                    step: 1,
                     eyebrow: 'First-person dream universe',
                     title: 'Fly toward a bright memory.',
                     body: 'WASD + mouse. The closer you get, the memory will wake. Press E when you want to inspect it.',
                     action: 'E · inspect memory',
                   }
                 : {
+                    step: 1,
                     eyebrow: 'Dream universe',
                     title: 'First person is the intended demo path.',
                     body: 'Return to flight and move directly through the constellation.',
@@ -1288,6 +1311,10 @@ export default function DreamMap({
         diveActive ? styles.pageDiveMode : ''
       } ${introStage < 4 ? styles.pageIntroMode : ''} ${
         flightMode ? styles.pageFlightMode : ''
+      } ${
+        demoMode && guideStarted && !demoGuideDismissed
+          ? styles.pageGuidedMode
+          : ''
       }`}
     >
       <header className={styles.topbar}>
@@ -1375,13 +1402,71 @@ export default function DreamMap({
             <div className={styles.particleField} aria-hidden="true" />
             <div className={styles.dreamFog} aria-hidden="true" />
 
+            {demoMode &&
+              introStage >= 4 &&
+              !guideStarted &&
+              !demoGuideDismissed && (
+                <div className={styles.guidedStart} role="dialog" aria-modal="true">
+                  <div className={styles.guidedStartOrb} aria-hidden="true">
+                    <i />
+                    <i />
+                    <i />
+                  </div>
+                  <span>Oniria · guided dream journey</span>
+                  <h2>Fly through your memories.</h2>
+                  <p>
+                    You will enter one dream, cross into a related memory,
+                    then pull back to see the shape of the whole history.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGuideStarted(true)
+                      const canvas = document.querySelector('canvas')
+                      if (canvas instanceof HTMLCanvasElement) {
+                        void canvas.requestPointerLock()
+                      }
+                    }}
+                  >
+                    Begin journey
+                    <b aria-hidden="true">→</b>
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.guidedStartSkip}
+                    onClick={() => {
+                      setGuideStarted(true)
+                      setDemoGuideDismissed(true)
+                    }}
+                  >
+                    Explore without guidance
+                  </button>
+                </div>
+              )}
+
             {demoGuide && !enteringNodeId && (
               <aside className={styles.demoDirector} aria-live="polite">
+                <div
+                  className={styles.demoDirectorProgress}
+                  aria-label={'Step ' + demoGuide.step + ' of 5'}
+                >
+                  {Array.from({length: 5}, (_, index) => (
+                    <i
+                      key={index}
+                      className={
+                        index + 1 <= demoGuide.step
+                          ? styles.demoDirectorProgressActive
+                          : ''
+                      }
+                    />
+                  ))}
+                  <span>{demoGuide.step}/5</span>
+                </div>
                 <button
                   type="button"
                   className={styles.demoDirectorDismiss}
                   onClick={() => setDemoGuideDismissed(true)}
-                  aria-label="Hide demo guide"
+                  aria-label="Explore without guidance"
                 >
                   ×
                 </button>
@@ -1695,6 +1780,14 @@ export default function DreamMap({
                 diveTimelineProgress={diveTimelineProgress}
                 observatoryMode={observatoryMode}
                 flightMode={flightMode}
+                guidedNodeId={
+                  demoMode &&
+                  guideStarted &&
+                  !demoGuideDismissed &&
+                  !demoHasDived
+                    ? guidedTargetNode?._id ?? null
+                    : null
+                }
                 onZoomChange={changeZoom}
                 onPanChange={setPan}
                 onNodeHover={(node) => {
