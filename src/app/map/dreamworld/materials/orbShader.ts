@@ -34,7 +34,7 @@ export function createLivingOrbMaterial(
       uTime: {value: 0},
       uColor: {value: color.clone()},
       uGlow: {value: color.clone().lerp(new THREE.Color(0xffffff), 0.34)},
-      uOpacity: {value: 0.9},
+      uOpacity: {value: 0.035},
       uPulse: {value: 0},
       uFocus: {value: 0},
       uFlow: {value: CATEGORY_FLOW[category]},

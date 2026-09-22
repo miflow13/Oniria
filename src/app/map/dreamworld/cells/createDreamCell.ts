@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import type {SymbolCategory} from '@/types/dream'
+import type {DreamProfile} from '../dreamProfile'
 import type {DreamQualitySettings} from '../quality'
 
 export type DreamCell = {
@@ -55,6 +56,7 @@ function standardMaterial(color: THREE.Color, opacity = 1) {
 
 function buildCellWorld(
   scene: THREE.Scene,
+  profile: DreamProfile,
   category: SymbolCategory,
   color: THREE.Color,
   detail: number,
@@ -78,6 +80,113 @@ function buildCellWorld(
   }
 
   const phase = ((seed % 991) / 991) * Math.PI * 2
+
+  const motifGroup = new THREE.Group()
+  group.add(motifGroup)
+
+  if (profile.motifs.house) {
+    const body = addMesh(
+      new THREE.BoxGeometry(.42, .34, .36),
+      standardMaterial(color.clone().multiplyScalar(.5), .56 + profile.stability * .25),
+      motifGroup,
+    )
+    body.position.set(-.34, -.24, -.18)
+
+    const roof = addMesh(
+      new THREE.ConeGeometry(.34, .26, 4),
+      standardMaterial(color.clone().multiplyScalar(.38), .48 + profile.stability * .28),
+      motifGroup,
+    )
+    roof.position.set(-.34, .055, -.18)
+    roof.rotation.y = Math.PI / 4
+  }
+
+  if (profile.motifs.eye) {
+    const eye = new THREE.Group()
+    const sclera = addMesh(
+      new THREE.SphereGeometry(.13, 20, 20),
+      glowMaterial(color.clone().lerp(new THREE.Color(0xffffff), .65), .72),
+      eye,
+    )
+    const iris = addMesh(
+      new THREE.SphereGeometry(.055, 16, 16),
+      standardMaterial(color, .9),
+      eye,
+    )
+    iris.position.z = .11
+    eye.position.set(.34, .28, -.35)
+    motifGroup.add(eye)
+    updaters.push((time) => {
+      eye.rotation.y = Math.sin(time * .18 + phase) * .22
+      sclera.scale.setScalar(1 + Math.sin(time * .52) * .025)
+    })
+  }
+
+  if (profile.motifs.library) {
+    const shelfMaterial = standardMaterial(color.clone().multiplyScalar(.36), .52)
+    disposables.push(shelfMaterial)
+    for (let row = 0; row < (detail > 1 ? 4 : 2); row += 1) {
+      const shelf = addMesh(
+        new THREE.BoxGeometry(.62, .035, .14),
+        shelfMaterial,
+        motifGroup,
+      )
+      shelf.position.set(.28, -.18 + row * .16, -.28 - row * .06)
+      shelf.rotation.y = -.16
+    }
+  }
+
+  if (profile.motifs.forest) {
+    const treeMaterial = standardMaterial(color.clone().multiplyScalar(.3), .42)
+    disposables.push(treeMaterial)
+    for (let index = 0; index < (detail > 1 ? 7 : 4); index += 1) {
+      const tree = addMesh(
+        new THREE.ConeGeometry(.07, .32 + index * .018, 6),
+        treeMaterial,
+        motifGroup,
+      )
+      tree.position.set(
+        -.45 + (index % 4) * .25,
+        -.22 + (index % 2) * .04,
+        -.4 - Math.floor(index / 4) * .16,
+      )
+    }
+  }
+
+  if (profile.motifs.stairs) {
+    const stairMaterial = standardMaterial(color.clone().multiplyScalar(.48), .48)
+    disposables.push(stairMaterial)
+    const stairs = new THREE.Group()
+    for (let index = 0; index < 7; index += 1) {
+      const step = addMesh(
+        new THREE.BoxGeometry(.24, .025, .09),
+        stairMaterial,
+        stairs,
+      )
+      step.position.set(index * .07, index * .055, -index * .045)
+      step.rotation.y = index * .08
+    }
+    stairs.position.set(-.24, -.25, -.12)
+    motifGroup.add(stairs)
+  }
+
+  if (profile.motifs.door) {
+    const door = new THREE.Group()
+    const material = standardMaterial(color.clone().multiplyScalar(.52), .68)
+    disposables.push(material)
+    const left = addMesh(new THREE.BoxGeometry(.025, .28, .03), material, door)
+    const right = addMesh(new THREE.BoxGeometry(.025, .28, .03), material, door)
+    const top = addMesh(new THREE.BoxGeometry(.2, .025, .03), material, door)
+    left.position.x = -.09
+    right.position.x = .09
+    top.position.y = .13
+    door.position.set(.4, -.08, -.15)
+    motifGroup.add(door)
+  }
+
+  motifGroup.scale.setScalar(.9 + Math.min(profile.recurrence, 5) * .03)
+  motifGroup.rotation.y = profile.lucid ? 0 : (1 - profile.stability) * .12
+
 
   const floor = addMesh(
     new THREE.CircleGeometry(1.25, 64),
@@ -305,8 +414,10 @@ function buildCellWorld(
   disposables.push(dustGeometry, dustMaterial)
 
   updaters.push((time, focus) => {
-    dust.rotation.y = time * 0.045
-    dust.position.y = Math.sin(time * 0.2 + phase) * 0.06
+    dust.rotation.y = time * (0.035 + profile.wind * 0.04)
+    dust.position.y =
+      Math.sin(time * (0.16 + profile.wind * 0.12) + phase) *
+      (0.035 + (1 - profile.stability) * 0.055)
     dustMaterial.opacity = 0.48 + focus * 0.24
     horizon.rotation.z = time * 0.03
   })
@@ -321,23 +432,40 @@ function buildCellWorld(
 }
 
 export function createDreamCell(
+  profile: DreamProfile,
   category: SymbolCategory,
   color: THREE.Color,
   settings: DreamQualitySettings,
   seed: number,
 ): DreamCell {
   const scene = new THREE.Scene()
-  scene.background = new THREE.Color(0x02040c)
+  const cold = new THREE.Color(0x02040c)
+  const warm = new THREE.Color(0x16080f)
+  scene.background = cold.clone().lerp(
+    warm,
+    Math.max(0, profile.warmth) * 0.3,
+  )
   scene.fog = new THREE.FogExp2(
-    color.clone().multiplyScalar(0.09),
-    category === 'feeling' ? 0.34 : 0.22,
+    color.clone().multiplyScalar(profile.lucid ? 0.07 : 0.12),
+    Math.max(
+      0.1,
+      Math.min(
+        0.38,
+        profile.fogDensity * 2.2 + (category === 'feeling' ? 0.06 : 0),
+      ),
+    ),
   )
 
   const cellCamera = new THREE.PerspectiveCamera(46, 1, 0.04, 16)
   cellCamera.position.set(0, 0.08, 2.7)
   cellCamera.lookAt(0, 0, 0)
 
-  scene.add(new THREE.AmbientLight(0x8394c9, 0.72))
+  scene.add(
+    new THREE.AmbientLight(
+      profile.lucid ? 0xa9e8ee : profile.warmth > 0.35 ? 0xc994b0 : 0x8394c9,
+      profile.lucid ? 0.92 : 0.68,
+    ),
+  )
 
   const key = new THREE.PointLight(
     color.clone().lerp(new THREE.Color(0xffffff), 0.34),
@@ -354,6 +482,7 @@ export function createDreamCell(
 
   const world = buildCellWorld(
     scene,
+    profile,
     category,
     color,
     settings.miniWorldDetail,
@@ -398,8 +527,15 @@ export function createDreamCell(
     portal,
     update: (time, focus) => {
       world.update(time, focus)
-      key.intensity = 7.5 + focus * 4.5
-      rim.intensity = 6.5 + focus * 4
+      key.intensity =
+        5.2 +
+        profile.mood * 0.55 +
+        profile.recurrence * 0.3 +
+        focus * 2.4
+      rim.intensity =
+        4.6 +
+        (profile.lucid ? 1.4 : 0) +
+        focus * 2.2
       portalMaterial.opacity += (0.84 + focus * 0.12 - portalMaterial.opacity) * 0.08
       portal.scale.setScalar(1.0 + focus * 0.08 + Math.sin(time * 0.62) * 0.012)
     },

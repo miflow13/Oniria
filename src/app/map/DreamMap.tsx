@@ -245,6 +245,11 @@ export default function DreamMap({
   const [soundEnabled, setSoundEnabled] = useState(false)
   const [quality, setQuality] = useState<DreamQuality>('high')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [introStage, setIntroStage] = useState(0)
+  const [diveActive, setDiveActive] = useState(false)
+  const [diveTitle, setDiveTitle] = useState<string | null>(null)
+  const [diveExitRequest, setDiveExitRequest] = useState(0)
+  const [closingJournal, setClosingJournal] = useState(false)
   const [motionPositions, setMotionPositions] = useState<Record<string, {x: number; y: number}>>({})
   const [enteringNodeId, setEnteringNodeId] = useState<string | null>(null)
   const [enteringDreamTitle, setEnteringDreamTitle] = useState<string | null>(null)
@@ -263,6 +268,7 @@ export default function DreamMap({
   const physicsRef = useRef<Map<string, MotionPoint>>(new Map())
   const cameraFrameRef = useRef<number | null>(null)
   const enterTimerRef = useRef<number | null>(null)
+  const closeTimerRef = useRef<number | null>(null)
 
   const stopAmbient = useCallback(() => {
     const ambient = ambientRef.current
@@ -620,6 +626,9 @@ export default function DreamMap({
     if (demoMode) setLocalDreams(readLocalDreams())
 
     try {
+      const introSeen = window.sessionStorage.getItem('oniria-map-intro-seen')
+      if (introSeen === 'yes') setIntroStage(4)
+
       const stored = window.localStorage.getItem('oniria-dream-quality')
       const storedSidebar = window.localStorage.getItem('oniria-map-sidebar')
       if (storedSidebar === 'collapsed') setSidebarCollapsed(true)
@@ -646,6 +655,26 @@ export default function DreamMap({
   }, [quality])
 
   useEffect(() => {
+    const context = audioContextRef.current
+    const ambient = ambientRef.current
+    if (!context || !ambient || context.state === 'closed') return
+
+    const now = context.currentTime
+    const target = diveActive ? 0.009 : 0.032
+
+    try {
+      ambient.gain.gain.cancelScheduledValues(now)
+      ambient.gain.gain.setValueAtTime(
+        Math.max(0.0001, ambient.gain.gain.value),
+        now,
+      )
+      ambient.gain.gain.exponentialRampToValueAtTime(target, now + 0.8)
+    } catch {
+      // Audio may be transitioning between contexts.
+    }
+  }, [diveActive])
+
+  useEffect(() => {
     try {
       window.localStorage.setItem(
         'oniria-map-sidebar',
@@ -655,6 +684,42 @@ export default function DreamMap({
       // Ignore storage failures.
     }
   }, [sidebarCollapsed])
+
+  useEffect(() => {
+    try {
+      if (window.sessionStorage.getItem('oniria-map-intro-seen') === 'yes') {
+        setIntroStage(4)
+        return
+      }
+    } catch {
+      // Continue with the intro when session storage is unavailable.
+    }
+
+    const schedule = [
+      window.setTimeout(() => setIntroStage(1), 450),
+      window.setTimeout(() => setIntroStage(2), 1650),
+      window.setTimeout(() => setIntroStage(3), 3100),
+      window.setTimeout(() => {
+        setIntroStage(4)
+        try {
+          window.sessionStorage.setItem('oniria-map-intro-seen', 'yes')
+        } catch {
+          // Ignore storage failures.
+        }
+      }, 5200),
+    ]
+
+    return () => schedule.forEach((timer) => window.clearTimeout(timer))
+  }, [])
+
+  function skipIntro() {
+    setIntroStage(4)
+    try {
+      window.sessionStorage.setItem('oniria-map-intro-seen', 'yes')
+    } catch {
+      // Ignore storage failures.
+    }
+  }
 
   useEffect(() => {
     return () => {
@@ -668,6 +733,9 @@ export default function DreamMap({
       }
       if (enterTimerRef.current !== null) {
         window.clearTimeout(enterTimerRef.current)
+      }
+      if (closeTimerRef.current !== null) {
+        window.clearTimeout(closeTimerRef.current)
       }
     }
   }, [stopAmbient])
@@ -989,6 +1057,7 @@ export default function DreamMap({
       y: (330 - position.y) * targetZoom,
     }
 
+    setClosingJournal(false)
     setSelectedId(node._id)
     setOpenDreamId(targetDream._id)
     setFocusedDreamId(targetDream._id)
@@ -1015,15 +1084,26 @@ export default function DreamMap({
   }
 
   function closeDreamNote() {
-    setEnteringNodeId(null)
-    setEnteringDreamTitle(null)
-    setOpenDreamId(null)
-    setSelectedProjection(null)
-    setSelectedId(null)
-    setHoveredId(null)
-    setFocusedDreamId(null)
-    animateCameraTo(1, {x: 0, y: 0}, 680)
-    window.history.replaceState(null, '', '/map')
+    if (closingJournal) return
+
+    setClosingJournal(true)
+
+    if (closeTimerRef.current !== null) {
+      window.clearTimeout(closeTimerRef.current)
+    }
+
+    closeTimerRef.current = window.setTimeout(() => {
+      setEnteringNodeId(null)
+      setEnteringDreamTitle(null)
+      setOpenDreamId(null)
+      setSelectedProjection(null)
+      setSelectedId(null)
+      setHoveredId(null)
+      setFocusedDreamId(null)
+      setClosingJournal(false)
+      animateCameraTo(1, {x: 0, y: 0}, 680)
+      window.history.replaceState(null, '', '/map')
+    }, 520)
   }
 
   function focusDream(dreamId: string | null) {
@@ -1088,7 +1168,9 @@ export default function DreamMap({
     <main
       className={`${styles.page} ${
         sidebarCollapsed ? styles.pageSidebarCollapsed : ''
-      } ${selectedNode ? styles.pageFocusMode : ''}`}
+      } ${selectedNode ? styles.pageFocusMode : ''} ${
+        diveActive ? styles.pageDiveMode : ''
+      } ${introStage < 4 ? styles.pageIntroMode : ''}`}
     >
       <header className={styles.topbar}>
         <Link href="/" className={styles.brand} aria-label="Oniria journal">
@@ -1174,6 +1256,60 @@ export default function DreamMap({
             <div className={styles.aurora} aria-hidden="true" />
             <div className={styles.particleField} aria-hidden="true" />
             <div className={styles.dreamFog} aria-hidden="true" />
+
+            {introStage < 4 && (
+              <div
+                className={`${styles.introSequence} ${
+                  introStage === 0
+                    ? styles.introStage0
+                    : introStage === 1
+                      ? styles.introStage1
+                      : introStage === 2
+                        ? styles.introStage2
+                        : styles.introStage3
+                }`}
+                aria-live="polite"
+              >
+                <div className={styles.introStars} aria-hidden="true">
+                  <i />
+                  <i />
+                  <i />
+                  <i />
+                  <i />
+                </div>
+                <div className={styles.introCopy}>
+                  <span>{introStage < 2 ? 'between waking and memory' : 'dream field online'}</span>
+                  <strong>{introStage < 3 ? 'Oniria' : 'Your memories are connected.'}</strong>
+                  <small>
+                    {introStage < 2
+                      ? 'A memory is waking.'
+                      : introStage < 3
+                        ? 'Connections are surfacing.'
+                        : 'Enter whenever you are ready.'}
+                  </small>
+                </div>
+                <button type="button" onClick={skipIntro} className={styles.introSkip}>
+                  Skip
+                </button>
+              </div>
+            )}
+
+            {diveActive && (
+              <div className={styles.diveHud} aria-live="polite">
+                <div className={styles.diveIdentity}>
+                  <span>Dream Dive</span>
+                  <strong>{diveTitle || openDream?.title || 'Dream'}</strong>
+                  <small>Move the pointer to look around · no controls to learn</small>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDiveExitRequest((value) => value + 1)}
+                  className={styles.diveReturn}
+                >
+                  ← Return to Dream Map
+                </button>
+              </div>
+            )}
 
             <div className={styles.mapControls}>
               <button
@@ -1274,6 +1410,8 @@ export default function DreamMap({
                 nodes={nodes}
                 edges={edges}
                 positions={motionPositions}
+                dreams={visibleDreams}
+                selectedDreamId={openDream?._id ?? focusedDreamId}
                 selectedId={selectedId}
                 activeId={activeId}
                 focusedIds={focusedSymbolIds}
@@ -1282,6 +1420,8 @@ export default function DreamMap({
                 pan={pan}
                 quality={quality}
                 soundEnabled={soundEnabled}
+                introStage={introStage}
+                diveExitRequest={diveExitRequest}
                 onZoomChange={changeZoom}
                 onPanChange={setPan}
                 onNodeHover={(node) => {
@@ -1293,6 +1433,14 @@ export default function DreamMap({
                   if (selectedNode) closeDreamNote()
                 }}
                 onProjectionChange={setSelectedProjection}
+                onDiveStateChange={(active, title) => {
+                  setDiveActive(active)
+                  setDiveTitle(active ? title ?? openDream?.title ?? 'Dream' : null)
+                  if (active) {
+                    setEnteringNodeId(null)
+                    setClosingJournal(false)
+                  }
+                }}
               />
             )}
 
@@ -1372,25 +1520,32 @@ export default function DreamMap({
             <div className={styles.mapHint}>
               {focusedDream
                 ? 'Focused constellation · select a symbol to inspect it'
-                : 'Hover to hear · drag through space · scroll to zoom · select an orb to awaken its Dream Cell'}
+                : 'Hover to hear · click to inspect · double-click or hold a selected orb to enter the dream'}
             </div>
 
             {selectedNode &&
               openDream &&
               selectedMeta &&
               noteStyle &&
-              !enteringNodeId && (
+              !enteringNodeId &&
+              !diveActive && (
                 <div
+                  key={`${selectedNode._id}:${openDream._id}`}
                   className={`${styles.noteCluster} ${
                     noteSide === 'left'
                       ? styles.noteClusterLeft
                       : styles.noteClusterRight
-                  }`}
+                  } ${closingJournal ? styles.noteClusterClosing : ''}`}
                   style={noteStyle}
                   aria-live="polite"
                 >
                   <span className={styles.noteAnchorPulse} aria-hidden="true" />
                   <span className={styles.noteAnchorBeam} aria-hidden="true" />
+                  <span className={styles.journalParticles} aria-hidden="true">
+                    {Array.from({length: 12}).map((_, index) => (
+                      <i key={index} />
+                    ))}
+                  </span>
 
                   <div className={styles.noteStage}>
                     <button
