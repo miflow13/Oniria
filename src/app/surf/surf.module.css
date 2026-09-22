@@ -3243,3 +3243,229 @@
     animation: none;
   }
 }
+
+
+/* ==========================================================================
+   Development layout editor
+   ========================================================================== */
+
+.layoutEditorToggle {
+  position: absolute;
+  z-index: 94;
+  right: 64px;
+  bottom: 76px;
+  min-width: 62px;
+  height: 28px;
+  cursor: pointer;
+  color: #89919e;
+  background: rgba(13,15,20,.88);
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 7px;
+  font: inherit;
+  font-size: .48rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  backdrop-filter: blur(12px);
+}
+
+.layoutEditorToggle:hover,
+.layoutEditorToggleActive {
+  color: #eef8ff;
+  border-color: rgba(83,211,255,.34);
+  background: rgba(20,25,38,.96);
+}
+
+.layoutEditorToggleActive {
+  box-shadow:
+    0 0 0 1px rgba(59,73,223,.2),
+    0 0 24px rgba(83,211,255,.08);
+}
+
+.layoutEditorPanel {
+  position: absolute;
+  z-index: 93;
+  right: 14px;
+  top: 160px;
+  width: 250px;
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  color: #d8dee8;
+  background:
+    radial-gradient(
+      circle at 100% 0,
+      rgba(59,73,223,.13),
+      transparent 42%
+    ),
+    rgba(10,12,16,.965);
+  border: 1px solid rgba(83,211,255,.16);
+  border-radius: 10px;
+  box-shadow: 0 24px 64px rgba(0,0,0,.5);
+  backdrop-filter: blur(22px);
+}
+
+.layoutEditorHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.layoutEditorHeading > div {
+  display: grid;
+  gap: 2px;
+}
+
+.layoutEditorHeading span,
+.layoutEditorSelection > span {
+  color: #6f7887;
+  font-size: .46rem;
+  font-weight: 760;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.layoutEditorHeading strong {
+  color: #f3f7fc;
+  font-size: .62rem;
+}
+
+.layoutEditorHeading kbd {
+  min-width: 24px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  color: #9ba5ff;
+  background: rgba(255,255,255,.035);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 5px;
+  font-size: .5rem;
+}
+
+.layoutEditorTools {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.layoutEditorTools button,
+.layoutEditorActions button {
+  min-height: 30px;
+  cursor: pointer;
+  color: #aab2bf;
+  background: rgba(255,255,255,.035);
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 6px;
+  font: inherit;
+  font-size: .49rem;
+  font-weight: 720;
+}
+
+.layoutEditorTools button:hover,
+.layoutEditorActions button:hover,
+.layoutEditorToolActive {
+  color: #f3f8ff !important;
+  border-color: rgba(83,211,255,.28) !important;
+  background: rgba(59,73,223,.15) !important;
+}
+
+.layoutEditorTools label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #818a98;
+  font-size: .46rem;
+  white-space: nowrap;
+}
+
+.layoutEditorTools input {
+  accent-color: #6574ff;
+}
+
+.layoutEditorSelection {
+  display: grid;
+  gap: 5px;
+  padding: 9px;
+  background: rgba(255,255,255,.025);
+  border: 1px solid rgba(255,255,255,.055);
+  border-radius: 7px;
+}
+
+.layoutEditorSelection > strong {
+  overflow: hidden;
+  color: #f0f4fa;
+  font-size: .55rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.layoutEditorSelection dl {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+  margin: 2px 0 0;
+}
+
+.layoutEditorSelection dl div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  padding: 5px 6px;
+  background: rgba(0,0,0,.2);
+  border-radius: 5px;
+}
+
+.layoutEditorSelection dt {
+  color: #677181;
+  font-size: .42rem;
+  text-transform: uppercase;
+}
+
+.layoutEditorSelection dd {
+  margin: 0;
+  color: #cfe9f5;
+  font-size: .5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.layoutEditorEmpty {
+  margin: 0;
+  padding: 16px 10px;
+  color: #737d8b;
+  background: rgba(255,255,255,.018);
+  border: 1px dashed rgba(255,255,255,.07);
+  border-radius: 7px;
+  font-size: .5rem;
+  text-align: center;
+}
+
+.layoutEditorActions {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 8px;
+}
+
+.layoutEditorActions button {
+  padding: 0 9px;
+}
+
+.layoutEditorActions button:disabled {
+  cursor: wait;
+  opacity: .55;
+}
+
+.layoutEditorActions span {
+  color: #68717e;
+  font-size: .43rem;
+  line-height: 1.35;
+}
+
+@media (max-width: 720px) {
+  .layoutEditorToggle,
+  .layoutEditorPanel {
+    display: none;
+  }
+}
