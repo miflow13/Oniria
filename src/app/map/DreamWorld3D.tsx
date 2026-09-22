@@ -1435,6 +1435,9 @@ export default function DreamWorld3D({
           divePost.uniforms.uTime.value = elapsed
           divePost.uniforms.uTravel.value =
             diveMode === 'exiting' ? exitProgress : .06
+          divePost.uniforms.uFlarePosition.value.set(.62, .34)
+          divePost.uniforms.uFlareStrength.value =
+            qualityRef.current === 'cinematic' ? .22 : .08
         }
 
         if (diveMode === 'exiting' && exitProgress >= 1) {
@@ -1935,6 +1938,24 @@ export default function DreamWorld3D({
 
       if (selectedVisual) {
         const projected = selectedVisual.group.position.clone().project(camera)
+        const selectedProfile = selectedNode
+          ? getProfileForNode(selectedNode)
+          : null
+        const flareX = projected.x * .5 + .5
+        const flareY = -projected.y * .5 + .5
+        dreamPost.uniforms.uFlarePosition.value.set(flareX, flareY)
+        dreamPost.uniforms.uFlareStrength.value +=
+          ((selectedProfile &&
+            (selectedProfile.lucid ||
+              selectedProfile.recurrence >= 3 ||
+              selectedProfile.secret)
+            ? qualityRef.current === 'cinematic'
+              ? .34
+              : .16
+            : .06) -
+            dreamPost.uniforms.uFlareStrength.value) *
+          .06
+
         const visible =
           projected.z > -1 &&
           projected.z < 1 &&
@@ -1954,9 +1975,14 @@ export default function DreamWorld3D({
           lastProjection = nextProjection
           onProjectionChangeRef.current(nextProjection)
         }
-      } else if (lastProjection.visible) {
-        lastProjection = {x: -999, y: -999, visible: false}
-        onProjectionChangeRef.current(null)
+      } else {
+        dreamPost.uniforms.uFlareStrength.value +=
+          (0 - dreamPost.uniforms.uFlareStrength.value) * .05
+
+        if (lastProjection.visible) {
+          lastProjection = {x: -999, y: -999, visible: false}
+          onProjectionChangeRef.current(null)
+        }
       }
 
       composer.render()
