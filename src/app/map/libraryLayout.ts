@@ -2,7 +2,7 @@ export const ARCHIVE_PATH_RENDER_BAYS = 72
 export const ARCHIVE_WALKWAY_HALF_WIDTH = 4.1
 export const ARCHIVE_WALKWAY_Y_OFFSET = -2.08
 
-const ARCHIVE_BAY_SPACING = 7.2
+export const ARCHIVE_BAY_SPACING = 7.2
 const ARCHIVE_LANE_MIN = 6.6
 const ARCHIVE_LANE_VARIATION = 1.45
 
@@ -94,6 +94,27 @@ export function archiveDistrictInfluence(bay: number) {
     influence = Math.max(influence, local)
   })
   return influence
+}
+
+export function archiveWalkwayHalfWidthAtBay(bay: number) {
+  const welcomeInfluence =
+    1 - smoothStep(.45, 2.25, bay)
+
+  return (
+    ARCHIVE_WALKWAY_HALF_WIDTH +
+    archiveDistrictInfluence(bay) * 2.4 +
+    welcomeInfluence * 3.15
+  )
+}
+
+export function archiveBayFromWorldZ(z: number) {
+  return Math.max(
+    0,
+    Math.min(
+      ARCHIVE_PATH_RENDER_BAYS,
+      (-8 - z) / ARCHIVE_BAY_SPACING,
+    ),
+  )
 }
 
 export function nearestArchiveDistrict(bay: number) {
