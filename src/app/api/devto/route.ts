@@ -50,6 +50,14 @@ function lowQualityImageTarget(target: URL) {
     }
   }
 
+  if (thumbnail.hostname === 'dev-to-uploads.s3.amazonaws.com') {
+    return new URL(
+      'https://media2.dev.to/cdn-cgi/image/' +
+        'width=112,height=84,fit=cover,gravity=auto,quality=45,format=auto/' +
+        target.href,
+    )
+  }
+
   if (thumbnail.hostname === 'res.cloudinary.com') {
     const marker = '/image/upload/'
     const markerIndex = thumbnail.pathname.indexOf(marker)
