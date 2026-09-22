@@ -979,18 +979,25 @@ export function createDreamDive(
     })
 
   if (settings.miniWorldDetail > 0) {
-    root.traverse((object) => {
-      const mesh = object as THREE.Mesh
-      if (!mesh.isMesh) return
+    const applyDreamShadows = (container: THREE.Object3D) => {
+      container.traverse((object) => {
+        const mesh = object as THREE.Mesh
+        if (!mesh.isMesh) return
 
-      const material = mesh.material as THREE.Material | THREE.Material[]
-      const transparent = Array.isArray(material)
-        ? material.some((item) => item.transparent)
-        : material?.transparent
+        const material = mesh.material as
+          | THREE.Material
+          | THREE.Material[]
+        const transparent = Array.isArray(material)
+          ? material.some((item) => item.transparent)
+          : material?.transparent
 
-      mesh.castShadow = !transparent
-      mesh.receiveShadow = true
-    })
+        mesh.castShadow = !transparent
+        mesh.receiveShadow = true
+      })
+    }
+
+    applyDreamShadows(root)
+    applyDreamShadows(impossibleSpace.group)
   }
 
   let lookX = 0
