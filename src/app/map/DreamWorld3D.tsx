@@ -6,8 +6,9 @@ import {EffectComposer} from 'three/examples/jsm/postprocessing/EffectComposer.j
 import {RenderPass} from 'three/examples/jsm/postprocessing/RenderPass.js'
 import {UnrealBloomPass} from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 import {BokehPass} from 'three/examples/jsm/postprocessing/BokehPass.js'
+import {ShaderPass} from 'three/examples/jsm/postprocessing/ShaderPass.js'
 import {OutputPass} from 'three/examples/jsm/postprocessing/OutputPass.js'
-import type {SymbolCategory} from '@/types/dream'
+import type {Dream, SymbolCategory} from '@/types/dream'
 import styles from './map.module.css'
 import {
   getQualitySettings,
@@ -29,6 +30,15 @@ import {
   createSpatialDreamAudio,
   type SpatialDreamAudio,
 } from './dreamworld/audio/createSpatialDreamAudio'
+import {
+  createDreamProfile,
+  type DreamProfile,
+} from './dreamworld/dreamProfile'
+import {
+  createDreamDive,
+  type DreamDive,
+} from './dreamworld/dive/createDreamDive'
+import {DreamPostShader} from './dreamworld/effects/dreamPostShader'
 
 export type DreamWorldNode = {
   _id: string
@@ -63,6 +73,8 @@ type Props = {
   nodes: DreamWorldNode[]
   edges: DreamWorldEdge[]
   positions: Record<string, {x: number; y: number}>
+  dreams: Dream[]
+  selectedDreamId: string | null
   selectedId: string | null
   activeId: string | null
   focusedIds: Set<string>
@@ -71,12 +83,14 @@ type Props = {
   pan: Pan
   quality: DreamQuality
   soundEnabled: boolean
+  introStage: number
   onZoomChange: (zoom: number) => void
   onPanChange: (pan: Pan) => void
   onNodeHover: (node: DreamWorldNode | null) => void
   onNodeSelect: (node: DreamWorldNode) => void
   onBackgroundClick: () => void
   onProjectionChange: (projection: ProjectionPoint | null) => void
+  onDiveStateChange: (active: boolean, title?: string) => void
 }
 
 type NodeVisual = {
@@ -245,6 +259,8 @@ export default function DreamWorld3D({
   nodes,
   edges,
   positions,
+  dreams,
+  selectedDreamId,
   selectedId,
   activeId,
   focusedIds,
@@ -253,16 +269,20 @@ export default function DreamWorld3D({
   pan,
   quality,
   soundEnabled,
+  introStage,
   onZoomChange,
   onPanChange,
   onNodeHover,
   onNodeSelect,
   onBackgroundClick,
   onProjectionChange,
+  onDiveStateChange,
 }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const nodeRef = useRef(nodes)
   const positionsRef = useRef(positions)
+  const dreamsRef = useRef(dreams)
+  const selectedDreamIdRef = useRef(selectedDreamId)
   const selectedRef = useRef(selectedId)
   const activeRef = useRef(activeId)
   const focusedIdsRef = useRef(focusedIds)
@@ -277,9 +297,13 @@ export default function DreamWorld3D({
   const onProjectionChangeRef = useRef(onProjectionChange)
   const qualityRef = useRef(quality)
   const soundEnabledRef = useRef(soundEnabled)
+  const introStageRef = useRef(introStage)
+  const onDiveStateChangeRef = useRef(onDiveStateChange)
 
   nodeRef.current = nodes
   positionsRef.current = positions
+  dreamsRef.current = dreams
+  selectedDreamIdRef.current = selectedDreamId
   selectedRef.current = selectedId
   activeRef.current = activeId
   focusedIdsRef.current = focusedIds
@@ -294,6 +318,8 @@ export default function DreamWorld3D({
   onProjectionChangeRef.current = onProjectionChange
   qualityRef.current = quality
   soundEnabledRef.current = soundEnabled
+  introStageRef.current = introStage
+  onDiveStateChangeRef.current = onDiveStateChange
 
   const graphKey = useMemo(
     () =>
