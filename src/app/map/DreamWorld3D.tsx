@@ -751,9 +751,78 @@ export default function DreamWorld3D({
     const nodeVisuals = new Map<string, NodeVisual>()
     const interactive: THREE.Object3D[] = []
 
+    // Reusable shelf kit for cinematic library mode.
+    const shelfSideGeometry = new THREE.BoxGeometry(.18, 2.65, .56)
+    const shelfBoardGeometry = new THREE.BoxGeometry(3.45, .12, .62)
+    const shelfBackGeometry = new THREE.BoxGeometry(3.45, 2.65, .1)
+    const shelfBookGeometry = new THREE.BoxGeometry(.34, .56, .24)
+    const shelfPickGeometry = new THREE.BoxGeometry(3.8, 2.9, .95)
+    const shelfFrameMaterial = new THREE.MeshStandardMaterial({
+      color: 0x11151e,
+      emissive: 0x070a11,
+      emissiveIntensity: .18,
+      roughness: .82,
+      metalness: .16,
+      envMapIntensity: settings.environmentIntensity,
+    })
+    const shelfBoardMaterial = new THREE.MeshStandardMaterial({
+      color: 0x202838,
+      emissive: 0x11182a,
+      emissiveIntensity: .24,
+      roughness: .72,
+      metalness: .14,
+      envMapIntensity: settings.environmentIntensity,
+    })
+    const shelfBookMaterials = [
+      new THREE.MeshStandardMaterial({
+        color: 0x3b49df,
+        emissive: 0x182272,
+        emissiveIntensity: .42,
+        roughness: .68,
+      }),
+      new THREE.MeshStandardMaterial({
+        color: 0x5fc7d7,
+        emissive: 0x173f4b,
+        emissiveIntensity: .34,
+        roughness: .7,
+      }),
+      new THREE.MeshStandardMaterial({
+        color: 0x9c7be8,
+        emissive: 0x3b285f,
+        emissiveIntensity: .32,
+        roughness: .72,
+      }),
+      new THREE.MeshStandardMaterial({
+        color: 0xd8dce8,
+        emissive: 0x343946,
+        emissiveIntensity: .16,
+        roughness: .8,
+      }),
+      new THREE.MeshStandardMaterial({
+        color: 0x252b39,
+        emissive: 0x111722,
+        emissiveIntensity: .18,
+        roughness: .84,
+      }),
+    ]
+    const shelfAccentMaterial = new THREE.MeshBasicMaterial({
+      color: 0x7186ff,
+      transparent: true,
+      opacity: .22,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+    const shelfPickMaterial = new THREE.MeshBasicMaterial({
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+    })
+
     for (const node of nodeRef.current) {
       const seed = hashString(node._id)
-      const color = new THREE.Color(CATEGORY_COLORS[node.category])
+      const color = new THREE.Color(
+        node.accent ?? CATEGORY_COLORS[node.category],
+      )
       const group = new THREE.Group()
       group.userData.nodeId = node._id
 
@@ -763,7 +832,9 @@ export default function DreamWorld3D({
       shell.castShadow = renderer.shadowMap.enabled
       shell.receiveShadow = renderer.shadowMap.enabled
       group.add(shell)
-      interactive.push(shell)
+      if (node.libraryKind !== 'shelf') {
+        interactive.push(shell)
+      }
 
       const reflectionMaterial = new THREE.MeshPhysicalMaterial({
         color: color.clone().lerp(new THREE.Color(0xffffff), .16),
@@ -872,13 +943,98 @@ export default function DreamWorld3D({
       label.scale.set(2.2, .5, 1)
       group.add(label)
 
+      if (node.libraryKind === 'shelf') {
+        shell.visible = false
+        reflectionShell.visible = false
+        miniWorld.group.visible = false
+        glow.visible = false
+        core.visible = false
+        orbit.visible = false
+
+        const shelf = new THREE.Group()
+        shelf.rotation.y = (seededUnit(seed, 27) - .5) * .16
+
+        ;[-1.64, 1.64].forEach((x) => {
+          const side = new THREE.Mesh(
+            shelfSideGeometry,
+            shelfFrameMaterial,
+          )
+          side.position.set(x, 0, 0)
+          shelf.add(side)
+        })
+
+        const back = new THREE.Mesh(
+          shelfBackGeometry,
+          shelfFrameMaterial,
+        )
+        back.position.z = .28
+        shelf.add(back)
+
+        ;[-1.28, -.43, .42, 1.27].forEach((y) => {
+          const board = new THREE.Mesh(
+            shelfBoardGeometry,
+            shelfBoardMaterial,
+          )
+          board.position.set(0, y, 0)
+          shelf.add(board)
+        })
+
+        const bookCount = Math.max(
+          6,
+          Math.min(18, node.articleCount ?? node.frequency),
+        )
+        for (let index = 0; index < bookCount; index += 1) {
+          const row = Math.floor(index / 6)
+          const column = index % 6
+          const book = new THREE.Mesh(
+            shelfBookGeometry,
+            shelfBookMaterials[
+              (seed + index * 7) % shelfBookMaterials.length
+            ],
+          )
+          book.position.set(
+            -1.35 + column * .54,
+            -.86 + row * .85,
+            -.22,
+          )
+          book.scale.y =
+            .82 + seededUnit(seed, index + 90) * .28
+          shelf.add(book)
+        }
+
+        const accentRail = new THREE.Mesh(
+          new THREE.BoxGeometry(3.34, .035, .68),
+          shelfAccentMaterial,
+        )
+        accentRail.position.set(0, 1.34, -.02)
+        shelf.add(accentRail)
+
+        const pick = new THREE.Mesh(
+          shelfPickGeometry,
+          shelfPickMaterial,
+        )
+        pick.userData.nodeId = node._id
+        shelf.add(pick)
+        interactive.push(pick)
+
+        shelf.scale.setScalar(.9)
+        group.add(shelf)
+        label.position.set(0, -1.75, .18)
+        label.scale.set(2.65, .58, 1)
+      }
+
       const start = worldPosition(node, positionsRef.current)
       group.position.copy(start)
 
       const baseScale =
-        .72 +
-        Math.min(node.frequency, 6) * .095 +
-        Math.min(0.18, Math.max(0, node.frequency - 2) * .035)
+        node.libraryKind === 'shelf'
+          ? .9
+          : .72 +
+            Math.min(node.frequency, 6) * .095 +
+            Math.min(
+              0.18,
+              Math.max(0, node.frequency - 2) * .035,
+            )
       group.scale.setScalar(baseScale)
       world.add(group)
 
@@ -2783,9 +2939,12 @@ export default function DreamWorld3D({
           elapsed,
           selected ? 1 : hoveredId === node._id ? 0.55 : 0,
         )
-        if (!selected) {
+        if (!selected && node.libraryKind !== 'shelf') {
           visual.miniWorld.group.visible = true
           visual.core.visible = true
+        } else if (node.libraryKind === 'shelf') {
+          visual.miniWorld.group.visible = false
+          visual.core.visible = false
         }
         reflectionMaterial.opacity +=
           ((selected
@@ -3131,7 +3290,18 @@ export default function DreamWorld3D({
         )
 
         if (!routeActive) {
-          nodeVisuals.forEach((visual) => {
+          shelfSideGeometry.dispose()
+      shelfBoardGeometry.dispose()
+      shelfBackGeometry.dispose()
+      shelfBookGeometry.dispose()
+      shelfPickGeometry.dispose()
+      shelfFrameMaterial.dispose()
+      shelfBoardMaterial.dispose()
+      shelfBookMaterials.forEach((material) => material.dispose())
+      shelfAccentMaterial.dispose()
+      shelfPickMaterial.dispose()
+
+      nodeVisuals.forEach((visual) => {
             visual.group.getWorldPosition(flightCollisionPoint)
             flightCollisionDelta
               .copy(flightPosition)
