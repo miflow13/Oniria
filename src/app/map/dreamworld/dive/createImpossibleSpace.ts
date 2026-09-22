@@ -16,6 +16,7 @@ export type DiveInteraction =
       dreamId: string
       title: string
       depth: number
+      focus?: {x: number; y: number; z: number}
     }
   | null
 
@@ -450,7 +451,16 @@ export function createImpossibleSpace({
       while (object && !object.userData.diveInteraction) {
         object = object.parent
       }
-      return (object?.userData.diveInteraction as DiveInteraction) ?? null
+
+      const interaction =
+        (object?.userData.diveInteraction as DiveInteraction) ?? null
+      if (!interaction || !object) return null
+
+      const focus = object.getWorldPosition(new THREE.Vector3())
+      return {
+        ...interaction,
+        focus: {x: focus.x, y: focus.y, z: focus.z},
+      }
     },
     update: (time, delta, temporalProgress, lookX, lookY) => {
       lastLookX = lookX
