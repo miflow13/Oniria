@@ -556,6 +556,7 @@ export default function DevLibraryMap() {
       setArticle(payload.article)
       document.exitPointerLock?.()
     } catch (caught) {
+      setReadingBook(null)
       setError(
         caught instanceof Error
           ? caught.message
@@ -675,9 +676,7 @@ export default function DevLibraryMap() {
           const selectedBook = shelf?.articles[bookIndex]
           if (selectedBook) {
             setReadingBook({nodeId, index: bookIndex})
-            void openArticle(selectedBook).catch(() => {
-              setReadingBook(null)
-            })
+            void openArticle(selectedBook)
           }
         }}
         onFlightNavigationChange={setNavigation}
