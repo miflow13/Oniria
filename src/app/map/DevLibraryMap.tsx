@@ -80,6 +80,7 @@ function makeShelf(
     accent: SHELF_ACCENTS[kind],
     world: placement.world,
     yaw: placement.yaw,
+    pathBay: placement.pathBay,
     articles,
   }
 }
@@ -444,6 +445,7 @@ export default function DevLibraryMap() {
         accent: shelf.accent,
         world: shelf.world,
         libraryYaw: shelf.yaw,
+        libraryPathBay: shelf.pathBay,
         libraryBooks: shelf.articles.slice(0, 9).map((article) => {
           const image = article.cover_image ?? article.social_image ?? undefined
           return {
