@@ -309,6 +309,11 @@ export default function DevLibraryMap() {
               : shelf.articles.length,
         accent: shelf.accent,
         world: shelf.world,
+        coverImages: shelf.articles
+          .map((article) => article.cover_image ?? article.social_image ?? null)
+          .filter((url): url is string => Boolean(url))
+          .filter((url, index, all) => all.indexOf(url) === index)
+          .slice(0, 9),
       })),
     [bootstrap?.tags.length, creators.length, shelves],
   )
