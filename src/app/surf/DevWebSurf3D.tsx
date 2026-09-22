@@ -658,6 +658,130 @@ export default function DevWebSurf3D({
     renderer.domElement.tabIndex = 0
     container.appendChild(renderer.domElement)
 
+    // Open-roof sky: reuse the Dream Journal's point-star + additive-nebula
+    // language, but keep it restrained enough to sit behind the DEV/TRON
+    // architecture. The group follows the camera so the field reads as an
+    // effectively infinite skybox rather than particles floating in the room.
+    const skyGroup = new THREE.Group()
+    skyGroup.renderOrder = -20
+    scene.add(skyGroup)
+
+    const makeStarField = (
+      count: number,
+      size: number,
+      opacity: number,
+      bright = false,
+    ) => {
+      const positions = new Float32Array(count * 3)
+      const colors = new Float32Array(count * 3)
+      const base = new THREE.Color(bright ? 0xe8f5ff : 0xcfe5ff)
+      const cyanTint = new THREE.Color(0x9ddcff)
+      const violetTint = new THREE.Color(0xc4b6ff)
+
+      for (let index = 0; index < count; index += 1) {
+        const i = index * 3
+        const azimuth = Math.random() * Math.PI * 2
+        // Keep the majority of the field above the horizon so the missing
+        // roof opens into space without filling the walkable interior.
+        const elevation = .12 + Math.random() * 1.12
+        const radius = 92 + Math.random() * 38
+        const horizontalRadius = Math.cos(elevation) * radius
+
+        positions[i] = Math.cos(azimuth) * horizontalRadius
+        positions[i + 1] = Math.sin(elevation) * radius
+        positions[i + 2] = Math.sin(azimuth) * horizontalRadius
+
+        const starColor = base.clone()
+        const tintRoll = Math.random()
+        if (tintRoll > .86) starColor.lerp(cyanTint, .38)
+        else if (tintRoll < .08) starColor.lerp(violetTint, .32)
+        const intensity = .72 + Math.random() * .28
+        colors[i] = starColor.r * intensity
+        colors[i + 1] = starColor.g * intensity
+        colors[i + 2] = starColor.b * intensity
+      }
+
+      const geometry = new THREE.BufferGeometry()
+      geometry.setAttribute(
+        'position',
+        new THREE.BufferAttribute(positions, 3),
+      )
+      geometry.setAttribute(
+        'color',
+        new THREE.BufferAttribute(colors, 3),
+      )
+      const material = new THREE.PointsMaterial({
+        size,
+        vertexColors: true,
+        transparent: true,
+        opacity,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        depthTest: true,
+        fog: false,
+        sizeAttenuation: true,
+      })
+      const points = new THREE.Points(geometry, material)
+      points.frustumCulled = false
+      skyGroup.add(points)
+      return {geometry, material}
+    }
+
+    // Two batched point clouds provide depth/brightness variation for only two
+    // draw calls instead of hundreds of individual star meshes.
+    const skyStars = makeStarField(620, .72, .72)
+    const skyBrightStars = makeStarField(84, 1.25, .9, true)
+
+    const skyMistCanvas = document.createElement('canvas')
+    skyMistCanvas.width = 256
+    skyMistCanvas.height = 256
+    const skyMistContext = skyMistCanvas.getContext('2d')
+    if (skyMistContext) {
+      const mistGradient = skyMistContext.createRadialGradient(
+        128,
+        128,
+        0,
+        128,
+        128,
+        128,
+      )
+      mistGradient.addColorStop(0, 'rgba(155,188,255,.34)')
+      mistGradient.addColorStop(.24, 'rgba(92,111,220,.18)')
+      mistGradient.addColorStop(.58, 'rgba(74,108,174,.07)')
+      mistGradient.addColorStop(1, 'rgba(20,28,58,0)')
+      skyMistContext.fillStyle = mistGradient
+      skyMistContext.fillRect(0, 0, 256, 256)
+    }
+    const skyMistTexture = new THREE.CanvasTexture(skyMistCanvas)
+    skyMistTexture.colorSpace = THREE.SRGBColorSpace
+    skyMistTexture.minFilter = THREE.LinearFilter
+    skyMistTexture.magFilter = THREE.LinearFilter
+
+    const skyMistMaterials: THREE.SpriteMaterial[] = []
+    const skyMistSprites: THREE.Sprite[] = []
+    ;[
+      {x: -48, y: 68, z: -84, scaleX: 72, scaleY: 38, color: 0x6c63d8},
+      {x: 58, y: 54, z: -66, scaleX: 62, scaleY: 32, color: 0x4bb7c2},
+      {x: 12, y: 82, z: 72, scaleX: 74, scaleY: 34, color: 0x766bbf},
+    ].forEach((mist) => {
+      const material = new THREE.SpriteMaterial({
+        map: skyMistTexture,
+        color: mist.color,
+        transparent: true,
+        opacity: .085,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        depthTest: true,
+        fog: false,
+      })
+      const sprite = new THREE.Sprite(material)
+      sprite.position.set(mist.x, mist.y, mist.z)
+      sprite.scale.set(mist.scaleX, mist.scaleY, 1)
+      skyGroup.add(sprite)
+      skyMistMaterials.push(material)
+      skyMistSprites.push(sprite)
+    })
+
     const ambient = new THREE.HemisphereLight(0xe6ebf0, 0x202126, 1.38)
     scene.add(ambient)
 
@@ -5095,6 +5219,19 @@ export default function DevWebSurf3D({
     function animate(nowMs: number) {
       frame = requestAnimationFrame(animate)
       const now = nowMs / 1000
+
+      // Keep the distant field centered on the player for skybox-like depth.
+      // A nearly imperceptible drift preserves the dream-journal atmosphere
+      // without making the DEV library itself feel unstable.
+      skyGroup.position.copy(camera.position)
+      skyGroup.rotation.y = now * .00055
+      skyBrightStars.material.opacity =
+        .84 + Math.sin(now * .72) * .06
+      skyMistSprites.forEach((sprite, index) => {
+        sprite.material.rotation =
+          Math.sin(now * (.018 + index * .004) + index) * .035
+      })
+
       const streamReveal = THREE.MathUtils.smoothstep(
         nowMs - sceneRevealStartedAt,
         0,
@@ -6078,6 +6215,12 @@ export default function DevWebSurf3D({
       thumbnailPrefetchTimers.forEach((timer) => window.clearTimeout(timer))
       thumbnailPrefetchTimers.clear()
       remoteTextures.forEach((texture) => texture.dispose())
+      skyStars.geometry.dispose()
+      skyStars.material.dispose()
+      skyBrightStars.geometry.dispose()
+      skyBrightStars.material.dispose()
+      skyMistMaterials.forEach((material) => material.dispose())
+      skyMistTexture.dispose()
       rainGeometry.dispose()
       rainMaterial.dispose()
       destroyed = true
