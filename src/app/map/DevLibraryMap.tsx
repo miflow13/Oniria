@@ -998,7 +998,10 @@ export default function DevLibraryMap() {
                   (worldConfig.sanityRevision
                     ? ' · latest ' + worldConfig.sanityRevision
                     : '')
-                : 'Reload the published spatial archive configuration from Sanity'
+                : worldConfig.sanitySyncIssue ===
+                    'missing-preview-token'
+                  ? 'Draft preview token is not loaded by the running dev server. Restart npm run dev after setting SANITY_API_WRITE_TOKEN or SANITY_API_READ_TOKEN.'
+                  : 'Reload the published spatial archive configuration from Sanity'
             }
           >
             {worldSyncing
@@ -1006,7 +1009,10 @@ export default function DevLibraryMap() {
               : worldConfig.source === 'sanity'
                 ? worldConfig.syncMode === 'drafts'
                   ? '◉ SANITY DRAFT LIVE'
-                  : '◉ SANITY LIVE'
+                  : worldConfig.sanitySyncIssue ===
+                      'missing-preview-token'
+                    ? '⚠ SANITY PUBLISHED'
+                    : '◉ SANITY PUBLISHED'
                 : '○ LOCAL MODEL'}
           </button>
           <button
