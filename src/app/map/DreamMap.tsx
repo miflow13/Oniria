@@ -1251,6 +1251,13 @@ export default function DreamMap({
                 body: 'You have seen a memory from the inside. Now reveal the shape of the whole history.',
                 action: 'Reveal Observatory',
               }
+            : demoHasDived && flightMode
+              ? {
+                  eyebrow: 'One relationship remains',
+                  title: 'Go back in and take the doorway.',
+                  body: 'The strongest related memory is rendered live beyond the portal. Crossing it is the core Oniria moment.',
+                  action: 'F · re-enter dream',
+                }
             : openDream && flightMode
               ? {
                   eyebrow: 'Memory found',
