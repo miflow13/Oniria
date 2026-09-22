@@ -1139,7 +1139,7 @@ export default function DevWebSurf3D({
       : [netGrid.material]
     netGridMaterials.forEach((material) => {
       material.transparent = true
-      material.opacity = .035
+      material.opacity = .012
       material.blending = THREE.AdditiveBlending
       architecturalMaterials.push(material)
     })
