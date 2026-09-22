@@ -202,7 +202,7 @@ export default function DevLibraryMap() {
         'Featured',
         'popular this week',
         'featured',
-        [-7.5, 1.5, -5.5],
+        [-10.5, 1.0, -7.0],
         featured,
       ),
       makeShelf(
@@ -210,7 +210,7 @@ export default function DevLibraryMap() {
         'New',
         'freshly published',
         'latest',
-        [0, 4.4, -8.5],
+        [1.5, 6.2, -12.5],
         latest,
       ),
       makeShelf(
@@ -220,7 +220,7 @@ export default function DevLibraryMap() {
           : 'My DEV',
         'creator shelf',
         'mine',
-        [7.8, .2, -6.4],
+        [11.5, -1.8, -9.5],
         mine,
       ),
       makeShelf(
@@ -228,7 +228,7 @@ export default function DevLibraryMap() {
         'Deep Catalog I',
         'long-tail DEV',
         'catalog',
-        [-11.2, -3.6, -13.8],
+        [-16.0, -5.5, -20.5],
         remaining.slice(0, 18),
       ),
       makeShelf(
@@ -236,7 +236,7 @@ export default function DevLibraryMap() {
         'Deep Catalog II',
         'long-tail DEV',
         'catalog',
-        [0, -4.8, -16.2],
+        [-2.0, .5, -28.0],
         remaining.slice(18, 36),
       ),
       makeShelf(
@@ -244,7 +244,7 @@ export default function DevLibraryMap() {
         'Deep Catalog III',
         'long-tail DEV',
         'catalog',
-        [11.4, -2.7, -14.6],
+        [15.5, -4.0, -24.5],
         remaining.slice(36, 54),
       ),
       makeShelf(
@@ -252,7 +252,7 @@ export default function DevLibraryMap() {
         'Topics',
         'choose a DEV tag',
         'topics',
-        [-13.4, 5.4, -20.8],
+        [-13.5, 8.5, -35.0],
         dynamicTitle?.startsWith('#') ? dynamicArticles : [],
       ),
       makeShelf(
@@ -260,7 +260,7 @@ export default function DevLibraryMap() {
         'Creators',
         'browse author shelves',
         'creators',
-        [13.2, 5.8, -21.5],
+        [14.5, 10.5, -38.5],
         dynamicTitle?.startsWith('@') ? dynamicArticles : [],
       ),
     ]
@@ -272,7 +272,7 @@ export default function DevLibraryMap() {
           'Search',
           query || 'search results',
           'search',
-          [0, 8.2, -23.5],
+          [0, 13.0, -46.0],
           searchResults,
         ),
       )
@@ -309,16 +309,17 @@ export default function DevLibraryMap() {
               : shelf.articles.length,
         accent: shelf.accent,
         world: shelf.world,
-        coverImages: shelf.articles
-          .map((article) => article.cover_image ?? article.social_image ?? null)
-          .filter((url): url is string => Boolean(url))
-          .filter((url, index, all) => all.indexOf(url) === index)
-          .slice(0, 9)
-          .map(
-            (url) =>
-              '/api/devto?mode=image&variant=thumb&url=' +
-              encodeURIComponent(url),
-          ),
+        libraryBooks: shelf.articles.slice(0, 9).map((article) => {
+          const image = article.cover_image ?? article.social_image ?? undefined
+          return {
+            id: String(article.id),
+            title: article.title,
+            coverUrl: image
+              ? '/api/devto?mode=image&variant=thumb&url=' +
+                encodeURIComponent(image)
+              : undefined,
+          }
+        }),
       })),
     [bootstrap?.tags.length, creators.length, shelves],
   )
@@ -462,6 +463,13 @@ export default function DevLibraryMap() {
         onNodeSelect={(node) => {
           setSelectedId(node._id)
           document.exitPointerLock?.()
+        }}
+        onBookSelect={(nodeId, bookIndex) => {
+          const shelf = shelves.find((item) => item.id === nodeId)
+          const selectedBook = shelf?.articles[bookIndex]
+          if (selectedBook) {
+            void openArticle(selectedBook)
+          }
         }}
         onBackgroundClick={() => setSelectedId(null)}
         onProjectionChange={() => {}}
