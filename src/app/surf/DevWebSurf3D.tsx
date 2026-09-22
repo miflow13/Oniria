@@ -1520,12 +1520,19 @@ export default function DevWebSurf3D({
     })
 
     function setVisibleFloor(floor: number) {
+      detailedBookIds.clear()
+      activeCoverUrls.clear()
       visualsByFloor.forEach((entries, floorIndex) => {
         const visible = floorIndex === floor
         entries.forEach(([, visual]) => {
           visual.group.visible = visible
+          if (!visible) {
+            downgradeCover(visual)
+            downgradeBookTitle(visual)
+          }
         })
       })
+      lastDetailSelection = 0
     }
     setVisibleFloor(currentFloorRef.current)
 
