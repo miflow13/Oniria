@@ -53,6 +53,16 @@ const SECTION_CENTERS: Record<LibrarySection, THREE.Vector3> = {
   archive: new THREE.Vector3(0, 1.6, -40),
 }
 
+const SECTION_DOORWAYS: Record<LibrarySection, THREE.Vector3> = {
+  atrium: new THREE.Vector3(0, .09, 5.8),
+  featured: new THREE.Vector3(0, .09, -5.4),
+  latest: new THREE.Vector3(-8.35, .09, -5.2),
+  topics: new THREE.Vector3(8.35, .09, -5.2),
+  creators: new THREE.Vector3(8.35, .09, -21.1),
+  search: new THREE.Vector3(-8.35, .09, -21.1),
+  archive: new THREE.Vector3(0, .09, -34.4),
+}
+
 const KIND_GEOMETRY: Record<SurfNodeKind, () => THREE.BufferGeometry> = {
   home: () => new THREE.CylinderGeometry(.8, 1.05, .72, 8),
   section: () => new THREE.BoxGeometry(1.6, 2.5, .18),
@@ -188,6 +198,54 @@ function makeCurve(a: THREE.Vector3, b: THREE.Vector3, lift = .2) {
     new THREE.Vector3(a.x, .09, a.z),
     middle,
     new THREE.Vector3(b.x, .09, b.z),
+  )
+}
+
+function makeArchitecturalGuide(
+  start: THREE.Vector3,
+  destination: THREE.Vector3,
+  currentSection: LibrarySection,
+  targetSection: LibrarySection,
+) {
+  const points: THREE.Vector3[] = [
+    new THREE.Vector3(start.x, .09, start.z),
+  ]
+
+  if (currentSection !== targetSection) {
+    if (currentSection !== 'atrium') {
+      const exit = SECTION_DOORWAYS[currentSection]
+      points.push(exit.clone())
+      points.push(new THREE.Vector3(0, .09, exit.z))
+    }
+
+    const entry = SECTION_DOORWAYS[targetSection]
+    if (targetSection !== 'atrium') {
+      points.push(new THREE.Vector3(0, .09, entry.z))
+      points.push(entry.clone())
+    } else {
+      points.push(entry.clone())
+    }
+  }
+
+  points.push(
+    new THREE.Vector3(destination.x, .09, destination.z),
+  )
+
+  const deduped = points.filter(
+    (point, index, collection) =>
+      index === 0 ||
+      point.distanceToSquared(collection[index - 1]) > .04,
+  )
+
+  if (deduped.length <= 2) {
+    return makeCurve(start, destination, .03)
+  }
+
+  return new THREE.CatmullRomCurve3(
+    deduped,
+    false,
+    'centripetal',
+    .35,
   )
 }
 
@@ -756,6 +814,7 @@ export default function DevWebSurf3D({
     deskGlow.position.set(0, 1.04, 7)
     scene.add(deskGlow)
 
+    const nodeById = new Map(nodes.map((node) => [node.id, node]))
     const visuals = new Map<string, Visual>()
     const interactive: THREE.Object3D[] = []
     const disposableTextures: THREE.Texture[] = []
@@ -1127,7 +1186,7 @@ export default function DevWebSurf3D({
       scene.add(packet)
       return packet
     })
-    let activeGuideCurve: THREE.QuadraticBezierCurve3 | null = null
+    let activeGuideCurve: THREE.Curve<THREE.Vector3> | null = null
 
     const floorStripGeometry = new THREE.BoxGeometry(.44, .018, .055)
     const floorStrips = Array.from({length: 30}, (_, index) => {
@@ -1183,6 +1242,7 @@ export default function DevWebSurf3D({
     const right = new THREE.Vector3()
     const up = new THREE.Vector3(0, 1, 0)
     const move = new THREE.Vector3()
+    const tempWorldPosition = new THREE.Vector3()
     const euler = new THREE.Euler(0, 0, 0, 'YXZ')
     let yaw = 0
     let pitch = 0
@@ -1209,7 +1269,7 @@ export default function DevWebSurf3D({
       const hit = raycaster.intersectObjects(interactive, false)[0]
       if (!hit) return null
       const nodeId = hit.object.userData.nodeId as string | undefined
-      return nodes.find((node) => node.id === nodeId) ?? null
+      return nodeId ? nodeById.get(nodeId) ?? null : null
     }
 
     function startTravel(
@@ -1291,7 +1351,7 @@ export default function DevWebSurf3D({
           nodes.find((candidate) => candidate.id === selectedRef.current) ??
           pickCenter()
         if (node) {
-          startTravel(node, request.inspectOnArrival)
+          startTravel(node, true)
         }
       }
 
@@ -1349,8 +1409,10 @@ export default function DevWebSurf3D({
       const request = travelRequestRef.current
       if (request && request.nonce !== lastTravelNonce) {
         lastTravelNonce = request.nonce
-        const node = nodes.find((candidate) => candidate.id === request.id)
-        if (node) startTravel(node)
+        const node = nodeById.get(request.id)
+        if (node) {
+          startTravel(node, request.inspectOnArrival)
+        }
       }
 
       const aimed = pickCenter()
@@ -1360,23 +1422,28 @@ export default function DevWebSurf3D({
         hoverRef.current(aimed ?? null)
       }
 
+      const selectedNode = selectedRef.current
+        ? nodeById.get(selectedRef.current)
+        : undefined
+      const hoveredNode = hoverId
+        ? nodeById.get(hoverId)
+        : undefined
+      const routeTargetNode = routeTargetRef.current
+        ? nodeById.get(routeTargetRef.current)
+        : undefined
+      const activeShelfKey =
+        selectedNode?.kind === 'article'
+          ? selectedNode.shelfKey
+          : hoveredNode?.kind === 'article'
+            ? hoveredNode.shelfKey
+            : undefined
+      const routedSection = routeTargetNode?.section
+
       visuals.forEach((visual, id) => {
         const selected = selectedRef.current === id
         const hovered = hoverId === id
         const routed = routeTargetRef.current === id
-        const node = nodes.find((candidate) => candidate.id === id)
-        const selectedNode = nodes.find(
-          (candidate) => candidate.id === selectedRef.current,
-        )
-        const hoveredNode = nodes.find(
-          (candidate) => candidate.id === hoverId,
-        )
-        const activeShelfKey =
-          selectedNode?.kind === 'article'
-            ? selectedNode.shelfKey
-            : hoveredNode?.kind === 'article'
-              ? hoveredNode.shelfKey
-              : undefined
+        const node = nodeById.get(id)
         const sameShelf =
           Boolean(activeShelfKey) &&
           visual.shelfKey === activeShelfKey
@@ -1432,8 +1499,9 @@ export default function DevWebSurf3D({
             .11,
           )
 
+          visual.group.getWorldPosition(tempWorldPosition)
           const distance = camera.position.distanceTo(
-            visual.group.getWorldPosition(new THREE.Vector3()),
+            tempWorldPosition,
           )
           const priority = selected || hovered || routed
           if (priority || distance <= COVER_LOAD_DISTANCE) {
@@ -1502,7 +1570,12 @@ export default function DevWebSurf3D({
 
         if (visual.archMaterial) {
           const archActive =
-            routed || selected || hovered
+            routed ||
+            selected ||
+            hovered ||
+            (node?.kind === 'section' &&
+              Boolean(routedSection) &&
+              node.section === routedSection)
           visual.archMaterial.opacity +=
             ((archActive ? .92 : .35) -
               visual.archMaterial.opacity) *
@@ -1516,11 +1589,12 @@ export default function DevWebSurf3D({
         }
       })
 
-      const activeShelfVisual = nodes.find(
-        (node) =>
-          node.kind === 'article' &&
-          (node.id === selectedRef.current || node.id === hoverId),
-      )
+      const activeShelfVisual =
+        selectedNode?.kind === 'article'
+          ? selectedNode
+          : hoveredNode?.kind === 'article'
+            ? hoveredNode
+            : null
       const activeShelfCenter = activeShelfVisual
         ? new THREE.Vector3(...activeShelfVisual.position)
         : null
@@ -1531,7 +1605,7 @@ export default function DevWebSurf3D({
           Math.hypot(
             center.x - activeShelfCenter.x,
             center.z - activeShelfCenter.z,
-          ) < 5.2
+          ) < 4.4
         material.opacity +=
           ((nearShelf ? .52 : activeShelfCenter ? .018 : .045) -
             material.opacity) *
@@ -1602,10 +1676,14 @@ export default function DevWebSurf3D({
         const destination = routeTarget.group.getWorldPosition(
           new THREE.Vector3(),
         )
-        activeGuideCurve = makeCurve(
+        const targetNode = routeTargetId
+          ? nodeById.get(routeTargetId)
+          : undefined
+        activeGuideCurve = makeArchitecturalGuide(
           camera.position,
           destination,
-          .03,
+          currentSection,
+          targetNode?.section ?? currentSection,
         )
         guideGeometry.setFromPoints(activeGuideCurve.getPoints(52))
         guideLine.computeLineDistances()
