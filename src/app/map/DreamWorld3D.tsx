@@ -3843,22 +3843,6 @@ export default function DreamWorld3D({
           : openingEase
         : 0
 
-      const ritualForward = new THREE.Vector3()
-      const ritualRight = new THREE.Vector3()
-      const ritualUp = new THREE.Vector3(0, 1, 0)
-      const ritualWorldTarget = new THREE.Vector3()
-      const parentWorldQuaternion = new THREE.Quaternion()
-      const ritualWorldQuaternion = new THREE.Quaternion()
-      const ritualLocalQuaternion = new THREE.Quaternion()
-      const ritualFacingOffset = new THREE.Quaternion().setFromEuler(
-        new THREE.Euler(0, Math.PI, 0),
-      )
-
-      camera.getWorldDirection(ritualForward)
-      ritualRight
-        .crossVectors(ritualForward, ritualUp)
-        .normalize()
-
       libraryBookVisuals.forEach((bookVisual) => {
         const shelfVisual = nodeVisuals.get(bookVisual.nodeId)
         const shelfDistance = shelfVisual
@@ -3880,52 +3864,41 @@ export default function DreamWorld3D({
 
         const positionTarget = bookVisual.basePosition.clone()
 
-        if (isOpening && bookVisual.group.parent) {
-          ritualWorldTarget
-            .copy(camera.position)
-            .addScaledVector(ritualForward, 1.18)
-            .addScaledVector(ritualRight, .18)
-            .addScaledVector(ritualUp, -.08)
-
-          const localTarget = bookVisual.group.parent.worldToLocal(
-            ritualWorldTarget.clone(),
-          )
-          positionTarget.lerp(localTarget, ritualAmount)
-
-          bookVisual.group.parent.getWorldQuaternion(
-            parentWorldQuaternion,
-          )
-          ritualWorldQuaternion
-            .copy(camera.quaternion)
-            .multiply(ritualFacingOffset)
-          ritualLocalQuaternion
-            .copy(parentWorldQuaternion)
-            .invert()
-            .multiply(ritualWorldQuaternion)
-
-          bookVisual.group.quaternion.slerp(
-            ritualLocalQuaternion,
-            .16,
-          )
+        if (isOpening) {
+          // Keep the entire reading ritual local to the shelf. Never derive a
+          // book transform from the camera: that can pin the cover plane to
+          // the visitor's view if the reader opens during the transition.
+          positionTarget.z += .62 * ritualAmount
+          positionTarget.y += .08 * ritualAmount
+          positionTarget.x += .035 * ritualAmount
         } else {
           positionTarget.z += isHovered
             ? .2
             : isApproachedShelf
               ? .075
               : 0
-          bookVisual.group.quaternion.slerp(
-            new THREE.Quaternion(),
-            .14,
-          )
         }
 
         bookVisual.group.position.lerp(
           positionTarget,
-          isOpening ? .18 : .12,
+          isOpening ? .2 : .12,
         )
 
+        // Safety envelope: no book animation is allowed to move a visual more
+        // than a small distance from its authored shelf slot.
+        const displacement = bookVisual.group.position
+          .clone()
+          .sub(bookVisual.basePosition)
+        const maxDisplacement = .78
+        if (displacement.lengthSq() > maxDisplacement * maxDisplacement) {
+          displacement.setLength(maxDisplacement)
+          bookVisual.group.position
+            .copy(bookVisual.basePosition)
+            .add(displacement)
+        }
+
         const targetScale = isOpening
-          ? 1 + .42 * ritualAmount
+          ? 1 + .12 * ritualAmount
           : isHovered
             ? 1.045
             : isApproachedShelf
@@ -3937,15 +3910,32 @@ export default function DreamWorld3D({
             targetScale,
             targetScale,
           ),
-          isOpening ? .16 : .1,
+          isOpening ? .18 : .1,
         )
 
+        const targetYaw = isOpening
+          ? .08 * ritualAmount
+          : isHovered
+            ? .025
+            : isApproachedShelf
+              ? .012
+              : 0
+        const targetPitch = isOpening
+          ? -.045 * ritualAmount
+          : 0
+
+        bookVisual.group.rotation.y +=
+          (targetYaw - bookVisual.group.rotation.y) * .18
+        bookVisual.group.rotation.x +=
+          (targetPitch - bookVisual.group.rotation.x) * .18
+        bookVisual.group.rotation.z *= .84
+
         const targetCoverAngle = isOpening
-          ? -Math.PI * .84 * ritualAmount
+          ? -Math.PI * .74 * ritualAmount
           : 0
         bookVisual.coverHinge.rotation.y +=
           (targetCoverAngle - bookVisual.coverHinge.rotation.y) *
-          (isOpening ? .18 : .15)
+          (isOpening ? .2 : .15)
       })
 
       if (
@@ -3956,7 +3946,7 @@ export default function DreamWorld3D({
         openingBook.visual.group.position.copy(
           openingBook.visual.basePosition,
         )
-        openingBook.visual.group.quaternion.identity()
+        openingBook.visual.group.rotation.set(0, 0, 0)
         openingBook.visual.group.scale.setScalar(1)
         openingBook.visual.coverHinge.rotation.y = 0
         openingBook = null
