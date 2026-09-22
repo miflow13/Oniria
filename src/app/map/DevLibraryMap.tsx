@@ -27,14 +27,33 @@ const QUALITY: DreamQuality = 'cinematic'
 const CATALOG_PAGE_SIZE = 100
 const CATALOG_BOOKS_PER_SHELF = 9
 
-function catalogShelfWorld(index: number): [number, number, number] {
-  const angle = index * 1.17
-  const radius = 11 + (index % 4) * 2.4
+const ARCHIVE_BAY_SPACING = 7.2
+const ARCHIVE_LANE_OFFSET = 7.4
+
+function archivePathCenter(bay: number): [number, number, number] {
   return [
-    Math.sin(angle) * radius,
-    Math.cos(index * .71) * 7.2,
-    -26 - index * 6.4,
+    Math.sin(bay * .34) * 2.15,
+    Math.sin(bay * .19) * .55,
+    -8 - bay * ARCHIVE_BAY_SPACING,
   ]
+}
+
+function shelfBayWorld(
+  bay: number,
+  side: -1 | 1,
+): [number, number, number] {
+  const [centerX, centerY, centerZ] = archivePathCenter(bay)
+  return [
+    centerX + side * ARCHIVE_LANE_OFFSET,
+    centerY,
+    centerZ,
+  ]
+}
+
+function catalogShelfWorld(index: number): [number, number, number] {
+  const bay = 3 + Math.floor(index / 2)
+  const side: -1 | 1 = index % 2 === 0 ? -1 : 1
+  return shelfBayWorld(bay, side)
 }
 
 const SHELF_ACCENTS: Record<LibraryShelfKind, string> = {
@@ -306,7 +325,7 @@ export default function DevLibraryMap() {
         'Featured',
         'popular this week',
         'featured',
-        [-10.5, 1, -7],
+        shelfBayWorld(0, -1),
         featured,
       ),
       makeShelf(
@@ -314,7 +333,7 @@ export default function DevLibraryMap() {
         'New',
         'freshly published',
         'latest',
-        [1.5, 6.2, -12.5],
+        shelfBayWorld(0, 1),
         latest,
       ),
       makeShelf(
@@ -324,7 +343,7 @@ export default function DevLibraryMap() {
           : 'My DEV',
         'creator shelf',
         'mine',
-        [11.5, -1.8, -9.5],
+        shelfBayWorld(1, -1),
         mine,
       ),
       makeShelf(
@@ -332,7 +351,7 @@ export default function DevLibraryMap() {
         'Topics',
         'choose a DEV tag',
         'topics',
-        [-14.5, 7.5, -20.5],
+        shelfBayWorld(1, 1),
         dynamicTitle?.startsWith('#') ? dynamicArticles : [],
       ),
       makeShelf(
@@ -340,7 +359,7 @@ export default function DevLibraryMap() {
         'Creators',
         'browse author shelves',
         'creators',
-        [14.5, 8.8, -22.5],
+        shelfBayWorld(2, -1),
         dynamicTitle?.startsWith('@') ? dynamicArticles : [],
       ),
     ]
@@ -352,7 +371,7 @@ export default function DevLibraryMap() {
           'Search',
           query || 'search results',
           'search',
-          [0, 11, -24],
+          shelfBayWorld(2, 1),
           searchResults.slice(0, CATALOG_BOOKS_PER_SHELF),
         ),
       )
