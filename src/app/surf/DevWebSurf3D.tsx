@@ -541,37 +541,37 @@ export default function DevWebSurf3D({
     renderer.domElement.tabIndex = 0
     container.appendChild(renderer.domElement)
 
-    const ambient = new THREE.HemisphereLight(0xd7defd, 0x101010, 1.35)
+    const ambient = new THREE.HemisphereLight(0xd7defd, 0x101010, 1.18)
     scene.add(ambient)
 
-    const key = new THREE.DirectionalLight(0xf5f5f5, 2.65)
+    const key = new THREE.DirectionalLight(0xf5f5f5, 2.15)
     key.position.set(-9, 13, 9)
     key.castShadow = true
     key.shadow.mapSize.set(1024, 1024)
     key.shadow.bias = -0.0002
     scene.add(key)
 
-    const cyan = new THREE.PointLight(0x3b49df, 10, 34, 2)
+    const cyan = new THREE.PointLight(0x3b49df, 6.5, 36, 2)
     cyan.position.set(-13, 4, -18)
     scene.add(cyan)
 
-    const violet = new THREE.PointLight(0x5965e8, 8, 32, 2)
+    const violet = new THREE.PointLight(0x5965e8, 5.4, 34, 2)
     violet.position.set(13, 4, -22)
     scene.add(violet)
 
-    const warm = new THREE.PointLight(0xffffff, 4.5, 24, 2)
+    const warm = new THREE.PointLight(0xffffff, 3.6, 26, 2)
     warm.position.set(0, 5, -5)
     scene.add(warm)
 
-    const netCyan = new THREE.PointLight(0x53d3ff, 7.5, 32, 2)
+    const netCyan = new THREE.PointLight(0x53d3ff, 5.4, 34, 2)
     netCyan.position.set(-2, 2.6, -31)
     scene.add(netCyan)
 
-    const netMagenta = new THREE.PointLight(0xff4fd8, 4.2, 24, 2)
+    const netMagenta = new THREE.PointLight(0xff4fd8, 2.8, 26, 2)
     netMagenta.position.set(15, 3.2, -15)
     scene.add(netMagenta)
 
-    const netViolet = new THREE.PointLight(0xae7bff, 4.8, 28, 2)
+    const netViolet = new THREE.PointLight(0xae7bff, 3.2, 30, 2)
     netViolet.position.set(-15, 4, -24)
     scene.add(netViolet)
 
@@ -1067,7 +1067,7 @@ export default function DevWebSurf3D({
       const material = new THREE.MeshBasicMaterial({
         color: SECTION_ACCENTS[section],
         transparent: true,
-        opacity: .018,
+        opacity: .009,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
         side: THREE.DoubleSide,
@@ -2450,11 +2450,14 @@ export default function DevWebSurf3D({
 
       const targetY =
         clamped * LIBRARY_FLOOR_HEIGHT + CAMERA_HEIGHT
+      const sourceY = camera.position.y
+      const floorDistance = Math.abs(clamped - currentFloorIndex)
       const points = [
         camera.position.clone(),
-        new THREE.Vector3(0, camera.position.y, 7),
+        new THREE.Vector3(0, sourceY, 5.8),
+        new THREE.Vector3(0, sourceY, 7),
         new THREE.Vector3(0, targetY, 7),
-        new THREE.Vector3(0, targetY, 5.2),
+        new THREE.Vector3(0, targetY, 5.8),
       ]
       floorTravel = {
         curve: new THREE.CatmullRomCurve3(
@@ -2465,7 +2468,9 @@ export default function DevWebSurf3D({
         ),
         targetFloor: clamped,
         startedAt: performance.now() / 1000,
-        duration: reducedMotion ? 1.1 : 1.65,
+        duration: reducedMotion
+          ? 1.15
+          : THREE.MathUtils.clamp(1.05 + floorDistance * .48, 1.45, 3.45),
       }
       travel = null
       velocity.set(0, 0, 0)
@@ -2534,7 +2539,7 @@ export default function DevWebSurf3D({
 
     function collides(
       next: THREE.Vector3,
-      radius = .31,
+      radius = .27,
     ) {
       return collisionRects.some(
         (rect) =>
@@ -2557,7 +2562,7 @@ export default function DevWebSurf3D({
       if (!collides(nextX)) {
         position.x = nextX.x
       } else {
-        velocity.x *= .12
+        velocity.x *= .28
       }
 
       const nextZ = position.clone()
@@ -2569,7 +2574,7 @@ export default function DevWebSurf3D({
       if (!collides(nextZ)) {
         position.z = nextZ.z
       } else {
-        velocity.z *= .12
+        velocity.z *= .28
       }
     }
 
@@ -2581,9 +2586,9 @@ export default function DevWebSurf3D({
       ) {
         return
       }
-      yaw -= event.movementX * .00132
-      pitch -= event.movementY * .00116
-      pitch = THREE.MathUtils.clamp(pitch, -.52, .52)
+      yaw -= event.movementX * .00118
+      pitch -= event.movementY * .00104
+      pitch = THREE.MathUtils.clamp(pitch, -.48, .48)
     }
 
     function onKeyDown(event: KeyboardEvent) {
@@ -3298,9 +3303,9 @@ export default function DevWebSurf3D({
       })
 
       netCyan.intensity =
-        6.2 + Math.max(0, Math.sin(now * .46)) * 1.35
+        4.5 + Math.max(0, Math.sin(now * .46)) * .8
       netMagenta.intensity =
-        2.7 + Math.max(0, Math.sin(now * .38 + 1.1)) * 1.05
+        2.15 + Math.max(0, Math.sin(now * .38 + 1.1)) * .65
 
       if (floorTravel) {
         const progress = THREE.MathUtils.clamp(
@@ -3319,7 +3324,7 @@ export default function DevWebSurf3D({
         liftCabin.position.y = point.y - CAMERA_HEIGHT
         camera.lookAt(look)
         camera.fov +=
-          (62 - camera.fov) *
+          (60 - camera.fov) *
           (1 - Math.exp(-delta * 8))
         camera.updateProjectionMatrix()
 
@@ -3362,10 +3367,10 @@ export default function DevWebSurf3D({
         camera.position.copy(point)
         camera.lookAt(look)
         const travelFov =
-          62 +
+          60 +
           (reducedMotion
             ? 0
-            : Math.sin(progress * Math.PI) * 3.2)
+            : Math.sin(progress * Math.PI) * 1.6)
         camera.fov +=
           (travelFov - camera.fov) *
           (1 - Math.exp(-delta * 7.5))
@@ -3402,9 +3407,9 @@ export default function DevWebSurf3D({
 
         const hurrying =
           keys.has('ShiftLeft') || keys.has('ShiftRight')
-        const speed = hurrying ? 3.8 : 1.9
+        const speed = hurrying ? 3.25 : 2.05
         const desired = move.multiplyScalar(speed)
-        const response = move.lengthSq() > 0 ? 9.5 : 12
+        const response = move.lengthSq() > 0 ? 7.6 : 10.5
         velocity.lerp(
           desired,
           1 - Math.exp(-delta * response),
@@ -3428,12 +3433,12 @@ export default function DevWebSurf3D({
           1 - Math.exp(-delta * 12),
         )
         const speedRatio = THREE.MathUtils.clamp(
-          velocity.length() / 3.8,
+          velocity.length() / 3.25,
           0,
           1,
         )
         const targetFov =
-          62 + (reducedMotion ? 0 : speedRatio * 1.4)
+          60 + (reducedMotion ? 0 : speedRatio * .8)
         camera.fov +=
           (targetFov - camera.fov) *
           (1 - Math.exp(-delta * 5.5))
