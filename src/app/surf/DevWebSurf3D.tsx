@@ -2043,6 +2043,175 @@ export default function DevWebSurf3D({
       },
     )
 
+    // A completely data-independent archive LOD keeps every upper floor
+    // visually occupied even before its real DEV articles have arrived.
+    // These silhouettes are non-interactive and intentionally cheap.
+    const realArticleCountByFloor = Array.from(
+      {length: LIBRARY_FLOOR_COUNT},
+      () => 0,
+    )
+    nodes.forEach((node) => {
+      if (node.kind !== 'article') return
+      const floorIndex = THREE.MathUtils.clamp(
+        node.floorIndex ?? 0,
+        0,
+        LIBRARY_FLOOR_COUNT - 1,
+      )
+      realArticleCountByFloor[floorIndex] += 1
+    })
+
+    const archivePlaceholderLods = new Map<
+      number,
+      {
+        shelves: THREE.InstancedMesh
+        books: THREE.InstancedMesh
+        shelfMaterial: THREE.MeshStandardMaterial
+        bookMaterial: THREE.MeshStandardMaterial
+        articleCount: number
+      }
+    >()
+
+    const placeholderShelfGeometry = new THREE.BoxGeometry(4.2, 3.35, .16)
+    const placeholderBookGeometry = new THREE.BoxGeometry(1, 1, 1)
+    architecturalGeometries.push(
+      placeholderShelfGeometry,
+      placeholderBookGeometry,
+    )
+
+    const placeholderRows = [-9.5, -15.2, -20.9, -26.6, -32.3, -38, -43.7, -49.4]
+    const placeholderColumns = [-13.2, -7.4, 7.4, 13.2]
+    const placeholderBooksPerShelf = 30
+    const placeholderMatrix = new THREE.Matrix4()
+    const placeholderPosition = new THREE.Vector3()
+    const placeholderQuaternion = new THREE.Quaternion()
+    const placeholderScale = new THREE.Vector3()
+    const placeholderUp = new THREE.Vector3(0, 1, 0)
+
+    for (let floor = 1; floor < LIBRARY_FLOOR_COUNT; floor += 1) {
+      const floorBase = floor * LIBRARY_FLOOR_HEIGHT
+      const accent = new THREE.Color(FLOOR_ACCENTS[floor])
+      const shelfMaterial = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(0x15181e).lerp(accent, .09),
+        emissive: accent,
+        emissiveIntensity: .035,
+        roughness: .9,
+        metalness: .04,
+        transparent: true,
+        opacity: .74,
+      })
+      const bookMaterial = new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        vertexColors: true,
+        emissive: accent,
+        emissiveIntensity: .08,
+        roughness: .72,
+        metalness: .08,
+        transparent: true,
+        opacity: .68,
+      })
+      architecturalMaterials.push(shelfMaterial, bookMaterial)
+
+      const shelfCount =
+        placeholderRows.length * placeholderColumns.length
+      const shelves = new THREE.InstancedMesh(
+        placeholderShelfGeometry,
+        shelfMaterial,
+        shelfCount,
+      )
+      const books = new THREE.InstancedMesh(
+        placeholderBookGeometry,
+        bookMaterial,
+        shelfCount * placeholderBooksPerShelf,
+      )
+      shelves.castShadow = false
+      shelves.receiveShadow = false
+      books.castShadow = false
+      books.receiveShadow = false
+      shelves.frustumCulled = true
+      books.frustumCulled = true
+
+      let shelfIndex = 0
+      let bookIndex = 0
+
+      placeholderRows.forEach((z, rowIndex) => {
+        placeholderColumns.forEach((x, columnIndex) => {
+          const rotationY = rowIndex % 2 === 0 ? 0 : Math.PI
+          placeholderQuaternion.setFromAxisAngle(
+            placeholderUp,
+            rotationY,
+          )
+          placeholderPosition.set(x, floorBase + 1.72, z)
+          placeholderScale.set(1, 1, 1)
+          placeholderMatrix.compose(
+            placeholderPosition,
+            placeholderQuaternion,
+            placeholderScale,
+          )
+          shelves.setMatrixAt(shelfIndex, placeholderMatrix)
+
+          for (let level = 0; level < 3; level += 1) {
+            for (let slot = 0; slot < 10; slot += 1) {
+              const localX = THREE.MathUtils.lerp(
+                -1.82,
+                1.82,
+                slot / 9,
+              )
+              const seed =
+                floor * 997 +
+                rowIndex * 89 +
+                columnIndex * 37 +
+                level * 13 +
+                slot * 5
+              const height = .54 + ((seed % 11) / 10) * .25
+              const width = .12 + ((seed % 5) / 4) * .07
+              const front = .125
+              placeholderPosition.set(
+                x +
+                  Math.cos(rotationY) * localX +
+                  Math.sin(rotationY) * front,
+                floorBase + .23 + level * 1.08 + height / 2,
+                z -
+                  Math.sin(rotationY) * localX +
+                  Math.cos(rotationY) * front,
+              )
+              placeholderScale.set(width, height, .13)
+              placeholderMatrix.compose(
+                placeholderPosition,
+                placeholderQuaternion,
+                placeholderScale,
+              )
+              books.setMatrixAt(bookIndex, placeholderMatrix)
+
+              const variation =
+                .18 + ((seed % 9) / 8) * .18
+              books.setColorAt(
+                bookIndex,
+                new THREE.Color(0x2b3039).lerp(
+                  accent,
+                  variation,
+                ),
+              )
+              bookIndex += 1
+            }
+          }
+
+          shelfIndex += 1
+        })
+      })
+
+      shelves.instanceMatrix.needsUpdate = true
+      books.instanceMatrix.needsUpdate = true
+      if (books.instanceColor) books.instanceColor.needsUpdate = true
+      scene.add(shelves, books)
+      archivePlaceholderLods.set(floor, {
+        shelves,
+        books,
+        shelfMaterial,
+        bookMaterial,
+        articleCount: realArticleCountByFloor[floor],
+      })
+    }
+
     // Beyond the collision boundary, banks of cheap shelves keep repeating.
     // They are deliberately inaccessible: their job is to sell impossible
     // depth, not add thousands of collision bodies.
