@@ -71,6 +71,16 @@ function nodeCategory(kind: LibraryShelfKind) {
   return 'place' as const
 }
 
+function shelfIcon(kind: LibraryShelfKind) {
+  if (kind === 'featured') return '★'
+  if (kind === 'latest') return '✦'
+  if (kind === 'mine') return '@'
+  if (kind === 'topics') return '#'
+  if (kind === 'creators') return '◎'
+  if (kind === 'search') return '⌕'
+  return '▥'
+}
+
 function cleanMarkdown(markdown: string | undefined) {
   if (!markdown) return ''
   return markdown
@@ -96,6 +106,13 @@ export default function DevLibraryMap() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [flightMode, setFlightMode] = useState(true)
+  const [navigation, setNavigation] = useState<{
+    nearestId: string | null
+    routeTargetId: string | null
+  }>({
+    nearestId: null,
+    routeTargetId: null,
+  })
 
   useEffect(() => {
     let cancelled = false
@@ -294,7 +311,7 @@ export default function DevLibraryMap() {
         _id: shelf.id,
         name: shelf.title,
         category: nodeCategory(shelf.kind),
-        icon: '▤',
+        icon: shelfIcon(shelf.kind),
         x: 50,
         y: 50,
         frequency: Math.max(1, shelf.articles.length),
@@ -341,6 +358,10 @@ export default function DevLibraryMap() {
     shelves.find((shelf) => shelf.id === selectedId) ?? null
   const hoveredShelf =
     shelves.find((shelf) => shelf.id === hoveredId) ?? null
+  const nearestShelf =
+    shelves.find((shelf) => shelf.id === navigation.nearestId) ?? null
+  const routeShelf =
+    shelves.find((shelf) => shelf.id === navigation.routeTargetId) ?? null
 
   async function openArticle(summary: DevArticleSummary) {
     try {
@@ -471,6 +492,7 @@ export default function DevLibraryMap() {
             void openArticle(selectedBook)
           }
         }}
+        onFlightNavigationChange={setNavigation}
         onBackgroundClick={() => setSelectedId(null)}
         onProjectionChange={() => {}}
         onDiveStateChange={() => {}}
@@ -497,10 +519,25 @@ export default function DevLibraryMap() {
           </button>
         </form>
 
-        <div className={styles.status}>
-          {hoveredShelf
-            ? hoveredShelf.title
-            : 'WASD · mouse · E inspect · R route'}
+        <div className={styles.navigationState}>
+          <span className={styles.navigationLabel}>
+            {selectedShelf ? 'INSPECTING' : 'YOU ARE NEAR'}
+          </span>
+          <strong>
+            {selectedShelf?.title ??
+              hoveredShelf?.title ??
+              nearestShelf?.title ??
+              'Open space'}
+          </strong>
+          {routeShelf ? (
+            <small className={styles.routeActive}>
+              R ROUTE → {routeShelf.title}
+            </small>
+          ) : (
+            <small>
+              R · fly to next shelf · E · inspect book
+            </small>
+          )}
         </div>
       </header>
 
