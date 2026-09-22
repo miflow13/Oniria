@@ -175,6 +175,7 @@ export default function DevLibraryMap() {
   const [soundEnabled, setSoundEnabled] = useState(false)
   const [worldConfig, setWorldConfig] =
     useState<LibraryWorldConfig>(DEFAULT_LIBRARY_WORLD_CONFIG)
+  const [worldSyncing, setWorldSyncing] = useState(false)
   const [readingBook, setReadingBook] =
     useState<LibraryReadingBook | null>(null)
   const [navigation, setNavigation] = useState<{
@@ -245,23 +246,32 @@ export default function DevLibraryMap() {
     }
   }, [])
 
+  const refreshWorldConfig = useCallback(
+    async (applyDefaultMovement = false) => {
+      try {
+        setWorldSyncing(true)
+        const response = await fetch('/api/library-world', {
+          cache: 'no-store',
+        })
+        if (!response.ok) return
+        const payload = (await response.json()) as LibraryWorldConfig
+        setWorldConfig(payload)
+        if (applyDefaultMovement) {
+          setMovementMode(payload.defaultMovement)
+        }
+      } catch {
+        // The fallback world config remains active if Sanity is unavailable.
+      } finally {
+        setWorldSyncing(false)
+      }
+    },
+    [],
+  )
+
   useEffect(() => {
     let cancelled = false
 
-    async function loadWorldConfig() {
-      try {
-        const response = await fetch('/api/library-world')
-        if (!response.ok) return
-        const payload = (await response.json()) as LibraryWorldConfig
-        if (cancelled) return
-        setWorldConfig(payload)
-        setMovementMode(payload.defaultMovement)
-      } catch {
-        // The fallback world config remains active if Sanity is unavailable.
-      }
-    }
-
-    void loadWorldConfig()
+    void refreshWorldConfig(true)
 
     async function load() {
       try {
@@ -297,7 +307,7 @@ export default function DevLibraryMap() {
     return () => {
       cancelled = true
     }
-  }, [loadMoreCatalog])
+  }, [loadMoreCatalog, refreshWorldConfig])
 
   const resumeFirstPersonControls = useCallback(() => {
     const canvas = document.querySelector<HTMLCanvasElement>(
@@ -852,6 +862,20 @@ export default function DevLibraryMap() {
         </form>
 
         <div className={styles.navigationState}>
+          <button
+            type="button"
+            className={styles.soundToggle}
+            data-active={worldConfig.source === 'sanity' ? 'true' : 'false'}
+            onClick={() => void refreshWorldConfig(false)}
+            disabled={worldSyncing}
+            title="Reload the spatial archive configuration from Sanity"
+          >
+            {worldSyncing
+              ? '◌ SYNCING'
+              : worldConfig.source === 'sanity'
+                ? '◉ SANITY LIVE'
+                : '○ LOCAL MODEL'}
+          </button>
           <button
             type="button"
             className={styles.soundToggle}
