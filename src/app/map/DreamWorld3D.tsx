@@ -76,6 +76,7 @@ export type DreamWorldNode = {
   accent?: string
   world?: [number, number, number]
   libraryYaw?: number
+  libraryPathBay?: number
   libraryBooks?: Array<{
     id: string
     title: string
@@ -431,7 +432,7 @@ export default function DreamWorld3D({
       `${quality}::${nodes
         .map(
           (node) =>
-            `${node._id}:${node.articleCount ?? 0}:${node.libraryBooks?.map((book) => book.id + ':' + (book.coverUrl ?? '')).join('|') ?? ''}:${node.world?.join(',') ?? ''}:${node.libraryYaw ?? ''}`,
+            `${node._id}:${node.articleCount ?? 0}:${node.libraryBooks?.map((book) => book.id + ':' + (book.coverUrl ?? '')).join('|') ?? ''}:${node.world?.join(',') ?? ''}:${node.libraryYaw ?? ''}:${node.libraryPathBay ?? ''}`,
         )
         .join('|')}::${edges
         .map((edge) => `${edge.id}:${edge.weight}`)
@@ -1479,6 +1480,12 @@ export default function DreamWorld3D({
     let libraryWalkwayRailMaterial: THREE.LineBasicMaterial | null = null
     let libraryWalkway: THREE.Mesh | null = null
     let libraryWalkwayRails: THREE.LineSegments | null = null
+    let libraryBranchGeometry: THREE.BufferGeometry | null = null
+    let libraryBranchRailGeometry: THREE.BufferGeometry | null = null
+    let libraryBranchMaterial: THREE.MeshBasicMaterial | null = null
+    let libraryBranchRailMaterial: THREE.LineBasicMaterial | null = null
+    let libraryBranches: THREE.Mesh | null = null
+    let libraryBranchRails: THREE.LineSegments | null = null
 
     if (libraryMode) {
       const subdivisionsPerBay = 4
@@ -1634,6 +1641,200 @@ export default function DreamWorld3D({
       libraryWalkway.userData.libraryDecorative = true
       libraryWalkwayRails.userData.libraryDecorative = true
       world.add(libraryWalkway, libraryWalkwayRails)
+
+      const branchPositions: number[] = []
+      const branchIndices: number[] = []
+      const branchRailPositions: number[] = []
+      let branchVertexCount = 0
+      const branchSamples = 6
+      const branchHalfWidth = .58
+      const shelfApproachDistance = 2.35
+
+      nodeRef.current
+        .filter(
+          (node) =>
+            node.libraryKind === 'shelf' &&
+            typeof node.libraryPathBay === 'number',
+        )
+        .forEach((node) => {
+          const pathBay = node.libraryPathBay as number
+          const anchor = new THREE.Vector3(
+            ...archivePathPoint(pathBay),
+          )
+          anchor.y += ARCHIVE_WALKWAY_Y_OFFSET
+
+          const shelfCenter = worldPosition(
+            node,
+            positionsRef.current,
+          )
+          const outward = shelfCenter.clone().sub(anchor)
+          outward.y = 0
+          if (outward.lengthSq() < .0001) outward.set(1, 0, 0)
+          outward.normalize()
+
+          const branchStart = anchor
+            .clone()
+            .addScaledVector(
+              outward,
+              ARCHIVE_WALKWAY_HALF_WIDTH * .84,
+            )
+
+          const branchEnd = shelfCenter
+            .clone()
+            .addScaledVector(outward, -shelfApproachDistance)
+          branchEnd.y = shelfCenter.y + ARCHIVE_WALKWAY_Y_OFFSET
+
+          const travel = branchEnd.clone().sub(branchStart)
+          const travelLength = Math.max(.001, travel.length())
+          const horizontalTravel = travel.clone()
+          horizontalTravel.y = 0
+          if (horizontalTravel.lengthSq() < .0001) {
+            horizontalTravel.copy(outward)
+          } else {
+            horizontalTravel.normalize()
+          }
+
+          const branchSide = new THREE.Vector3(
+            -horizontalTravel.z,
+            0,
+            horizontalTravel.x,
+          )
+
+          let previousLeft: THREE.Vector3 | null = null
+          let previousRight: THREE.Vector3 | null = null
+
+          for (let sample = 0; sample <= branchSamples; sample += 1) {
+            const t = sample / branchSamples
+            const eased = t * t * (3 - 2 * t)
+            const center = branchStart
+              .clone()
+              .lerp(branchEnd, eased)
+
+            const landingFlare =
+              t > .68
+                ? THREE.MathUtils.smoothstep(t, .68, 1) * .34
+                : 0
+            const width = branchHalfWidth + landingFlare
+
+            const left = center
+              .clone()
+              .addScaledVector(branchSide, width)
+            const right = center
+              .clone()
+              .addScaledVector(branchSide, -width)
+
+            branchPositions.push(
+              left.x,
+              left.y,
+              left.z,
+              right.x,
+              right.y,
+              right.z,
+            )
+
+            const currentLeft = branchVertexCount
+            const currentRight = branchVertexCount + 1
+
+            if (previousLeft && previousRight) {
+              const previousLeftIndex = branchVertexCount - 2
+              const previousRightIndex = branchVertexCount - 1
+              branchIndices.push(
+                previousLeftIndex,
+                previousRightIndex,
+                currentLeft,
+                previousRightIndex,
+                currentRight,
+                currentLeft,
+              )
+
+              branchRailPositions.push(
+                previousLeft.x,
+                previousLeft.y + .03,
+                previousLeft.z,
+                left.x,
+                left.y + .03,
+                left.z,
+                previousRight.x,
+                previousRight.y + .03,
+                previousRight.z,
+                right.x,
+                right.y + .03,
+                right.z,
+              )
+            }
+
+            if (sample === 0 || sample === branchSamples) {
+              branchRailPositions.push(
+                left.x,
+                left.y + .038,
+                left.z,
+                right.x,
+                right.y + .038,
+                right.z,
+              )
+            }
+
+            previousLeft = left
+            previousRight = right
+            branchVertexCount += 2
+          }
+
+          void travelLength
+        })
+
+      if (branchPositions.length > 0) {
+        libraryBranchGeometry = new THREE.BufferGeometry()
+        libraryBranchGeometry.setAttribute(
+          'position',
+          new THREE.Float32BufferAttribute(branchPositions, 3),
+        )
+        libraryBranchGeometry.setIndex(branchIndices)
+        libraryBranchGeometry.computeVertexNormals()
+        libraryBranchGeometry.computeBoundingSphere()
+
+        libraryBranchRailGeometry = new THREE.BufferGeometry()
+        libraryBranchRailGeometry.setAttribute(
+          'position',
+          new THREE.Float32BufferAttribute(
+            branchRailPositions,
+            3,
+          ),
+        )
+        libraryBranchRailGeometry.computeBoundingSphere()
+
+        libraryBranchMaterial = new THREE.MeshBasicMaterial({
+          color: 0x63dbe8,
+          transparent: true,
+          opacity: .055,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+          blending: THREE.NormalBlending,
+          toneMapped: true,
+        })
+        libraryBranchRailMaterial = new THREE.LineBasicMaterial({
+          color: 0x91c9ff,
+          transparent: true,
+          opacity: .2,
+          depthWrite: false,
+          blending: THREE.NormalBlending,
+          toneMapped: true,
+        })
+
+        libraryBranches = new THREE.Mesh(
+          libraryBranchGeometry,
+          libraryBranchMaterial,
+        )
+        libraryBranchRails = new THREE.LineSegments(
+          libraryBranchRailGeometry,
+          libraryBranchRailMaterial,
+        )
+        libraryBranches.renderOrder = 1
+        libraryBranchRails.renderOrder = 2
+        libraryBranches.userData.walkableSurface = true
+        libraryBranches.userData.libraryDecorative = true
+        libraryBranchRails.userData.libraryDecorative = true
+        world.add(libraryBranches, libraryBranchRails)
+      }
     }
 
     const nodeDataById = new Map(nodeRef.current.map((node) => [node._id, node]))
@@ -3472,6 +3673,13 @@ export default function DreamWorld3D({
           .22 + Math.max(0, Math.sin(elapsed * .36 + .8)) * .04
       }
 
+      if (libraryBranchMaterial && libraryBranchRailMaterial) {
+        libraryBranchMaterial.opacity =
+          .052 + Math.sin(elapsed * .36 + .9) * .006
+        libraryBranchRailMaterial.opacity =
+          .18 + Math.max(0, Math.sin(elapsed * .31 + 1.4)) * .035
+      }
+
       worldLightShafts.forEach((shaft, index) => {
         shaft.rotation.y += .00022 + index * .00005
         const material = shaft.material as THREE.MeshBasicMaterial
@@ -4445,8 +4653,14 @@ export default function DreamWorld3D({
       libraryWalkwayRailGeometry?.dispose()
       libraryWalkwayPanelMaterial?.dispose()
       libraryWalkwayRailMaterial?.dispose()
+      libraryBranchGeometry?.dispose()
+      libraryBranchRailGeometry?.dispose()
+      libraryBranchMaterial?.dispose()
+      libraryBranchRailMaterial?.dispose()
       if (libraryWalkway) world.remove(libraryWalkway)
       if (libraryWalkwayRails) world.remove(libraryWalkwayRails)
+      if (libraryBranches) world.remove(libraryBranches)
+      if (libraryBranchRails) world.remove(libraryBranchRails)
       shaftGeometries.forEach((geometry) => geometry.dispose())
       shaftMaterials.forEach((material) => material.dispose())
 
