@@ -2,9 +2,9 @@ export const ARCHIVE_PATH_RENDER_BAYS = 72
 export const ARCHIVE_WALKWAY_HALF_WIDTH = 4.1
 export const ARCHIVE_WALKWAY_Y_OFFSET = -2.08
 
-export const ARCHIVE_BAY_SPACING = 8.4
-const ARCHIVE_LANE_MIN = 7.0
-const ARCHIVE_LANE_VARIATION = 1.15
+export const ARCHIVE_BAY_SPACING = 9.2
+const ARCHIVE_LANE_MIN = 8.15
+const ARCHIVE_LANE_VARIATION = .9
 
 export type ArchiveDistrict = {
   id: string
@@ -160,7 +160,7 @@ export function archiveShelfPlacement(
     ARCHIVE_LANE_MIN +
     seededUnit(seed, 11) * ARCHIVE_LANE_VARIATION +
     (options.laneBias ?? 0)
-  const lateralJitter = (seededUnit(seed, 13) - .5) * .55
+  const lateralJitter = (seededUnit(seed, 13) - .5) * .34
   const distance = Math.max(5.45, laneDistance + lateralJitter)
 
   const world: [number, number, number] = [
@@ -190,4 +190,106 @@ export function archiveShelfPlacement(
     pathBay: fractionalBay,
     districtId: nearestArchiveDistrict(fractionalBay).id,
   }
+}
+
+
+const ARCHIVE_SHELF_MIN_CENTER_DISTANCE = 6.25
+const ARCHIVE_SHELF_CLEARANCE_STEP_BAYS = .14
+const ARCHIVE_SHELF_MAX_CLEARANCE_STEPS = 48
+
+function wrapAngle(angle: number) {
+  return Math.atan2(Math.sin(angle), Math.cos(angle))
+}
+
+function moveArchivePlacementToBay(
+  placement: ArchiveShelfPlacement,
+  nextBay: number,
+): ArchiveShelfPlacement {
+  const oldCenter = archivePathPoint(placement.pathBay)
+  const oldFrame = archivePathFrame(placement.pathBay)
+  const offsetX = placement.world[0] - oldCenter[0]
+  const offsetZ = placement.world[2] - oldCenter[2]
+  const signedLaneDistance =
+    offsetX * oldFrame.normalX +
+    offsetZ * oldFrame.normalZ
+  const heightOffset = placement.world[1] - oldCenter[1]
+
+  const oldBaseYaw =
+    Math.atan2(
+      oldCenter[0] - placement.world[0],
+      oldCenter[2] - placement.world[2],
+    ) + Math.PI
+  const yawOffset = wrapAngle(placement.yaw - oldBaseYaw)
+
+  const nextCenter = archivePathPoint(nextBay)
+  const nextFrame = archivePathFrame(nextBay)
+  const world: [number, number, number] = [
+    nextCenter[0] +
+      nextFrame.normalX * signedLaneDistance,
+    nextCenter[1] + heightOffset,
+    nextCenter[2] +
+      nextFrame.normalZ * signedLaneDistance,
+  ]
+
+  const nextBaseYaw =
+    Math.atan2(
+      nextCenter[0] - world[0],
+      nextCenter[2] - world[2],
+    ) + Math.PI
+
+  return {
+    world,
+    yaw: nextBaseYaw + yawOffset,
+    pathBay: nextBay,
+    districtId: nearestArchiveDistrict(nextBay).id,
+  }
+}
+
+/**
+ * Enforce real world-space breathing room between shelf footprints.
+ *
+ * Layout formulas can produce perfectly valid anchor spacing while rotated
+ * shelf bodies still look crowded. This resolver keeps earlier shelf
+ * placements stable and only nudges later shelves forward along the fixed
+ * archive path until their centers have enough clearance.
+ */
+export function resolveArchiveShelfClearance(
+  placements: ArchiveShelfPlacement[],
+): ArchiveShelfPlacement[] {
+  const resolved: ArchiveShelfPlacement[] = []
+
+  placements.forEach((placement) => {
+    let candidate = placement
+
+    for (
+      let attempt = 0;
+      attempt < ARCHIVE_SHELF_MAX_CLEARANCE_STEPS;
+      attempt += 1
+    ) {
+      const overlaps = resolved.some((other) => {
+        const dx = candidate.world[0] - other.world[0]
+        const dz = candidate.world[2] - other.world[2]
+        const horizontalDistance = Math.hypot(dx, dz)
+        const verticalDistance = Math.abs(
+          candidate.world[1] - other.world[1],
+        )
+
+        return (
+          verticalDistance < 3.7 &&
+          horizontalDistance < ARCHIVE_SHELF_MIN_CENTER_DISTANCE
+        )
+      })
+
+      if (!overlaps) break
+
+      candidate = moveArchivePlacementToBay(
+        candidate,
+        candidate.pathBay + ARCHIVE_SHELF_CLEARANCE_STEP_BAYS,
+      )
+    }
+
+    resolved.push(candidate)
+  })
+
+  return resolved
 }
