@@ -1390,6 +1390,9 @@ export default function DreamWorld3D({
     let diveMusic: DreamMusic | null = null
     let diveMusicStarted = false
     let diveMusicAnalyser: THREE.AudioAnalyser | null = null
+    let portalLeakAudio: SpatialDreamAudio | null = null
+    let portalLeakDreamId: string | null = null
+    let portalLeakStarted = false
     let portalPreviewDive: DreamDive | null = null
     let portalSceneTransition: PortalSceneTransition | null = null
     let diveMode:
@@ -1500,6 +1503,69 @@ export default function DreamWorld3D({
       )[0] ?? 'place'
     }
 
+    function releasePortalLeak() {
+      if (portalLeakAudio && activeDive) {
+        activeDive.scene.remove(portalLeakAudio.audio)
+      }
+      portalLeakAudio?.dispose()
+      portalLeakAudio = null
+      portalLeakDreamId = null
+      portalLeakStarted = false
+    }
+
+    function ensurePortalLeak(
+      dreamId: string,
+      focus?: {x: number; y: number; z: number},
+    ) {
+      if (!activeDive) return
+      if (portalLeakDreamId === dreamId && portalLeakAudio) {
+        if (focus) {
+          portalLeakAudio.audio.position.set(
+            focus.x,
+            focus.y,
+            focus.z,
+          )
+        }
+        return
+      }
+
+      releasePortalLeak()
+
+      const dream = dreamsRef.current.find(
+        (candidate) => candidate._id === dreamId,
+      )
+      if (!dream) return
+
+      const recurrence = dreamRecurrence(dream, dreamsRef.current)
+      const profile = createDreamProfile(dream, recurrence)
+      portalLeakAudio = createSpatialDreamAudio(
+        listener,
+        categoryForDream(dream),
+        hashString(`portal-leak:${dream._id}`),
+        {
+          mood: profile.mood,
+          lucid: profile.lucid,
+          recurrence: profile.recurrence,
+          mode: 'cluster',
+        },
+      )
+      portalLeakDreamId = dream._id
+      portalLeakAudio.setFocus(.22)
+      portalLeakAudio.audio.position.set(
+        focus?.x ?? 0,
+        focus?.y ?? 1.3,
+        focus?.z ?? -5,
+      )
+      activeDive.scene.add(portalLeakAudio.audio)
+
+      if (soundEnabledRef.current) {
+        portalLeakStarted = true
+        void portalLeakAudio.ensurePlaying().catch(() => {
+          portalLeakStarted = false
+        })
+      }
+    }
+
     function disposeDive(options: {
       restoreListener?: boolean
       clearMode?: boolean
@@ -1519,6 +1585,11 @@ export default function DreamWorld3D({
       diveMusic = null
       diveMusicStarted = false
       diveMusicAnalyser = null
+
+      portalLeakAudio?.dispose()
+      portalLeakAudio = null
+      portalLeakDreamId = null
+      portalLeakStarted = false
 
       portalPreviewDive?.dispose()
       portalPreviewDive = null
@@ -1685,6 +1756,8 @@ export default function DreamWorld3D({
       )
       if (!destination) return
 
+      releasePortalLeak()
+
       portalPreviewDive?.dispose()
       portalPreviewDive = null
       portalSceneTransition?.dispose()
@@ -1841,6 +1914,34 @@ export default function DreamWorld3D({
           diveMode === 'inside'
             ? activeDive?.pick(pointer.x, pointer.y)
             : null
+
+        if (interaction?.dreamId) {
+          ensurePortalLeak(interaction.dreamId, interaction.focus)
+          portalLeakAudio?.setFocus(.28)
+
+          if (
+            portalLeakAudio &&
+            soundEnabledRef.current &&
+            !portalLeakStarted
+          ) {
+            portalLeakStarted = true
+            void portalLeakAudio.ensurePlaying().catch(() => {
+              portalLeakStarted = false
+            })
+          } else if (
+            portalLeakAudio &&
+            !soundEnabledRef.current &&
+            portalLeakStarted
+          ) {
+            if (portalLeakAudio.audio.isPlaying) {
+              portalLeakAudio.audio.pause()
+            }
+            portalLeakStarted = false
+          }
+        } else {
+          releasePortalLeak()
+        }
+
         renderer.domElement.style.cursor = interaction ? 'pointer' : 'crosshair'
         return
       }
@@ -1883,10 +1984,6 @@ export default function DreamWorld3D({
           const node = pickCenterNode()
           if (node) onNodeSelectRef.current(node)
         }
-        return
-      }
-
-      if (flightModeRef.current && diveMode === 'none') {
         return
       }
 
@@ -1962,6 +2059,7 @@ export default function DreamWorld3D({
       }
       pointerDown = null
       dragging = false
+      releasePortalLeak()
       if (hoveredId !== null) {
         hoveredId = null
         onNodeHoverRef.current(null)
