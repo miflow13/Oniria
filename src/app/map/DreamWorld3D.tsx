@@ -749,6 +749,24 @@ export default function DreamWorld3D({
     }
 
     const nodeDataById = new Map(nodeRef.current.map((node) => [node._id, node]))
+    const newestDreamTime = Math.max(
+      ...dreamsRef.current.map((dream) => new Date(dream.date).getTime()),
+      Date.now(),
+    )
+    const nodeMemoryAge = new Map(
+      nodeRef.current.map((node) => {
+        const times = dreamsRef.current
+          .filter((dream) => node.dreamIds.includes(dream._id))
+          .map((dream) => new Date(dream.date).getTime())
+        const averageTime =
+          times.length > 0
+            ? times.reduce((sum, value) => sum + value, 0) / times.length
+            : newestDreamTime
+        const ageDays = Math.max(0, (newestDreamTime - averageTime) / 86_400_000)
+        const normalizedAge = Math.min(1, Math.log2(ageDays + 1) / 7)
+        return [node._id, normalizedAge] as const
+      }),
+    )
     const introWakeOrder = new Map(
       [...nodeRef.current]
         .sort(
@@ -1913,7 +1931,11 @@ export default function DreamWorld3D({
         if (!visual) continue
 
         const target = worldPosition(node, positionsRef.current)
-        target.z = visual.z + Math.sin(elapsed * .21 + visual.phase) * .22
+        const memoryAge = nodeMemoryAge.get(node._id) ?? 0
+        target.z =
+          visual.z -
+          memoryAge * (node.frequency <= 1 ? 1.35 : .48) +
+          Math.sin(elapsed * .21 + visual.phase) * .22
         target.y +=
           Math.sin(elapsed * .37 + visual.phase) * .08 +
           Math.cos(elapsed * .105) * .055
