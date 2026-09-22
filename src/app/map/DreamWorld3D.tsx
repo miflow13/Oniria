@@ -59,9 +59,11 @@ import {
   ARCHIVE_PATH_RENDER_BAYS,
   ARCHIVE_WALKWAY_HALF_WIDTH,
   ARCHIVE_WALKWAY_Y_OFFSET,
+  archiveBayFromWorldZ,
   archiveDistrictInfluence,
   archivePathFrame,
   archivePathPoint,
+  archiveWalkwayHalfWidthAtBay,
 } from './libraryLayout'
 
 export type DreamWorldNode = {
@@ -106,6 +108,8 @@ type ProjectionPoint = {
   visible: boolean
 }
 
+export type LibraryMovementMode = 'walk' | 'fly'
+
 type Props = {
   nodes: DreamWorldNode[]
   edges: DreamWorldEdge[]
@@ -126,6 +130,7 @@ type Props = {
   diveTimelineProgress: number
   observatoryMode: boolean
   flightMode: boolean
+  libraryMovementMode?: LibraryMovementMode
   inputBlocked?: boolean
   onZoomChange: (zoom: number) => void
   onPanChange: (pan: Pan) => void
@@ -141,6 +146,9 @@ type Props = {
   onDiveStateChange: (active: boolean, title?: string) => void
   onDiveDreamChange: (dreamId: string, title: string, depth: number) => void
   onFlightModeChange: (active: boolean) => void
+  onLibraryMovementModeChange?: (
+    mode: LibraryMovementMode,
+  ) => void
 }
 
 type NodeVisual = {
@@ -495,6 +503,7 @@ export default function DreamWorld3D({
   diveTimelineProgress,
   observatoryMode,
   flightMode,
+  libraryMovementMode = 'walk',
   inputBlocked = false,
   onZoomChange,
   onPanChange,
@@ -507,6 +516,7 @@ export default function DreamWorld3D({
   onDiveStateChange,
   onDiveDreamChange,
   onFlightModeChange,
+  onLibraryMovementModeChange,
 }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const nodeRef = useRef(nodes)
@@ -535,6 +545,8 @@ export default function DreamWorld3D({
   const diveTimelineProgressRef = useRef(diveTimelineProgress)
   const observatoryModeRef = useRef(observatoryMode)
   const flightModeRef = useRef(flightMode)
+  const libraryMovementModeRef =
+    useRef<LibraryMovementMode>(libraryMovementMode)
   const inputBlockedRef = useRef(inputBlocked)
   const libraryFlightStateRef = useRef<{
     position: [number, number, number]
@@ -543,6 +555,9 @@ export default function DreamWorld3D({
   const onDiveStateChangeRef = useRef(onDiveStateChange)
   const onDiveDreamChangeRef = useRef(onDiveDreamChange)
   const onFlightModeChangeRef = useRef(onFlightModeChange)
+  const onLibraryMovementModeChangeRef = useRef(
+    onLibraryMovementModeChange,
+  )
 
   nodeRef.current = nodes
   positionsRef.current = positions
@@ -570,10 +585,13 @@ export default function DreamWorld3D({
   diveTimelineProgressRef.current = diveTimelineProgress
   observatoryModeRef.current = observatoryMode
   flightModeRef.current = flightMode
+  libraryMovementModeRef.current = libraryMovementMode
   inputBlockedRef.current = inputBlocked
   onDiveStateChangeRef.current = onDiveStateChange
   onDiveDreamChangeRef.current = onDiveDreamChange
   onFlightModeChangeRef.current = onFlightModeChange
+  onLibraryMovementModeChangeRef.current =
+    onLibraryMovementModeChange
 
   const graphKey = useMemo(
     () =>
@@ -1955,13 +1973,8 @@ export default function DreamWorld3D({
         side.set(-tangent.z, 0, tangent.x)
 
         const pathY = point.y + ARCHIVE_WALKWAY_Y_OFFSET
-        const districtInfluence = archiveDistrictInfluence(bay)
-        const welcomeInfluence =
-          1 - THREE.MathUtils.smoothstep(bay, .45, 2.25)
         const localHalfWidth =
-          ARCHIVE_WALKWAY_HALF_WIDTH +
-          districtInfluence * 2.4 +
-          welcomeInfluence * 3.15
+          archiveWalkwayHalfWidthAtBay(bay)
         const left = point
           .clone()
           .addScaledVector(side, localHalfWidth)
@@ -2780,6 +2793,8 @@ export default function DreamWorld3D({
     const flightCollisionDelta = new THREE.Vector3()
     let flightYaw = 0
     let flightPitch = 0
+    let libraryWalkBobPhase = 0
+    let libraryWalkBobStrength = 0
     let flightInitialized = false
     let previousFlightMode = false
     let flightNearestId: string | null = null
@@ -3701,6 +3716,21 @@ export default function DreamWorld3D({
         return
       }
 
+      if (libraryMode && event.code === 'KeyG') {
+        event.preventDefault()
+        const nextMode: LibraryMovementMode =
+          libraryMovementModeRef.current === 'walk'
+            ? 'fly'
+            : 'walk'
+        libraryMovementModeRef.current = nextMode
+        onLibraryMovementModeChangeRef.current?.(nextMode)
+        flightRoute = null
+        flightVelocity.set(0, 0, 0)
+        libraryWalkBobStrength = 0
+        flightKeys.clear()
+        return
+      }
+
       flightKeys.add(event.code)
 
       if (
@@ -3720,6 +3750,12 @@ export default function DreamWorld3D({
 
       if (event.code === 'KeyR') {
         event.preventDefault()
+        if (
+          libraryMode &&
+          libraryMovementModeRef.current === 'walk'
+        ) {
+          return
+        }
         const sourceNode = nearestFlightNode(12)
         if (sourceNode) {
           const strongest = edges
@@ -4934,11 +4970,24 @@ export default function DreamWorld3D({
           }
         }
 
-        flightForward.set(
-          -Math.sin(flightYaw) * Math.cos(flightPitch),
-          Math.sin(flightPitch),
-          -Math.cos(flightYaw) * Math.cos(flightPitch),
-        ).normalize()
+        const libraryWalking =
+          libraryMode &&
+          libraryMovementModeRef.current === 'walk'
+
+        if (libraryWalking) {
+          flightForward.set(
+            -Math.sin(flightYaw),
+            0,
+            -Math.cos(flightYaw),
+          ).normalize()
+        } else {
+          flightForward.set(
+            -Math.sin(flightYaw) * Math.cos(flightPitch),
+            Math.sin(flightPitch),
+            -Math.cos(flightYaw) * Math.cos(flightPitch),
+          ).normalize()
+        }
+
         flightRight.crossVectors(flightForward, flightUp).normalize()
         flightMove.set(0, 0, 0)
 
@@ -4946,13 +4995,16 @@ export default function DreamWorld3D({
         if (flightKeys.has('KeyS')) flightMove.sub(flightForward)
         if (flightKeys.has('KeyD')) flightMove.add(flightRight)
         if (flightKeys.has('KeyA')) flightMove.sub(flightRight)
-        if (flightKeys.has('Space')) flightMove.add(flightUp)
-        if (
-          flightKeys.has('ControlLeft') ||
-          flightKeys.has('ControlRight') ||
-          flightKeys.has('KeyQ')
-        ) {
-          flightMove.sub(flightUp)
+
+        if (!libraryWalking) {
+          if (flightKeys.has('Space')) flightMove.add(flightUp)
+          if (
+            flightKeys.has('ControlLeft') ||
+            flightKeys.has('ControlRight') ||
+            flightKeys.has('KeyQ')
+          ) {
+            flightMove.sub(flightUp)
+          }
         }
 
         if (flightMove.lengthSq() > 0) flightMove.normalize()
@@ -4960,9 +5012,17 @@ export default function DreamWorld3D({
         const boosted =
           flightKeys.has('ShiftLeft') ||
           flightKeys.has('ShiftRight')
-        const flightSpeed = boosted ? 7.2 : 3.15
-        const desiredVelocity = flightMove.multiplyScalar(flightSpeed)
-        const damping = 1 - Math.exp(-delta * 7.5)
+        const movementSpeed = libraryWalking
+          ? boosted
+            ? 4.25
+            : 2.55
+          : boosted
+            ? 7.2
+            : 3.15
+        const desiredVelocity =
+          flightMove.multiplyScalar(movementSpeed)
+        const damping =
+          1 - Math.exp(-delta * (libraryWalking ? 10.5 : 7.5))
 
         if (!routeActive) {
           flightVelocity.lerp(desiredVelocity, damping)
@@ -4982,8 +5042,80 @@ export default function DreamWorld3D({
             -12,
             14,
           )
+        } else if (libraryWalking) {
+          const startZ = archivePathPoint(0)[2]
+          const endZ =
+            archivePathPoint(ARCHIVE_PATH_RENDER_BAYS)[2]
+          const targetZ = THREE.MathUtils.clamp(
+            flightPosition.z,
+            endZ,
+            startZ,
+          )
+          const settle =
+            1 - Math.exp(-delta * 8.5)
+          flightPosition.z = THREE.MathUtils.lerp(
+            flightPosition.z,
+            targetZ,
+            settle,
+          )
+
+          const pathBay = archiveBayFromWorldZ(
+            flightPosition.z,
+          )
+          const pathPoint = new THREE.Vector3(
+            ...archivePathPoint(pathBay),
+          )
+          const frame = archivePathFrame(pathBay)
+          const normal = new THREE.Vector3(
+            frame.normalX,
+            0,
+            frame.normalZ,
+          )
+          const relative = flightPosition
+            .clone()
+            .sub(pathPoint)
+          const lateral = relative.dot(normal)
+          const maxLateral = Math.max(
+            1.25,
+            archiveWalkwayHalfWidthAtBay(pathBay) - .48,
+          )
+          const clampedLateral = THREE.MathUtils.clamp(
+            lateral,
+            -maxLateral,
+            maxLateral,
+          )
+
+          if (Math.abs(clampedLateral - lateral) > .0001) {
+            flightPosition.addScaledVector(
+              normal,
+              clampedLateral - lateral,
+            )
+            const outwardVelocity =
+              flightVelocity.dot(normal)
+            if (
+              (lateral > maxLateral && outwardVelocity > 0) ||
+              (lateral < -maxLateral && outwardVelocity < 0)
+            ) {
+              flightVelocity.addScaledVector(
+                normal,
+                -outwardVelocity * .86,
+              )
+            }
+          }
+
+          const eyeHeight = 1.64
+          const groundY =
+            pathPoint.y +
+            ARCHIVE_WALKWAY_Y_OFFSET +
+            eyeHeight
+          flightPosition.y = THREE.MathUtils.lerp(
+            flightPosition.y,
+            groundY,
+            1 - Math.exp(-delta * 11),
+          )
+          flightVelocity.y = 0
         } else {
-          // The DEV catalogue extends as the user explores, so library flight
+          // The DEV catalogue extends as the user explores, so free flight
           // must not inherit the dream-map's finite spherical boundary.
           flightPosition.y = THREE.MathUtils.clamp(
             flightPosition.y,
@@ -5015,21 +5147,66 @@ export default function DreamWorld3D({
 
         if (!routeActive) {
           camera.position.copy(flightPosition)
+
+          if (libraryWalking) {
+            const planarSpeed = Math.hypot(
+              flightVelocity.x,
+              flightVelocity.z,
+            )
+            const movingStrength = THREE.MathUtils.clamp(
+              planarSpeed / Math.max(.001, movementSpeed),
+              0,
+              1,
+            )
+            libraryWalkBobStrength +=
+              (movingStrength - libraryWalkBobStrength) *
+              (1 - Math.exp(-delta * 9))
+
+            if (libraryWalkBobStrength > .001) {
+              libraryWalkBobPhase +=
+                delta *
+                (boosted ? 10.2 : 7.7) *
+                (.45 + libraryWalkBobStrength * .55)
+            }
+
+            const bobY =
+              Math.sin(libraryWalkBobPhase * 2) *
+              .032 *
+              libraryWalkBobStrength
+            const sway =
+              Math.sin(libraryWalkBobPhase) *
+              .016 *
+              libraryWalkBobStrength
+            camera.position.y += bobY
+            camera.position.addScaledVector(flightRight, sway)
+          } else {
+            libraryWalkBobStrength *=
+              Math.exp(-delta * 10)
+          }
+
           camera.rotation.order = 'YXZ'
           camera.rotation.y = flightYaw
           camera.rotation.x = flightPitch
         }
+
         camera.rotation.z = THREE.MathUtils.lerp(
           camera.rotation.z,
-          -flightVelocity.dot(flightRight) * .008,
+          -flightVelocity.dot(flightRight) *
+            (libraryWalking ? .0025 : .008),
           .08,
         )
 
         const speedRatio = routeActive
           ? .72 + Math.sin(routeProgress * Math.PI) * .28
-          : Math.min(1, flightVelocity.length() / 7.2)
+          : Math.min(
+              1,
+              flightVelocity.length() /
+                (libraryWalking ? 4.25 : 7.2),
+            )
+        const fovBoost =
+          libraryWalking ? speedRatio * 2.2 : speedRatio * 9
         camera.fov +=
-          ((43 + speedRatio * 9) - camera.fov) * .065
+          ((43 + fovBoost) - camera.fov) * .065
         camera.updateProjectionMatrix()
 
         const nearest = nearestFlightNode(10)
