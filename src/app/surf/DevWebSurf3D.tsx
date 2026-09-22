@@ -1085,6 +1085,25 @@ export default function DevWebSurf3D({
         baseY,
       )
 
+      // Front and rear bridges connect the two gallery decks while keeping
+      // the long center atrium open. The lift arrives on the front bridge.
+      addFloor(
+        0,
+        9.2,
+        18,
+        4.2,
+        stackFloorMaterial,
+        baseY,
+      )
+      addFloor(
+        0,
+        -41.6,
+        18,
+        4.6,
+        stackFloorMaterial,
+        baseY,
+      )
+
       // Outer guard rails.
       addWall(-8.95, -15, .12, 58, 1.04, concrete, baseY)
       addWall(8.95, -15, .12, 58, 1.04, concrete, baseY)
