@@ -16,6 +16,14 @@ type FloorRequest = {
   nonce: number
 } | null
 
+export type SurfDebugMetrics = {
+  fps: number
+  drawCalls: number
+  triangles: number
+  textures: number
+  geometries: number
+}
+
 type Props = {
   nodes: SurfNode[]
   edges: SurfEdge[]
@@ -31,6 +39,9 @@ type Props = {
   currentFloor: number
   floorRequest: FloorRequest
   onFloorChange: (floor: number) => void
+  uiOverlayOpen: boolean
+  debugEnabled: boolean
+  onDebugMetrics: (metrics: SurfDebugMetrics) => void
 }
 
 type Visual = {
@@ -514,6 +525,9 @@ export default function DevWebSurf3D({
   currentFloor,
   floorRequest,
   onFloorChange,
+  uiOverlayOpen,
+  debugEnabled,
+  onDebugMetrics,
 }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const selectedRef = useRef(selectedId)
@@ -528,6 +542,9 @@ export default function DevWebSurf3D({
   const currentFloorRef = useRef(currentFloor)
   const floorRequestRef = useRef(floorRequest)
   const floorChangeRef = useRef(onFloorChange)
+  const uiOverlayRef = useRef(uiOverlayOpen)
+  const debugEnabledRef = useRef(debugEnabled)
+  const debugMetricsRef = useRef(onDebugMetrics)
 
   selectedRef.current = selectedId
   routeTargetRef.current = routeTargetId
@@ -541,6 +558,9 @@ export default function DevWebSurf3D({
   currentFloorRef.current = currentFloor
   floorRequestRef.current = floorRequest
   floorChangeRef.current = onFloorChange
+  uiOverlayRef.current = uiOverlayOpen
+  debugEnabledRef.current = debugEnabled
+  debugMetricsRef.current = onDebugMetrics
 
   useEffect(() => {
     const host = hostRef.current
@@ -3713,6 +3733,8 @@ export default function DevWebSurf3D({
     let lastFloorNonce = floorRequestRef.current?.nonce ?? -1
     let currentFloorIndex = currentFloorRef.current
     let lastLodUpdate = -1
+    let debugFrameCount = 0
+    let debugWindowStartedAt = performance.now()
 
     function updateArticleLods(now: number) {
       if (now - lastLodUpdate < .22) return
@@ -4345,8 +4367,9 @@ export default function DevWebSurf3D({
             .1
         }
 
+        const overlayFade = uiOverlayRef.current ? .12 : 1
         const labelTarget =
-          selected || hovered || routed
+          (selected || hovered || routed
             ? 1
             : id.startsWith('section:')
               ? .22
@@ -4358,7 +4381,7 @@ export default function DevWebSurf3D({
                     : unrelatedShelf
                       ? .025
                       : .1
-                  : .7
+                  : .7) * overlayFade
         visual.labelMaterial.opacity +=
           (labelTarget - visual.labelMaterial.opacity) *
           (1 - Math.exp(-delta * 9))
@@ -4823,6 +4846,25 @@ export default function DevWebSurf3D({
       }
 
       renderer.render(scene, camera)
+
+      if (debugEnabledRef.current) {
+        debugFrameCount += 1
+        const debugElapsed = nowMs - debugWindowStartedAt
+        if (debugElapsed >= 750) {
+          debugMetricsRef.current({
+            fps: (debugFrameCount * 1000) / debugElapsed,
+            drawCalls: renderer.info.render.calls,
+            triangles: renderer.info.render.triangles,
+            textures: renderer.info.memory.textures,
+            geometries: renderer.info.memory.geometries,
+          })
+          debugFrameCount = 0
+          debugWindowStartedAt = nowMs
+        }
+      } else {
+        debugFrameCount = 0
+        debugWindowStartedAt = nowMs
+      }
     }
 
     frame = requestAnimationFrame(animate)
