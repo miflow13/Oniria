@@ -227,13 +227,11 @@ function createBookTitleTexture(
 }
 
 function makeCurve(a: THREE.Vector3, b: THREE.Vector3, lift = .2) {
-  const middle = a.clone().lerp(b, .5)
-  middle.y = .08 + lift
-  return new THREE.QuadraticBezierCurve3(
-    new THREE.Vector3(a.x, .09, a.z),
-    middle,
-    new THREE.Vector3(b.x, .09, b.z),
-  )
+  const start = a.clone()
+  const end = b.clone()
+  const middle = start.clone().lerp(end, .5)
+  middle.y = (start.y + end.y) / 2 + lift
+  return new THREE.QuadraticBezierCurve3(start, middle, end)
 }
 
 function makeArchitecturalGuide(
