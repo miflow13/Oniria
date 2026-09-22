@@ -11,6 +11,11 @@ type TravelRequest = {
   inspectOnArrival: boolean
 } | null
 
+type FloorRequest = {
+  floor: number
+  nonce: number
+} | null
+
 type Props = {
   nodes: SurfNode[]
   edges: SurfEdge[]
@@ -23,6 +28,9 @@ type Props = {
   onHover: (node: SurfNode | null) => void
   onPointerLockChange: (locked: boolean) => void
   onZoneChange: (section: LibrarySection) => void
+  currentFloor: number
+  floorRequest: FloorRequest
+  onFloorChange: (floor: number) => void
 }
 
 type Visual = {
@@ -42,6 +50,10 @@ type Visual = {
   baseScale: number
   phase: number
 }
+
+const LIBRARY_FLOOR_COUNT = 4
+const LIBRARY_FLOOR_HEIGHT = 5.2
+const CAMERA_HEIGHT = 1.62
 
 const SECTION_CENTERS: Record<LibrarySection, THREE.Vector3> = {
   atrium: new THREE.Vector3(0, 1.6, 8),
@@ -297,6 +309,9 @@ export default function DevWebSurf3D({
   onHover,
   onPointerLockChange,
   onZoneChange,
+  currentFloor,
+  floorRequest,
+  onFloorChange,
 }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const selectedRef = useRef(selectedId)
@@ -308,6 +323,9 @@ export default function DevWebSurf3D({
   const hoverRef = useRef(onHover)
   const lockRef = useRef(onPointerLockChange)
   const zoneRef = useRef(onZoneChange)
+  const currentFloorRef = useRef(currentFloor)
+  const floorRequestRef = useRef(floorRequest)
+  const floorChangeRef = useRef(onFloorChange)
 
   selectedRef.current = selectedId
   routeTargetRef.current = routeTargetId
@@ -318,6 +336,9 @@ export default function DevWebSurf3D({
   hoverRef.current = onHover
   lockRef.current = onPointerLockChange
   zoneRef.current = onZoneChange
+  currentFloorRef.current = currentFloor
+  floorRequestRef.current = floorRequest
+  floorChangeRef.current = onFloorChange
 
   useEffect(() => {
     const host = hostRef.current
