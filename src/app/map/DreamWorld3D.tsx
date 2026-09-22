@@ -4108,6 +4108,16 @@ export default function DreamWorld3D({
         holdNodeId = null
       }
 
+      // First-person interactions are completed on pointerdown using the
+      // center-screen ray. Do not run the regular pointerup picker afterward:
+      // it can hit the parent shelf, trigger onNodeSelect, and exit pointer
+      // lock immediately after a book was picked up.
+      if (flightModeRef.current && diveMode === 'none') {
+        pointerDown = null
+        dragging = false
+        return
+      }
+
       if (diveMode !== 'none') {
         normalizedPointer(event)
         if (diveMode === 'inside') {
