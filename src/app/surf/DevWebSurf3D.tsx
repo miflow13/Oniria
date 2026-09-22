@@ -2765,61 +2765,121 @@ export default function DevWebSurf3D({
       sectionBeacons.push({section, materials})
     }
 
-    function addWayfindingPath(
-      section: LibrarySection,
-      x: number,
-      z: number,
-      width: number,
-      depth: number,
-    ) {
-      const geometry = new THREE.BoxGeometry(width, .012, depth)
-      architecturalGeometries.push(geometry)
-      const material = new THREE.MeshBasicMaterial({
-        color: SECTION_ACCENTS[section],
-        transparent: true,
-        opacity: .026,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        toneMapped: false,
-      })
-      architecturalMaterials.push(material)
-      const mesh = new THREE.Mesh(geometry, material)
-      mesh.position.set(x, .048, z)
-      scene.add(mesh)
-      wayfindingPaths.push({section, material})
-    }
+    // Simplified DEV Library: one readable deck, one shelf grid, no building
+    // superstructure. Browsing complexity lives in the content/UI; visual
+    // richness lives in the surrounding dream-space environment.
+    const scanGates: Array<{
+      mesh: THREE.Mesh
+      material: THREE.MeshBasicMaterial
+      phase: number
+    }> = []
+    const balconyUndersideStripMaterials: THREE.MeshBasicMaterial[] = []
 
-    addWayfindingPath('featured', 0, .15, .07, 10.4)
-    addWayfindingPath('latest', -4.15, -5.2, 8.25, .07)
-    addWayfindingPath('topics', 4.15, -5.2, 8.25, .07)
-    addWayfindingPath('search', -8.35, -13.15, .07, 15.9)
-    addWayfindingPath('creators', 8.35, -13.15, .07, 15.9)
-    addWayfindingPath('archive', 0, -20, .07, 28.8)
+    // Keep an inert cabin object for the legacy ground-level travel state
+    // machine. No lift or vertical architecture is rendered.
+    const liftCabin = new THREE.Group()
 
-    // Netspace underlay: the library still reads as DEV, but the floor
-    // behaves like a data plane rather than a conventional building.
-    const netGrid = new THREE.GridHelper(82, 82, 0x3b49df, 0x203640)
-    netGrid.position.set(0, .005, -16)
-    const netGridMaterials = Array.isArray(netGrid.material)
-      ? netGrid.material
-      : [netGrid.material]
-    netGridMaterials.forEach((material) => {
-      material.transparent = true
-      material.opacity = .052
-      material.blending = THREE.NormalBlending
-      material.depthWrite = false
-      architecturalMaterials.push(material)
+    // One single walkable island. All real content lives on this plane.
+    const libraryDeckCenterZ = -17
+    const libraryDeckWidth = 36
+    const libraryDeckDepth = 62
+    addFloor(
+      0,
+      libraryDeckCenterZ,
+      libraryDeckWidth,
+      libraryDeckDepth,
+      floorMaterial,
+      0,
+    )
+
+    // A restrained edge lip makes the floating island readable against space
+    // without reintroducing walls, rails, portals, or layered sub-decks.
+    const platformEdgeMaterial = new THREE.MeshBasicMaterial({
+      color: 0x7186ff,
+      transparent: true,
+      opacity: .13,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      toneMapped: false,
     })
-    netGrid.visible = true
-    scene.add(netGrid)
+    architecturalMaterials.push(platformEdgeMaterial)
 
-    const rainCount = 160
+    const longEdgeGeometry = new THREE.BoxGeometry(
+      .08,
+      .055,
+      libraryDeckDepth,
+    )
+    const shortEdgeGeometry = new THREE.BoxGeometry(
+      libraryDeckWidth,
+      .055,
+      .08,
+    )
+    architecturalGeometries.push(
+      longEdgeGeometry,
+      shortEdgeGeometry,
+    )
+
+    ;[-libraryDeckWidth / 2, libraryDeckWidth / 2].forEach((x) => {
+      const edge = new THREE.Mesh(
+        longEdgeGeometry,
+        platformEdgeMaterial,
+      )
+      edge.position.set(x, .075, libraryDeckCenterZ)
+      scene.add(edge)
+    })
+    ;[
+      libraryDeckCenterZ - libraryDeckDepth / 2,
+      libraryDeckCenterZ + libraryDeckDepth / 2,
+    ].forEach((z) => {
+      const edge = new THREE.Mesh(
+        shortEdgeGeometry,
+        platformEdgeMaterial,
+      )
+      edge.position.set(0, .075, z)
+      scene.add(edge)
+    })
+
+    // Invisible perimeter only: the visual edge stays open to space.
+    addBoundaryCollision(
+      -libraryDeckWidth / 2,
+      libraryDeckCenterZ,
+      .3,
+      libraryDeckDepth,
+      2.5,
+    )
+    addBoundaryCollision(
+      libraryDeckWidth / 2,
+      libraryDeckCenterZ,
+      .3,
+      libraryDeckDepth,
+      2.5,
+    )
+    addBoundaryCollision(
+      0,
+      libraryDeckCenterZ - libraryDeckDepth / 2,
+      libraryDeckWidth,
+      .3,
+      2.5,
+    )
+    addBoundaryCollision(
+      0,
+      libraryDeckCenterZ + libraryDeckDepth / 2,
+      libraryDeckWidth,
+      .3,
+      2.5,
+    )
+
+    // Dream-style near particles replace the old net grid / scan gates /
+    // architecture effects. They are visual only and deliberately sparse.
+    const rainCount = 140
     const rainPositions = new Float32Array(rainCount * 3)
     for (let index = 0; index < rainCount; index += 1) {
       const offset = index * 3
-      rainPositions[offset] = (Math.random() - .5) * 38
-      rainPositions[offset + 1] = Math.random() * 10
-      rainPositions[offset + 2] = 12 - Math.random() * 58
+      rainPositions[offset] = (Math.random() - .5) * 34
+      rainPositions[offset + 1] = .35 + Math.random() * 7.5
+      rainPositions[offset + 2] =
+        libraryDeckCenterZ +
+        (Math.random() - .5) * (libraryDeckDepth - 4)
     }
     const rainGeometry = new THREE.BufferGeometry()
     rainGeometry.setAttribute(
@@ -2827,706 +2887,19 @@ export default function DevWebSurf3D({
       new THREE.BufferAttribute(rainPositions, 3),
     )
     const rainMaterial = new THREE.PointsMaterial({
-      color: 0x53d3ff,
-      size: .021,
+      color: 0xd9eef3,
+      size: .032,
       transparent: true,
-      opacity: .07,
+      opacity: .15,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
+      fog: true,
     })
     const dataRain = new THREE.Points(rainGeometry, rainMaterial)
-    dataRain.visible = false
+    dataRain.name = 'dream-near-dust'
+    dataRain.visible = true
+    dataRain.renderOrder = 7
     scene.add(dataRain)
-
-    const scanGateGeometry = new THREE.PlaneGeometry(18, 5.4)
-    const scanGates: Array<{
-      mesh: THREE.Mesh
-      material: THREE.MeshBasicMaterial
-      phase: number
-    }> = []
-    ;[-3.5, -16.5, -30.5, -42].forEach((z, index) => {
-      const material = new THREE.MeshBasicMaterial({
-        color: index % 2 ? 0xae7bff : 0x53d3ff,
-        transparent: true,
-        opacity: .006,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-      })
-      const gate = new THREE.Mesh(scanGateGeometry, material)
-      gate.position.set(0, 2.45, z)
-      gate.visible = false
-      scene.add(gate)
-      scanGates.push({mesh: gate, material, phase: index * 1.7})
-      architecturalMaterials.push(material)
-    })
-    architecturalGeometries.push(scanGateGeometry)
-
-    addSectionFloorGlow('atrium', 0, 7, 4.2)
-    addSectionFloorGlow('featured', 0, -12.5, 5.4)
-    addSectionFloorGlow('latest', -13, -14, 4.8)
-    addSectionFloorGlow('topics', 13, -14, 4.8)
-    addSectionFloorGlow('creators', 13, -25.5, 4.4)
-    addSectionFloorGlow('search', -13, -25.5, 4.4)
-    addSectionFloorGlow('archive', 0, -39.5, 4.3)
-
-    addDoorwayBeacon('featured', 0, -5.4, 0)
-    addDoorwayBeacon('latest', -8.35, -5.2, Math.PI / 2)
-    addDoorwayBeacon('topics', 8.35, -5.2, Math.PI / 2)
-    addDoorwayBeacon('creators', 8.35, -21.1, Math.PI / 2)
-    addDoorwayBeacon('search', -8.35, -21.1, Math.PI / 2)
-    addDoorwayBeacon('archive', 0, -34.4, 0)
-
-    // Multi-level building shell. The playable library opens into a six-storey
-    // atrium while the archive continues far past the walkable boundary.
-    const buildingHeight = LIBRARY_FLOOR_COUNT * LIBRARY_FLOOR_HEIGHT
-    const archiveCenterZ = -31.5
-    const archiveDepth = 94
-
-    const balconyUndersideStripGeometry = new THREE.BoxGeometry(
-      .09,
-      .045,
-      88,
-    )
-    architecturalGeometries.push(balconyUndersideStripGeometry)
-    const balconyUndersideStripMaterials = FLOOR_ACCENTS.map(() => {
-      const material = new THREE.MeshBasicMaterial({
-        color: 0xe4e5e2,
-        transparent: true,
-        opacity: .18,
-        toneMapped: false,
-        depthWrite: false,
-      })
-      architecturalMaterials.push(material)
-      return material
-    })
-
-    function addLandmarkArch(
-      x: number,
-      z: number,
-      width: number,
-      height: number,
-      floorBase: number,
-      accent: number,
-    ) {
-      const columnGeometry = new THREE.BoxGeometry(.24, height, .36)
-      const beamGeometry = new THREE.BoxGeometry(width, .24, .36)
-      architecturalGeometries.push(columnGeometry, beamGeometry)
-      const frameMaterial = new THREE.MeshStandardMaterial({
-        color: 0x3a3d42,
-        emissive: accent,
-        emissiveIntensity: .025,
-        roughness: .72,
-        metalness: .12,
-      })
-      architecturalMaterials.push(frameMaterial)
-
-      ;[-width / 2, width / 2].forEach((offset) => {
-        const column = new THREE.Mesh(columnGeometry, frameMaterial)
-        column.position.set(x + offset, floorBase + height / 2, z)
-        column.castShadow = true
-        column.receiveShadow = true
-        scene.add(column)
-      })
-
-      const beam = new THREE.Mesh(beamGeometry, frameMaterial)
-      beam.position.set(x, floorBase + height - .12, z)
-      beam.castShadow = true
-      scene.add(beam)
-    }
-
-    // A recognisable portal makes the Deep Archive a destination rather than
-    // just another repeated shelf row.
-    addLandmarkArch(0, -34.4, 6.4, 3.65, 0, FLOOR_ACCENTS[5])
-
-    // Small project-signature easter egg: an unobtrusive green archive buddy
-    // tucked beside the restricted stacks for explorers who wander off-route.
-    const archiveBuddy = new THREE.Group()
-    archiveBuddy.position.set(-4.55, .28, -36.15)
-    archiveBuddy.name = 'archive-buddy'
-    archiveBuddy.userData.layoutObjectKey = archiveBuddy.name
-    archiveBuddy.userData.layoutLabel = 'Archive Buddy'
-
-    const buddyBodyGeometry = new THREE.SphereGeometry(.34, 16, 12)
-    const buddyEyeGeometry = new THREE.SphereGeometry(.035, 8, 6)
-    architecturalGeometries.push(buddyBodyGeometry, buddyEyeGeometry)
-
-    const buddyBodyMaterial = new THREE.MeshStandardMaterial({
-      color: 0x68d98a,
-      emissive: 0x1f5f35,
-      emissiveIntensity: .12,
-      roughness: .72,
-      metalness: .02,
-    })
-    const buddyEyeMaterial = new THREE.MeshStandardMaterial({
-      color: 0x090d0a,
-      roughness: .5,
-      metalness: .05,
-    })
-    architecturalMaterials.push(
-      buddyBodyMaterial,
-      buddyEyeMaterial,
-    )
-
-    const buddyBody = new THREE.Mesh(
-      buddyBodyGeometry,
-      buddyBodyMaterial,
-    )
-    buddyBody.scale.set(1.18, .82, 1)
-    buddyBody.castShadow = true
-    archiveBuddy.add(buddyBody)
-
-    ;[-.115, .115].forEach((x) => {
-      const eye = new THREE.Mesh(
-        buddyEyeGeometry,
-        buddyEyeMaterial,
-      )
-      eye.position.set(x, .045, .285)
-      archiveBuddy.add(eye)
-    })
-
-    const buddyPlaqueTexture = createTextTexture(
-      'MOCHI WAS HERE',
-      'quietly cataloging the weird stuff',
-      '#68d98a',
-      430,
-      120,
-    )
-    labelsToDispose.push(buddyPlaqueTexture)
-    const buddyPlaqueMaterial = new THREE.SpriteMaterial({
-      map: buddyPlaqueTexture,
-      transparent: true,
-      depthWrite: false,
-      toneMapped: false,
-      opacity: .72,
-    })
-    architecturalMaterials.push(buddyPlaqueMaterial)
-    const buddyPlaque = new THREE.Sprite(buddyPlaqueMaterial)
-    buddyPlaque.position.set(0, .9, 0)
-    buddyPlaque.scale.set(2.1, .58, 1)
-    archiveBuddy.add(buddyPlaque)
-
-    scene.add(archiveBuddy)
-
-    const restrictedCanvas = document.createElement('canvas')
-    restrictedCanvas.width = 640
-    restrictedCanvas.height = 300
-    const restrictedContext = restrictedCanvas.getContext('2d')
-    if (restrictedContext) {
-      restrictedContext.fillStyle = 'rgba(10,12,16,.76)'
-      restrictedContext.fillRect(0, 0, 640, 300)
-
-      for (let line = 0; line < 84; line += 1) {
-        const seed = Math.abs(Math.sin(line * 18.917) * 43758.5453)
-        const y = (seed % 1) * 300
-        const alpha = .018 + ((line % 7) / 7) * .04
-        restrictedContext.fillStyle =
-          'rgba(180,190,202,' + alpha + ')'
-        restrictedContext.fillRect(0, y, 640, line % 5 === 0 ? 2 : 1)
-      }
-
-      restrictedContext.textAlign = 'center'
-      restrictedContext.textBaseline = 'middle'
-      restrictedContext.fillStyle = '#c7ccd4'
-      restrictedContext.font = '700 64px system-ui, sans-serif'
-      restrictedContext.fillText('🔒', 320, 102)
-      restrictedContext.fillStyle = '#e4e7eb'
-      restrictedContext.font = '800 34px system-ui, sans-serif'
-      restrictedContext.fillText('RESTRICTED STACKS', 320, 172)
-      restrictedContext.fillStyle = '#8d9aad'
-      restrictedContext.font = '650 18px system-ui, sans-serif'
-      restrictedContext.fillText('DEEP ARCHIVE · AUTHORIZATION THRESHOLD', 320, 220)
-    }
-    const restrictedTexture = new THREE.CanvasTexture(restrictedCanvas)
-    restrictedTexture.colorSpace = THREE.SRGBColorSpace
-    restrictedTexture.minFilter = THREE.LinearFilter
-    restrictedTexture.magFilter = THREE.LinearFilter
-    labelsToDispose.push(restrictedTexture)
-    const restrictedMaterial = new THREE.MeshBasicMaterial({
-      map: restrictedTexture,
-      transparent: true,
-      opacity: .38,
-      depthWrite: false,
-      toneMapped: false,
-      side: THREE.DoubleSide,
-    })
-    architecturalMaterials.push(restrictedMaterial)
-    const restrictedGeometry = new THREE.PlaneGeometry(5.7, 2.75)
-    architecturalGeometries.push(restrictedGeometry)
-    const restrictedGate = new THREE.Mesh(
-      restrictedGeometry,
-      restrictedMaterial,
-    )
-    restrictedGate.position.set(0, 1.72, -34.25)
-    scene.add(restrictedGate)
-
-    // The library is now an open-air digital megastructure: no opaque
-    // exterior wall slabs. Retain only perimeter collisions at the wireframe
-    // boundary so the open silhouette does not let the player walk into void.
-    addBoundaryCollision(-19, archiveCenterZ, .38, archiveDepth, buildingHeight)
-    addBoundaryCollision(19, archiveCenterZ, .38, archiveDepth, buildingHeight)
-    addBoundaryCollision(0, -78.3, 38, .38, buildingHeight)
-    addBoundaryCollision(-10.4, 14.7, 17.2, .38, buildingHeight)
-    addBoundaryCollision(10.4, 14.7, 17.2, .38, buildingHeight)
-
-    // TRON-like "inside the system" exoskeleton. Keep this as one batched
-    // LineSegments object so the extra depth language costs a single draw call.
-    // The frame now acts as the exposed outer structure itself. It continues
-    // into the star field without opaque walls or a top cap.
-    const systemWirePositions: number[] = []
-    const addSystemWire = (
-      x1: number,
-      y1: number,
-      z1: number,
-      x2: number,
-      y2: number,
-      z2: number,
-    ) => {
-      systemWirePositions.push(x1, y1, z1, x2, y2, z2)
-    }
-    const systemWireBottom = .04
-    const systemWireTop = 9.5
-    const systemSideX = 18.82
-    const systemFrontZ = 14.35
-    const systemBackZ = -78.08
-
-    for (let z = 10; z >= -74; z -= 14) {
-      addSystemWire(
-        -systemSideX,
-        systemWireBottom,
-        z,
-        -systemSideX,
-        systemWireTop,
-        z,
-      )
-      addSystemWire(
-        systemSideX,
-        systemWireBottom,
-        z,
-        systemSideX,
-        systemWireTop,
-        z,
-      )
-    }
-
-    for (let x = -18; x <= 18; x += 9) {
-      addSystemWire(
-        x,
-        systemWireBottom,
-        systemBackZ,
-        x,
-        systemWireTop,
-        systemBackZ,
-      )
-    }
-
-    for (let floor = 0; floor < LIBRARY_FLOOR_COUNT; floor += 1) {
-      const y = floor * LIBRARY_FLOOR_HEIGHT + .08
-      addSystemWire(
-        -systemSideX,
-        y,
-        systemFrontZ,
-        -systemSideX,
-        y,
-        systemBackZ,
-      )
-      addSystemWire(
-        systemSideX,
-        y,
-        systemFrontZ,
-        systemSideX,
-        y,
-        systemBackZ,
-      )
-      addSystemWire(
-        -systemSideX,
-        y,
-        systemBackZ,
-        systemSideX,
-        y,
-        systemBackZ,
-      )
-    }
-
-    const systemWireGeometry = new THREE.BufferGeometry()
-    systemWireGeometry.setAttribute(
-      'position',
-      new THREE.Float32BufferAttribute(systemWirePositions, 3),
-    )
-    const systemWireMaterial = new THREE.LineBasicMaterial({
-      color: 0x53d3ff,
-      transparent: true,
-      opacity: .038,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    })
-    architecturalGeometries.push(systemWireGeometry)
-    architecturalMaterials.push(systemWireMaterial)
-    const systemWireframe = new THREE.LineSegments(
-      systemWireGeometry,
-      systemWireMaterial,
-    )
-    systemWireframe.renderOrder = 1
-    scene.add(systemWireframe)
-
-    function addUpperFloor(floor: number) {
-      const base = floor * LIBRARY_FLOOR_HEIGHT
-      const floorAccent = FLOOR_ACCENTS[floor]
-      const floorAccentHex =
-        '#' + new THREE.Color(floorAccent).getHexString()
-
-      // No opaque side skins: floor identity now comes from the slab fascias,
-      // shelf accents, lighting, and HUD while the star field remains visible
-      // through the exposed structure.
-
-      ;[-4.7, 4.7].forEach((x) => {
-        const strip = new THREE.Mesh(
-          balconyUndersideStripGeometry,
-          balconyUndersideStripMaterials[floor],
-        )
-        strip.position.set(x, base - .27, archiveCenterZ)
-        scene.add(strip)
-      })
-
-      // Wide side balconies leave a continuous central void. From any level
-      // the player can read the floors above and below as one megastructure.
-      addFloor(-11.85, archiveCenterZ, 14.3, archiveDepth, floorMaterial, base)
-      addFloor(11.85, archiveCenterZ, 14.3, archiveDepth, floorMaterial, base)
-
-      // Layered balcony decks give the player a readable walking plane
-      // above the heavier structural slab.
-      addFloorInsetSurface(
-        -10.2,
-        archiveCenterZ,
-        2.85,
-        88,
-        base,
-        floor,
-        'primary',
-      )
-      addFloorInsetSurface(
-        10.2,
-        archiveCenterZ,
-        2.85,
-        88,
-        base,
-        floor,
-        'primary',
-      )
-      addRouteBorder(-10.2, archiveCenterZ, 2.85, 88, base, floor, .1)
-      addRouteBorder(10.2, archiveCenterZ, 2.85, 88, base, floor, .1)
-      addFloorSeams(-10.2, archiveCenterZ, 2.85, 88, base, 'z', 9)
-      addFloorSeams(10.2, archiveCenterZ, 2.85, 88, base, 'z', 9)
-
-      const bridgeRibGeometry = new THREE.BoxGeometry(
-        8.85,
-        .16,
-        .12,
-      )
-      architecturalGeometries.push(bridgeRibGeometry)
-
-      UPPER_BRIDGE_Z.forEach((z) => {
-        addFloor(0, z, 9.4, 4.4, floorMaterial, base)
-        addFloorInsetSurface(
-          0,
-          z,
-          8.75,
-          2.55,
-          base,
-          floor,
-          'bridge',
-        )
-        addRouteBorder(0, z, 8.75, 2.55, base, floor, .2)
-
-        // Small raised threshold plates make the transition from balcony to
-        // bridge obvious and provide repeated scale cues down the atrium.
-        ;[-4.22, 4.22].forEach((x) => {
-          addFloorInsetSurface(
-            x,
-            z,
-            .78,
-            2.9,
-            base,
-            floor,
-            'threshold',
-          )
-        })
-
-        // Dark structural ribs under every bridge remain visible from the
-        // storeys below, giving the cross-spans weight and a repeatable unit
-        // of scale as the player looks through the atrium.
-        ;[-1.35, 0, 1.35].forEach((offset) => {
-          const rib = new THREE.Mesh(
-            bridgeRibGeometry,
-            slabUndersideMaterial,
-          )
-          rib.position.set(0, base - .3, z + offset)
-          rib.castShadow = true
-          scene.add(rib)
-        })
-      })
-
-      // The lift bridge gets a thicker landing pad and physical floor marker.
-      addFloorInsetSurface(0, 7, 4.15, 3.05, base, floor, 'landing')
-      addRouteBorder(0, 7, 4.15, 3.05, base, floor, .28)
-      addLandingMarker(floor, -3.05, 7, base)
-
-      if (floor % 2 === 0) {
-        addLandmarkArch(
-          0,
-          -27,
-          8.8,
-          3.2,
-          base,
-          FLOOR_ACCENTS[floor],
-        )
-      }
-
-      // Colored slab fascias make each storey identifiable from the atrium.
-      // This is visible even when the floor surface itself is mostly hidden.
-      const fasciaGeometry = new THREE.BoxGeometry(.075, .18, archiveDepth - 4)
-      architecturalGeometries.push(fasciaGeometry)
-      const fasciaMaterial = new THREE.MeshBasicMaterial({
-        color: floorAccent,
-        transparent: true,
-        opacity: .11,
-        depthWrite: false,
-      })
-      architecturalMaterials.push(fasciaMaterial)
-      ;[-4.73, 4.73].forEach((x) => {
-        const fascia = new THREE.Mesh(fasciaGeometry, fasciaMaterial)
-        fascia.position.set(x, base - .045, archiveCenterZ)
-        scene.add(fascia)
-      })
-
-      // Balcony rails stop at bridge entrances instead of slicing across
-      // them, so the cross-floor circulation reads as physically plausible.
-      const balconyRailMaterial = new THREE.MeshBasicMaterial({
-        color: floorAccent,
-        transparent: true,
-        opacity: .032,
-        depthWrite: false,
-      })
-      architecturalMaterials.push(balconyRailMaterial)
-      const railSegments = [
-        {z: 11.85, length: 5.3},
-        {z: -1.5, length: 12.6},
-        {z: -18.5, length: 12.6},
-        {z: -36, length: 13.6},
-        {z: -54, length: 13.6},
-        {z: -71.6, length: 12.8},
-      ]
-      railSegments.forEach(({z, length}) => {
-        const geometry = new THREE.BoxGeometry(.055, .06, length)
-        architecturalGeometries.push(geometry)
-        ;[-4.72, 4.72].forEach((x) => {
-          const rail = new THREE.Mesh(
-            geometry,
-            balconyRailMaterial,
-          )
-          rail.position.set(x, base + 1.05, z)
-          scene.add(rail)
-        })
-      })
-
-      // Each cross-bridge gets a luminous threshold so the circulation path
-      // is visible from several storeys away.
-      const bridgeLightGeometry = new THREE.BoxGeometry(8.8, .024, .05)
-      architecturalGeometries.push(bridgeLightGeometry)
-      const bridgeLightMaterial = new THREE.MeshBasicMaterial({
-        color: floorAccent,
-        transparent: true,
-        opacity: .075,
-        depthWrite: false,
-      })
-      architecturalMaterials.push(bridgeLightMaterial)
-      UPPER_BRIDGE_Z.forEach((z) => {
-        const strip = new THREE.Mesh(
-          bridgeLightGeometry,
-          bridgeLightMaterial,
-        )
-        strip.position.set(0, base + .03, z)
-        scene.add(strip)
-      })
-
-      const bridgeRailGeometry = new THREE.BoxGeometry(9.4, .055, .055)
-      architecturalGeometries.push(bridgeRailGeometry)
-      UPPER_BRIDGE_Z.forEach((z) => {
-        ;[-2.05, 2.05].forEach((offset) => {
-          const rail = new THREE.Mesh(
-            bridgeRailGeometry,
-            balconyRailMaterial,
-          )
-          rail.position.set(0, base + 1.05, z + offset)
-          scene.add(rail)
-        })
-      })
-
-      // A translucent archive horizon hides the actual render cutoff and
-      // suggests more stacks beyond the visible geometry.
-      const horizonGeometry = new THREE.PlaneGeometry(25, 4.2)
-      architecturalGeometries.push(horizonGeometry)
-      const horizonMaterial = new THREE.MeshBasicMaterial({
-        color: new THREE.Color(0x0c0f14).lerp(
-          new THREE.Color(floorAccent),
-          .1,
-        ),
-        transparent: true,
-        opacity: .045,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-      })
-      architecturalMaterials.push(horizonMaterial)
-      const horizon = new THREE.Mesh(
-        horizonGeometry,
-        horizonMaterial,
-      )
-      horizon.position.set(0, base + 2.05, -57.8)
-      horizon.visible = false
-      scene.add(horizon)
-
-      const levelTexture = createTextTexture(
-        'LEVEL ' + String(floor + 1).padStart(2, '0'),
-        FLOOR_IDENTITIES[floor] ?? 'DEEP DEV COLLECTION',
-        floorAccentHex,
-        760,
-        180,
-      )
-      labelsToDispose.push(levelTexture)
-      const levelMaterial = new THREE.SpriteMaterial({
-        map: levelTexture,
-        transparent: true,
-        depthWrite: false,
-        toneMapped: false,
-      })
-      architecturalMaterials.push(levelMaterial)
-      const levelSprite = new THREE.Sprite(levelMaterial)
-      levelSprite.position.set(0, base + 2.75, 4.45)
-      levelSprite.scale.set(7.2, 1.7, 1)
-      scene.add(levelSprite)
-
-      // Human-height aisle markers make the current collection readable while
-      // walking, instead of forcing the player to read giant atrium signage.
-      ;[-10, -27, -45].forEach((z, aisleIndex) => {
-        const aisleName =
-          FLOOR_AISLES[floor][aisleIndex] ?? 'COLLECTION'
-        const aisleTexture = createTextTexture(
-          'AISLE ' +
-            String(floor + 1).padStart(2, '0') +
-            String.fromCharCode(65 + aisleIndex) +
-            ' · ' +
-            aisleName,
-          'DEV LIBRARY · REAL ARTICLES',
-          floorAccentHex,
-          620,
-          142,
-        )
-        labelsToDispose.push(aisleTexture)
-        const aisleMaterial = new THREE.SpriteMaterial({
-          map: aisleTexture,
-          transparent: true,
-          depthWrite: false,
-          toneMapped: false,
-        })
-        architecturalMaterials.push(aisleMaterial)
-        const aisleSprite = new THREE.Sprite(aisleMaterial)
-        aisleSprite.position.set(
-          aisleIndex % 2 === 0 ? -5.8 : 5.8,
-          base + 1.95,
-          z,
-        )
-        aisleSprite.scale.set(4.8, 1.1, 1)
-        scene.add(aisleSprite)
-      })
-
-      // A visible emergency stairwell makes the vertical circulation legible
-      // even though the central lift remains the fast traversal mechanic.
-      const stepGeometry = new THREE.BoxGeometry(2.2, .16, .64)
-      architecturalGeometries.push(stepGeometry)
-      for (let step = 0; step < 14; step += 1) {
-        const stair = new THREE.Mesh(stepGeometry, floorMaterial)
-        stair.position.set(
-          16.25,
-          base + .08 + step * (LIBRARY_FLOOR_HEIGHT / 14),
-          10.8 - step * .58,
-        )
-        stair.receiveShadow = true
-        scene.add(stair)
-      }
-    }
-
-    // The main library is intentionally the only playable level. The old
-    // upper-floor generator remains isolated above for now, but is not invoked.
-
-    // Vertical travel is gone. Keep an inert cabin object so the existing
-    // ground-level travel state machine does not need a separate code path.
-    const liftCabin = new THREE.Group()
-
-    // Main library architecture.
-    addFloor(0, -15, 34, 58)
-    addFloor(-13, -13, 16, 28)
-    addFloor(13, -13, 16, 28)
-    addFloor(0, -39, 18, 12)
-
-    // Ground-floor decks are layered separately from the structural slab.
-    // The raised surfaces and joints give the long nave a measurable rhythm.
-    addFloorInsetSurface(0, -15, 3.65, 56, 0, 0, 'primary')
-    addRouteBorder(0, -15, 3.65, 56, 0, 0, .14)
-    addFloorSeams(0, -15, 3.65, 56, 0, 'z', 8)
-
-    addFloorInsetSurface(-13, -15, 2.85, 26, 0, 0, 'secondary')
-    addFloorInsetSurface(13, -15, 2.85, 26, 0, 0, 'secondary')
-    addRouteBorder(-13, -15, 2.85, 26, 0, 0, .09)
-    addRouteBorder(13, -15, 2.85, 26, 0, 0, .09)
-    addFloorSeams(-13, -15, 2.85, 26, 0, 'z', 4)
-    addFloorSeams(13, -15, 2.85, 26, 0, 'z', 4)
-
-    addFloorInsetSurface(0, -39, 5.6, 10.5, 0, 5, 'threshold')
-    addRouteBorder(0, -39, 5.6, 10.5, 0, 5, .2)
-
-    // The real walkable library ends at an overlook. A hidden collision lip
-    // keeps the player on the main level while exposing the archive below.
-    addBoundaryCollision(0, -44.15, 34, .36, 2.4, 0)
-
-    const lowerArchiveMaterial = new THREE.MeshStandardMaterial({
-      color: 0x111821,
-      emissive: 0x0a1424,
-      emissiveIntensity: .14,
-      roughness: .9,
-      metalness: .06,
-      transparent: true,
-      opacity: .78,
-    })
-    architecturalMaterials.push(lowerArchiveMaterial)
-    addFloor(0, -61, 36, 30, lowerArchiveMaterial, -4.55)
-
-    // Thin atmospheric veil between the overlook and faux stacks below. It
-    // helps the lower archive read as scale/depth rather than a second route.
-    const lowerArchiveHazeGeometry = new THREE.PlaneGeometry(36, 30)
-    const lowerArchiveHazeMaterial = new THREE.MeshBasicMaterial({
-      color: 0x17324b,
-      transparent: true,
-      opacity: .075,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-    })
-    architecturalGeometries.push(lowerArchiveHazeGeometry)
-    architecturalMaterials.push(lowerArchiveHazeMaterial)
-    const lowerArchiveHaze = new THREE.Mesh(
-      lowerArchiveHazeGeometry,
-      lowerArchiveHazeMaterial,
-    )
-    lowerArchiveHaze.rotation.x = -Math.PI / 2
-    lowerArchiveHaze.position.set(0, -3.65, -61)
-    lowerArchiveHaze.name = 'lower-archive-haze'
-    lowerArchiveHaze.userData.layoutObjectKey = lowerArchiveHaze.name
-    lowerArchiveHaze.userData.layoutLabel = 'Lower Archive Haze'
-    scene.add(lowerArchiveHaze)
-
-    // The atrium and wings are intentionally wall-free. Shelves, floor
-    // treatments, signs, and the exposed system frame now define circulation
-    // without opaque partitions interrupting the sky/void sightlines.
 
     type DensityShelfUnit = {
       x: number
