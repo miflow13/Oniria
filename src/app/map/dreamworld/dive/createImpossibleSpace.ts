@@ -71,12 +71,17 @@ function categoryForDream(dream: Dream): SymbolCategory {
 }
 
 function impossibleMaterial(color: THREE.Color, opacity = 0.46) {
-  return new THREE.MeshStandardMaterial({
+  return new THREE.MeshPhysicalMaterial({
     color,
-    emissive: color.clone().multiplyScalar(.09),
-    emissiveIntensity: .52,
-    roughness: .62,
-    metalness: .12,
+    emissive: color.clone().multiplyScalar(.075),
+    emissiveIntensity: .46,
+    roughness: .64,
+    metalness: .14,
+    clearcoat: .24,
+    clearcoatRoughness: .32,
+    sheen: .08,
+    sheenColor: color.clone().lerp(new THREE.Color(0xffffff), .12),
+    envMapIntensity: .82,
     transparent: true,
     opacity,
   })
@@ -341,13 +346,62 @@ export function createImpossibleSpace({
       .62,
     )
     const previewTexture = (cell.portal.material as THREE.SpriteMaterial).map
-    const portalMaterial = new THREE.MeshBasicMaterial({
-      map: previewTexture,
+    const portalMaterial = new THREE.ShaderMaterial({
       transparent: true,
-      opacity: .94,
       side: THREE.DoubleSide,
-      toneMapped: false,
       depthWrite: false,
+      toneMapped: false,
+      uniforms: {
+        tPreview: {value: previewTexture},
+        uTime: {value: 0},
+        uHover: {value: 0},
+        uOpacity: {value: .94},
+        uTint: {value: color.clone()},
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform sampler2D tPreview;
+        uniform float uTime;
+        uniform float uHover;
+        uniform float uOpacity;
+        uniform vec3 uTint;
+        varying vec2 vUv;
+
+        void main() {
+          vec2 centered = vUv - 0.5;
+          float radius = length(centered);
+          vec2 direction = normalize(centered + vec2(.0001));
+          float ripple =
+            sin(radius * 32.0 - uTime * 2.4) *
+            (.0018 + uHover * .0028);
+          vec2 uv = vUv + direction * ripple;
+
+          float edge = smoothstep(.54, .16, radius);
+          float membrane =
+            .5 + .5 * sin((vUv.x + vUv.y) * 13.0 + uTime * .55);
+
+          vec4 preview = texture2D(tPreview, uv);
+          vec3 color = mix(
+            preview.rgb,
+            preview.rgb + uTint * membrane * .08,
+            .35 + uHover * .24
+          );
+
+          float rim = smoothstep(.5, .37, radius) - smoothstep(.37, .24, radius);
+          color += uTint * rim * (.12 + uHover * .16);
+
+          gl_FragColor = vec4(
+            color,
+            preview.a * edge * uOpacity
+          );
+        }
+      `,
     })
 
     const leftGeometry = new THREE.BoxGeometry(.12, 2.9, .12)
@@ -369,8 +423,8 @@ export function createImpossibleSpace({
       portal.userData.diveInteraction = interaction
       pickables.push(portal)
     } else {
-      portalMaterial.opacity = .28
-      portalMaterial.color.set(0x667080)
+      portalMaterial.uniforms.uOpacity.value = .28
+      portalMaterial.uniforms.uTint.value.set(0x667080)
     }
 
     left.position.x = -1
@@ -650,12 +704,19 @@ export function createImpossibleSpace({
               .08
           }
 
-          if (portalMaterial && 'opacity' in portalMaterial) {
-            const material = portalMaterial as
-              | THREE.MeshBasicMaterial
-              | THREE.SpriteMaterial
-            material.opacity +=
-              ((hovered ? 1 : .88) - material.opacity) * .08
+          if (
+            portalMaterial &&
+            portalMaterial instanceof THREE.ShaderMaterial
+          ) {
+            portalMaterial.uniforms.uTime.value = time
+            portalMaterial.uniforms.uHover.value +=
+              ((hovered ? 1 : 0) -
+                portalMaterial.uniforms.uHover.value) *
+              .1
+            portalMaterial.uniforms.uOpacity.value +=
+              ((hovered ? 1 : .88) -
+                portalMaterial.uniforms.uOpacity.value) *
+              .08
           }
         },
       )
