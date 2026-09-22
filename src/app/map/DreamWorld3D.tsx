@@ -6012,11 +6012,11 @@ export default function DreamWorld3D({
         )
         const shelfDistanceOpacity =
           labelDistance < 24
-            ? .86
+            ? .96
             : labelDistance < 50
               ? THREE.MathUtils.lerp(
-                  .5,
-                  .12,
+                  .58,
+                  .14,
                   (labelDistance - 24) / 26,
                 )
               : labelDistance < 78
