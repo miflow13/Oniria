@@ -72,6 +72,7 @@ const FLOOR_IDENTITIES = [
   'LINUX / DEVOPS / OPEN SOURCE',
   'DEEP ARCHIVE / LONG-TAIL DEV',
 ] as const
+const UPPER_BRIDGE_Z = [7, -10, -27, -45, -63] as const
 
 const SECTION_CENTERS: Record<LibrarySection, THREE.Vector3> = {
   atrium: new THREE.Vector3(0, 1.6, 8),
@@ -799,6 +800,7 @@ export default function DevWebSurf3D({
       architecturalSurfaceTexture.clone()
     architecturalSurfaceRoughness.colorSpace =
       THREE.NoColorSpace
+    architecturalSurfaceRoughness.needsUpdate = true
 
     // One material family for floors + walls. The floor now reads as the
     // horizontal face of the same megastructure instead of a separate skin.
@@ -1224,8 +1226,7 @@ export default function DevWebSurf3D({
       addFloor(-11.85, archiveCenterZ, 14.3, archiveDepth, floorMaterial, base)
       addFloor(11.85, archiveCenterZ, 14.3, archiveDepth, floorMaterial, base)
 
-      const bridgeZ = [7, -10, -27, -45, -63]
-      bridgeZ.forEach((z) => {
+      UPPER_BRIDGE_Z.forEach((z) => {
         addFloor(0, z, 9.4, 4.4, floorMaterial, base)
       })
 
@@ -1272,13 +1273,26 @@ export default function DevWebSurf3D({
         depthWrite: false,
       })
       architecturalMaterials.push(bridgeLightMaterial)
-      bridgeZ.forEach((z) => {
+      UPPER_BRIDGE_Z.forEach((z) => {
         const strip = new THREE.Mesh(
           bridgeLightGeometry,
           bridgeLightMaterial,
         )
         strip.position.set(0, base + .03, z)
         scene.add(strip)
+      })
+
+      const bridgeRailGeometry = new THREE.BoxGeometry(9.4, .055, .055)
+      architecturalGeometries.push(bridgeRailGeometry)
+      UPPER_BRIDGE_Z.forEach((z) => {
+        ;[-2.05, 2.05].forEach((offset) => {
+          const rail = new THREE.Mesh(
+            bridgeRailGeometry,
+            balconyRailMaterial,
+          )
+          rail.position.set(0, base + 1.05, z + offset)
+          scene.add(rail)
+        })
       })
 
       const levelTexture = createTextTexture(
@@ -1523,11 +1537,13 @@ export default function DevWebSurf3D({
     const distantBackGeometry = new THREE.BoxGeometry(1, 1, .12)
     const distantBoardGeometry = new THREE.BoxGeometry(1, .09, .64)
     const distantShelfMaterial = new THREE.MeshStandardMaterial({
-      color: 0x171b25,
-      emissive: 0x111a3b,
-      emissiveIntensity: .24,
-      roughness: .7,
-      metalness: .24,
+      color: 0x23262d,
+      map: architecturalSurfaceTexture,
+      roughnessMap: architecturalSurfaceRoughness,
+      emissive: 0x10152a,
+      emissiveIntensity: .16,
+      roughness: .82,
+      metalness: .12,
     })
     architecturalGeometries.push(
       distantBackGeometry,
@@ -2537,6 +2553,22 @@ export default function DevWebSurf3D({
       }
     }
 
+    function hasWalkableSurface(next: THREE.Vector3) {
+      if (currentFloorIndex === 0) return true
+
+      const onSideBalcony =
+        Math.abs(next.x) >= 4.68 &&
+        Math.abs(next.x) <= 18.8
+
+      const onBridge =
+        Math.abs(next.x) <= 4.82 &&
+        UPPER_BRIDGE_Z.some(
+          (bridgeZ) => Math.abs(next.z - bridgeZ) <= 2.16,
+        )
+
+      return onSideBalcony || onBridge
+    }
+
     function collides(
       next: THREE.Vector3,
       radius = .27,
@@ -2559,7 +2591,7 @@ export default function DevWebSurf3D({
         -19.55,
         19.55,
       )
-      if (!collides(nextX)) {
+      if (!collides(nextX) && hasWalkableSurface(nextX)) {
         position.x = nextX.x
       } else {
         velocity.x *= .28
@@ -2571,7 +2603,7 @@ export default function DevWebSurf3D({
         -43.15,
         13.65,
       )
-      if (!collides(nextZ)) {
+      if (!collides(nextZ) && hasWalkableSurface(nextZ)) {
         position.z = nextZ.z
       } else {
         velocity.z *= .28
@@ -3365,6 +3397,11 @@ export default function DevWebSurf3D({
 
         position.copy(point)
         camera.position.copy(point)
+        liftCabin.position.y = THREE.MathUtils.clamp(
+          point.y - CAMERA_HEIGHT,
+          0,
+          (LIBRARY_FLOOR_COUNT - 1) * LIBRARY_FLOOR_HEIGHT,
+        )
         camera.lookAt(look)
         const travelFov =
           60 +
@@ -3385,6 +3422,8 @@ export default function DevWebSurf3D({
           const inspectOnArrival = travel.inspectOnArrival
           currentFloorIndex =
             arrived.floorIndex ?? currentFloorIndex
+          liftCabin.position.y =
+            currentFloorIndex * LIBRARY_FLOOR_HEIGHT
           setVisibleFloor(currentFloorIndex)
           floorChangeRef.current(currentFloorIndex)
           travel = null
@@ -3487,6 +3526,8 @@ export default function DevWebSurf3D({
       architecturalGeometries.forEach((geometry) => geometry.dispose())
       architecturalMaterials.forEach((material) => material.dispose())
       labelsToDispose.forEach((texture) => texture.dispose())
+      architecturalSurfaceTexture.dispose()
+      architecturalSurfaceRoughness.dispose()
       coverCache.clear()
       remoteTextures.forEach((texture) => texture.dispose())
       rainGeometry.dispose()
