@@ -119,6 +119,7 @@ type NodeVisual = {
   group: THREE.Group
   shell: THREE.Mesh
   shellMaterial: LivingOrbMaterial
+  reflectionShell: THREE.Mesh
   miniWorld: MiniWorld
   glow: THREE.Mesh
   core: THREE.Mesh
@@ -676,8 +677,32 @@ export default function DreamWorld3D({
       const shellMaterial = createLivingOrbMaterial(color, node.category)
       const shell = new THREE.Mesh(nodeGeometry(node.category), shellMaterial)
       shell.userData.nodeId = node._id
+      shell.castShadow = renderer.shadowMap.enabled
+      shell.receiveShadow = renderer.shadowMap.enabled
       group.add(shell)
       interactive.push(shell)
+
+      const reflectionMaterial = new THREE.MeshPhysicalMaterial({
+        color: color.clone().lerp(new THREE.Color(0xffffff), .16),
+        roughness: .055,
+        metalness: .02,
+        transmission: .34,
+        thickness: .42,
+        ior: 1.22,
+        clearcoat: 1,
+        clearcoatRoughness: .045,
+        envMapIntensity: settings.environmentIntensity * 1.18,
+        transparent: true,
+        opacity: .14,
+        depthWrite: false,
+      })
+      const reflectionShell = new THREE.Mesh(
+        nodeGeometry(node.category),
+        reflectionMaterial,
+      )
+      reflectionShell.scale.setScalar(1.035)
+      reflectionShell.renderOrder = 4
+      group.add(reflectionShell)
 
       const miniWorld = createMiniWorld(
         node.category,
@@ -701,19 +726,25 @@ export default function DreamWorld3D({
       glow.userData.nodeId = node._id
       group.add(glow)
 
-      const coreMaterial = new THREE.MeshStandardMaterial({
+      const coreMaterial = new THREE.MeshPhysicalMaterial({
         color: color.clone().lerp(new THREE.Color(0xffffff), .2),
         emissive: color,
-        emissiveIntensity: 2.6,
+        emissiveIntensity: 2.25,
         transparent: true,
-        opacity: .88,
-        roughness: .35,
+        opacity: .9,
+        roughness: .24,
+        metalness: node.category === 'object' ? .24 : .08,
+        clearcoat: .55,
+        clearcoatRoughness: .12,
+        envMapIntensity: settings.environmentIntensity,
       })
       const core = new THREE.Mesh(
         new THREE.IcosahedronGeometry(.22 + Math.min(node.frequency, 5) * .025, 2),
         coreMaterial,
       )
       core.userData.nodeId = node._id
+      core.castShadow = renderer.shadowMap.enabled
+      core.receiveShadow = renderer.shadowMap.enabled
       group.add(core)
 
       const orbitMaterial = new THREE.MeshBasicMaterial({
@@ -772,6 +803,7 @@ export default function DreamWorld3D({
         group,
         shell,
         shellMaterial,
+        reflectionShell,
         miniWorld,
         glow,
         core,
@@ -2491,8 +2523,10 @@ export default function DreamWorld3D({
           Math.sin(elapsed * .22 + visual.phase) * .045
 
         const shellMaterial = visual.shellMaterial
+        const reflectionMaterial =
+          visual.reflectionShell.material as THREE.MeshPhysicalMaterial
         const glowMaterial = visual.glow.material as THREE.MeshBasicMaterial
-        const coreMaterial = visual.core.material as THREE.MeshStandardMaterial
+        const coreMaterial = visual.core.material as THREE.MeshPhysicalMaterial
         const orbitMaterial = visual.orbit.material as THREE.MeshBasicMaterial
         const labelMaterial = visual.label.material as THREE.SpriteMaterial
 
@@ -2515,6 +2549,23 @@ export default function DreamWorld3D({
           visual.miniWorld.group.visible = true
           visual.core.visible = true
         }
+        reflectionMaterial.opacity +=
+          ((selected
+            ? .24
+            : hoveredId === node._id
+              ? .19
+              : visible
+                ? .12
+                : .035) -
+            reflectionMaterial.opacity) *
+          .07
+        reflectionMaterial.envMapIntensity +=
+          ((selected
+            ? settings.environmentIntensity * 1.5
+            : settings.environmentIntensity * 1.08) -
+            reflectionMaterial.envMapIntensity) *
+          .05
+
         glowMaterial.opacity +=
           ((selected ? .2 : hoveredId === node._id ? .14 : visible ? .06 : .01) -
             glowMaterial.opacity) *
@@ -3014,11 +3065,13 @@ export default function DreamWorld3D({
 
       nodeVisuals.forEach((visual) => {
         ;(visual.shell.geometry as THREE.BufferGeometry).dispose()
+        ;(visual.reflectionShell.geometry as THREE.BufferGeometry).dispose()
         ;(visual.glow.geometry as THREE.BufferGeometry).dispose()
         ;(visual.core.geometry as THREE.BufferGeometry).dispose()
         ;(visual.orbit.geometry as THREE.BufferGeometry).dispose()
         ;(visual.shockwave.geometry as THREE.BufferGeometry).dispose()
         visual.shellMaterial.dispose()
+        ;(visual.reflectionShell.material as THREE.Material).dispose()
         visual.miniWorld.dispose()
         ;(visual.glow.material as THREE.Material).dispose()
         ;(visual.core.material as THREE.Material).dispose()
