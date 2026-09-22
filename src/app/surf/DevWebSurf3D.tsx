@@ -908,6 +908,22 @@ export default function DevWebSurf3D({
       ...floorShelfTopMaterials,
     )
 
+    const slabUndersideMaterial = new THREE.MeshStandardMaterial({
+      color: 0x15181d,
+      roughness: .96,
+      metalness: .02,
+    })
+    const expansionJointMaterial = new THREE.MeshBasicMaterial({
+      color: 0x090b0f,
+      transparent: true,
+      opacity: .5,
+      depthWrite: false,
+    })
+    architecturalMaterials.push(
+      slabUndersideMaterial,
+      expansionJointMaterial,
+    )
+
     function addFloor(
       x: number,
       z: number,
@@ -932,6 +948,21 @@ export default function DevWebSurf3D({
       mesh.receiveShadow = true
       scene.add(mesh)
 
+      // A darker soffit beneath every slab creates a readable thickness line
+      // when looking across the atrium or up from a lower storey.
+      const undersideGeometry = new THREE.BoxGeometry(
+        Math.max(.1, width - .08),
+        .035,
+        Math.max(.1, depth - .08),
+      )
+      architecturalGeometries.push(undersideGeometry)
+      const underside = new THREE.Mesh(
+        undersideGeometry,
+        slabUndersideMaterial,
+      )
+      underside.position.set(x, floorBase - .215, z)
+      scene.add(underside)
+
       // A hairline perimeter catches light and tells the eye "this is floor"
       // without turning the architecture back into a glowing game grid.
       if (material === floorMaterial && floorBase > 0) {
@@ -951,36 +982,189 @@ export default function DevWebSurf3D({
       return mesh
     }
 
-    function addWalkwaySurface(
+    type FloorDeckVariant =
+      | 'primary'
+      | 'secondary'
+      | 'bridge'
+      | 'threshold'
+      | 'landing'
+
+    function addFloorInsetSurface(
       x: number,
       z: number,
       width: number,
       depth: number,
       floorBase: number,
-      accent: number,
+      floorIndex: number,
+      variant: FloorDeckVariant = 'primary',
     ) {
-      const geometry = new THREE.BoxGeometry(width, .024, depth)
+      const height =
+        variant === 'landing'
+          ? .05
+          : variant === 'threshold'
+            ? .042
+            : .032
+      const geometry = new THREE.BoxGeometry(width, height, depth)
       architecturalGeometries.push(geometry)
-      const floorIndex = THREE.MathUtils.clamp(
-        Math.round(floorBase / LIBRARY_FLOOR_HEIGHT),
-        0,
-        LIBRARY_FLOOR_COUNT - 1,
+
+      const baseColor = new THREE.Color(
+        FLOOR_WALKWAY_TINTS[floorIndex],
       )
+      if (variant === 'secondary') baseColor.multiplyScalar(.9)
+      if (variant === 'bridge') {
+        baseColor.lerp(new THREE.Color(FLOOR_ACCENTS[floorIndex]), .08)
+      }
+      if (variant === 'threshold' || variant === 'landing') {
+        baseColor.lerp(new THREE.Color(FLOOR_ACCENTS[floorIndex]), .15)
+      }
+
       const material = new THREE.MeshStandardMaterial({
-        color: FLOOR_WALKWAY_TINTS[floorIndex],
+        color: baseColor,
         map: architecturalSurfaceTexture,
         roughnessMap: architecturalSurfaceRoughness,
-        roughness: .88,
-        metalness: .035,
-        emissive: accent,
-        emissiveIntensity: .065,
+        roughness:
+          variant === 'landing' || variant === 'threshold' ? .8 : .88,
+        metalness:
+          variant === 'landing' || variant === 'threshold' ? .07 : .035,
+        emissive: FLOOR_ACCENTS[floorIndex],
+        emissiveIntensity:
+          variant === 'bridge'
+            ? .075
+            : variant === 'threshold' || variant === 'landing'
+              ? .09
+              : .045,
       })
       architecturalMaterials.push(material)
+
       const mesh = new THREE.Mesh(geometry, material)
-      mesh.position.set(x, floorBase + .004, z)
+      mesh.position.set(x, floorBase + height / 2 + .006, z)
       mesh.receiveShadow = true
       scene.add(mesh)
       return mesh
+    }
+
+    function addRouteBorder(
+      x: number,
+      z: number,
+      width: number,
+      depth: number,
+      floorBase: number,
+      floorIndex: number,
+      opacity = .15,
+    ) {
+      const borderSource = new THREE.BoxGeometry(width, .02, depth)
+      const edgeGeometry = new THREE.EdgesGeometry(borderSource)
+      architecturalGeometries.push(borderSource, edgeGeometry)
+      const edgeMaterial = new THREE.LineBasicMaterial({
+        color: FLOOR_ACCENTS[floorIndex],
+        transparent: true,
+        opacity,
+        blending: THREE.AdditiveBlending,
+      })
+      architecturalMaterials.push(edgeMaterial)
+      const edges = new THREE.LineSegments(edgeGeometry, edgeMaterial)
+      edges.position.set(x, floorBase + .035, z)
+      scene.add(edges)
+      return edges
+    }
+
+    function addFloorSeams(
+      x: number,
+      z: number,
+      width: number,
+      depth: number,
+      floorBase: number,
+      axis: 'x' | 'z',
+      count = 5,
+    ) {
+      const seamThickness = .018
+      for (let index = 1; index <= count; index += 1) {
+        const t = index / (count + 1)
+        const seamGeometry =
+          axis === 'z'
+            ? new THREE.BoxGeometry(
+                Math.max(.1, width - .18),
+                .006,
+                seamThickness,
+              )
+            : new THREE.BoxGeometry(
+                seamThickness,
+                .006,
+                Math.max(.1, depth - .18),
+              )
+        architecturalGeometries.push(seamGeometry)
+        const seam = new THREE.Mesh(
+          seamGeometry,
+          expansionJointMaterial,
+        )
+        seam.position.set(
+          axis === 'x'
+            ? x - width / 2 + width * t
+            : x,
+          floorBase + .041,
+          axis === 'z'
+            ? z - depth / 2 + depth * t
+            : z,
+        )
+        scene.add(seam)
+      }
+    }
+
+    function addLandingMarker(
+      floor: number,
+      x: number,
+      z: number,
+      floorBase: number,
+      rotationY = 0,
+    ) {
+      const accentHex =
+        '#' + new THREE.Color(FLOOR_ACCENTS[floor]).getHexString()
+      const markerTexture = createTextTexture(
+        String(floor + 1).padStart(2, '0'),
+        FLOOR_IDENTITIES[floor],
+        accentHex,
+        520,
+        210,
+      )
+      labelsToDispose.push(markerTexture)
+
+      const plateGeometry = new THREE.BoxGeometry(3.6, .045, 1.75)
+      const decalGeometry = new THREE.PlaneGeometry(3.25, 1.42)
+      architecturalGeometries.push(plateGeometry, decalGeometry)
+
+      const plateMaterial = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(
+          FLOOR_WALKWAY_TINTS[floor],
+        ).multiplyScalar(.86),
+        emissive: FLOOR_ACCENTS[floor],
+        emissiveIntensity: .07,
+        roughness: .78,
+        metalness: .08,
+      })
+      const decalMaterial = new THREE.MeshBasicMaterial({
+        map: markerTexture,
+        transparent: true,
+        toneMapped: false,
+        depthWrite: false,
+      })
+      architecturalMaterials.push(plateMaterial, decalMaterial)
+
+      const group = new THREE.Group()
+      group.position.set(x, floorBase + .038, z)
+      group.rotation.y = rotationY
+
+      const plate = new THREE.Mesh(plateGeometry, plateMaterial)
+      plate.position.y = .012
+      plate.receiveShadow = true
+      group.add(plate)
+
+      const decal = new THREE.Mesh(decalGeometry, decalMaterial)
+      decal.rotation.x = -Math.PI / 2
+      decal.position.y = .039
+      decal.renderOrder = 6
+      group.add(decal)
+      scene.add(group)
+      return group
     }
 
     function addWall(
