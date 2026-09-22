@@ -1020,6 +1020,8 @@ export default function DevWebSurf3D({
       maxX: 1.7,
       minZ: 5.3,
       maxZ: 8.7,
+      minY: 0,
+      maxY: 1.2,
     })
 
     const deskGlowGeometry = new THREE.TorusGeometry(1.15, .028, 8, 72)
