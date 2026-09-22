@@ -962,6 +962,97 @@ export default function DreamWorld3D({
       })
     }
 
+    const lucidDreamIds = new Set(
+      dreamsRef.current
+        .filter((dream) => dream.lucid)
+        .map((dream) => dream._id),
+    )
+    const lucidRiverNodeIds = nodeRef.current
+      .filter((node) =>
+        node.dreamIds.some((dreamId) => lucidDreamIds.has(dreamId)),
+      )
+      .sort((a, b) => b.frequency - a.frequency)
+      .slice(0, 9)
+      .map((node) => node._id)
+
+    let lucidRiver:
+      | {
+          line: THREE.Line
+          geometry: THREE.BufferGeometry
+          material: THREE.LineBasicMaterial
+          positions: Float32Array
+        }
+      | null = null
+
+    if (lucidRiverNodeIds.length >= 3) {
+      const positions = new Float32Array(lucidRiverNodeIds.length * 3)
+      const geometry = new THREE.BufferGeometry()
+      geometry.setAttribute(
+        'position',
+        new THREE.BufferAttribute(positions, 3),
+      )
+      const material = new THREE.LineBasicMaterial({
+        color: 0xa8f2f1,
+        transparent: true,
+        opacity: .16,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })
+      const line = new THREE.Line(geometry, material)
+      world.add(line)
+      lucidRiver = {line, geometry, material, positions}
+    }
+
+    const now = Date.now()
+    const supernovae = nodeRef.current
+      .filter((node) => {
+        const recentMatches = dreamsRef.current.filter(
+          (dream) =>
+            node.dreamIds.includes(dream._id) &&
+            now - new Date(dream.date).getTime() <= 30 * 86_400_000,
+        )
+        return node.frequency >= 3 && recentMatches.length >= 2
+      })
+      .slice(0, 4)
+      .map((node) => {
+        const visual = nodeVisuals.get(node._id)
+        if (!visual) return null
+
+        const group = new THREE.Group()
+        const color = new THREE.Color(CATEGORY_COLORS[node.category])
+        const geometry = new THREE.TorusGeometry(.86, .015, 8, 72)
+        const material = new THREE.MeshBasicMaterial({
+          color: color.clone().lerp(new THREE.Color(0xffffff), .38),
+          transparent: true,
+          opacity: .17,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        })
+        const ring = new THREE.Mesh(geometry, material)
+        ring.rotation.x = Math.PI / 2.2
+        group.add(ring)
+        visual.group.add(group)
+
+        return {
+          nodeId: node._id,
+          group,
+          geometry,
+          material,
+          phase: seededUnit(hashString(`supernova:${node._id}`), 71) * Math.PI * 2,
+        }
+      })
+      .filter(
+        (
+          value,
+        ): value is {
+          nodeId: string
+          group: THREE.Group
+          geometry: THREE.BufferGeometry
+          material: THREE.MeshBasicMaterial
+          phase: number
+        } => Boolean(value),
+      )
+
     const clusterAudios = [...nodeRef.current]
       .filter((node) => node.frequency >= 2)
       .sort((a, b) => b.frequency - a.frequency)
@@ -1712,6 +1803,45 @@ export default function DreamWorld3D({
 
       pointerParallax.lerp(pointerTarget, 0.035)
 
+      const observatoryScale = observatoryModeRef.current ? .7 : 1
+      world.scale.lerp(
+        new THREE.Vector3(
+          observatoryScale,
+          observatoryScale,
+          observatoryScale,
+        ),
+        .035,
+      )
+
+      if (lucidRiver) {
+        lucidRiverNodeIds.forEach((nodeId, index) => {
+          const position = nodeVisuals.get(nodeId)?.group.position
+          if (!position) return
+          const offset = index * 3
+          lucidRiver.positions[offset] = position.x
+          lucidRiver.positions[offset + 1] = position.y
+          lucidRiver.positions[offset + 2] = position.z
+        })
+        ;(
+          lucidRiver.geometry.getAttribute('position') as THREE.BufferAttribute
+        ).needsUpdate = true
+        lucidRiver.material.opacity =
+          .1 + Math.max(0, Math.sin(elapsed * .23)) * .08
+      }
+
+      supernovae.forEach((event, index) => {
+        event.group.rotation.z += .002 + index * .0003
+        event.group.rotation.y = Math.sin(elapsed * .11 + event.phase) * .25
+        const scale =
+          1 +
+          Math.sin(elapsed * .7 + event.phase) * .08 +
+          (observatoryModeRef.current ? .18 : 0)
+        event.group.scale.setScalar(scale)
+        event.material.opacity =
+          .12 +
+          Math.max(0, Math.sin(elapsed * .52 + event.phase)) * .12
+      })
+
       clusterAudios.forEach((cluster) => {
         const isFocused = selectedRef.current === cluster.nodeId
         cluster.audio.setFocus(isFocused ? .55 : .05)
@@ -1896,9 +2026,13 @@ export default function DreamWorld3D({
         const labelTarget =
           selected || hoveredId === node._id
             ? .9
-            : node.frequency >= 3
-              ? .42
-              : .07
+            : observatoryModeRef.current
+              ? node.frequency >= 4
+                ? .24
+                : .015
+              : node.frequency >= 3
+                ? .42
+                : .07
         labelMaterial.opacity +=
           (((visible ? labelTarget : .04) * introVisibility) -
             labelMaterial.opacity) *
@@ -2121,18 +2255,25 @@ export default function DreamWorld3D({
           lookTarget.lerp(position, .085)
         }
       } else {
+        const observatory = observatoryModeRef.current
         cameraTarget.set(
-          panRef.current.x / 125 + pointerParallax.x * 0.34,
-          -panRef.current.y / 125 + pointerParallax.y * 0.2,
-          10.8 / Math.max(.68, zoomRef.current),
+          observatory
+            ? pointerParallax.x * .7
+            : panRef.current.x / 125 + pointerParallax.x * .34,
+          observatory
+            ? pointerParallax.y * .42
+            : -panRef.current.y / 125 + pointerParallax.y * .2,
+          observatory
+            ? 22.5
+            : 10.8 / Math.max(.68, zoomRef.current),
         )
         lookTarget.lerp(
           tempVector.set(
-            panRef.current.x / 180,
-            -panRef.current.y / 180,
+            observatory ? 0 : panRef.current.x / 180,
+            observatory ? 0 : -panRef.current.y / 180,
             0,
           ),
-          .06,
+          observatory ? .035 : .06,
         )
       }
 
@@ -2237,6 +2378,13 @@ export default function DreamWorld3D({
         edgeVisual.material.dispose()
         ;(edgeVisual.pulse.geometry as THREE.BufferGeometry).dispose()
         ;(edgeVisual.pulse.material as THREE.Material).dispose()
+      })
+
+      lucidRiver?.geometry.dispose()
+      lucidRiver?.material.dispose()
+      supernovae.forEach((event) => {
+        event.geometry.dispose()
+        event.material.dispose()
       })
 
       fragments.forEach((fragment) => {
