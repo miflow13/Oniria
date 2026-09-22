@@ -16,6 +16,7 @@ import {
   surfLayout,
   type LayoutEditorMode,
   type LayoutEditorSelection,
+  type SceneLayoutTransform,
   type ShelfLayoutTransform,
   type SurfLayoutConfig,
 } from './surfLayout'
@@ -799,8 +800,9 @@ export default function DevWebSurf() {
   const [layoutSelection, setLayoutSelection] =
     useState<LayoutEditorSelection | null>(null)
   const [layoutDraft, setLayoutDraft] = useState<SurfLayoutConfig>(() => ({
-    version: 1,
+    version: 2,
     shelves: {...surfLayout.shelves},
+    objects: {...surfLayout.objects},
   }))
   const [layoutSaveState, setLayoutSaveState] = useState<
     'idle' | 'saving' | 'saved' | 'error'
@@ -838,17 +840,48 @@ export default function DevWebSurf() {
   }, [])
 
   const updateLayoutTransform = useCallback(
-    (key: string, transform: ShelfLayoutTransform) => {
+    (
+      key: string,
+      transform: ShelfLayoutTransform | SceneLayoutTransform,
+      kind: LayoutEditorSelection['kind'],
+    ) => {
       setLayoutDraft((current) => ({
-        version: 1,
-        shelves: {
-          ...current.shelves,
-          [key]: transform,
-        },
+        version: 2,
+        shelves:
+          kind === 'shelf'
+            ? {
+                ...current.shelves,
+                [key]: transform as ShelfLayoutTransform,
+              }
+            : current.shelves,
+        objects:
+          kind === 'object'
+            ? {
+                ...current.objects,
+                [key]: transform as SceneLayoutTransform,
+              }
+            : current.objects,
       }))
       setLayoutSelection((current) =>
         current?.key === key
-          ? {...current, ...transform}
+          ? {
+              ...current,
+              x: transform.x,
+              y:
+                'y' in transform
+                  ? transform.y
+                  : current.y,
+              z: transform.z,
+              rotationX:
+                'rotationX' in transform
+                  ? transform.rotationX
+                  : current.rotationX,
+              rotationY: transform.rotationY,
+              rotationZ:
+                'rotationZ' in transform
+                  ? transform.rotationZ
+                  : current.rotationZ,
+            }
           : current,
       )
       setLayoutSaveState('idle')
@@ -1734,7 +1767,7 @@ export default function DevWebSurf() {
               <div className={styles.layoutEditorHeading}>
                 <div>
                   <span>Layout Mode</span>
-                  <strong>Shelf Editor</strong>
+                  <strong>Scene Editor</strong>
                 </div>
                 <kbd>L</kbd>
               </div>
@@ -1784,14 +1817,38 @@ export default function DevWebSurf() {
                       <dd>{layoutSelection.x.toFixed(2)}</dd>
                     </div>
                     <div>
+                      <dt>Y</dt>
+                      <dd>{layoutSelection.y.toFixed(2)}</dd>
+                    </div>
+                    <div>
                       <dt>Z</dt>
                       <dd>{layoutSelection.z.toFixed(2)}</dd>
                     </div>
                     <div>
-                      <dt>Rot</dt>
+                      <dt>Rot X</dt>
+                      <dd>
+                        {(
+                          (layoutSelection.rotationX * 180) /
+                          Math.PI
+                        ).toFixed(0)}
+                        °
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Rot Y</dt>
                       <dd>
                         {(
                           (layoutSelection.rotationY * 180) /
+                          Math.PI
+                        ).toFixed(0)}
+                        °
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Rot Z</dt>
+                      <dd>
+                        {(
+                          (layoutSelection.rotationZ * 180) /
                           Math.PI
                         ).toFixed(0)}
                         °
@@ -1801,7 +1858,7 @@ export default function DevWebSurf() {
                 </div>
               ) : (
                 <p className={styles.layoutEditorEmpty}>
-                  Click a bookcase to edit it.
+                  Click a scene object to edit it.
                 </p>
               )}
 
