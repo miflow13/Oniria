@@ -236,28 +236,48 @@ function makeArchitecturalGuide(
   currentSection: LibrarySection,
   targetSection: LibrarySection,
 ) {
+  const startFloor = THREE.MathUtils.clamp(
+    Math.round((start.y - CAMERA_HEIGHT) / LIBRARY_FLOOR_HEIGHT),
+    0,
+    LIBRARY_FLOOR_COUNT - 1,
+  )
+  const targetFloor = THREE.MathUtils.clamp(
+    Math.round((destination.y - CAMERA_HEIGHT) / LIBRARY_FLOOR_HEIGHT),
+    0,
+    LIBRARY_FLOOR_COUNT - 1,
+  )
+  const startBase = startFloor * LIBRARY_FLOOR_HEIGHT
+  const targetBase = targetFloor * LIBRARY_FLOOR_HEIGHT
+
   const points: THREE.Vector3[] = [
-    new THREE.Vector3(start.x, .09, start.z),
+    new THREE.Vector3(start.x, start.y, start.z),
   ]
 
-  if (currentSection !== targetSection) {
-    if (currentSection !== 'atrium') {
-      const exit = SECTION_DOORWAYS[currentSection]
-      points.push(exit.clone())
-      points.push(new THREE.Vector3(0, .09, exit.z))
+  if (startFloor !== targetFloor) {
+    points.push(new THREE.Vector3(0, startBase + CAMERA_HEIGHT, 7))
+    points.push(new THREE.Vector3(0, targetBase + CAMERA_HEIGHT, 7))
+  }
+
+  if (currentSection !== targetSection && targetFloor === 0) {
+    if (currentSection !== 'atrium' && startFloor === 0) {
+      const exit = SECTION_DOORWAYS[currentSection].clone()
+      exit.y = startBase + .09
+      points.push(exit)
+      points.push(new THREE.Vector3(0, startBase + .09, exit.z))
     }
 
-    const entry = SECTION_DOORWAYS[targetSection]
+    const entry = SECTION_DOORWAYS[targetSection].clone()
+    entry.y = targetBase + .09
     if (targetSection !== 'atrium') {
-      points.push(new THREE.Vector3(0, .09, entry.z))
-      points.push(entry.clone())
+      points.push(new THREE.Vector3(0, targetBase + .09, entry.z))
+      points.push(entry)
     } else {
-      points.push(entry.clone())
+      points.push(entry)
     }
   }
 
   points.push(
-    new THREE.Vector3(destination.x, .09, destination.z),
+    new THREE.Vector3(destination.x, destination.y, destination.z),
   )
 
   const deduped = points.filter(
@@ -266,7 +286,7 @@ function makeArchitecturalGuide(
       point.distanceToSquared(collection[index - 1]) > .04,
   )
 
-  if (deduped.length <= 2) {
+  if (deduped.length <= 2 && startFloor === targetFloor) {
     return makeCurve(start, destination, .03)
   }
 
