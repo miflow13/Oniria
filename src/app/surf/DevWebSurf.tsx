@@ -11,6 +11,14 @@ import {
 import DevWebSurf3D, {
   type SurfDebugMetrics,
 } from './DevWebSurf3D'
+import {
+  shelfLayoutKey,
+  surfLayout,
+  type LayoutEditorMode,
+  type LayoutEditorSelection,
+  type ShelfLayoutTransform,
+  type SurfLayoutConfig,
+} from './layout'
 import type {
   DevArticle,
   DevArticleSummary,
@@ -222,13 +230,44 @@ function shelfSlotWorldPosition(
   ]
 }
 
+function applyShelfLayoutOverride(
+  placement: ShelfPlacement,
+): ShelfPlacement {
+  const key = shelfLayoutKey(
+    placement.shelfKey,
+    placement.floorIndex ?? 0,
+  )
+  if (!key) return placement
+  const override = surfLayout.shelves[key]
+  if (!override) return placement
+
+  const spacing = placement.shelfKey?.startsWith('catalog:')
+    ? .96
+    : 1.02
+  const localOffset =
+    ((placement.shelfSlot ?? 1) - 1) * spacing
+  const [x, z] = shelfSlotWorldPosition(
+    override.x,
+    override.z,
+    override.rotationY,
+    localOffset,
+    .42,
+  )
+
+  return {
+    ...placement,
+    position: [x, placement.position[1], z],
+    rotationY: override.rotationY,
+  }
+}
+
 function shelfPlacement(
   section: LibrarySection,
   index: number,
 ): ShelfPlacement {
   const anchors = SHELF_ANCHORS[section]
   if (!anchors?.length) {
-    return {
+    return applyShelfLayoutOverride({
       position: [0, .74, -12 - index * 1.1],
       rotationY: 0,
       shelfKey: section + ':fallback',
@@ -236,7 +275,7 @@ function shelfPlacement(
       shelfSlot: index,
       shelfOrder: index,
       floorIndex: 0,
-    }
+    })
   }
 
   const booksPerShelf = 9
@@ -257,7 +296,7 @@ function shelfPlacement(
     anchor.front,
   )
 
-  return {
+  return applyShelfLayoutOverride({
     position: [x, y, z],
     rotationY: anchor.rotationY,
     shelfKey: section + ':' + anchor.id + ':level-' + level,
@@ -265,7 +304,7 @@ function shelfPlacement(
     shelfSlot: slot,
     shelfOrder: localIndex,
     floorIndex: 0,
-  }
+  })
 }
 
 function megaShelfPlacement(
@@ -293,7 +332,7 @@ function megaShelfPlacement(
     .42,
   )
 
-  return {
+  return applyShelfLayoutOverride({
     position: [
       x,
       .67 + level * 1.1,
@@ -311,7 +350,7 @@ function megaShelfPlacement(
     shelfSlot: slot,
     shelfOrder: localIndex,
     floorIndex: 0,
-  }
+  })
 }
 
 function buildLibraryGraph(
@@ -753,6 +792,85 @@ export default function DevWebSurf() {
     useState<SurfDebugMetrics | null>(null)
   const [guideStep, setGuideStep] = useState<0 | 1 | 2 | 3>(0)
   const [controlsExpanded, setControlsExpanded] = useState(false)
+  const [layoutEditorEnabled, setLayoutEditorEnabled] = useState(false)
+  const [layoutEditorMode, setLayoutEditorMode] =
+    useState<LayoutEditorMode>('translate')
+  const [layoutEditorSnap, setLayoutEditorSnap] = useState(true)
+  const [layoutSelection, setLayoutSelection] =
+    useState<LayoutEditorSelection | null>(null)
+  const [layoutDraft, setLayoutDraft] = useState<SurfLayoutConfig>(() => ({
+    version: 1,
+    shelves: {...surfLayout.shelves},
+  }))
+  const [layoutSaveState, setLayoutSaveState] = useState<
+    'idle' | 'saving' | 'saved' | 'error'
+  >('idle')
+
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'development') return
+
+    const toggleLayoutEditor = (event: KeyboardEvent) => {
+      const target = event.target
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        (target instanceof HTMLElement && target.isContentEditable)
+      ) {
+        return
+      }
+      if (event.code !== 'KeyL') return
+      event.preventDefault()
+      setLayoutEditorEnabled((current) => {
+        const next = !current
+        if (next) {
+          setDirectoryOpen(false)
+          setControlsExpanded(false)
+        } else {
+          setLayoutSelection(null)
+        }
+        return next
+      })
+    }
+
+    window.addEventListener('keydown', toggleLayoutEditor)
+    return () => window.removeEventListener('keydown', toggleLayoutEditor)
+  }, [])
+
+  const updateLayoutTransform = useCallback(
+    (key: string, transform: ShelfLayoutTransform) => {
+      setLayoutDraft((current) => ({
+        version: 1,
+        shelves: {
+          ...current.shelves,
+          [key]: transform,
+        },
+      }))
+      setLayoutSelection((current) =>
+        current?.key === key
+          ? {...current, ...transform}
+          : current,
+      )
+      setLayoutSaveState('idle')
+    },
+    [],
+  )
+
+  async function saveLayoutDraft() {
+    if (process.env.NODE_ENV !== 'development') return
+    setLayoutSaveState('saving')
+    try {
+      const response = await fetch('/api/surf-layout', {
+        method: 'POST',
+        headers: {'content-type': 'application/json'},
+        body: JSON.stringify(layoutDraft),
+      })
+      if (!response.ok) throw new Error('Could not save layout')
+      setLayoutSaveState('saved')
+    } catch {
+      setLayoutSaveState('error')
+    }
+  }
 
   useEffect(() => {
     const onboardingKey = 'oniria:dev-library:onboarded-v1'
@@ -1337,6 +1455,11 @@ export default function DevWebSurf() {
         catalogLoading={catalogLoading}
         debugEnabled={debugOpen}
         onDebugMetrics={setDebugMetrics}
+        layoutEditorEnabled={layoutEditorEnabled}
+        layoutEditorMode={layoutEditorMode}
+        layoutEditorSnap={layoutEditorSnap}
+        onLayoutSelectionChange={setLayoutSelection}
+        onLayoutTransformChange={updateLayoutTransform}
       />
 
       <header ref={chromeRef} className={styles.chrome}>
@@ -1573,6 +1696,139 @@ export default function DevWebSurf() {
         <strong>{SECTION_COPY[currentSection].title}</strong>
         <small>Ground level · archive depths below</small>
       </aside>
+
+      {process.env.NODE_ENV === 'development' && (
+        <>
+          <button
+            type="button"
+            className={[
+              styles.layoutEditorToggle,
+              layoutEditorEnabled
+                ? styles.layoutEditorToggleActive
+                : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
+            onClick={() => {
+              setLayoutEditorEnabled((current) => {
+                const next = !current
+                if (next) {
+                  setDirectoryOpen(false)
+                  setControlsExpanded(false)
+                } else {
+                  setLayoutSelection(null)
+                }
+                return next
+              })
+            }}
+            title="Toggle visual layout editor (L)"
+          >
+            Layout
+          </button>
+
+          {layoutEditorEnabled && (
+            <aside
+              className={styles.layoutEditorPanel}
+              aria-label="DEV library layout editor"
+            >
+              <div className={styles.layoutEditorHeading}>
+                <div>
+                  <span>Layout Mode</span>
+                  <strong>Shelf Editor</strong>
+                </div>
+                <kbd>L</kbd>
+              </div>
+
+              <div className={styles.layoutEditorTools}>
+                <button
+                  type="button"
+                  className={
+                    layoutEditorMode === 'translate'
+                      ? styles.layoutEditorToolActive
+                      : ''
+                  }
+                  onClick={() => setLayoutEditorMode('translate')}
+                >
+                  Move
+                </button>
+                <button
+                  type="button"
+                  className={
+                    layoutEditorMode === 'rotate'
+                      ? styles.layoutEditorToolActive
+                      : ''
+                  }
+                  onClick={() => setLayoutEditorMode('rotate')}
+                >
+                  Rotate
+                </button>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={layoutEditorSnap}
+                    onChange={(event) =>
+                      setLayoutEditorSnap(event.target.checked)
+                    }
+                  />
+                  Snap
+                </label>
+              </div>
+
+              {layoutSelection ? (
+                <div className={styles.layoutEditorSelection}>
+                  <span>Selected</span>
+                  <strong>{layoutSelection.label}</strong>
+                  <dl>
+                    <div>
+                      <dt>X</dt>
+                      <dd>{layoutSelection.x.toFixed(2)}</dd>
+                    </div>
+                    <div>
+                      <dt>Z</dt>
+                      <dd>{layoutSelection.z.toFixed(2)}</dd>
+                    </div>
+                    <div>
+                      <dt>Rot</dt>
+                      <dd>
+                        {(
+                          (layoutSelection.rotationY * 180) /
+                          Math.PI
+                        ).toFixed(0)}
+                        °
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+              ) : (
+                <p className={styles.layoutEditorEmpty}>
+                  Click a bookcase to edit it.
+                </p>
+              )}
+
+              <div className={styles.layoutEditorActions}>
+                <button
+                  type="button"
+                  onClick={() => void saveLayoutDraft()}
+                  disabled={layoutSaveState === 'saving'}
+                >
+                  {layoutSaveState === 'saving'
+                    ? 'Saving…'
+                    : 'Save layout'}
+                </button>
+                <span>
+                  {layoutSaveState === 'saved'
+                    ? 'Saved to layout.json'
+                    : layoutSaveState === 'error'
+                      ? 'Save failed'
+                      : layoutEditorSnap
+                        ? '0.5m · 15° snap'
+                        : 'free transform'}
+                </span>
+              </div>
+            </aside>
+          )}
+        </>
+      )}
 
       <button
         type="button"
