@@ -2911,3 +2911,105 @@
     display: none;
   }
 }
+
+
+/* ==========================================================================
+   Wing legend + balanced location HUD
+   ========================================================================== */
+
+.wingLegend {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px 10px;
+  margin: 0 0 12px;
+  padding: 9px 10px;
+  background: rgba(10,12,16,.58);
+  border: 1px solid rgba(255,255,255,.055);
+  border-radius: 8px;
+}
+
+.wingLegend span {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #aeb4bf;
+  font-size: .5rem;
+  white-space: nowrap;
+}
+
+.wingLegend i {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  box-shadow: 0 0 10px rgba(255,255,255,.05);
+}
+
+.locationHud {
+  position: absolute;
+  z-index: 58;
+  right: 14px;
+  bottom: 12px;
+  width: min(250px, calc(100vw - 28px));
+  display: grid;
+  gap: 2px;
+  padding: 8px 11px 9px;
+  color: #dfe4ec;
+  background:
+    linear-gradient(
+      145deg,
+      rgba(15,18,24,.86),
+      rgba(10,12,16,.8)
+    );
+  border: 1px solid rgba(255,255,255,.06);
+  border-radius: 9px;
+  box-shadow:
+    0 10px 30px rgba(0,0,0,.24),
+    inset 0 1px rgba(255,255,255,.025);
+  backdrop-filter: blur(14px);
+  pointer-events: none;
+}
+
+.locationHud span {
+  color: #8d98ff;
+  font-size: .47rem;
+  font-weight: 800;
+  letter-spacing: .11em;
+  text-transform: uppercase;
+}
+
+.locationHud strong {
+  overflow: hidden;
+  color: #f3f6fa;
+  font-size: .6rem;
+  font-weight: 720;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.locationHud small {
+  overflow: hidden;
+  color: #737b87;
+  font-size: .45rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.debugToggle {
+  bottom: 76px;
+}
+
+.debugHud {
+  bottom: 112px;
+}
+
+@media (max-width: 720px) {
+  .wingLegend {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .locationHud {
+    display: none;
+  }
+}
