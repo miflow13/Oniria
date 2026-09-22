@@ -1230,6 +1230,60 @@ export default function DreamMap({
             <div className={styles.particleField} aria-hidden="true" />
             <div className={styles.dreamFog} aria-hidden="true" />
 
+            {introStage < 4 && (
+              <div
+                className={`${styles.introSequence} ${
+                  introStage === 0
+                    ? styles.introStage0
+                    : introStage === 1
+                      ? styles.introStage1
+                      : introStage === 2
+                        ? styles.introStage2
+                        : styles.introStage3
+                }`}
+                aria-live="polite"
+              >
+                <div className={styles.introStars} aria-hidden="true">
+                  <i />
+                  <i />
+                  <i />
+                  <i />
+                  <i />
+                </div>
+                <div className={styles.introCopy}>
+                  <span>{introStage < 2 ? 'between waking and memory' : 'dream field online'}</span>
+                  <strong>{introStage < 3 ? 'Oniria' : 'Your memories are connected.'}</strong>
+                  <small>
+                    {introStage < 2
+                      ? 'A memory is waking.'
+                      : introStage < 3
+                        ? 'Connections are surfacing.'
+                        : 'Enter whenever you are ready.'}
+                  </small>
+                </div>
+                <button type="button" onClick={skipIntro} className={styles.introSkip}>
+                  Skip
+                </button>
+              </div>
+            )}
+
+            {diveActive && (
+              <div className={styles.diveHud} aria-live="polite">
+                <div className={styles.diveIdentity}>
+                  <span>Dream Dive</span>
+                  <strong>{diveTitle || openDream?.title || 'Dream'}</strong>
+                  <small>Move the pointer to look around · no controls to learn</small>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDiveExitRequest((value) => value + 1)}
+                  className={styles.diveReturn}
+                >
+                  ← Return to Dream Map
+                </button>
+              </div>
+            )}
+
             <div className={styles.mapControls}>
               <button
                 type="button"
@@ -1439,20 +1493,22 @@ export default function DreamMap({
             <div className={styles.mapHint}>
               {focusedDream
                 ? 'Focused constellation · select a symbol to inspect it'
-                : 'Hover to hear · drag through space · scroll to zoom · select an orb to awaken its Dream Cell'}
+                : 'Hover to hear · click to inspect · double-click or hold a selected orb to enter the dream'}
             </div>
 
             {selectedNode &&
               openDream &&
               selectedMeta &&
               noteStyle &&
-              !enteringNodeId && (
+              !enteringNodeId &&
+              !diveActive && (
                 <div
+                  key={`${selectedNode._id}:${openDream._id}`}
                   className={`${styles.noteCluster} ${
                     noteSide === 'left'
                       ? styles.noteClusterLeft
                       : styles.noteClusterRight
-                  }`}
+                  } ${closingJournal ? styles.noteClusterClosing : ''}`}
                   style={noteStyle}
                   aria-live="polite"
                 >
