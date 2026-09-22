@@ -408,12 +408,12 @@ function buildLibraryGraph(
     section: LibrarySection
     position: [number, number, number]
   }> = [
-    {id: 'section:featured', section: 'featured', position: [0, 1.3, -5]},
-    {id: 'section:latest', section: 'latest', position: [-10.3, 1.3, -5]},
-    {id: 'section:topics', section: 'topics', position: [10.3, 1.3, -5]},
-    {id: 'section:creators', section: 'creators', position: [10.3, 1.3, -20.4]},
-    {id: 'section:search', section: 'search', position: [-10.3, 1.3, -20.4]},
-    {id: 'section:archive', section: 'archive', position: [0, 1.3, -34.2]},
+    {id: 'section:featured', section: 'featured', position: [0, 1.3, -6.4]},
+    {id: 'section:latest', section: 'latest', position: [-13.5, 1.3, -6.4]},
+    {id: 'section:topics', section: 'topics', position: [13.5, 1.3, -6.4]},
+    {id: 'section:creators', section: 'creators', position: [13.5, 1.3, -20.4]},
+    {id: 'section:search', section: 'search', position: [-13.5, 1.3, -20.4]},
+    {id: 'section:archive', section: 'archive', position: [0, 1.3, -27.3]},
   ]
 
   sections.forEach(({id, section, position}) => {
