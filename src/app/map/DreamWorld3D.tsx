@@ -774,6 +774,179 @@ export default function DreamWorld3D({
     const listener = new THREE.AudioListener()
     camera.add(listener)
 
+    const libraryAudioContext = libraryMode
+      ? (listener.context as AudioContext)
+      : null
+    let libraryAudioMaster: GainNode | null = null
+    let libraryFloorGain: GainNode | null = null
+    let libraryDroneGain: GainNode | null = null
+    let libraryWindGain: GainNode | null = null
+    let libraryDroneOscillator: OscillatorNode | null = null
+    let libraryToneOscillator: OscillatorNode | null = null
+    let libraryNoiseSource: AudioBufferSourceNode | null = null
+    let nextLibraryFootstepAt = 0
+    let lastLibraryAudioShelfId: string | null = null
+
+    const createLibraryTone = (
+      frequency: number,
+      volume: number,
+      duration: number,
+      type: OscillatorType = 'sine',
+    ) => {
+      if (
+        !libraryAudioContext ||
+        !libraryAudioMaster ||
+        !soundEnabledRef.current ||
+        libraryAudioContext.state !== 'running'
+      ) {
+        return
+      }
+
+      const now = libraryAudioContext.currentTime
+      const oscillator = libraryAudioContext.createOscillator()
+      const gain = libraryAudioContext.createGain()
+      oscillator.type = type
+      oscillator.frequency.setValueAtTime(frequency, now)
+      oscillator.frequency.exponentialRampToValueAtTime(
+        Math.max(24, frequency * .72),
+        now + duration,
+      )
+      gain.gain.setValueAtTime(.0001, now)
+      gain.gain.exponentialRampToValueAtTime(
+        Math.max(.0002, volume),
+        now + .012,
+      )
+      gain.gain.exponentialRampToValueAtTime(
+        .0001,
+        now + duration,
+      )
+      oscillator.connect(gain)
+      gain.connect(libraryAudioMaster)
+      oscillator.start(now)
+      oscillator.stop(now + duration + .025)
+    }
+
+    const playLibraryShelfWake = () => {
+      createLibraryTone(520, .013, .22, 'sine')
+      if (!libraryAudioContext || !libraryAudioMaster) return
+      const context = libraryAudioContext
+      if (
+        !soundEnabledRef.current ||
+        context.state !== 'running'
+      ) {
+        return
+      }
+      const now = context.currentTime
+      const oscillator = context.createOscillator()
+      const gain = context.createGain()
+      oscillator.type = 'sine'
+      oscillator.frequency.setValueAtTime(780, now)
+      oscillator.frequency.exponentialRampToValueAtTime(
+        620,
+        now + .3,
+      )
+      gain.gain.setValueAtTime(.0001, now)
+      gain.gain.exponentialRampToValueAtTime(.008, now + .018)
+      gain.gain.exponentialRampToValueAtTime(.0001, now + .3)
+      oscillator.connect(gain)
+      gain.connect(libraryAudioMaster)
+      oscillator.start(now)
+      oscillator.stop(now + .34)
+    }
+
+    const playLibraryFootstep = (strength: number) => {
+      const volume = .008 + strength * .008
+      createLibraryTone(
+        82 + strength * 12,
+        volume,
+        .095,
+        'triangle',
+      )
+    }
+
+    const handleLibraryAudioUnlock = () => {
+      if (!libraryAudioContext) return
+      void libraryAudioContext.resume()
+    }
+
+    if (libraryAudioContext) {
+      libraryAudioMaster = libraryAudioContext.createGain()
+      libraryAudioMaster.gain.value = 0
+      libraryAudioMaster.connect(listener.getInput())
+
+      const floorFilter = libraryAudioContext.createBiquadFilter()
+      floorFilter.type = 'lowpass'
+      floorFilter.frequency.value = 180
+      floorFilter.Q.value = .6
+
+      const floorOscillator = libraryAudioContext.createOscillator()
+      floorOscillator.type = 'sine'
+      floorOscillator.frequency.value = 54
+      libraryFloorGain = libraryAudioContext.createGain()
+      libraryFloorGain.gain.value = .012
+      floorOscillator
+        .connect(floorFilter)
+        .connect(libraryFloorGain)
+        .connect(libraryAudioMaster)
+      floorOscillator.start()
+
+      const droneFilter = libraryAudioContext.createBiquadFilter()
+      droneFilter.type = 'lowpass'
+      droneFilter.frequency.value = 420
+      droneFilter.Q.value = .8
+
+      libraryDroneOscillator = libraryAudioContext.createOscillator()
+      libraryDroneOscillator.type = 'triangle'
+      libraryDroneOscillator.frequency.value = 92
+      libraryDroneGain = libraryAudioContext.createGain()
+      libraryDroneGain.gain.value = .007
+      libraryDroneOscillator
+        .connect(droneFilter)
+        .connect(libraryDroneGain)
+        .connect(libraryAudioMaster)
+      libraryDroneOscillator.start()
+
+      libraryToneOscillator = libraryAudioContext.createOscillator()
+      libraryToneOscillator.type = 'sine'
+      libraryToneOscillator.frequency.value = 184
+      const toneGain = libraryAudioContext.createGain()
+      toneGain.gain.value = .0022
+      libraryToneOscillator
+        .connect(toneGain)
+        .connect(libraryAudioMaster)
+      libraryToneOscillator.start()
+
+      const noiseBuffer = libraryAudioContext.createBuffer(
+        1,
+        libraryAudioContext.sampleRate * 2,
+        libraryAudioContext.sampleRate,
+      )
+      const noiseData = noiseBuffer.getChannelData(0)
+      for (let index = 0; index < noiseData.length; index += 1) {
+        noiseData[index] = Math.random() * 2 - 1
+      }
+
+      libraryNoiseSource = libraryAudioContext.createBufferSource()
+      libraryNoiseSource.buffer = noiseBuffer
+      libraryNoiseSource.loop = true
+      const windFilter = libraryAudioContext.createBiquadFilter()
+      windFilter.type = 'bandpass'
+      windFilter.frequency.value = 460
+      windFilter.Q.value = .38
+      libraryWindGain = libraryAudioContext.createGain()
+      libraryWindGain.gain.value = .002
+      libraryNoiseSource
+        .connect(windFilter)
+        .connect(libraryWindGain)
+        .connect(libraryAudioMaster)
+      libraryNoiseSource.start()
+
+      window.addEventListener(
+        'oniria:library-audio-enable',
+        handleLibraryAudioUnlock,
+      )
+    }
+
     const renderer = new THREE.WebGLRenderer({
       antialias: true,
       alpha: false,
@@ -4626,6 +4799,109 @@ export default function DreamWorld3D({
         ? archiveBayFromWorldZ(camera.position.z)
         : 0
 
+      if (
+        libraryAudioContext &&
+        libraryAudioMaster &&
+        libraryFloorGain &&
+        libraryDroneGain &&
+        libraryWindGain
+      ) {
+        const nowAudio = libraryAudioContext.currentTime
+        const enabled =
+          soundEnabledRef.current &&
+          libraryAudioContext.state === 'running'
+
+        libraryAudioMaster.gain.setTargetAtTime(
+          enabled ? .74 : 0,
+          nowAudio,
+          enabled ? .18 : .06,
+        )
+
+        if (enabled) {
+          const walking =
+            libraryMovementModeRef.current === 'walk'
+          const speed = Math.hypot(
+            flightVelocity.x,
+            flightVelocity.z,
+          )
+          const speedStrength = THREE.MathUtils.clamp(
+            speed / 4.25,
+            0,
+            1,
+          )
+
+          libraryFloorGain.gain.setTargetAtTime(
+            walking ? .014 : .006,
+            nowAudio,
+            .18,
+          )
+          libraryWindGain.gain.setTargetAtTime(
+            walking
+              ? .0015 + speedStrength * .001
+              : .008 + speedStrength * .008,
+            nowAudio,
+            .2,
+          )
+          libraryDroneGain.gain.setTargetAtTime(
+            .006 + (1 - speedStrength) * .003,
+            nowAudio,
+            .28,
+          )
+
+          const district = ARCHIVE_DISTRICTS.reduce(
+            (nearest, candidate) =>
+              Math.abs(candidate.bay - currentArchiveBay) <
+              Math.abs(nearest.bay - currentArchiveBay)
+                ? candidate
+                : nearest,
+          )
+
+          const districtFrequency =
+            district.id === 'ai'
+              ? 146
+              : district.id === 'linux'
+                ? 72
+                : district.id === 'javascript'
+                  ? 110
+                  : district.id === 'deep-stacks'
+                    ? 58
+                    : district.id === 'archive-2026'
+                      ? 82
+                      : 92
+          const districtTone =
+            district.id === 'ai'
+              ? 292
+              : district.id === 'linux'
+                ? 144
+                : district.id === 'javascript'
+                  ? 220
+                  : district.id === 'deep-stacks'
+                    ? 116
+                    : 184
+
+          libraryDroneOscillator?.frequency.setTargetAtTime(
+            districtFrequency,
+            nowAudio,
+            .9,
+          )
+          libraryToneOscillator?.frequency.setTargetAtTime(
+            districtTone,
+            nowAudio,
+            .9,
+          )
+
+          if (
+            walking &&
+            speedStrength > .18 &&
+            elapsed >= nextLibraryFootstepAt
+          ) {
+            playLibraryFootstep(speedStrength)
+            nextLibraryFootstepAt =
+              elapsed + THREE.MathUtils.lerp(.58, .38, speedStrength)
+          }
+        }
+      }
+
       libraryRouteObjects.forEach((object) => {
         if (!object.userData.routeMarkerBaseY) return
         const phase = object.userData.routeMarkerPhase as number
@@ -4850,6 +5126,18 @@ export default function DreamWorld3D({
           0,
           1,
         )
+
+        if (
+          soundEnabledRef.current &&
+          focusStrength > .32 &&
+          nearestLibraryShelfId &&
+          nearestLibraryShelfId !== lastLibraryAudioShelfId
+        ) {
+          playLibraryShelfWake()
+          lastLibraryAudioShelfId = nearestLibraryShelfId
+        } else if (focusStrength < .08) {
+          lastLibraryAudioShelfId = null
+        }
 
         if (libraryShelfLight && nearestVisual) {
           libraryShelfLight.position
@@ -5878,6 +6166,18 @@ export default function DreamWorld3D({
       if (diveMode !== 'none') onDiveStateChangeRef.current(false)
       disposeDive()
       releaseDreamCell()
+
+      if (libraryAudioContext) {
+        window.removeEventListener(
+          'oniria:library-audio-enable',
+          handleLibraryAudioUnlock,
+        )
+      }
+      libraryNoiseSource?.stop()
+      libraryDroneOscillator?.stop()
+      libraryToneOscillator?.stop()
+      libraryAudioMaster?.disconnect()
+
       camera.remove(listener)
 
       shelfSideGeometry.dispose()
