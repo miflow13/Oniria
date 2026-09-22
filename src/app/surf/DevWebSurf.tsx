@@ -784,6 +784,30 @@ export default function DevWebSurf() {
   const [debugOpen, setDebugOpen] = useState(false)
   const [debugMetrics, setDebugMetrics] =
     useState<SurfDebugMetrics | null>(null)
+  const [guideStep, setGuideStep] = useState<0 | 1 | 2 | 3>(0)
+  const [controlsExpanded, setControlsExpanded] = useState(false)
+
+  useEffect(() => {
+    const onboardingKey = 'oniria:dev-library:onboarded-v1'
+    if (window.localStorage.getItem(onboardingKey)) return
+
+    setGuideStep(1)
+    setControlsExpanded(true)
+
+    const wingTimer = window.setTimeout(() => setGuideStep(2), 2200)
+    const controlsTimer = window.setTimeout(() => setGuideStep(3), 4600)
+    const finishTimer = window.setTimeout(() => {
+      setGuideStep(0)
+      setControlsExpanded(false)
+      window.localStorage.setItem(onboardingKey, '1')
+    }, 7600)
+
+    return () => {
+      window.clearTimeout(wingTimer)
+      window.clearTimeout(controlsTimer)
+      window.clearTimeout(finishTimer)
+    }
+  }, [])
 
   useEffect(() => {
     const toggleDebug = (event: KeyboardEvent) => {
@@ -1384,11 +1408,16 @@ export default function DevWebSurf() {
             <button
               type="button"
               key={item.section}
-              className={
+              className={[
                 currentSection === item.section
                   ? styles.wingRailActive
-                  : ''
-              }
+                  : '',
+                guideStep === 2 && item.section === 'featured'
+                  ? styles.guidedPulse
+                  : '',
+              ]
+                .filter(Boolean)
+                .join(' ')}
               onClick={() => {
                 if (item.section === 'search') {
                   walkTo(item.target)
@@ -1461,7 +1490,12 @@ export default function DevWebSurf() {
 
       <button
         type="button"
-        className={styles.directoryToggle}
+        className={[
+          styles.directoryToggle,
+          guideStep === 1 ? styles.guidedPulse : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
         onClick={() => setDirectoryOpen((current) => !current)}
       >
         <span aria-hidden="true">☷</span>
@@ -1670,19 +1704,39 @@ export default function DevWebSurf() {
         </aside>
       )}
 
-      <section className={styles.controls}>
-        <span><kbd>WASD</kbd> walk</span>
-        <span><kbd>mouse</kbd> look</span>
-        <span>
-          <kbd>E</kbd>{' '}
-          {activeNode?.kind === 'article' ? 'put back' : 'inspect'}
-        </span>
-        <span><kbd>F</kbd> travel</span>
-        <span><kbd>1–6</kbd> floors</span>
-        <span><kbd>Pg↑↓</kbd> lift</span>
-        <span><kbd>Shift</kbd> hurry</span>
-        <span><kbd>Esc</kbd> cursor</span>
-      </section>
+      <div
+        className={[
+          styles.controlsDock,
+          controlsExpanded ? styles.controlsDockExpanded : '',
+          guideStep === 3 ? styles.guidedPulse : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+      >
+        <button
+          type="button"
+          className={styles.controlsToggle}
+          aria-expanded={controlsExpanded}
+          onClick={() => setControlsExpanded((current) => !current)}
+          title="Show movement controls"
+        >
+          <span aria-hidden="true">⌨</span>
+          Controls
+        </button>
+        <section className={styles.controls}>
+          <span><kbd>WASD</kbd> walk</span>
+          <span><kbd>mouse</kbd> look</span>
+          <span>
+            <kbd>E</kbd>{' '}
+            {activeNode?.kind === 'article' ? 'put back' : 'inspect'}
+          </span>
+          <span><kbd>F</kbd> travel</span>
+          <span><kbd>1–6</kbd> floors</span>
+          <span><kbd>Pg↑↓</kbd> lift</span>
+          <span><kbd>Shift</kbd> hurry</span>
+          <span><kbd>Esc</kbd> cursor</span>
+        </section>
+      </div>
 
       {hovered && !activeNode && (
         <div className={styles.hoverCard}>
