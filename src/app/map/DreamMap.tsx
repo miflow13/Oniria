@@ -251,6 +251,7 @@ export default function DreamMap({
   const [diveDepth, setDiveDepth] = useState(0)
   const [diveTimelineProgress, setDiveTimelineProgress] = useState(1)
   const [diveExitRequest, setDiveExitRequest] = useState(0)
+  const [diveBackRequest, setDiveBackRequest] = useState(0)
   const [observatoryMode, setObservatoryMode] = useState(false)
   const [closingJournal, setClosingJournal] = useState(false)
   const [motionPositions, setMotionPositions] = useState<Record<string, {x: number; y: number}>>({})
@@ -1333,13 +1334,24 @@ export default function DreamMap({
                   </small>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => setDiveExitRequest((value) => value + 1)}
-                  className={styles.diveReturn}
-                >
-                  ← Return to Dream Map
-                </button>
+                <div className={styles.diveActions}>
+                  {diveDepth > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setDiveBackRequest((value) => value + 1)}
+                      className={styles.diveBack}
+                    >
+                      ← Previous dream
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setDiveExitRequest((value) => value + 1)}
+                    className={styles.diveReturn}
+                  >
+                    Return to Dream Map
+                  </button>
+                </div>
               </div>
             )}
 
@@ -1476,6 +1488,7 @@ export default function DreamMap({
                 soundEnabled={soundEnabled}
                 introStage={introStage}
                 diveExitRequest={diveExitRequest}
+                diveBackRequest={diveBackRequest}
                 diveTimelineProgress={diveTimelineProgress}
                 observatoryMode={observatoryMode}
                 onZoomChange={changeZoom}
