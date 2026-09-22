@@ -387,6 +387,10 @@ export default function DreamWorld3D({
   const observatoryModeRef = useRef(observatoryMode)
   const flightModeRef = useRef(flightMode)
   const inputBlockedRef = useRef(inputBlocked)
+  const libraryFlightStateRef = useRef<{
+    position: [number, number, number]
+    quaternion: [number, number, number, number]
+  } | null>(null)
   const onDiveStateChangeRef = useRef(onDiveStateChange)
   const onDiveDreamChangeRef = useRef(onDiveDreamChange)
   const onFlightModeChangeRef = useRef(onFlightModeChange)
@@ -465,7 +469,14 @@ export default function DreamWorld3D({
       0.05,
       libraryMode ? 900 : 80,
     )
-    camera.position.set(0, 0, 10.8)
+    const savedLibraryFlightState =
+      libraryMode ? libraryFlightStateRef.current : null
+    if (savedLibraryFlightState) {
+      camera.position.fromArray(savedLibraryFlightState.position)
+      camera.quaternion.fromArray(savedLibraryFlightState.quaternion)
+    } else {
+      camera.position.set(0, 0, 10.8)
+    }
 
     const listener = new THREE.AudioListener()
     camera.add(listener)
@@ -4311,6 +4322,22 @@ export default function DreamWorld3D({
     animationFrame = requestAnimationFrame(animate)
 
     return () => {
+      if (libraryMode && flightModeRef.current) {
+        libraryFlightStateRef.current = {
+          position: [
+            camera.position.x,
+            camera.position.y,
+            camera.position.z,
+          ],
+          quaternion: [
+            camera.quaternion.x,
+            camera.quaternion.y,
+            camera.quaternion.z,
+            camera.quaternion.w,
+          ],
+        }
+      }
+
       cancelAnimationFrame(animationFrame)
       resizeObserver.disconnect()
 
