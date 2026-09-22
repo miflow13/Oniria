@@ -7,7 +7,7 @@ import type {
   LayoutEditorMode,
   LayoutEditorSelection,
   ShelfLayoutTransform,
-} from './layout'
+} from './surfLayout'
 import {shelfLayoutKey} from './layout'
 import type {LibrarySection, SurfEdge, SurfNode, SurfNodeKind} from './types'
 import styles from './surf.module.css'
