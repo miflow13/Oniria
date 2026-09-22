@@ -324,7 +324,7 @@ function sanitizeDistrict(
   }
 }
 
-const MAX_DISTRICT_GAP_BAYS = 5
+const MAX_DISTRICT_GAP_BAYS = 4
 
 function compactDistrictRoute(
   districts: LibraryDistrictConfig[],
