@@ -525,7 +525,11 @@ export default function DevWebSurf3D({
         map: labelTexture,
         transparent: true,
         opacity:
-          node.kind === 'section' || node.kind === 'home' ? .92 : .56,
+          node.kind === 'section' || node.kind === 'home'
+            ? .98
+            : node.kind === 'profile' || node.kind === 'tag'
+              ? .82
+              : .7,
         depthWrite: false,
         toneMapped: false,
       })
@@ -540,8 +544,8 @@ export default function DevWebSurf3D({
         0,
       )
       label.scale.set(
-        node.kind === 'article' ? 3.2 : 4.4,
-        node.kind === 'article' ? .8 : 1.05,
+        node.kind === 'article' ? 3.55 : 4.7,
+        node.kind === 'article' ? .9 : 1.12,
         1,
       )
       group.add(label)
@@ -603,14 +607,14 @@ export default function DevWebSurf3D({
             edge.kind === 'author'
               ? 0x7c83ff
               : edge.kind === 'tag'
-                ? 0x5ad39f
+                ? 0x3b49df
                 : edge.kind === 'search'
-                  ? 0xe1b25b
+                  ? 0x3b49df
                   : edge.kind === 'corridor'
-                    ? 0x6b7c82
+                    ? 0x555555
                     : 0x5965e8,
           transparent: true,
-          opacity: edge.kind === 'corridor' ? .18 : .11,
+          opacity: edge.kind === 'corridor' ? .26 : .16,
           blending: THREE.AdditiveBlending,
           depthWrite: false,
         })
@@ -621,7 +625,7 @@ export default function DevWebSurf3D({
         const packetMaterial = new THREE.MeshBasicMaterial({
           color: material.color,
           transparent: true,
-          opacity: .5,
+          opacity: .68,
           blending: THREE.AdditiveBlending,
           depthWrite: false,
         })
@@ -849,10 +853,12 @@ export default function DevWebSurf3D({
           .08
         visual.labelMaterial.opacity +=
           ((selected || hovered || routed
-            ? .98
+            ? 1
             : id.startsWith('section:')
-              ? .9
-              : .56) -
+              ? .98
+              : id.startsWith('profile:') || id.startsWith('tag:')
+                ? .82
+                : .7) -
             visual.labelMaterial.opacity) *
           .1
       })
