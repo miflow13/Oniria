@@ -437,6 +437,7 @@ export function createDreamCell(
   color: THREE.Color,
   settings: DreamQualitySettings,
   seed: number,
+  environmentMap: THREE.Texture | null = null,
 ): DreamCell {
   const scene = new THREE.Scene()
   const cold = new THREE.Color(0x02040c)
