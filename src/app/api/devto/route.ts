@@ -32,6 +32,39 @@ function safeValue(value: string | null, fallback = '') {
   return (value ?? fallback).trim().slice(0, 140)
 }
 
+function lowQualityImageTarget(target: URL) {
+  const thumbnail = new URL(target)
+
+  if (thumbnail.hostname === 'media2.dev.to') {
+    const marker = '/cdn-cgi/image/'
+    const markerIndex = thumbnail.pathname.indexOf(marker)
+    if (markerIndex >= 0) {
+      const optionsStart = markerIndex + marker.length
+      const sourceStart = thumbnail.pathname.indexOf('/', optionsStart)
+      if (sourceStart >= 0) {
+        thumbnail.pathname =
+          thumbnail.pathname.slice(0, optionsStart) +
+          'width=112,height=84,fit=cover,gravity=auto,quality=45,format=auto' +
+          thumbnail.pathname.slice(sourceStart)
+      }
+    }
+  }
+
+  if (thumbnail.hostname === 'res.cloudinary.com') {
+    const marker = '/image/upload/'
+    const markerIndex = thumbnail.pathname.indexOf(marker)
+    if (markerIndex >= 0) {
+      const insertAt = markerIndex + marker.length
+      thumbnail.pathname =
+        thumbnail.pathname.slice(0, insertAt) +
+        'w_112,h_84,c_fill,q_auto:low,f_auto/' +
+        thumbnail.pathname.slice(insertAt)
+    }
+  }
+
+  return thumbnail
+}
+
 function normalizeTagList(value: unknown, fallback?: unknown) {
   const source = value ?? fallback
 
@@ -96,7 +129,16 @@ export async function GET(request: NextRequest) {
         )
       }
 
-      const imageResponse = await fetch(target, {
+      const variant = safeValue(
+        searchParams.get('variant'),
+        'full',
+      )
+      const fetchTarget =
+        variant === 'thumb'
+          ? lowQualityImageTarget(target)
+          : target
+
+      const imageResponse = await fetch(fetchTarget, {
         headers: {
           accept: 'image/avif,image/webp,image/png,image/jpeg,image/*',
           'user-agent':
@@ -126,7 +168,9 @@ export async function GET(request: NextRequest) {
         headers: {
           'content-type': contentType,
           'cache-control':
-            'public, max-age=3600, stale-while-revalidate=86400',
+            variant === 'thumb'
+              ? 'public, max-age=86400, stale-while-revalidate=604800'
+              : 'public, max-age=3600, stale-while-revalidate=86400',
         },
       })
     }
