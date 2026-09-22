@@ -1404,6 +1404,12 @@ export default function DevWebSurf3D({
     const up = new THREE.Vector3(0, 1, 0)
     const move = new THREE.Vector3()
     const tempWorldPosition = new THREE.Vector3()
+    const tempDirection = new THREE.Vector3()
+    const tempTargetPosition = new THREE.Vector3()
+    const tempScale = new THREE.Vector3()
+    const reducedMotion = window.matchMedia(
+      '(prefers-reduced-motion: reduce)',
+    ).matches
     const euler = new THREE.Euler(0, 0, 0, 'YXZ')
     let yaw = 0
     let pitch = 0
@@ -1441,20 +1447,26 @@ export default function DevWebSurf3D({
       if (!visual) return
 
       const source = camera.position.clone()
-      const destination = visual.group
-        .getWorldPosition(new THREE.Vector3())
-        .add(
-          new THREE.Vector3(
-            node.kind === 'article' ? 0 : 0,
-            0,
-            node.kind === 'section' ? 2.5 : 1.75,
-          ),
-        )
+      const destination = visual.group.getWorldPosition(
+        new THREE.Vector3(),
+      )
+      const standOff =
+        node.kind === 'section'
+          ? 2.35
+          : node.kind === 'article'
+            ? 1.38
+            : 1.65
+      tempDirection
+        .set(0, 0, 1)
+        .applyAxisAngle(up, node.rotationY ?? 0)
+      destination.addScaledVector(tempDirection, standOff)
       destination.y = 1.62
 
       const control = source.clone().lerp(destination, .5)
-      control.y = 1.9
-      control.x += Math.sin(destination.z * .19) * .65
+      control.y = reducedMotion ? 1.7 : 1.78
+      control.x +=
+        Math.sin(destination.z * .19) *
+        (reducedMotion ? .14 : .34)
 
       travel = {
         source,
@@ -1463,16 +1475,18 @@ export default function DevWebSurf3D({
         node,
         startedAt: performance.now() / 1000,
         duration: THREE.MathUtils.clamp(
-          source.distanceTo(destination) / 7,
-          .75,
-          2.3,
+          source.distanceTo(destination) / 5.2,
+          1,
+          3.15,
         ),
         inspectOnArrival,
       }
     }
 
-    function collides(next: THREE.Vector3) {
-      const radius = .28
+    function collides(
+      next: THREE.Vector3,
+      radius = .31,
+    ) {
       return collisionRects.some(
         (rect) =>
           next.x + radius > rect.minX &&
@@ -1482,11 +1496,37 @@ export default function DevWebSurf3D({
       )
     }
 
+    function moveWithSliding(deltaMove: THREE.Vector3) {
+      const nextX = position.clone()
+      nextX.x = THREE.MathUtils.clamp(
+        nextX.x + deltaMove.x,
+        -19.55,
+        19.55,
+      )
+      if (!collides(nextX)) {
+        position.x = nextX.x
+      } else {
+        velocity.x *= .12
+      }
+
+      const nextZ = position.clone()
+      nextZ.z = THREE.MathUtils.clamp(
+        nextZ.z + deltaMove.z,
+        -43.15,
+        13.65,
+      )
+      if (!collides(nextZ)) {
+        position.z = nextZ.z
+      } else {
+        velocity.z *= .12
+      }
+    }
+
     function onMouseMove(event: MouseEvent) {
       if (document.pointerLockElement !== renderer.domElement || travel) return
-      yaw -= event.movementX * .00165
-      pitch -= event.movementY * .0014
-      pitch = THREE.MathUtils.clamp(pitch, -.46, .46)
+      yaw -= event.movementX * .00132
+      pitch -= event.movementY * .00116
+      pitch = THREE.MathUtils.clamp(pitch, -.52, .52)
     }
 
     function onKeyDown(event: KeyboardEvent) {
@@ -1494,9 +1534,9 @@ export default function DevWebSurf3D({
 
       if (event.code === 'KeyE') {
         event.preventDefault()
-        const selectedNode = nodes.find(
-          (candidate) => candidate.id === selectedRef.current,
-        )
+        const selectedNode = selectedRef.current
+          ? nodeById.get(selectedRef.current)
+          : undefined
         if (selectedNode?.kind === 'article') {
           putBackRef.current()
           return
@@ -1509,8 +1549,9 @@ export default function DevWebSurf3D({
       if (event.code === 'KeyF') {
         event.preventDefault()
         const node =
-          nodes.find((candidate) => candidate.id === selectedRef.current) ??
-          pickCenter()
+          (selectedRef.current
+            ? nodeById.get(selectedRef.current)
+            : undefined) ?? pickCenter()
         if (node) {
           startTravel(node, true)
         }
@@ -1617,24 +1658,32 @@ export default function DevWebSurf3D({
           visual.baseScale *
           (selected ? 1.13 : hovered ? 1.075 : routed ? 1.05 : 1)
 
+        tempScale.set(targetScale, targetScale, targetScale)
         visual.group.scale.lerp(
-          new THREE.Vector3(targetScale, targetScale, targetScale),
-          .08,
+          tempScale,
+          1 - Math.exp(-delta * 8.5),
         )
 
         if (node?.kind === 'article') {
-          const toCamera = camera.position
-            .clone()
+          tempDirection
+            .copy(camera.position)
             .sub(visual.basePosition)
-          toCamera.y = 0
-          if (toCamera.lengthSq() > .0001) toCamera.normalize()
+          tempDirection.y = 0
+          if (tempDirection.lengthSq() > .0001) {
+            tempDirection.normalize()
+          }
 
-          const pull = selected ? .46 : hovered ? .3 : routed ? .16 : 0
-          const targetPosition = visual.basePosition
-            .clone()
-            .addScaledVector(toCamera, pull)
-          targetPosition.y += selected ? .06 : hovered ? .035 : 0
-          visual.group.position.lerp(targetPosition, .12)
+          const pull =
+            selected ? .34 : hovered ? .22 : routed ? .12 : 0
+          tempTargetPosition
+            .copy(visual.basePosition)
+            .addScaledVector(tempDirection, pull)
+          tempTargetPosition.y +=
+            selected ? .035 : hovered ? .02 : 0
+          visual.group.position.lerp(
+            tempTargetPosition,
+            1 - Math.exp(-delta * 10),
+          )
 
           const cameraYaw = Math.atan2(
             camera.position.x - visual.group.position.x,
@@ -1645,7 +1694,7 @@ export default function DevWebSurf3D({
             Math.sin(yawDelta),
             Math.cos(yawDelta),
           )
-          const turnAmount = selected ? .24 : hovered ? .16 : .045
+          const turnAmount = selected ? .18 : hovered ? .12 : .03
           const targetYaw =
             visual.baseRotationY +
             THREE.MathUtils.clamp(
@@ -1657,7 +1706,7 @@ export default function DevWebSurf3D({
           visual.group.rotation.y = THREE.MathUtils.lerp(
             visual.group.rotation.y,
             targetYaw,
-            .11,
+            1 - Math.exp(-delta * 9),
           )
 
           visual.group.getWorldPosition(tempWorldPosition)
@@ -1716,18 +1765,23 @@ export default function DevWebSurf3D({
             .1
         }
 
-        visual.labelMaterial.opacity +=
-          ((selected || hovered || routed
+        const labelTarget =
+          selected || hovered || routed
             ? 1
             : id.startsWith('section:')
               ? .98
               : id.startsWith('profile:') || id.startsWith('tag:')
                 ? .82
-                : unrelatedShelf
-                  ? .24
-                  : .7) -
-            visual.labelMaterial.opacity) *
-          .1
+                : node?.kind === 'article'
+                  ? sameShelf
+                    ? .46
+                    : unrelatedShelf
+                      ? .08
+                      : .16
+                  : .7
+        visual.labelMaterial.opacity +=
+          (labelTarget - visual.labelMaterial.opacity) *
+          (1 - Math.exp(-delta * 9))
 
         if (visual.archMaterial) {
           const archActive =
@@ -1780,6 +1834,42 @@ export default function DevWebSurf3D({
 
       trimCoverCache(now)
 
+      sectionFloorGlows.forEach(({section, mesh, material}) => {
+        const isCurrent = section === currentSection
+        const isRouted = section === routedSection
+        material.opacity +=
+          ((isRouted ? .1 : isCurrent ? .055 : .018) -
+            material.opacity) *
+          (1 - Math.exp(-delta * 3.8))
+        const targetScale = isRouted ? 1.08 : isCurrent ? 1.03 : 1
+        mesh.scale.lerp(
+          tempScale.set(targetScale, targetScale, targetScale),
+          1 - Math.exp(-delta * 3.5),
+        )
+      })
+
+      sectionBeacons.forEach(({section, materials}) => {
+        const isCurrent = section === currentSection
+        const isRouted = section === routedSection
+        materials.forEach((material, index) => {
+          const target =
+            isRouted
+              ? index === 0
+                ? .82
+                : .54
+              : isCurrent
+                ? index === 0
+                  ? .3
+                  : .18
+                : index === 0
+                  ? .12
+                  : .065
+          material.opacity +=
+            (target - material.opacity) *
+            (1 - Math.exp(-delta * 6))
+        })
+      })
+
       routeVisuals.forEach((routeVisual) => {
         const touchesSelected =
           routeVisual.edge.source === selectedRef.current ||
@@ -1803,16 +1893,16 @@ export default function DevWebSurf3D({
           ((active
             ? .82
             : routeVisual.edge.kind === 'corridor'
-              ? .34
-              : .24) -
+              ? .16
+              : .1) -
             routeVisual.material.opacity) *
           .1
         routeVisual.glowMaterial.opacity +=
-          ((active ? .22 : routeVisual.edge.kind === 'corridor' ? .05 : .03) -
+          ((active ? .2 : routeVisual.edge.kind === 'corridor' ? .026 : .012) -
             routeVisual.glowMaterial.opacity) *
           .1
         routeVisual.packetMaterial.opacity =
-          active ? .98 : .72
+          active ? .98 : .34
 
         routeVisual.packets.forEach((packet, packetIndex) => {
           const t =
@@ -1947,18 +2037,24 @@ export default function DevWebSurf3D({
       rainAttribute.needsUpdate = true
       dataRain.rotation.y = Math.sin(now * .05) * .018
       rainMaterial.opacity =
-        .23 + Math.max(0, Math.sin(now * .72)) * .12
+        reducedMotion
+          ? .1
+          : .13 + Math.max(0, Math.sin(now * .52)) * .07
 
       scanGates.forEach(({mesh, material, phase}) => {
         material.opacity =
-          .012 + Math.max(0, Math.sin(now * 1.25 + phase)) * .028
-        mesh.position.x = Math.sin(now * .18 + phase) * .14
+          reducedMotion
+            ? .008
+            : .008 +
+              Math.max(0, Math.sin(now * .82 + phase)) * .016
+        mesh.position.x =
+          reducedMotion ? 0 : Math.sin(now * .12 + phase) * .08
       })
 
       netCyan.intensity =
-        6.8 + Math.max(0, Math.sin(now * .63)) * 2.2
+        6.2 + Math.max(0, Math.sin(now * .46)) * 1.35
       netMagenta.intensity =
-        3.2 + Math.max(0, Math.sin(now * .47 + 1.1)) * 1.8
+        2.7 + Math.max(0, Math.sin(now * .38 + 1.1)) * 1.05
 
       if (travel) {
         const progress = THREE.MathUtils.clamp(
@@ -1966,7 +2062,8 @@ export default function DevWebSurf3D({
           0,
           1,
         )
-        const eased = 1 - Math.pow(1 - progress, 3)
+        const eased =
+          progress * progress * (3 - 2 * progress)
         const oneMinus = 1 - eased
 
         const point = new THREE.Vector3()
@@ -1995,9 +2092,14 @@ export default function DevWebSurf3D({
         position.copy(point)
         camera.position.copy(point)
         camera.lookAt(look)
+        const travelFov =
+          62 +
+          (reducedMotion
+            ? 0
+            : Math.sin(progress * Math.PI) * 3.2)
         camera.fov +=
-          ((68 + Math.sin(progress * Math.PI) * 7) - camera.fov) *
-          .1
+          (travelFov - camera.fov) *
+          (1 - Math.exp(-delta * 7.5))
         camera.updateProjectionMatrix()
 
         if (progress >= 1) {
@@ -2025,21 +2127,21 @@ export default function DevWebSurf3D({
         if (keys.has('KeyA')) move.sub(right)
         if (move.lengthSq() > 0) move.normalize()
 
-        const speed =
-          keys.has('ShiftLeft') || keys.has('ShiftRight') ? 6.6 : 3.25
+        const hurrying =
+          keys.has('ShiftLeft') || keys.has('ShiftRight')
+        const speed = hurrying ? 3.8 : 1.9
         const desired = move.multiplyScalar(speed)
-        velocity.lerp(desired, 1 - Math.exp(-delta * 8))
+        const response = move.lengthSq() > 0 ? 9.5 : 12
+        velocity.lerp(
+          desired,
+          1 - Math.exp(-delta * response),
+        )
 
-        const proposed = position.clone().addScaledVector(velocity, delta)
-        proposed.y = 1.62
-        proposed.x = THREE.MathUtils.clamp(proposed.x, -20, 20)
-        proposed.z = THREE.MathUtils.clamp(proposed.z, -43.5, 14)
-
-        if (!collides(proposed)) {
-          position.copy(proposed)
-        } else {
-          velocity.multiplyScalar(.2)
-        }
+        const deltaMove = tempTargetPosition
+          .copy(velocity)
+          .multiplyScalar(delta)
+        moveWithSliding(deltaMove)
+        position.y = 1.62
 
         camera.position.copy(position)
         camera.rotation.order = 'YXZ'
@@ -2047,13 +2149,19 @@ export default function DevWebSurf3D({
         camera.rotation.x = pitch
         camera.rotation.z = THREE.MathUtils.lerp(
           camera.rotation.z,
-          -velocity.dot(right) * .0035,
-          .08,
+          0,
+          1 - Math.exp(-delta * 12),
         )
+        const speedRatio = THREE.MathUtils.clamp(
+          velocity.length() / 3.8,
+          0,
+          1,
+        )
+        const targetFov =
+          62 + (reducedMotion ? 0 : speedRatio * 1.4)
         camera.fov +=
-          ((68 + Math.min(1, velocity.length() / 6.6) * 3) -
-            camera.fov) *
-          .06
+          (targetFov - camera.fov) *
+          (1 - Math.exp(-delta * 5.5))
         camera.updateProjectionMatrix()
       }
 
