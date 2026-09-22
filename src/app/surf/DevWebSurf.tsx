@@ -144,45 +144,105 @@ function cleanMarkdown(markdown: string | undefined) {
     .trim()
 }
 
-function shelfPosition(
+type ShelfPlacement = Pick<
+  SurfNode,
+  | 'position'
+  | 'rotationY'
+  | 'shelfKey'
+  | 'shelfLevel'
+  | 'shelfSlot'
+  | 'shelfOrder'
+>
+
+const SHELF_ANCHORS: Partial<
+  Record<
+    LibrarySection,
+    Array<{
+      id: string
+      x: number
+      z: number
+      rotationY: number
+      front: number
+    }>
+  >
+> = {
+  featured: [
+    {id: 'featured-left', x: -4.9, z: -10, rotationY: 0, front: .42},
+    {id: 'featured-right', x: 4.9, z: -10, rotationY: 0, front: .42},
+    {id: 'featured-deep-left', x: -4.9, z: -17, rotationY: 0, front: .42},
+    {id: 'featured-deep-right', x: 4.9, z: -17, rotationY: 0, front: .42},
+  ],
+  latest: [
+    {id: 'latest-outer', x: -14.8, z: -10, rotationY: Math.PI / 2, front: .42},
+    {id: 'latest-inner', x: -11.1, z: -10, rotationY: Math.PI / 2, front: .42},
+    {id: 'latest-deep-outer', x: -14.8, z: -18, rotationY: Math.PI / 2, front: .42},
+    {id: 'latest-deep-inner', x: -11.1, z: -18, rotationY: Math.PI / 2, front: .42},
+  ],
+  topics: [
+    {id: 'topics-inner', x: 11.1, z: -10, rotationY: -Math.PI / 2, front: .42},
+    {id: 'topics-outer', x: 14.8, z: -10, rotationY: -Math.PI / 2, front: .42},
+    {id: 'topics-deep-inner', x: 11.1, z: -18, rotationY: -Math.PI / 2, front: .42},
+    {id: 'topics-deep-outer', x: 14.8, z: -18, rotationY: -Math.PI / 2, front: .42},
+  ],
+  creators: [
+    {id: 'creators-inner', x: 11.1, z: -25.5, rotationY: -Math.PI / 2, front: .42},
+    {id: 'creators-outer', x: 14.8, z: -25.5, rotationY: -Math.PI / 2, front: .42},
+  ],
+  search: [
+    {id: 'search-outer', x: -14.8, z: -25.5, rotationY: Math.PI / 2, front: .42},
+    {id: 'search-inner', x: -11.1, z: -25.5, rotationY: Math.PI / 2, front: .42},
+  ],
+  archive: [
+    {id: 'archive-left', x: -4.6, z: -39.5, rotationY: 0, front: .42},
+    {id: 'archive-right', x: 4.6, z: -39.5, rotationY: 0, front: .42},
+  ],
+}
+
+function shelfPlacement(
   section: LibrarySection,
   index: number,
-): [number, number, number] {
-  const level = index % 3
-  const slot = Math.floor(index / 3)
-  const y = .62 + level * 1.05
-
-  if (section === 'featured') {
-    const side = slot % 2 === 0 ? -4.8 : 4.8
-    return [side, y, -9.2 - Math.floor(slot / 2) * 2.1]
+): ShelfPlacement {
+  const anchors = SHELF_ANCHORS[section]
+  if (!anchors?.length) {
+    return {
+      position: [0, .74, -12 - index * 1.1],
+      rotationY: 0,
+      shelfKey: section + ':fallback',
+      shelfLevel: 0,
+      shelfSlot: index,
+      shelfOrder: index,
+    }
   }
 
-  if (section === 'latest') {
-    const x = slot % 2 === 0 ? -14.7 : -11.2
-    return [x, y, -8.8 - Math.floor(slot / 2) * 2.15]
+  const booksPerShelf = 9
+  const slotsPerLevel = 3
+  const shelfIndex = Math.floor(index / booksPerShelf) % anchors.length
+  const localIndex = index % booksPerShelf
+  const level = Math.floor(localIndex / slotsPerLevel)
+  const slot = localIndex % slotsPerLevel
+  const anchor = anchors[shelfIndex]
+
+  const localOffset = (slot - 1) * 1.02
+  const y = .78 + level * 1.05
+
+  let x = anchor.x
+  let z = anchor.z + anchor.front
+
+  if (Math.abs(anchor.rotationY) < .1) {
+    x += localOffset
+  } else {
+    z += localOffset
+    x += Math.sign(anchor.rotationY) * anchor.front
   }
 
-  if (section === 'topics') {
-    const x = slot % 2 === 0 ? 11.2 : 14.7
-    return [x, y, -11.8 - Math.floor(slot / 2) * 2.05]
+  return {
+    position: [x, y, z],
+    rotationY: anchor.rotationY,
+    shelfKey: section + ':' + anchor.id + ':level-' + level,
+    shelfLevel: level,
+    shelfSlot: slot,
+    shelfOrder: localIndex,
   }
-
-  if (section === 'creators') {
-    const x = slot % 2 === 0 ? 11.2 : 14.7
-    return [x, y, -23.7 - Math.floor(slot / 2) * 2.05]
-  }
-
-  if (section === 'search') {
-    const x = slot % 2 === 0 ? -14.7 : -11.2
-    return [x, y, -23.7 - Math.floor(slot / 2) * 2.05]
-  }
-
-  if (section === 'archive') {
-    const side = slot % 2 === 0 ? -4.5 : 4.5
-    return [side, y, -38.2 - Math.floor(slot / 2) * 1.8]
-  }
-
-  return [0, y, -12 - slot * 1.5]
 }
 
 function buildLibraryGraph(
@@ -269,7 +329,7 @@ function buildLibraryGraph(
       username: article.user.username,
       section: 'featured',
       payload: article,
-      position: shelfPosition('featured', index),
+      ...shelfPlacement('featured', index),
       importance: articleImportance(article) + .2,
       accent: '#3b49df',
     })
@@ -303,7 +363,7 @@ function buildLibraryGraph(
       username: article.user.username,
       section: 'latest',
       payload: article,
-      position: shelfPosition('latest', index),
+      ...shelfPlacement('latest', index),
       importance: articleImportance(article),
       accent: SECTION_COPY.latest.accent,
     })
@@ -423,7 +483,7 @@ function buildLibraryGraph(
           username: article.user.username,
           section: 'creators',
           payload: article,
-          position: shelfPosition('creators', index),
+          ...shelfPlacement('creators', index),
           importance: articleImportance(article) + .18,
           accent: '#7c83ff',
         })
@@ -450,7 +510,7 @@ function buildLibraryGraph(
           username: article.user.username,
           section: 'archive',
           payload: article,
-          position: shelfPosition('archive', index),
+          ...shelfPlacement('archive', index),
           importance: articleImportance(article),
           accent: SECTION_COPY.archive.accent,
         })
@@ -516,7 +576,7 @@ function buildLibraryGraph(
           username: article.user.username,
           section,
           payload: article,
-          position: shelfPosition(section, index),
+          ...shelfPlacement(section, index),
           importance: articleImportance(article),
           accent: SECTION_COPY[section].accent,
         })
@@ -561,12 +621,14 @@ export default function DevWebSurf() {
   const [travelRequest, setTravelRequest] = useState<{
     id: string
     nonce: number
+    inspectOnArrival: boolean
   } | null>(null)
   const [travelNonce, setTravelNonce] = useState(0)
   const [visited, setVisited] = useState<
     Array<{id: string; title: string}>
   >([{id: 'dev-home', title: 'Atrium'}])
   const [directoryOpen, setDirectoryOpen] = useState(true)
+  const [readingOrigin, setReadingOrigin] = useState<SurfNode | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -671,7 +733,9 @@ export default function DevWebSurf() {
     }
   }, [])
 
-  const loadTag = useCallback(async (tag: string) => {
+  const loadTag = useCallback(
+    async (tag: string, preserveReadingOrigin = false) => {
+    if (!preserveReadingOrigin) setReadingOrigin(null)
     setRouteLoading(true)
     setArticle(null)
     setProfile(null)
@@ -744,6 +808,7 @@ export default function DevWebSurf() {
       )
 
       if (node.kind === 'article') {
+        setReadingOrigin(node)
         void fetchArticle(node)
       } else if (node.kind === 'profile' && node.username) {
         void fetchProfile(node.username)
@@ -760,7 +825,24 @@ export default function DevWebSurf() {
     [bootstrap, fetchArticle, fetchProfile, loadTag],
   )
 
-  function walkTo(id: string) {
+  function putBackArticle() {
+    if (!activeNode || activeNode.kind !== 'article') return
+    setActiveNode(null)
+    setSelectedId(null)
+    setArticle(null)
+    setRouteTargetId(null)
+    window.history.replaceState(
+      null,
+      '',
+      '/surf?to=' +
+        encodeURIComponent(
+          '/library/' + (activeNode.section ?? currentSection),
+        ),
+    )
+  }
+
+  function walkTo(id: string, preserveReadingOrigin = false) {
+    if (!preserveReadingOrigin) setReadingOrigin(null)
     setRouteTargetId(id)
     setActiveNode(null)
     setSelectedId(null)
@@ -768,15 +850,27 @@ export default function DevWebSurf() {
     setDirectoryOpen(false)
   }
 
-  function jumpTo(id: string) {
+  function jumpTo(
+    id: string,
+    inspectOnArrival = true,
+    preserveReadingOrigin = false,
+  ) {
+    if (!preserveReadingOrigin) setReadingOrigin(null)
     const next = travelNonce + 1
     setTravelNonce(next)
     setRouteTargetId(id)
-    setTravelRequest({id, nonce: next})
+    setTravelRequest({id, nonce: next, inspectOnArrival})
     setActiveNode(null)
     setSelectedId(null)
     setArticle(null)
     setDirectoryOpen(false)
+  }
+
+  function returnToReadingShelf() {
+    if (!readingOrigin) return
+    const origin = readingOrigin
+    setReadingOrigin(null)
+    jumpTo(origin.id, false, true)
   }
 
   function surpriseMe() {
@@ -914,6 +1008,37 @@ export default function DevWebSurf() {
     ? articleImage(article)
     : null
 
+  const activeShelfArticles =
+    activeNode?.kind === 'article' && activeNode.shelfKey
+      ? graph.nodes
+          .filter(
+            (node) =>
+              node.kind === 'article' &&
+              node.shelfKey === activeNode.shelfKey,
+          )
+          .sort(
+            (a, b) =>
+              (a.shelfOrder ?? 0) - (b.shelfOrder ?? 0),
+          )
+      : []
+
+  const activeShelfIndex =
+    activeNode?.kind === 'article'
+      ? activeShelfArticles.findIndex(
+          (node) => node.id === activeNode.id,
+        )
+      : -1
+
+  const previousBook =
+    activeShelfIndex > 0
+      ? activeShelfArticles[activeShelfIndex - 1]
+      : null
+  const nextBook =
+    activeShelfIndex >= 0 &&
+    activeShelfIndex < activeShelfArticles.length - 1
+      ? activeShelfArticles[activeShelfIndex + 1]
+      : null
+
   const continueTarget =
     visited.length > 1
       ? visited[visited.length - 1]?.id
@@ -950,9 +1075,14 @@ export default function DevWebSurf() {
         routeTargetId={routeTargetId}
         travelRequest={travelRequest}
         onInspect={inspectNode}
-        onTravel={(node) => {
+        onPutBack={putBackArticle}
+        onTravel={(node, inspectOnArrival) => {
           setRouteTargetId(null)
-          inspectNode(node)
+          if (inspectOnArrival) {
+            inspectNode(node)
+          } else {
+            setCurrentSection(node.section ?? currentSection)
+          }
         }}
         onHover={setHovered}
         onPointerLockChange={setLocked}
@@ -1150,6 +1280,18 @@ export default function DevWebSurf() {
         </div>
       )}
 
+      {readingOrigin &&
+        activeNode?.kind !== 'article' && (
+          <button
+            type="button"
+            className={styles.returnShelf}
+            onClick={returnToReadingShelf}
+          >
+            <span>↩</span>
+            Back to {SECTION_COPY[readingOrigin.section ?? 'featured'].title}
+          </button>
+        )}
+
       {activeNode && (
         <aside
           className={
@@ -1309,12 +1451,48 @@ export default function DevWebSurf() {
                 </div>
               </section>
 
+              <div className={styles.readingLoop}>
+                <button
+                  type="button"
+                  onClick={putBackArticle}
+                >
+                  <span>↩</span>
+                  Back to shelf
+                  <kbd>E</kbd>
+                </button>
+
+                <div>
+                  <button
+                    type="button"
+                    disabled={!previousBook}
+                    onClick={() => {
+                      if (previousBook) {
+                        jumpTo(previousBook.id, true, true)
+                      }
+                    }}
+                  >
+                    ← Previous book
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!nextBook}
+                    onClick={() => {
+                      if (nextBook) {
+                        jumpTo(nextBook.id, true, true)
+                      }
+                    }}
+                  >
+                    Next book →
+                  </button>
+                </div>
+              </div>
+
               <div className={styles.tags}>
                 {articleTags(article).map((tag) => (
                   <button
                     key={tag}
                     type="button"
-                    onClick={() => void loadTag(tag)}
+                    onClick={() => void loadTag(tag, true)}
                   >
                     #{tag} · doorway
                   </button>
