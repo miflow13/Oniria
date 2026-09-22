@@ -3209,30 +3209,67 @@ export default function DevWebSurf3D({
       // layer so missing network data never exposes empty shelf geometry.
       archivePlaceholderLods.forEach((placeholder, floorIndex) => {
         const isCurrentFloor = floorIndex === floor
+        const floorDistance = Math.abs(floorIndex - floor)
         const sparseCurrentFloor =
           isCurrentFloor && placeholder.articleCount < 36
 
-        placeholder.shelves.visible = !isCurrentFloor
+        placeholder.shelves.visible =
+          !isCurrentFloor || sparseCurrentFloor
         placeholder.books.visible =
           !isCurrentFloor || sparseCurrentFloor
 
+        const distantShelfOpacity =
+          floorDistance <= 1
+            ? .46
+            : floorDistance === 2
+              ? .26
+              : .12
+        const distantBookOpacity =
+          floorDistance <= 1
+            ? .34
+            : floorDistance === 2
+              ? .2
+              : .09
+
         placeholder.shelfMaterial.opacity =
-          isCurrentFloor ? 0 : .72
+          isCurrentFloor
+            ? sparseCurrentFloor
+              ? .12
+              : 0
+            : distantShelfOpacity
         placeholder.bookMaterial.opacity =
           isCurrentFloor
             ? sparseCurrentFloor
-              ? .24
+              ? .12
               : 0
-            : .62
+            : distantBookOpacity
         placeholder.bookMaterial.emissiveIntensity =
-          isCurrentFloor ? .04 : .08
+          isCurrentFloor ? .018 : floorDistance <= 1 ? .035 : .012
       })
 
-      thumbnailLodsByFloor.forEach((entries, floorIndex) => {
+      shelfCoverAtlasesByFloor.forEach((entries, floorIndex) => {
         const isCurrentFloor = floorIndex === floor
+        const floorDistance = Math.abs(floorIndex - floor)
+        const sparseCurrentFloor =
+          isCurrentFloor &&
+          (realArticleCountByFloor[floorIndex] ?? 0) < 36
+        const opacity =
+          isCurrentFloor
+            ? sparseCurrentFloor
+              ? .16
+              : 0
+            : floorDistance <= 1
+              ? .5
+              : floorDistance === 2
+                ? .28
+                : .12
+
         entries.forEach(({mesh, material}) => {
-          mesh.visible = !isCurrentFloor
-          material.opacity = isCurrentFloor ? .9 : .72
+          mesh.visible = opacity > .01
+          material.opacity = opacity
+          material.color.setScalar(
+            floorDistance <= 1 ? .92 : floorDistance === 2 ? .72 : .5,
+          )
         })
       })
 
@@ -3499,7 +3536,8 @@ export default function DevWebSurf3D({
             proxyUp,
             node.rotationY ?? 0,
           )
-          const scale = revealReal ? 0 : 1
+          const scale =
+            !isCurrentFloor || revealReal ? 0 : 1
           proxyScale.setScalar(scale)
           proxyMatrix.compose(
             proxyPosition,
@@ -3512,27 +3550,6 @@ export default function DevWebSurf3D({
         mesh.instanceMatrix.needsUpdate = true
       })
 
-      thumbnailLodsByFloor.forEach((entries, floorIndex) => {
-        const isCurrentFloor = floorIndex === currentFloorIndex
-
-        entries.forEach(({mesh, material, node}) => {
-          const visual = visuals.get(node.id)
-          const priority =
-            node.id === selectedRef.current ||
-            node.id === hoverId ||
-            node.id === routeTargetRef.current
-          const distanceSq = camera.position.distanceToSquared(
-            visual?.basePosition ??
-              proxyPosition.set(...node.position),
-          )
-          const revealFull =
-            isCurrentFloor &&
-            (priority || distanceSq <= revealDistanceSq)
-
-          mesh.visible = !revealFull
-          material.opacity = isCurrentFloor ? .92 : .72
-        })
-      })
     }
 
     let travel:
