@@ -880,24 +880,55 @@ This was treated as a lifecycle bug uncovered by cleanup rather than a new featu
 
 ## Phase 3 — Atmosphere
 
-Likely module:
+Status: **extracted (library haze scope)**
 
-`libraryAtmosphere.ts`
+Path:
 
-Should own:
+`src/app/map/libraryAtmosphere.ts`
 
-- fixed archive fog
-- camera-following haze
+This phase intentionally extracted the coherent DEV Library haze system rather than every atmospheric effect in the shared dream renderer.
+
+The controller now owns:
+
+- distant library haze planes
 - haze textures/materials
-- near/far particles
-- local district atmospheric response
+- fixed archive fog banks
+- camera-following local haze corridor
+- camera-distance fog clearing
+- district-accent haze tinting
+- haze/fog animation
+- all resources created by those systems
 - atmosphere disposal
 
-Important:
+The public surface is:
 
-Do not move core scene `FogExp2` blindly if that would make overall scene setup confusing.
+```ts
+createLibraryAtmosphere({...})
 
-Extract coherent resources, not code merely to reduce line count.
+atmosphere.update({
+  elapsed,
+  camera,
+  districts,
+})
+
+atmosphere.dispose()
+```
+
+The controller consumes the authoritative archive functions from `libraryLayout.ts`; it does not duplicate path geometry.
+
+### Intentionally left in `DreamWorld3D.tsx`
+
+These were not moved because they either serve both dream/library modes or form a different subsystem boundary:
+
+- global scene `FogExp2`
+- generic foreground fog
+- near-camera dust
+- far particle shader field
+- distant archive skyline / building geometry
+
+Those can be revisited later if they develop a stronger standalone ownership boundary.
+
+The goal of Phase 3 was not line-count reduction. It was to give the continuous archive haze system one lifecycle owner.
 
 ---
 
@@ -1098,7 +1129,17 @@ At minimum verify:
 
 ## Phase 3 — Atmosphere
 
-- [ ] not started
+- [x] define library-only atmosphere boundary
+- [x] create `libraryAtmosphere.ts`
+- [x] move distant haze planes
+- [x] move fixed archive fog banks
+- [x] move camera-following local haze
+- [x] move district haze tint response
+- [x] move fog/haze resource disposal
+- [x] remove renderer-owned haze/fog arrays
+- [x] source-level stale-reference audit
+- [ ] CI verification
+- [ ] manual browser smoke test
 
 ## Phase 4 — Shelf renderer
 
