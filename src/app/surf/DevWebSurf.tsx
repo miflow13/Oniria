@@ -321,6 +321,7 @@ function buildLibraryGraph(
     href: 'https://dev.to/',
     section: 'atrium',
     position: [0, .55, 7],
+    floorIndex: 0,
     importance: 2,
     accent: SECTION_COPY.atrium.accent,
   })
@@ -347,6 +348,7 @@ function buildLibraryGraph(
       subtitle: copy.subtitle,
       section,
       position,
+      floorIndex: 0,
       importance: 1.7,
       accent: copy.accent,
     })
@@ -440,6 +442,7 @@ function buildLibraryGraph(
         1.15,
         -9.3 - row * 2.7,
       ],
+      floorIndex: 0,
       importance: 1.1,
       accent: safeTagColor(tag),
     })
@@ -479,6 +482,7 @@ function buildLibraryGraph(
         1.2,
         -22.5 - Math.floor(index / 2) * 3,
       ],
+      floorIndex: 0,
       importance: 1 + articles.length * .12,
       accent: SECTION_COPY.creators.accent,
     })
@@ -502,6 +506,7 @@ function buildLibraryGraph(
       username: bootstrap.profile.username,
       section: 'creators',
       position: [13, 1.25, -20.8],
+      floorIndex: 0,
       importance: 2,
       accent: '#7c83ff',
     })
@@ -571,6 +576,41 @@ function buildLibraryGraph(
       })
     })
   }
+
+  const alreadyPlaced = new Set(
+    nodes
+      .filter((node) => node.kind === 'article')
+      .map((node) => node.articleId)
+      .filter((id): id is number => typeof id === 'number'),
+  )
+
+  catalogArticles
+    .filter((article) => !alreadyPlaced.has(article.id))
+    .forEach((article, index) => {
+      const id = 'article:' + article.id
+      const placement = megaShelfPlacement(index)
+      addNode({
+        id,
+        kind: 'article',
+        title: article.title,
+        subtitle:
+          '@' +
+          article.user.username +
+          ' · floor ' +
+          ((placement.floorIndex ?? 0) + 1),
+        href: article.url,
+        articleId: article.id,
+        username: article.user.username,
+        section: 'archive',
+        payload: article,
+        ...placement,
+        importance: articleImportance(article) * .82,
+        accent:
+          (placement.floorIndex ?? 0) % 2 === 0
+            ? '#3b49df'
+            : '#53d3ff',
+      })
+    })
 
   if (dynamicLabel && dynamicArticles.length) {
     const isTag = dynamicLabel.startsWith('#')
