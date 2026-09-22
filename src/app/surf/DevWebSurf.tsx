@@ -917,6 +917,31 @@ export default function DevWebSurf() {
     [bootstrap, catalogArticles, dynamicArticles, dynamicLabel],
   )
 
+  const wingCounts = useMemo(() => {
+    const counts: Record<LibrarySection, number> = {
+      atrium: 0,
+      featured: 0,
+      latest: 0,
+      topics: 0,
+      creators: 0,
+      search: 0,
+      archive: 0,
+    }
+
+    graph.nodes.forEach((node) => {
+      if (
+        !node.section ||
+        node.kind === 'section' ||
+        node.kind === 'home'
+      ) {
+        return
+      }
+      counts[node.section] += 1
+    })
+
+    return counts
+  }, [graph.nodes])
+
   const fetchArticle = useCallback(async (node: SurfNode) => {
     if (!node.articleId) return
     setRouteLoading(true)
@@ -1536,6 +1561,7 @@ export default function DevWebSurf() {
                   style={{background: SECTION_COPY[section].accent}}
                 />
                 {label}
+                <b>{wingCounts[section].toLocaleString()}</b>
               </span>
             ))}
           </div>
@@ -1587,7 +1613,12 @@ export default function DevWebSurf() {
             className={styles.archiveLink}
             onClick={() => walkTo('section:archive')}
           >
-            Restricted stacks · Deep Archive →
+            <span aria-hidden="true">🔒</span>
+            <span>
+              Restricted stacks · Deep Archive
+              <small>{wingCounts.archive.toLocaleString()} catalog entries</small>
+            </span>
+            <b aria-hidden="true">→</b>
           </button>
         </aside>
       )}
