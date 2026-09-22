@@ -163,6 +163,7 @@ export default function DevLibraryMap() {
   const [flightMode, setFlightMode] = useState(true)
   const [movementMode, setMovementMode] =
     useState<LibraryMovementMode>('walk')
+  const [soundEnabled, setSoundEnabled] = useState(false)
   const [readingBook, setReadingBook] =
     useState<LibraryReadingBook | null>(null)
   const [navigation, setNavigation] = useState<{
@@ -654,7 +655,7 @@ export default function DevLibraryMap() {
         zoom={1}
         pan={{x: 0, y: 0}}
         quality={QUALITY}
-        soundEnabled={false}
+        soundEnabled={soundEnabled}
         introStage={4}
         diveExitRequest={0}
         diveBackRequest={0}
@@ -708,6 +709,28 @@ export default function DevLibraryMap() {
         </form>
 
         <div className={styles.navigationState}>
+          <button
+            type="button"
+            className={styles.soundToggle}
+            data-active={soundEnabled ? 'true' : 'false'}
+            onClick={() => {
+              const next = !soundEnabled
+              setSoundEnabled(next)
+              if (next) {
+                window.dispatchEvent(
+                  new Event('oniria:library-audio-enable'),
+                )
+              }
+            }}
+            aria-pressed={soundEnabled}
+            aria-label={
+              soundEnabled
+                ? 'Mute library ambience'
+                : 'Enable library ambience'
+            }
+          >
+            {soundEnabled ? '◉ SOUND' : '○ SOUND'}
+          </button>
           <span className={styles.navigationLabel}>
             {selectedShelf ? 'INSPECTING' : 'YOU ARE NEAR'}
           </span>
