@@ -1441,6 +1441,7 @@ export default function DreamWorld3D({
     const libraryArchiveFogTextures: THREE.Texture[] = []
     const libraryArchiveFogMaterials: THREE.SpriteMaterial[] = []
     const libraryArchiveFog: THREE.Sprite[] = []
+    const libraryLocalHaze: THREE.Sprite[] = []
 
     if (libraryMode) {
       const fogTextureColors = [
@@ -1534,6 +1535,43 @@ export default function DreamWorld3D({
         world.add(sprite)
         libraryArchiveFog.push(sprite)
       }
+
+      const localHazeOffsets = [
+        -1.6,
+        -.7,
+        .15,
+        1.0,
+        1.9,
+        3.0,
+        4.3,
+        5.8,
+      ] as const
+
+      localHazeOffsets.forEach((bayOffset, index) => {
+        const material = new THREE.SpriteMaterial({
+          map: fogTextures[index % fogTextures.length],
+          transparent: true,
+          opacity: .03,
+          depthWrite: false,
+          blending: THREE.NormalBlending,
+          toneMapped: true,
+        })
+        libraryArchiveFogMaterials.push(material)
+
+        const sprite = new THREE.Sprite(material)
+        sprite.userData.localHazeBayOffset = bayOffset
+        sprite.userData.localHazePhase = index * 1.27
+        sprite.userData.localHazeSide =
+          index % 3 === 0 ? 0 : index % 2 === 0 ? 1 : -1
+        sprite.scale.set(
+          32 + (index % 3) * 6,
+          14 + (index % 4) * 2.2,
+          1,
+        )
+        sprite.renderOrder = -1
+        world.add(sprite)
+        libraryLocalHaze.push(sprite)
+      })
     }
 
     const nearDustCount =
@@ -4508,6 +4546,55 @@ export default function DreamWorld3D({
           (.24 + clearance * .76)
       })
 
+      if (libraryLocalHaze.length > 0) {
+        const cameraBay = archiveBayFromWorldZ(camera.position.z)
+
+        libraryLocalHaze.forEach((sprite, index) => {
+          const bayOffset =
+            sprite.userData.localHazeBayOffset as number
+          const bay = THREE.MathUtils.clamp(
+            cameraBay + bayOffset,
+            0,
+            ARCHIVE_PATH_RENDER_BAYS,
+          )
+          const point = archivePathPoint(bay)
+          const frame = archivePathFrame(bay)
+          const phase = sprite.userData.localHazePhase as number
+          const side = sprite.userData.localHazeSide as number
+          const sideDistance =
+            side *
+            (2.6 + Math.sin(elapsed * .07 + phase) * .65)
+
+          const targetX =
+            point[0] + frame.normalX * sideDistance
+          const targetY =
+            point[1] +
+            .8 +
+            Math.sin(elapsed * .055 + phase) * .72
+          const targetZ =
+            point[2] + frame.normalZ * sideDistance
+
+          sprite.position.x +=
+            (targetX - sprite.position.x) * .12
+          sprite.position.y +=
+            (targetY - sprite.position.y) * .1
+          sprite.position.z +=
+            (targetZ - sprite.position.z) * .12
+
+          const material = sprite.material as THREE.SpriteMaterial
+          const centerFade =
+            index <= 1 ? .72 : index >= 6 ? .8 : 1
+          material.opacity =
+            (.025 +
+              Math.max(
+                0,
+                Math.sin(elapsed * .09 + phase),
+              ) *
+                .01) *
+            centerFade
+        })
+      }
+
       nearDust.rotation.y = Math.sin(elapsed * .045) * .05
       nearDust.position.x = pointerParallax.x * .16
       nearDust.position.y = pointerParallax.y * .1
@@ -5840,6 +5927,9 @@ export default function DreamWorld3D({
       })
 
       libraryArchiveFog.forEach((sprite) => {
+        world.remove(sprite)
+      })
+      libraryLocalHaze.forEach((sprite) => {
         world.remove(sprite)
       })
       libraryArchiveFogMaterials.forEach((material) =>
