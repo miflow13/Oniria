@@ -24,7 +24,7 @@ type LibraryAtmosphereUpdate = {
   camera: THREE.Camera
   districts: Pick<
     LibraryDistrictConfig,
-    'bay' | 'accent'
+    'bay' | 'accent' | 'atmosphere'
   >[]
 }
 
@@ -257,6 +257,13 @@ export function createLibraryAtmosphere({
   const districtTint = new THREE.Color()
   const whiteTint = new THREE.Color(0xe8faff)
   const fallbackTint = new THREE.Color(0xb9b8ef)
+  const districtLight = new THREE.PointLight(
+    0xcaa2ff,
+    0,
+    28,
+    2,
+  )
+  world.add(districtLight)
   let disposed = false
 
   return {
@@ -331,12 +338,69 @@ export function createLibraryAtmosphere({
             )
           : null
 
+      let districtAtmosphereStrength = 1
+
       if (nearestDistrict) {
         districtTint
           .set(nearestDistrict.accent)
-          .lerp(whiteTint, .34)
+          .lerp(
+            whiteTint,
+            nearestDistrict.atmosphere === 'industrial'
+              ? .18
+              : nearestDistrict.atmosphere === 'deep-void'
+                ? .08
+                : .34,
+          )
+
+        districtAtmosphereStrength =
+          nearestDistrict.atmosphere === 'crystalline'
+            ? 1.18
+            : nearestDistrict.atmosphere === 'industrial'
+              ? .82
+              : nearestDistrict.atmosphere === 'deep-void'
+                ? .56
+                : 1
+
+        const districtPoint = archivePathPoint(
+          nearestDistrict.bay,
+        )
+        districtLight.position.set(
+          districtPoint[0],
+          districtPoint[1] + 3.2,
+          districtPoint[2],
+        )
+        districtLight.color.lerp(districtTint, .08)
+
+        const districtDistance = Math.abs(
+          nearestDistrict.bay - cameraBay,
+        )
+        const districtPresence =
+          1 -
+          THREE.MathUtils.smoothstep(
+            districtDistance,
+            .5,
+            5.5,
+          )
+
+        const targetLight =
+          nearestDistrict.atmosphere === 'deep-void'
+            ? .45
+            : nearestDistrict.atmosphere === 'industrial'
+              ? .7
+              : nearestDistrict.atmosphere === 'crystalline'
+                ? 1.25
+                : .95
+
+        districtLight.intensity +=
+          (
+            targetLight *
+              (.45 + districtPresence * .55) -
+            districtLight.intensity
+          ) *
+          .06
       } else {
         districtTint.copy(fallbackTint)
+        districtLight.intensity *= .92
       }
 
       localHaze.forEach((sprite, index) => {
@@ -398,9 +462,15 @@ export function createLibraryAtmosphere({
             ) *
               .01) *
           centerFade *
-          landmarkRichness
+          landmarkRichness *
+          districtAtmosphereStrength
 
-        material.color.lerp(districtTint, .025)
+        material.color.lerp(
+          districtTint,
+          nearestDistrict?.atmosphere === 'deep-void'
+            ? .014
+            : .025,
+        )
       })
     },
 
@@ -411,6 +481,7 @@ export function createLibraryAtmosphere({
       hazePlanes.forEach((plane) => farWorld.remove(plane))
       archiveFog.forEach((sprite) => world.remove(sprite))
       localHaze.forEach((sprite) => world.remove(sprite))
+      world.remove(districtLight)
 
       hazeGeometry.dispose()
       hazeMaterials.forEach((material) => material.dispose())
