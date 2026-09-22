@@ -10,6 +10,10 @@ import {SSAOPass} from 'three/examples/jsm/postprocessing/SSAOPass.js'
 import {ShaderPass} from 'three/examples/jsm/postprocessing/ShaderPass.js'
 import {OutputPass} from 'three/examples/jsm/postprocessing/OutputPass.js'
 import type {Dream, SymbolCategory} from '@/types/dream'
+import {
+  DEFAULT_LIBRARY_WORLD_CONFIG,
+  type LibraryWorldConfig,
+} from '@/lib/libraryWorldConfig'
 import styles from './map.module.css'
 import {
   getQualitySettings,
@@ -55,7 +59,6 @@ import {
   type PortalSceneTransition,
 } from './dreamworld/effects/createPortalSceneTransition'
 import {
-  ARCHIVE_DISTRICTS,
   ARCHIVE_PATH_RENDER_BAYS,
   ARCHIVE_WALKWAY_HALF_WIDTH,
   ARCHIVE_WALKWAY_Y_OFFSET,
@@ -136,6 +139,7 @@ type Props = {
   observatoryMode: boolean
   flightMode: boolean
   libraryMovementMode?: LibraryMovementMode
+  libraryWorldConfig?: LibraryWorldConfig
   libraryReadingBook?: LibraryReadingBook | null
   inputBlocked?: boolean
   onZoomChange: (zoom: number) => void
@@ -356,7 +360,7 @@ function createLibraryRouteLabelTexture(
   return texture
 }
 
-function createLibraryWelcomeTexture() {
+function createLibraryWelcomeTexture(config: LibraryWorldConfig) {
   const canvas = document.createElement('canvas')
   canvas.width = 1680
   canvas.height = 960
@@ -418,12 +422,12 @@ function createLibraryWelcomeTexture() {
 
   context.fillStyle = '#f5fbff'
   context.font = '800 86px system-ui, sans-serif'
-  context.fillText('DEV LIBRARY', 96, 82)
+  context.fillText(config.welcomeTitle, 96, 82)
 
   context.fillStyle = 'rgba(158, 225, 238, .94)'
   context.font = '700 30px ui-monospace, monospace'
   context.fillText(
-    'AN EXPLORABLE ARCHIVE OF DEV COMMUNITY WRITING',
+    config.welcomeSubtitle.toUpperCase(),
     102,
     188,
   )
@@ -442,8 +446,10 @@ function createLibraryWelcomeTexture() {
       title: 'WHAT THIS IS',
       accent: 'rgba(101, 212, 223, .18)',
       body: [
-        'A spatial browser for real DEV articles.',
-        'Walk the archive, browse shelves, inspect books, and open posts without leaving the world.',
+        config.welcomeBody,
+        config.source === 'sanity'
+          ? 'This archive is structured and curated live through Sanity.'
+          : 'Sanity can author the districts, curation, atmosphere, and journeys.',
       ],
     },
     {
@@ -529,7 +535,8 @@ function createLibraryWelcomeTexture() {
   context.fillStyle = 'rgba(193, 177, 239, .94)'
   context.font = '700 25px ui-monospace, monospace'
   context.fillText(
-    'Follow the holographic boulevard · district signs float overhead',
+    config.archiveStatus +
+      ' · follow the holographic boulevard · district signs float overhead',
     100,
     846,
   )
@@ -619,6 +626,7 @@ export default function DreamWorld3D({
   observatoryMode,
   flightMode,
   libraryMovementMode = 'walk',
+  libraryWorldConfig = DEFAULT_LIBRARY_WORLD_CONFIG,
   libraryReadingBook = null,
   inputBlocked = false,
   onZoomChange,
@@ -732,21 +740,52 @@ export default function DreamWorld3D({
     [dreams, edges, nodes, quality],
   )
 
+  const libraryWorldKey = useMemo(
+    () =>
+      JSON.stringify({
+        welcomeTitle: libraryWorldConfig.welcomeTitle,
+        welcomeSubtitle: libraryWorldConfig.welcomeSubtitle,
+        welcomeBody: libraryWorldConfig.welcomeBody,
+        archiveStatus: libraryWorldConfig.archiveStatus,
+        atmosphere: libraryWorldConfig.atmosphere,
+        hazeIntensity: libraryWorldConfig.hazeIntensity,
+        districts: libraryWorldConfig.districts,
+      }),
+    [libraryWorldConfig],
+  )
+
   useEffect(() => {
     const host = hostRef.current
     if (!host) return
     const container: HTMLDivElement = host
 
     const settings = getQualitySettings(qualityRef.current)
+    const activeLibraryConfig =
+      libraryWorldConfig ?? DEFAULT_LIBRARY_WORLD_CONFIG
+    const activeDistricts =
+      activeLibraryConfig.districts.length > 0
+        ? activeLibraryConfig.districts
+        : DEFAULT_LIBRARY_WORLD_CONFIG.districts
     const libraryMode = nodeRef.current.some(
       (node) => node.libraryKind === 'shelf',
     )
 
     const scene = new THREE.Scene()
     scene.background = new THREE.Color(0x030611)
+    const libraryFogColor =
+      activeLibraryConfig.atmosphere === 'deep-void'
+        ? 0x100817
+        : activeLibraryConfig.atmosphere === 'industrial'
+          ? 0x10151c
+          : activeLibraryConfig.atmosphere === 'crystalline'
+            ? 0x10172b
+            : 0x1b0d26
     scene.fog = new THREE.FogExp2(
-      libraryMode ? 0x1b0d26 : 0x07101f,
-      settings.fogDensity * (libraryMode ? 1.18 : 1),
+      libraryMode ? libraryFogColor : 0x07101f,
+      settings.fogDensity *
+        (libraryMode
+          ? .9 + activeLibraryConfig.hazeIntensity * .4
+          : 1),
     )
 
     const camera = new THREE.PerspectiveCamera(
@@ -1323,7 +1362,7 @@ export default function DreamWorld3D({
         height: number
       }> = []
 
-      ARCHIVE_DISTRICTS.slice(1).forEach((district, index) => {
+      activeDistricts.slice(1).forEach((district, index) => {
         const path = new THREE.Vector3(...archivePathPoint(district.bay))
         const frame = archivePathFrame(district.bay)
         const normal = new THREE.Vector3(
@@ -2381,7 +2420,7 @@ export default function DreamWorld3D({
 
         const pathY = point.y + ARCHIVE_WALKWAY_Y_OFFSET
         const localHalfWidth =
-          archiveWalkwayHalfWidthAtBay(bay)
+          archiveWalkwayHalfWidthAtBay(bay, activeDistricts)
         const left = point
           .clone()
           .addScaledVector(side, localHalfWidth)
@@ -2512,7 +2551,7 @@ export default function DreamWorld3D({
       libraryWalkwayRails.userData.libraryDecorative = true
       world.add(libraryWalkway, libraryWalkwayRails)
 
-      ARCHIVE_DISTRICTS.forEach((district, index) => {
+      activeDistricts.forEach((district, index) => {
         const center = new THREE.Vector3(...archivePathPoint(district.bay))
         center.y += ARCHIVE_WALKWAY_Y_OFFSET + 4.25
 
@@ -2544,7 +2583,8 @@ export default function DreamWorld3D({
       })
 
       const welcomePoint = new THREE.Vector3(...archivePathPoint(.35))
-      const welcomeTexture = createLibraryWelcomeTexture()
+      const welcomeTexture =
+        createLibraryWelcomeTexture(activeLibraryConfig)
       const welcomeMaterial = new THREE.SpriteMaterial({
         map: welcomeTexture,
         transparent: true,
@@ -2616,7 +2656,7 @@ export default function DreamWorld3D({
         toneMapped: true,
       })
       for (let bay = 2.5; bay < ARCHIVE_PATH_RENDER_BAYS; bay += 2.75) {
-        if (archiveDistrictInfluence(bay) < .68) {
+        if (archiveDistrictInfluence(bay, activeDistricts) < .68) {
           libraryArrowBays.push(bay)
         }
       }
@@ -2660,15 +2700,15 @@ export default function DreamWorld3D({
       libraryGuards = new THREE.InstancedMesh(
         libraryGuardGeometry,
         libraryGuardMaterial,
-        ARCHIVE_DISTRICTS.length * 2,
+        activeDistricts.length * 2,
       )
       const guardDummy = new THREE.Object3D()
-      ARCHIVE_DISTRICTS.forEach((district, index) => {
+      activeDistricts.forEach((district, index) => {
         const center = new THREE.Vector3(...archivePathPoint(district.bay))
         const frame = archivePathFrame(district.bay)
         const halfWidth =
           ARCHIVE_WALKWAY_HALF_WIDTH +
-          archiveDistrictInfluence(district.bay) * 2.4
+          archiveDistrictInfluence(district.bay, activeDistricts) * 2.4
         const sideVector = new THREE.Vector3(
           frame.normalX,
           0,
@@ -2711,10 +2751,10 @@ export default function DreamWorld3D({
       libraryJunctions = new THREE.InstancedMesh(
         libraryJunctionGeometry,
         libraryJunctionMaterial,
-        ARCHIVE_DISTRICTS.length,
+        activeDistricts.length,
       )
       const junctionDummy = new THREE.Object3D()
-      ARCHIVE_DISTRICTS.forEach((district, index) => {
+      activeDistricts.forEach((district, index) => {
         const center = new THREE.Vector3(...archivePathPoint(district.bay))
         center.y += ARCHIVE_WALKWAY_Y_OFFSET + .07
         junctionDummy.position.copy(center)
@@ -4858,7 +4898,7 @@ export default function DreamWorld3D({
             .28,
           )
 
-          const district = ARCHIVE_DISTRICTS.reduce(
+          const district = activeDistricts.reduce(
             (nearest, candidate) =>
               Math.abs(candidate.bay - currentArchiveBay) <
               Math.abs(nearest.bay - currentArchiveBay)
@@ -4867,26 +4907,24 @@ export default function DreamWorld3D({
           )
 
           const districtFrequency =
-            district.id === 'ai'
+            district.audioProfile === 'crystalline'
               ? 146
-              : district.id === 'linux'
+              : district.audioProfile === 'mechanical'
                 ? 72
-                : district.id === 'javascript'
-                  ? 110
-                  : district.id === 'deep-stacks'
-                    ? 58
-                    : district.id === 'archive-2026'
-                      ? 82
-                      : 92
+                : district.audioProfile === 'deep'
+                  ? 58
+                  : district.audioProfile === 'warm'
+                    ? 98
+                    : 92
           const districtTone =
-            district.id === 'ai'
+            district.audioProfile === 'crystalline'
               ? 292
-              : district.id === 'linux'
+              : district.audioProfile === 'mechanical'
                 ? 144
-                : district.id === 'javascript'
-                  ? 220
-                  : district.id === 'deep-stacks'
-                    ? 116
+                : district.audioProfile === 'deep'
+                  ? 116
+                  : district.audioProfile === 'warm'
+                    ? 196
                     : 184
 
           libraryDroneOscillator?.frequency.setTargetAtTime(
@@ -5857,7 +5895,7 @@ export default function DreamWorld3D({
           const lateral = relative.dot(normal)
           const maxLateral = Math.max(
             1.25,
-            archiveWalkwayHalfWidthAtBay(pathBay) - .48,
+            archiveWalkwayHalfWidthAtBay(pathBay, activeDistricts) - .48,
           )
           const clampedLateral = THREE.MathUtils.clamp(
             lateral,
@@ -6335,7 +6373,7 @@ export default function DreamWorld3D({
       renderer.dispose()
       container.removeChild(renderer.domElement)
     }
-  }, [graphKey])
+  }, [graphKey, libraryWorldKey])
 
   return (
     <div
