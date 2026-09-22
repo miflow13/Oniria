@@ -780,34 +780,44 @@ export default function DreamWorld3D({
     const shaftGeometries: THREE.BufferGeometry[] = []
     const shaftMaterials: THREE.Material[] = []
     const worldLightShafts: THREE.Mesh[] = []
-    for (let index = 0; index < Math.max(2, settings.atmosphereLayers - 1); index += 1) {
-      const geometry = new THREE.CylinderGeometry(
-        .18 + index * .08,
-        1.8 + index * .45,
-        13 + index * 2,
-        28,
-        1,
-        true,
-      )
-      const material = new THREE.MeshBasicMaterial({
-        color: index % 2 ? 0x8bded9 : 0xb69ce7,
-        transparent: true,
-        opacity: .012 + index * .004,
-        side: THREE.DoubleSide,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-      })
-      const shaft = new THREE.Mesh(geometry, material)
-      shaft.position.set(
-        -7 + index * 6.5,
-        2 + index * .8,
-        -10 - index * 2.2,
-      )
-      shaft.rotation.z = -.22 + index * .11
-      farWorld.add(shaft)
-      shaftGeometries.push(geometry)
-      shaftMaterials.push(material)
-      worldLightShafts.push(shaft)
+
+    // These theatrical shafts belong to the original dream scene. Keeping
+    // them out of library mode makes the archive read as open cosmic space
+    // instead of a stage while preserving the dream-world presentation.
+    if (!libraryMode) {
+      for (
+        let index = 0;
+        index < Math.max(2, settings.atmosphereLayers - 1);
+        index += 1
+      ) {
+        const geometry = new THREE.CylinderGeometry(
+          .18 + index * .08,
+          1.8 + index * .45,
+          13 + index * 2,
+          28,
+          1,
+          true,
+        )
+        const material = new THREE.MeshBasicMaterial({
+          color: index % 2 ? 0x8bded9 : 0xb69ce7,
+          transparent: true,
+          opacity: .012 + index * .004,
+          side: THREE.DoubleSide,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        })
+        const shaft = new THREE.Mesh(geometry, material)
+        shaft.position.set(
+          -7 + index * 6.5,
+          2 + index * .8,
+          -10 - index * 2.2,
+        )
+        shaft.rotation.z = -.22 + index * .11
+        farWorld.add(shaft)
+        shaftGeometries.push(geometry)
+        shaftMaterials.push(material)
+        worldLightShafts.push(shaft)
+      }
     }
 
     const nodeVisuals = new Map<string, NodeVisual>()
