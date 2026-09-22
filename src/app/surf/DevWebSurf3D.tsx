@@ -2588,8 +2588,11 @@ export default function DevWebSurf3D({
     for (let floor = 1; floor < LIBRARY_FLOOR_COUNT; floor += 1) {
       addUpperFloor(floor)
     }
-    addFloor(0, archiveCenterZ, 38, archiveDepth, concrete, buildingHeight)
 
+    // Leave the top of the megastructure open to the digital void. The prior
+    // full-size cap made the six levels read like an enclosed warehouse and
+    // flattened the vertical sightline from the atrium.
+    
     // Central lift shaft ties every floor together visually and is also the
     // route used by cross-floor travel.
     const liftColumnGeometry = new THREE.BoxGeometry(.07, buildingHeight, .07)
