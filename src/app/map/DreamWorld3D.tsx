@@ -69,7 +69,11 @@ export type DreamWorldNode = {
   articleCount?: number
   accent?: string
   world?: [number, number, number]
-  coverImages?: string[]
+  libraryBooks?: Array<{
+    id: string
+    title: string
+    coverUrl?: string
+  }>
 }
 
 export type DreamWorldEdge = {
@@ -114,6 +118,7 @@ type Props = {
   onPanChange: (pan: Pan) => void
   onNodeHover: (node: DreamWorldNode | null) => void
   onNodeSelect: (node: DreamWorldNode) => void
+  onBookSelect?: (nodeId: string, bookIndex: number) => void
   onBackgroundClick: () => void
   onProjectionChange: (projection: ProjectionPoint | null) => void
   onDiveStateChange: (active: boolean, title?: string) => void
@@ -333,6 +338,7 @@ export default function DreamWorld3D({
   onPanChange,
   onNodeHover,
   onNodeSelect,
+  onBookSelect,
   onBackgroundClick,
   onProjectionChange,
   onDiveStateChange,
@@ -354,6 +360,7 @@ export default function DreamWorld3D({
   const onPanChangeRef = useRef(onPanChange)
   const onNodeHoverRef = useRef(onNodeHover)
   const onNodeSelectRef = useRef(onNodeSelect)
+  const onBookSelectRef = useRef(onBookSelect)
   const onBackgroundClickRef = useRef(onBackgroundClick)
   const onProjectionChangeRef = useRef(onProjectionChange)
   const qualityRef = useRef(quality)
@@ -382,6 +389,7 @@ export default function DreamWorld3D({
   onPanChangeRef.current = onPanChange
   onNodeHoverRef.current = onNodeHover
   onNodeSelectRef.current = onNodeSelect
+  onBookSelectRef.current = onBookSelect
   onBackgroundClickRef.current = onBackgroundClick
   onProjectionChangeRef.current = onProjectionChange
   qualityRef.current = quality
