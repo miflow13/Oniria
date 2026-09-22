@@ -51,8 +51,8 @@ export function getQualitySettings(quality: DreamQuality): DreamQualitySettings 
       return {
         pixelRatio: 1.85,
         bloomStrength: 0.92,
-        bloomRadius: 0.84,
-        bloomThreshold: 0.4,
+        bloomRadius: 0.76,
+        bloomThreshold: 0.36,
         starCount: 1700,
         debrisCount: 38,
         particleCount: 44,
@@ -67,8 +67,8 @@ export function getQualitySettings(quality: DreamQuality): DreamQualitySettings 
       return {
         pixelRatio: 1.5,
         bloomStrength: 0.72,
-        bloomRadius: 0.68,
-        bloomThreshold: 0.32,
+        bloomRadius: 0.62,
+        bloomThreshold: 0.42,
         starCount: 1180,
         debrisCount: 24,
         particleCount: 30,
