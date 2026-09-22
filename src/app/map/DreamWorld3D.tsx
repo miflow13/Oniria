@@ -2309,6 +2309,7 @@ export default function DreamWorld3D({
       depthWrite: false,
       toneMapped: true,
     })
+    const shelfReactiveMaterials: THREE.Material[] = []
     const shelfCoverMaterials: THREE.MeshStandardMaterial[] = []
     const shelfCoverTextures: THREE.Texture[] = []
     const shelfTextureLoader = new THREE.TextureLoader()
@@ -2510,10 +2511,39 @@ export default function DreamWorld3D({
         const shelf = new THREE.Group()
         shelf.rotation.y = 0
 
+        const reactiveFrameMaterial =
+          shelfFrameMaterial.clone()
+        reactiveFrameMaterial.emissive.copy(color)
+        reactiveFrameMaterial.emissiveIntensity = .018
+        reactiveFrameMaterial.envMapIntensity =
+          settings.environmentIntensity * .4
+
+        const reactiveBoardMaterial =
+          shelfBoardMaterial.clone()
+        reactiveBoardMaterial.emissive.copy(color)
+        reactiveBoardMaterial.emissiveIntensity = .016
+
+        const reactiveAccentMaterial =
+          shelfAccentMaterial.clone()
+        reactiveAccentMaterial.color.copy(color)
+        reactiveAccentMaterial.opacity = .11
+
+        shelfReactiveMaterials.push(
+          reactiveFrameMaterial,
+          reactiveBoardMaterial,
+          reactiveAccentMaterial,
+        )
+        group.userData.libraryShelfFrameMaterial =
+          reactiveFrameMaterial
+        group.userData.libraryShelfBoardMaterial =
+          reactiveBoardMaterial
+        group.userData.libraryShelfAccentMaterial =
+          reactiveAccentMaterial
+
         ;[-1.64, 1.64].forEach((x) => {
           const side = new THREE.Mesh(
             shelfSideGeometry,
-            shelfFrameMaterial,
+            reactiveFrameMaterial,
           )
           side.position.set(x, 0, 0)
           shelf.add(side)
@@ -2521,7 +2551,7 @@ export default function DreamWorld3D({
 
         const back = new THREE.Mesh(
           shelfBackGeometry,
-          shelfFrameMaterial,
+          reactiveFrameMaterial,
         )
         back.position.z = .28
         shelf.add(back)
@@ -2529,7 +2559,7 @@ export default function DreamWorld3D({
         ;[-1.28, -.43, .42, 1.27].forEach((y) => {
           const board = new THREE.Mesh(
             shelfBoardGeometry,
-            shelfBoardMaterial,
+            reactiveBoardMaterial,
           )
           board.position.set(0, y, 0)
           shelf.add(board)
@@ -2638,7 +2668,7 @@ export default function DreamWorld3D({
 
         const accentRail = new THREE.Mesh(
           shelfAccentGeometry,
-          shelfAccentMaterial,
+          reactiveAccentMaterial,
         )
         accentRail.position.set(0, 1.34, -.02)
         shelf.add(accentRail)
@@ -6175,9 +6205,26 @@ export default function DreamWorld3D({
               10,
               42,
             )
-          const targetTint = presented
-            ? .76
-            : .22 + Math.max(awake, distanceWake * .45) * .34
+          const neighborDim =
+            nearestLibraryShelfId &&
+            bookVisual.nodeId !== nearestLibraryShelfId &&
+            focusStrength > .2
+              ? THREE.MathUtils.lerp(
+                  1,
+                  .78,
+                  focusStrength,
+                )
+              : 1
+          const targetTint =
+            (presented
+              ? .76
+              : .22 +
+                Math.max(
+                  awake,
+                  distanceWake * .45,
+                ) *
+                  .34) *
+            neighborDim
           const tint = bookVisual.coverMaterial.color
           tint.r += (targetTint - tint.r) * .08
           tint.g += (targetTint - tint.g) * .08
@@ -6311,6 +6358,74 @@ export default function DreamWorld3D({
           new THREE.Vector3(desiredScale, desiredScale, desiredScale),
           selected ? .13 : .08,
         )
+
+        if (node.libraryKind === 'shelf') {
+          const frameMaterial =
+            visual.group.userData
+              .libraryShelfFrameMaterial as
+              | THREE.MeshStandardMaterial
+              | undefined
+          const boardMaterial =
+            visual.group.userData
+              .libraryShelfBoardMaterial as
+              | THREE.MeshStandardMaterial
+              | undefined
+          const accentMaterial =
+            visual.group.userData
+              .libraryShelfAccentMaterial as
+              | THREE.MeshBasicMaterial
+              | undefined
+          const proximityWake =
+            1 -
+            THREE.MathUtils.smoothstep(
+              shelfDistance,
+              8,
+              30,
+            )
+          const focalWake = isNearestLibraryShelf
+            ? THREE.MathUtils.clamp(
+                1 -
+                  (nearestLibraryShelfDistance - 5) /
+                    14,
+                0,
+                1,
+              )
+            : 0
+          const neighborDim =
+            nearbyShelfFocusActive &&
+            !isNearestLibraryShelf
+              ? .58
+              : 1
+          const reactiveStrength =
+            Math.max(
+              proximityWake * .58,
+              focalWake,
+            ) * neighborDim
+
+          if (frameMaterial) {
+            frameMaterial.emissiveIntensity +=
+              ((.018 + reactiveStrength * .3) -
+                frameMaterial.emissiveIntensity) *
+              .09
+            frameMaterial.envMapIntensity +=
+              ((settings.environmentIntensity *
+                (.4 + reactiveStrength * .42)) -
+                frameMaterial.envMapIntensity) *
+              .08
+          }
+          if (boardMaterial) {
+            boardMaterial.emissiveIntensity +=
+              ((.016 + reactiveStrength * .2) -
+                boardMaterial.emissiveIntensity) *
+              .09
+          }
+          if (accentMaterial) {
+            accentMaterial.opacity +=
+              ((.1 + reactiveStrength * .55) -
+                accentMaterial.opacity) *
+              .11
+          }
+        }
 
         if (node.libraryKind === 'shelf') {
           const baseYaw =
@@ -7177,6 +7292,7 @@ export default function DreamWorld3D({
       shelfFrameMaterial.dispose()
       shelfBoardMaterial.dispose()
       shelfBookMaterials.forEach((material) => material.dispose())
+      shelfReactiveMaterials.forEach((material) => material.dispose())
       shelfCoverMaterials.forEach((material) => material.dispose())
       shelfCoverTextures.forEach((texture) => texture.dispose())
       shelfAccentMaterial.dispose()
