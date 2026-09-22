@@ -891,6 +891,33 @@ export default function DevWebSurf3D({
       return mesh
     }
 
+    function addWalkwaySurface(
+      x: number,
+      z: number,
+      width: number,
+      depth: number,
+      floorBase: number,
+      accent: number,
+    ) {
+      const geometry = new THREE.BoxGeometry(width, .024, depth)
+      architecturalGeometries.push(geometry)
+      const material = new THREE.MeshStandardMaterial({
+        color: 0x4b5059,
+        map: architecturalSurfaceTexture,
+        roughnessMap: architecturalSurfaceRoughness,
+        roughness: .88,
+        metalness: .035,
+        emissive: accent,
+        emissiveIntensity: .035,
+      })
+      architecturalMaterials.push(material)
+      const mesh = new THREE.Mesh(geometry, material)
+      mesh.position.set(x, floorBase + .004, z)
+      mesh.receiveShadow = true
+      scene.add(mesh)
+      return mesh
+    }
+
     function addWall(
       x: number,
       z: number,
@@ -1271,8 +1298,14 @@ export default function DevWebSurf3D({
       addFloor(-11.85, archiveCenterZ, 14.3, archiveDepth, floorMaterial, base)
       addFloor(11.85, archiveCenterZ, 14.3, archiveDepth, floorMaterial, base)
 
+      // Brighter matte lanes establish foreground navigation while shelves
+      // and distant architecture can safely recede into shadow.
+      addWalkwaySurface(-10.2, archiveCenterZ, 2.5, 88, base, floorAccent)
+      addWalkwaySurface(10.2, archiveCenterZ, 2.5, 88, base, floorAccent)
+
       UPPER_BRIDGE_Z.forEach((z) => {
         addFloor(0, z, 9.4, 4.4, floorMaterial, base)
+        addWalkwaySurface(0, z, 8.7, 2.25, base, floorAccent)
       })
 
       // Balcony rails stop at bridge entrances instead of slicing across
@@ -1508,6 +1541,11 @@ export default function DevWebSurf3D({
     addFloor(-13, -13, 16, 28)
     addFloor(13, -13, 16, 28)
     addFloor(0, -39, 18, 12)
+
+    addWalkwaySurface(0, -15, 3.2, 56, 0, FLOOR_ACCENTS[0])
+    addWalkwaySurface(-13, -15, 2.5, 26, 0, FLOOR_ACCENTS[0])
+    addWalkwaySurface(13, -15, 2.5, 26, 0, FLOOR_ACCENTS[0])
+    addWalkwaySurface(0, -39, 5.2, 10.5, 0, FLOOR_ACCENTS[5])
 
     // The playable archive stops around z=-43, but the physical collection
     // continues another thirty-plus metres into fog.
@@ -2092,7 +2130,7 @@ export default function DevWebSurf3D({
         disposableTextures.push(labelTexture)
       }
       const labelMaterial = new THREE.SpriteMaterial({
-        map: labelTexture ?? undefined,
+        ...(labelTexture ? {map: labelTexture} : {}),
         transparent: true,
         opacity:
           node.kind === 'article'
@@ -2787,7 +2825,10 @@ export default function DevWebSurf3D({
 
     function onCanvasClick() {
       if (document.pointerLockElement !== renderer.domElement) {
-        void renderer.domElement.requestPointerLock()
+        void renderer.domElement.requestPointerLock().catch(() => {
+          // Browsers reject immediate re-lock attempts after Escape. A failed
+          // lock request should never become an unhandled application error.
+        })
         return
       }
 
@@ -3051,7 +3092,7 @@ export default function DevWebSurf3D({
           )
 
           visual.material.opacity +=
-            (((unrelatedShelf ? .48 : 1)) -
+            (((unrelatedShelf ? .3 : 1)) -
               visual.material.opacity) *
             .08
         }
@@ -3069,10 +3110,10 @@ export default function DevWebSurf3D({
               : routed
                 ? .9
                 : sameShelf
-                  ? .68
+                  ? .84
                   : unrelatedShelf
-                    ? .22
-                    : .46) -
+                    ? .12
+                    : .38) -
             visual.material.emissiveIntensity) *
           .08
 
@@ -3081,10 +3122,12 @@ export default function DevWebSurf3D({
             ((selected
               ? .26
               : hovered
-                ? .2
+                ? .24
                 : routed
-                  ? .17
-                  : .055) -
+                  ? .2
+                  : sameShelf
+                    ? .11
+                    : .025) -
               visual.bookGlowMaterial.opacity) *
             .1
         }
@@ -3104,10 +3147,10 @@ export default function DevWebSurf3D({
                 ? .82
                 : node?.kind === 'article'
                   ? sameShelf
-                    ? .46
+                    ? .72
                     : unrelatedShelf
-                      ? .08
-                      : .16
+                      ? .025
+                      : .1
                   : .7
         visual.labelMaterial.opacity +=
           (labelTarget - visual.labelMaterial.opacity) *
@@ -3151,15 +3194,22 @@ export default function DevWebSurf3D({
             center.x - activeShelfCenter.x,
             center.z - activeShelfCenter.z,
           ) < 4.4
+        const shelfFloor = THREE.MathUtils.clamp(
+          Math.round(center.y / LIBRARY_FLOOR_HEIGHT),
+          0,
+          LIBRARY_FLOOR_COUNT - 1,
+        )
         material.opacity +=
-          ((nearShelf ? .52 : activeShelfCenter ? .018 : .045) -
+          ((nearShelf ? .76 : activeShelfCenter ? .006 : .018) -
             material.opacity) *
           .12
         material.color.lerp(
-          new THREE.Color(nearShelf ? 0x8ae8ff : 0x3b49df),
+          new THREE.Color(
+            nearShelf ? FLOOR_ACCENTS[shelfFloor] : 0x343b55,
+          ),
           .1,
         )
-        mesh.scale.z = nearShelf ? 1.8 : 1
+        mesh.scale.z = nearShelf ? 2.2 : 1
       })
 
       trimCoverCache(now)
@@ -3231,18 +3281,18 @@ export default function DevWebSurf3D({
 
         routeVisual.material.opacity +=
           ((active
-            ? .82
+            ? .78
             : routeVisual.edge.kind === 'corridor'
-              ? .16
-              : .1) -
+              ? .045
+              : .015) -
             routeVisual.material.opacity) *
           .1
         routeVisual.glowMaterial.opacity +=
-          ((active ? .2 : routeVisual.edge.kind === 'corridor' ? .026 : .012) -
+          ((active ? .17 : routeVisual.edge.kind === 'corridor' ? .008 : .003) -
             routeVisual.glowMaterial.opacity) *
           .1
         routeVisual.packetMaterial.opacity =
-          active ? .98 : .34
+          active ? .94 : .08
 
         routeVisual.packets.forEach((packet, packetIndex) => {
           const t =
