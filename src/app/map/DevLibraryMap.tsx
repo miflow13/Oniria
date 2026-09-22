@@ -596,6 +596,7 @@ export default function DevLibraryMap() {
         diveTimelineProgress={1}
         observatoryMode={false}
         flightMode={flightMode}
+        inputBlocked={Boolean(article)}
         onZoomChange={() => {}}
         onPanChange={() => {}}
         onNodeHover={(node) => setHoveredId(node?._id ?? null)}
