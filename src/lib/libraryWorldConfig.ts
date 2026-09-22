@@ -205,21 +205,23 @@ export function districtForTags(
   districts: LibraryDistrictConfig[],
 ) {
   const normalized = new Set(tags.map(normalizeDevTag))
-  let best: {district: LibraryDistrictConfig; score: number} | null = null
+  let bestDistrict: LibraryDistrictConfig | null = null
+  let bestScore = 0
 
-  districts.forEach((district) => {
-    if (!district.enabled || district.devTags.length === 0) return
+  for (const district of districts) {
+    if (!district.enabled || district.devTags.length === 0) continue
     const score = district.devTags.reduce(
       (total, tag) =>
         total + (normalized.has(normalizeDevTag(tag)) ? 1 : 0),
       0,
     )
-    if (score > 0 && (!best || score > best.score)) {
-      best = {district, score}
+    if (score > bestScore) {
+      bestDistrict = district
+      bestScore = score
     }
-  })
+  }
 
-  return best?.district ?? null
+  return bestDistrict
 }
 
 
