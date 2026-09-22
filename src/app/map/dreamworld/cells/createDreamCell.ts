@@ -446,6 +446,8 @@ export function createDreamCell(
     warm,
     Math.max(0, profile.warmth) * 0.3,
   )
+  scene.environment = environmentMap
+  scene.environmentIntensity = settings.environmentIntensity
   scene.fog = new THREE.FogExp2(
     color.clone().multiplyScalar(profile.lucid ? 0.07 : 0.12),
     Math.max(
