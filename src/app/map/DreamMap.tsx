@@ -245,6 +245,11 @@ export default function DreamMap({
   const [soundEnabled, setSoundEnabled] = useState(false)
   const [quality, setQuality] = useState<DreamQuality>('high')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [introStage, setIntroStage] = useState(0)
+  const [diveActive, setDiveActive] = useState(false)
+  const [diveTitle, setDiveTitle] = useState<string | null>(null)
+  const [diveExitRequest, setDiveExitRequest] = useState(0)
+  const [closingJournal, setClosingJournal] = useState(false)
   const [motionPositions, setMotionPositions] = useState<Record<string, {x: number; y: number}>>({})
   const [enteringNodeId, setEnteringNodeId] = useState<string | null>(null)
   const [enteringDreamTitle, setEnteringDreamTitle] = useState<string | null>(null)
@@ -263,6 +268,7 @@ export default function DreamMap({
   const physicsRef = useRef<Map<string, MotionPoint>>(new Map())
   const cameraFrameRef = useRef<number | null>(null)
   const enterTimerRef = useRef<number | null>(null)
+  const closeTimerRef = useRef<number | null>(null)
 
   const stopAmbient = useCallback(() => {
     const ambient = ambientRef.current
@@ -620,6 +626,9 @@ export default function DreamMap({
     if (demoMode) setLocalDreams(readLocalDreams())
 
     try {
+      const introSeen = window.sessionStorage.getItem('oniria-map-intro-seen')
+      if (introSeen === 'yes') setIntroStage(4)
+
       const stored = window.localStorage.getItem('oniria-dream-quality')
       const storedSidebar = window.localStorage.getItem('oniria-map-sidebar')
       if (storedSidebar === 'collapsed') setSidebarCollapsed(true)
@@ -657,6 +666,35 @@ export default function DreamMap({
   }, [sidebarCollapsed])
 
   useEffect(() => {
+    if (introStage >= 4) return
+
+    const schedule = [
+      window.setTimeout(() => setIntroStage((stage) => Math.max(stage, 1)), 450),
+      window.setTimeout(() => setIntroStage((stage) => Math.max(stage, 2)), 1650),
+      window.setTimeout(() => setIntroStage((stage) => Math.max(stage, 3)), 3100),
+      window.setTimeout(() => {
+        setIntroStage(4)
+        try {
+          window.sessionStorage.setItem('oniria-map-intro-seen', 'yes')
+        } catch {
+          // Ignore storage failures.
+        }
+      }, 5200),
+    ]
+
+    return () => schedule.forEach((timer) => window.clearTimeout(timer))
+  }, [introStage])
+
+  function skipIntro() {
+    setIntroStage(4)
+    try {
+      window.sessionStorage.setItem('oniria-map-intro-seen', 'yes')
+    } catch {
+      // Ignore storage failures.
+    }
+  }
+
+  useEffect(() => {
     return () => {
       stopAmbient()
       const context = audioContextRef.current
@@ -668,6 +706,9 @@ export default function DreamMap({
       }
       if (enterTimerRef.current !== null) {
         window.clearTimeout(enterTimerRef.current)
+      }
+      if (closeTimerRef.current !== null) {
+        window.clearTimeout(closeTimerRef.current)
       }
     }
   }, [stopAmbient])
