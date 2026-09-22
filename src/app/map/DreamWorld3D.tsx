@@ -665,6 +665,71 @@ export default function DreamWorld3D({
       return sprite
     })
 
+    const nearDustCount =
+      qualityRef.current === 'cinematic'
+        ? 180
+        : qualityRef.current === 'high'
+          ? 110
+          : qualityRef.current === 'medium'
+            ? 64
+            : 24
+    const nearDustPositions = new Float32Array(nearDustCount * 3)
+    for (let index = 0; index < nearDustCount; index += 1) {
+      const offset = index * 3
+      nearDustPositions[offset] = (seededUnit(index + 211, 1) - .5) * 18
+      nearDustPositions[offset + 1] = (seededUnit(index + 211, 2) - .5) * 11
+      nearDustPositions[offset + 2] = 1.6 + seededUnit(index + 211, 3) * 7.4
+    }
+    const nearDustGeometry = new THREE.BufferGeometry()
+    nearDustGeometry.setAttribute(
+      'position',
+      new THREE.BufferAttribute(nearDustPositions, 3),
+    )
+    const nearDustMaterial = new THREE.PointsMaterial({
+      color: 0xd9eef3,
+      size: qualityRef.current === 'cinematic' ? .026 : .02,
+      transparent: true,
+      opacity: .18,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+    const nearDust = new THREE.Points(nearDustGeometry, nearDustMaterial)
+    nearDust.renderOrder = 7
+    scene.add(nearDust)
+
+    const shaftGeometries: THREE.BufferGeometry[] = []
+    const shaftMaterials: THREE.Material[] = []
+    const worldLightShafts: THREE.Mesh[] = []
+    for (let index = 0; index < Math.max(2, settings.atmosphereLayers - 1); index += 1) {
+      const geometry = new THREE.CylinderGeometry(
+        .18 + index * .08,
+        1.8 + index * .45,
+        13 + index * 2,
+        28,
+        1,
+        true,
+      )
+      const material = new THREE.MeshBasicMaterial({
+        color: index % 2 ? 0x8bded9 : 0xb69ce7,
+        transparent: true,
+        opacity: .012 + index * .004,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })
+      const shaft = new THREE.Mesh(geometry, material)
+      shaft.position.set(
+        -7 + index * 6.5,
+        2 + index * .8,
+        -10 - index * 2.2,
+      )
+      shaft.rotation.z = -.22 + index * .11
+      farWorld.add(shaft)
+      shaftGeometries.push(geometry)
+      shaftMaterials.push(material)
+      worldLightShafts.push(shaft)
+    }
+
     const nodeVisuals = new Map<string, NodeVisual>()
     const interactive: THREE.Object3D[] = []
 
@@ -2323,6 +2388,21 @@ export default function DreamWorld3D({
           Math.sin(elapsed * 0.16 + index) * 0.008
       })
 
+      nearDust.rotation.y = Math.sin(elapsed * .045) * .05
+      nearDust.position.x = pointerParallax.x * .16
+      nearDust.position.y = pointerParallax.y * .1
+      nearDustMaterial.opacity =
+        .14 + Math.max(0, Math.sin(elapsed * .19)) * .06
+
+      worldLightShafts.forEach((shaft, index) => {
+        shaft.rotation.y += .00022 + index * .00005
+        const material = shaft.material as THREE.MeshBasicMaterial
+        material.opacity =
+          .012 +
+          index * .003 +
+          Math.max(0, Math.sin(elapsed * .11 + index)) * .007
+      })
+
       pointerParallax.lerp(pointerTarget, 0.035)
 
       const observatoryScale = observatoryModeRef.current ? .7 : 1
@@ -3120,6 +3200,12 @@ export default function DreamWorld3D({
         material.dispose()
         scene.remove(sprite)
       })
+
+      nearDustGeometry.dispose()
+      nearDustMaterial.dispose()
+      scene.remove(nearDust)
+      shaftGeometries.forEach((geometry) => geometry.dispose())
+      shaftMaterials.forEach((material) => material.dispose())
 
       nebulae.forEach((sprite) => {
         const material = sprite.material as THREE.SpriteMaterial
