@@ -543,6 +543,7 @@ export function createDreamDive(
   if (profile.lucid) background.lerp(new THREE.Color(0x06131c), .28)
   scene.background = background
   scene.environment = options.environmentMap ?? null
+  scene.environmentIntensity = settings.environmentIntensity
   scene.fog = new THREE.FogExp2(
     background.clone().lerp(accent, .18),
     profile.fogDensity,
@@ -582,7 +583,23 @@ export function createDreamDive(
     1.8 + profile.mood * .28,
   )
   moonLight.position.set(-5, 8, 5)
+  moonLight.castShadow = settings.miniWorldDetail > 0
+  moonLight.shadow.mapSize.set(
+    settings.miniWorldDetail > 1 ? 2048 : 1024,
+    settings.miniWorldDetail > 1 ? 2048 : 1024,
+  )
+  moonLight.shadow.bias = -0.0002
+  moonLight.shadow.normalBias = .035
   scene.add(moonLight)
+
+  const rimLight = new THREE.PointLight(
+    profile.lucid ? 0xb9fbff : profile.warmth > .35 ? 0xf2abc7 : 0x7d77ca,
+    5.5 + profile.recurrence * .7,
+    26,
+    2,
+  )
+  rimLight.position.set(-5.5, 2.6, -8)
+  scene.add(rimLight)
 
   const localLight = new THREE.PointLight(accent, 14 + profile.recurrence * 2, 22, 2)
   localLight.position.set(2, 3.5, -2)
@@ -591,6 +608,7 @@ export function createDreamDive(
   const groundGeometry = new THREE.PlaneGeometry(44, 44, 48, 48)
   let waterMaterial: THREE.MeshPhysicalMaterial | null = null
   let waterNormal: THREE.Texture | null = null
+  let waterCaustic: THREE.PointLight | null = null
 
   if (profile.motifs.water) {
     waterNormal = createWaterNormalTexture()
@@ -598,7 +616,18 @@ export function createDreamDive(
     const water = new THREE.Mesh(groundGeometry, waterMaterial)
     water.rotation.x = -Math.PI / 2
     water.position.y = -.05
+    water.receiveShadow = true
     root.add(water)
+
+    waterCaustic = new THREE.PointLight(
+      accent.clone().lerp(new THREE.Color(0xffffff), .42),
+      4.2,
+      14,
+      2,
+    )
+    waterCaustic.position.set(0, 1.2, -5)
+    scene.add(waterCaustic)
+
     disposables.push(groundGeometry, waterMaterial, waterNormal)
     animated.push((time, delta) => {
       if (!waterMaterial || !waterNormal) return
@@ -623,6 +652,7 @@ export function createDreamDive(
     )
     const ground = new THREE.Mesh(groundGeometry, groundMaterial)
     ground.rotation.x = -Math.PI / 2
+    ground.receiveShadow = true
     root.add(ground)
     disposables.push(groundGeometry, groundMaterial)
   }
@@ -947,6 +977,21 @@ export function createDreamDive(
       return item
     })
 
+  if (settings.miniWorldDetail > 0) {
+    root.traverse((object) => {
+      const mesh = object as THREE.Mesh
+      if (!mesh.isMesh) return
+
+      const material = mesh.material as THREE.Material | THREE.Material[]
+      const transparent = Array.isArray(material)
+        ? material.some((item) => item.transparent)
+        : material?.transparent
+
+      mesh.castShadow = !transparent
+      mesh.receiveShadow = true
+    })
+  }
+
   let lookX = 0
   let lookY = 0
   let currentYaw = 0
@@ -1059,6 +1104,21 @@ export function createDreamDive(
         profile.recurrence * 1.7 +
         profile.mood * .38 +
         audioEnergy * 7
+      rimLight.intensity =
+        4.6 +
+        profile.recurrence * .55 +
+        audioEnergy * 4.2
+
+      if (waterCaustic) {
+        waterCaustic.position.x = Math.sin(time * .31) * 3.8
+        waterCaustic.position.z = -5 + Math.cos(time * .27) * 3.2
+        waterCaustic.position.y = .8 + Math.sin(time * .43) * .45
+        waterCaustic.intensity =
+          2.8 +
+          Math.max(0, Math.sin(time * .9)) * 1.6 +
+          audioEnergy * 4.4
+      }
+
       particleMaterial.size =
         (profile.lucid ? .028 : .038) *
         (1 + audioEnergy * .36)
