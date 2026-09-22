@@ -564,7 +564,7 @@ export default function DevWebSurf3D({
     })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25))
     renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = 1.06
+    renderer.toneMappingExposure = 1.18
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.shadowMap.enabled = true
     renderer.shadowMap.type = THREE.PCFShadowMap
@@ -574,10 +574,10 @@ export default function DevWebSurf3D({
     renderer.domElement.tabIndex = 0
     container.appendChild(renderer.domElement)
 
-    const ambient = new THREE.HemisphereLight(0xd7defd, 0x101010, .92)
+    const ambient = new THREE.HemisphereLight(0xe2e7ed, 0x18191c, 1.2)
     scene.add(ambient)
 
-    const key = new THREE.DirectionalLight(0xf5f5f5, 1.72)
+    const key = new THREE.DirectionalLight(0xf5f2ec, 2.05)
     key.position.set(-9, 13, 9)
     key.castShadow = true
     key.shadow.mapSize.set(1024, 1024)
@@ -621,22 +621,70 @@ export default function DevWebSurf3D({
     )
     scene.add(floorIdentityLight)
 
-    const practicalLightStops = [-8, -28, -48] as const
-    const practicalLights = practicalLightStops.map((z, index) => {
+    const practicalLightLayout = [
+      {x: -9.6, z: -6, color: 0xf6f1e8},
+      {x: 9.6, z: -14, color: 0xe8edf2},
+      {x: -9.6, z: -22, color: 0xf6f1e8},
+      {x: 9.6, z: -30, color: 0xe8edf2},
+      {x: -9.6, z: -38, color: 0xf6f1e8},
+      {x: 9.6, z: -46, color: 0xe8edf2},
+    ] as const
+
+    const practicalLights = practicalLightLayout.map((entry) => {
       const light = new THREE.PointLight(
-        index === 1 ? 0xf7f2e8 : 0xdce4e8,
-        1.45,
-        16,
+        entry.color,
+        4.2,
+        14,
         2,
       )
       light.position.set(
-        index % 2 === 0 ? -8.8 : 8.8,
-        currentFloorRef.current * LIBRARY_FLOOR_HEIGHT + 4.15,
-        z,
+        entry.x,
+        currentFloorRef.current * LIBRARY_FLOOR_HEIGHT + 4.05,
+        entry.z,
       )
+      light.castShadow = false
       scene.add(light)
       return light
     })
+
+    const landingLightLayout = [
+      {x: 0, z: 7},
+      {x: 0, z: -27},
+    ] as const
+    const landingLights = landingLightLayout.map((entry) => {
+      const light = new THREE.PointLight(
+        0xf7f3ec,
+        3.4,
+        11,
+        2,
+      )
+      light.position.set(
+        entry.x,
+        currentFloorRef.current * LIBRARY_FLOOR_HEIGHT + 3.65,
+        entry.z,
+      )
+      light.castShadow = false
+      scene.add(light)
+      return light
+    })
+
+    const adjacentFloorLights = [-1, 1].flatMap((direction) =>
+      [
+        {x: -9, z: -18},
+        {x: 9, z: -38},
+      ].map((entry) => {
+        const light = new THREE.PointLight(
+          0xd9e0e5,
+          0,
+          13,
+          2,
+        )
+        light.position.set(entry.x, 0, entry.z)
+        light.castShadow = false
+        scene.add(light)
+        return {light, direction, entry}
+      }),
+    )
 
     const architecturalGeometries: THREE.BufferGeometry[] = []
     const architecturalMaterials: THREE.Material[] = []
@@ -3209,10 +3257,34 @@ export default function DevWebSurf3D({
         floor * LIBRARY_FLOOR_HEIGHT + 3.2
       floorIdentityLight.intensity = floor === 0 ? .7 : 1.05
       practicalLights.forEach((light, index) => {
-        light.position.y =
-          floor * LIBRARY_FLOOR_HEIGHT + 4.15
-        light.position.z = practicalLightStops[index]
-        light.intensity = floor === 0 ? 1.25 : 1.5
+        const layout = practicalLightLayout[index]
+        light.position.set(
+          layout.x,
+          floor * LIBRARY_FLOOR_HEIGHT + 4.05,
+          layout.z,
+        )
+        light.intensity = floor === 0 ? 3.8 : 4.4
+      })
+      landingLights.forEach((light, index) => {
+        const layout = landingLightLayout[index]
+        light.position.set(
+          layout.x,
+          floor * LIBRARY_FLOOR_HEIGHT + 3.65,
+          layout.z,
+        )
+        light.intensity = floor === 0 ? 3.1 : 3.6
+      })
+      adjacentFloorLights.forEach(({light, direction, entry}) => {
+        const targetFloor = floor + direction
+        const valid =
+          targetFloor >= 0 &&
+          targetFloor < LIBRARY_FLOOR_COUNT
+        light.position.set(
+          entry.x,
+          targetFloor * LIBRARY_FLOOR_HEIGHT + 3.9,
+          entry.z,
+        )
+        light.intensity = valid ? 1.15 : 0
       })
       practicalFixtureMaterials.forEach((material, floorIndex) => {
         const distance = Math.abs(floorIndex - floor)
