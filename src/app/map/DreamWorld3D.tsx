@@ -761,8 +761,8 @@ export default function DreamWorld3D({
     const shelfSideGeometry = new THREE.BoxGeometry(.18, 2.65, .56)
     const shelfBoardGeometry = new THREE.BoxGeometry(3.45, .12, .62)
     const shelfBackGeometry = new THREE.BoxGeometry(3.45, 2.65, .1)
-    const shelfBookGeometry = new THREE.BoxGeometry(.34, .56, .24)
-    const shelfCoverGeometry = new THREE.PlaneGeometry(.9, .52)
+    const shelfBookGeometry = new THREE.BoxGeometry(.92, .58, .1)
+    const shelfCoverGeometry = new THREE.PlaneGeometry(.84, .5)
     const shelfAccentGeometry = new THREE.BoxGeometry(3.34, .035, .68)
     const shelfPickGeometry = new THREE.BoxGeometry(3.8, 2.9, .95)
     const shelfFrameMaterial = new THREE.MeshStandardMaterial({
@@ -992,36 +992,38 @@ export default function DreamWorld3D({
           shelf.add(board)
         })
 
-        const fillerCount = 18
-        for (let index = 0; index < fillerCount; index += 1) {
-          const row = Math.floor(index / 6)
-          const column = index % 6
-          const book = new THREE.Mesh(
+        const displaySlots = 9
+        for (let index = 0; index < displaySlots; index += 1) {
+          const row = Math.floor(index / 3)
+          const column = index % 3
+          const backing = new THREE.Mesh(
             shelfBookGeometry,
             shelfBookMaterials[
               (seed + index * 7) % shelfBookMaterials.length
             ],
           )
-          book.position.set(
-            -1.35 + column * .54,
-            -.86 + row * .85,
-            .01,
+          backing.position.set(
+            -1.08 + column * 1.08,
+            -.84 + row * .84,
+            -.235,
           )
-          book.scale.set(
-            .72,
-            .78 + seededUnit(seed, index + 90) * .14,
-            .72,
+          backing.scale.set(
+            1,
+            .94 + seededUnit(seed, index + 90) * .06,
+            1,
           )
-          shelf.add(book)
+          shelf.add(backing)
         }
 
         ;(node.coverImages ?? []).slice(0, 9).forEach(
           (coverUrl, index) => {
-            const coverMaterial = new THREE.MeshBasicMaterial({
-              color: 0xb8bdc8,
-              transparent: true,
-              opacity: .92,
-              depthWrite: true,
+            const coverMaterial = new THREE.MeshStandardMaterial({
+              color: 0x242b38,
+              roughness: .96,
+              metalness: 0,
+              emissive: 0x000000,
+              emissiveIntensity: 0,
+              side: THREE.DoubleSide,
               toneMapped: true,
             })
             shelfCoverMaterials.push(coverMaterial)
@@ -1038,11 +1040,12 @@ export default function DreamWorld3D({
                 )
                 shelfCoverTextures.push(texture)
                 coverMaterial.map = texture
+                coverMaterial.color.setHex(0xffffff)
                 coverMaterial.needsUpdate = true
               },
               undefined,
               () => {
-                coverMaterial.color.setHex(0x3a4150)
+                coverMaterial.color.setHex(0x303746)
               },
             )
 
@@ -1055,8 +1058,9 @@ export default function DreamWorld3D({
             cover.position.set(
               -1.08 + column * 1.08,
               -.84 + row * .84,
-              -.345,
+              -.291,
             )
+            cover.rotation.y = Math.PI
             cover.renderOrder = 5
             shelf.add(cover)
           },
