@@ -64,6 +64,11 @@ export type DreamWorldNode = {
   y: number
   frequency: number
   dreamIds: string[]
+  libraryKind?: 'shelf'
+  subtitle?: string
+  articleCount?: number
+  accent?: string
+  world?: [number, number, number]
 }
 
 export type DreamWorldEdge = {
@@ -176,6 +181,10 @@ function worldPosition(
   node: DreamWorldNode,
   positions: Record<string, {x: number; y: number}>,
 ) {
+  if (node.world) {
+    return new THREE.Vector3(...node.world)
+  }
+
   const point = positions[node._id] ?? {x: node.x * 10, y: node.y * 7}
   const seed = hashString(node._id)
   const z = -1.6 + seededUnit(seed, 19) * 3.2
@@ -218,7 +227,9 @@ function createLabelTexture(node: DreamWorldNode) {
   const context = canvas.getContext('2d')
   if (!context) return new THREE.CanvasTexture(canvas)
 
-  const color = new THREE.Color(CATEGORY_COLORS[node.category])
+  const color = new THREE.Color(
+    node.accent ?? CATEGORY_COLORS[node.category],
+  )
   const rgb = {
     r: Math.round(color.r * 255),
     g: Math.round(color.g * 255),
@@ -255,7 +266,9 @@ function createLabelTexture(node: DreamWorldNode) {
   context.fillStyle = 'rgba(170, 183, 210, .82)'
   context.font = '500 17px system-ui, sans-serif'
   context.fillText(
-    `${node.frequency} dream${node.frequency === 1 ? '' : 's'} · ${node.category}`,
+    node.libraryKind === 'shelf'
+      ? `${node.articleCount ?? node.frequency} articles · ${node.subtitle ?? 'floating shelf'}`
+      : `${node.frequency} dream${node.frequency === 1 ? '' : 's'} · ${node.category}`,
     110,
     92,
   )
