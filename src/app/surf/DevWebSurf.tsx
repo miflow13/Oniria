@@ -30,37 +30,37 @@ const SECTION_COPY: Record<
   atrium: {
     title: 'DEV Library',
     subtitle: 'information atrium',
-    accent: '#d8b879',
+    accent: '#f5f5f5',
   },
   featured: {
     title: 'Featured Reading Hall',
     subtitle: 'popular this week',
-    accent: '#d8b879',
+    accent: '#3b49df',
   },
   latest: {
     title: 'New Arrivals',
     subtitle: 'freshly published',
-    accent: '#67cfd0',
+    accent: '#5b6cff',
   },
   topics: {
     title: 'Topic Wings',
     subtitle: 'browse by tag',
-    accent: '#62d7a5',
+    accent: '#3b49df',
   },
   creators: {
     title: 'Creator Studies',
     subtitle: 'authors and their collections',
-    accent: '#a98ae5',
+    accent: '#7c83ff',
   },
   search: {
     title: 'Card Catalog',
     subtitle: 'search the live collection',
-    accent: '#e5b760',
+    accent: '#3b49df',
   },
   archive: {
     title: 'Deep Archive',
     subtitle: 'older shelves and long-tail pages',
-    accent: '#7a8794',
+    accent: '#a3a3a3',
   },
 }
 
@@ -896,6 +896,20 @@ export default function DevWebSurf() {
     activeNode?.title,
   ].filter(Boolean)
 
+  const wingLinks: Array<{
+    section: LibrarySection
+    label: string
+    target: string
+  }> = [
+    {section: 'atrium', label: 'Home', target: 'dev-home'},
+    {section: 'featured', label: 'Featured', target: 'section:featured'},
+    {section: 'latest', label: 'New', target: 'section:latest'},
+    {section: 'topics', label: 'Topics', target: 'section:topics'},
+    {section: 'creators', label: 'Creators', target: 'section:creators'},
+    {section: 'search', label: 'Search', target: 'section:search'},
+    {section: 'archive', label: 'Archive', target: 'section:archive'},
+  ]
+
   return (
     <main className={styles.page}>
       <DevWebSurf3D
@@ -951,6 +965,33 @@ export default function DevWebSurf() {
             {index > 0 && <i>›</i>}
             {item}
           </span>
+        ))}
+      </nav>
+
+      <nav className={styles.wingRail} aria-label="Browse library wings">
+        {wingLinks.map((item) => (
+          <button
+            type="button"
+            key={item.section}
+            className={
+              currentSection === item.section
+                ? styles.wingRailActive
+                : ''
+            }
+            onClick={() => {
+              if (item.section === 'search') {
+                walkTo(item.target)
+                window.setTimeout(
+                  () => searchInputRef.current?.focus(),
+                  140,
+                )
+              } else {
+                walkTo(item.target)
+              }
+            }}
+          >
+            {item.label}
+          </button>
         ))}
       </nav>
 
@@ -1235,7 +1276,9 @@ export default function DevWebSurf() {
               </div>
 
               <div className={styles.articleBody}>
-                {cleanMarkdown(article.body_markdown).slice(0, 6500)}
+                {cleanMarkdown(article.body_markdown) ||
+                  article.description ||
+                  'This article body is unavailable in the public DEV response.'}
               </div>
 
               <div className={styles.metrics}>
