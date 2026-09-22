@@ -2211,7 +2211,7 @@ export default function DevWebSurf3D({
           const t = .035 + (index / (floorStrips.length - 1)) * .93
           const point = activeGuideCurve!.getPoint(t)
           const tangent = activeGuideCurve!.getTangent(t)
-          mesh.position.set(point.x, .035, point.z)
+          mesh.position.set(point.x, point.y + .025, point.z)
           mesh.rotation.y =
             Math.atan2(tangent.x, tangent.z) + Math.PI / 2
           mesh.visible = true
@@ -2229,7 +2229,7 @@ export default function DevWebSurf3D({
           const t = .16 + index * .135
           const point = activeGuideCurve!.getPoint(t)
           const tangent = activeGuideCurve!.getTangent(t)
-          mesh.position.set(point.x, .042, point.z)
+          mesh.position.set(point.x, point.y + .03, point.z)
           mesh.rotation.y =
             Math.atan2(tangent.x, tangent.z)
           mesh.visible = true
@@ -2309,7 +2309,39 @@ export default function DevWebSurf3D({
       netMagenta.intensity =
         2.7 + Math.max(0, Math.sin(now * .38 + 1.1)) * 1.05
 
-      if (travel) {
+      if (floorTravel) {
+        const progress = THREE.MathUtils.clamp(
+          (now - floorTravel.startedAt) / floorTravel.duration,
+          0,
+          1,
+        )
+        const eased = progress * progress * (3 - 2 * progress)
+        const point = floorTravel.curve.getPoint(eased)
+        const look = floorTravel.curve.getPoint(
+          Math.min(1, eased + .025),
+        )
+
+        position.copy(point)
+        camera.position.copy(point)
+        camera.lookAt(look)
+        camera.fov +=
+          (62 - camera.fov) *
+          (1 - Math.exp(-delta * 8))
+        camera.updateProjectionMatrix()
+
+        if (progress >= 1) {
+          currentFloorIndex = floorTravel.targetFloor
+          position.y =
+            currentFloorIndex * LIBRARY_FLOOR_HEIGHT +
+            CAMERA_HEIGHT
+          camera.position.copy(position)
+          euler.setFromQuaternion(camera.quaternion, 'YXZ')
+          yaw = euler.y
+          pitch = euler.x
+          floorTravel = null
+          floorChangeRef.current(currentFloorIndex)
+        }
+      } else if (travel) {
         const progress = THREE.MathUtils.clamp(
           (now - travel.startedAt) / travel.duration,
           0,
@@ -2349,6 +2381,9 @@ export default function DevWebSurf3D({
           velocity.set(0, 0, 0)
           const arrived = travel.node
           const inspectOnArrival = travel.inspectOnArrival
+          currentFloorIndex =
+            arrived.floorIndex ?? currentFloorIndex
+          floorChangeRef.current(currentFloorIndex)
           travel = null
           travelRef.current(arrived, inspectOnArrival)
         }
