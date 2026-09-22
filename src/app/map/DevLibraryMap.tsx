@@ -39,6 +39,7 @@ const DEFAULT_USERNAME = 'mikachu'
 const QUALITY: DreamQuality = 'cinematic'
 const CATALOG_PAGE_SIZE = 100
 const CATALOG_BOOKS_PER_SHELF = 9
+const FRONT_PAGE_SHELF_TARGET = 8
 
 function catalogShelfPlacement(
   index: number,
@@ -580,7 +581,8 @@ export default function DevLibraryMap() {
     })
 
     // FRONT PAGE is the public entrance, not a strict taxonomy bucket.
-    // Always give it enough live DEV content to feel occupied immediately.
+    // Let it grow into a substantial arrival collection from the live feed,
+    // latest posts, and streamed catalogue instead of stopping at 3 shelves.
     const frontPageDistrict = districts.find(
       (district) => district.id === 'front-page',
     )
@@ -590,7 +592,12 @@ export default function DevLibraryMap() {
         uniqueArticles(
           bootstrap.feed,
           bootstrap.latest,
-        ).slice(0, CATALOG_BOOKS_PER_SHELF * 3),
+          catalog,
+        ).slice(
+          0,
+          CATALOG_BOOKS_PER_SHELF *
+            FRONT_PAGE_SHELF_TARGET,
+        ),
       )
     }
 
