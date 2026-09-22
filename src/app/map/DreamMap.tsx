@@ -1141,7 +1141,9 @@ export default function DreamMap({
     <main
       className={`${styles.page} ${
         sidebarCollapsed ? styles.pageSidebarCollapsed : ''
-      } ${selectedNode ? styles.pageFocusMode : ''}`}
+      } ${selectedNode ? styles.pageFocusMode : ''} ${
+        diveActive ? styles.pageDiveMode : ''
+      } ${introStage < 4 ? styles.pageIntroMode : ''}`}
     >
       <header className={styles.topbar}>
         <Link href="/" className={styles.brand} aria-label="Oniria journal">
@@ -1327,6 +1329,8 @@ export default function DreamMap({
                 nodes={nodes}
                 edges={edges}
                 positions={motionPositions}
+                dreams={visibleDreams}
+                selectedDreamId={openDream?._id ?? focusedDreamId}
                 selectedId={selectedId}
                 activeId={activeId}
                 focusedIds={focusedSymbolIds}
@@ -1335,6 +1339,8 @@ export default function DreamMap({
                 pan={pan}
                 quality={quality}
                 soundEnabled={soundEnabled}
+                introStage={introStage}
+                diveExitRequest={diveExitRequest}
                 onZoomChange={changeZoom}
                 onPanChange={setPan}
                 onNodeHover={(node) => {
@@ -1346,6 +1352,14 @@ export default function DreamMap({
                   if (selectedNode) closeDreamNote()
                 }}
                 onProjectionChange={setSelectedProjection}
+                onDiveStateChange={(active, title) => {
+                  setDiveActive(active)
+                  setDiveTitle(active ? title ?? openDream?.title ?? 'Dream' : null)
+                  if (active) {
+                    setEnteringNodeId(null)
+                    setClosingJournal(false)
+                  }
+                }}
               />
             )}
 
