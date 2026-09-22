@@ -245,15 +245,15 @@ function createLabelTexture(node: DreamWorldNode) {
   context.clearRect(0, 0, canvas.width, canvas.height)
 
   const gradient = context.createLinearGradient(68, 16, 560, 128)
-  gradient.addColorStop(0, 'rgba(7, 11, 27, .88)')
-  gradient.addColorStop(.72, 'rgba(12, 18, 39, .72)')
-  gradient.addColorStop(1, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, .12)`)
+  gradient.addColorStop(0, 'rgba(4, 8, 20, .97)')
+  gradient.addColorStop(.72, 'rgba(8, 14, 31, .94)')
+  gradient.addColorStop(1, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, .2)`)
 
   roundedRect(context, 26, 20, 588, 102, 38)
   context.fillStyle = gradient
   context.fill()
-  context.strokeStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, .28)`
-  context.lineWidth = 2
+  context.strokeStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, .58)`
+  context.lineWidth = 3
   context.stroke()
 
   context.shadowColor = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, .48)`
@@ -265,12 +265,12 @@ function createLabelTexture(node: DreamWorldNode) {
 
   context.shadowBlur = 0
   context.fillStyle = '#e5ecfb'
-  context.font = '600 27px system-ui, sans-serif'
+  context.font = '700 31px system-ui, sans-serif'
   const title = node.name.length > 25 ? `${node.name.slice(0, 24)}…` : node.name
   context.fillText(title, 110, 61)
 
-  context.fillStyle = 'rgba(170, 183, 210, .82)'
-  context.font = '500 17px system-ui, sans-serif'
+  context.fillStyle = 'rgba(205, 217, 235, .92)'
+  context.font = '600 18px system-ui, sans-serif'
   context.fillText(
     node.libraryKind === 'shelf'
       ? `${node.articleCount ?? node.frequency} articles · ${node.subtitle ?? 'floating shelf'}`
@@ -430,10 +430,16 @@ export default function DreamWorld3D({
     const container: HTMLDivElement = host
 
     const settings = getQualitySettings(qualityRef.current)
+    const libraryMode = nodeRef.current.some(
+      (node) => node.libraryKind === 'shelf',
+    )
 
     const scene = new THREE.Scene()
     scene.background = new THREE.Color(0x030611)
-    scene.fog = new THREE.FogExp2(0x07101f, settings.fogDensity)
+    scene.fog = new THREE.FogExp2(
+      0x07101f,
+      settings.fogDensity * (libraryMode ? 1.18 : 1),
+    )
 
     const camera = new THREE.PerspectiveCamera(43, 1, 0.05, 80)
     camera.position.set(0, 0, 10.8)
@@ -482,9 +488,11 @@ export default function DreamWorld3D({
 
     const bloom = new UnrealBloomPass(
       new THREE.Vector2(1, 1),
-      settings.bloomStrength,
-      settings.bloomRadius,
-      settings.bloomThreshold,
+      settings.bloomStrength * (libraryMode ? .44 : 1),
+      settings.bloomRadius * (libraryMode ? .72 : 1),
+      libraryMode
+        ? Math.max(.82, settings.bloomThreshold)
+        : settings.bloomThreshold,
     )
     composer.addPass(bloom)
 
@@ -492,13 +500,27 @@ export default function DreamWorld3D({
     dreamPost.uniforms.uCinematic.value =
       qualityRef.current === 'cinematic' ? 1 : 0
     dreamPost.uniforms.uIntensity.value =
-      qualityRef.current === 'cinematic' ? 0.72 : 0.32
+      qualityRef.current === 'cinematic'
+        ? libraryMode
+          ? .54
+          : .72
+        : libraryMode
+          ? .24
+          : .32
     composer.addPass(dreamPost)
     composer.addPass(new OutputPass())
 
-    scene.add(new THREE.AmbientLight(0x7182b6, 0.75))
+    scene.add(
+      new THREE.AmbientLight(
+        0x7182b6,
+        libraryMode ? .46 : .75,
+      ),
+    )
 
-    const keyLight = new THREE.DirectionalLight(0xd4e5ff, 2.1)
+    const keyLight = new THREE.DirectionalLight(
+      0xd4e5ff,
+      libraryMode ? 1.22 : 2.1,
+    )
     keyLight.position.set(-5, 6, 8)
     keyLight.castShadow = renderer.shadowMap.enabled
     keyLight.shadow.mapSize.set(
