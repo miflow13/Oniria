@@ -1285,10 +1285,23 @@ export default function DevWebSurf3D({
       material.metalness = .006
       return material
     })
+    const upperFloorMaterials = FLOOR_SURFACE_TINTS.map((tint, floor) => {
+      const material = floorMaterial.clone()
+      material.color.setHex(tint)
+      material.emissive = new THREE.Color(FLOOR_ACCENTS[floor])
+      material.emissiveIntensity = .025
+      material.roughness = .72
+      material.metalness = .08
+      material.transparent = true
+      material.opacity = .2
+      material.depthWrite = false
+      return material
+    })
     architecturalMaterials.push(
       concrete,
       floorMaterial,
       ...floorMaterials,
+      ...upperFloorMaterials,
     )
 
     const brass = new THREE.MeshStandardMaterial({
@@ -1339,6 +1352,16 @@ export default function DevWebSurf3D({
       roughness: .96,
       metalness: .02,
     })
+    const upperSlabUndersideMaterial = new THREE.MeshStandardMaterial({
+      color: 0x252b35,
+      emissive: 0x11192b,
+      emissiveIntensity: .025,
+      roughness: .78,
+      metalness: .08,
+      transparent: true,
+      opacity: .11,
+      depthWrite: false,
+    })
     const expansionJointMaterial = new THREE.MeshBasicMaterial({
       color: 0x090b0f,
       transparent: true,
@@ -1347,6 +1370,7 @@ export default function DevWebSurf3D({
     })
     architecturalMaterials.push(
       slabUndersideMaterial,
+      upperSlabUndersideMaterial,
       expansionJointMaterial,
     )
 
@@ -1367,7 +1391,9 @@ export default function DevWebSurf3D({
       )
       const resolvedMaterial =
         material === floorMaterial
-          ? floorMaterials[floorIndex] ?? floorMaterial
+          ? floorBase > 0
+            ? upperFloorMaterials[floorIndex] ?? floorMaterial
+            : floorMaterials[floorIndex] ?? floorMaterial
           : material
       const mesh = new THREE.Mesh(geometry, resolvedMaterial)
       mesh.position.set(x, floorBase - .11, z)
@@ -1384,7 +1410,9 @@ export default function DevWebSurf3D({
       architecturalGeometries.push(undersideGeometry)
       const underside = new THREE.Mesh(
         undersideGeometry,
-        slabUndersideMaterial,
+        floorBase > 0
+          ? upperSlabUndersideMaterial
+          : slabUndersideMaterial,
       )
       underside.position.set(x, floorBase - .215, z)
       scene.add(underside)
@@ -1397,7 +1425,7 @@ export default function DevWebSurf3D({
         const edgeMaterial = new THREE.LineBasicMaterial({
           color: FLOOR_ACCENTS[floorIndex],
           transparent: true,
-          opacity: .025,
+          opacity: .075,
         })
         architecturalMaterials.push(edgeMaterial)
         const edges = new THREE.LineSegments(edgeGeometry, edgeMaterial)
@@ -1443,19 +1471,29 @@ export default function DevWebSurf3D({
         baseColor.lerp(new THREE.Color(FLOOR_ACCENTS[floorIndex]), .045)
       }
 
+      const isUpperDeck = floorBase > 0
       const material = new THREE.MeshStandardMaterial({
         color: baseColor,
         map: architecturalSurfaceTexture,
         roughnessMap: architecturalSurfaceRoughness,
         roughness:
-          variant === 'landing' || variant === 'threshold' ? .91 : .95,
+          variant === 'landing' || variant === 'threshold' ? .84 : .78,
         metalness:
-          variant === 'landing' || variant === 'threshold' ? .025 : .008,
+          variant === 'landing' || variant === 'threshold' ? .06 : .04,
         emissive: FLOOR_ACCENTS[floorIndex],
         emissiveIntensity:
           variant === 'threshold' || variant === 'landing'
-            ? .018
-            : .006,
+            ? .028
+            : .012,
+        transparent: isUpperDeck,
+        opacity: isUpperDeck
+          ? variant === 'landing' || variant === 'threshold'
+            ? .34
+            : variant === 'bridge'
+              ? .27
+              : .22
+          : 1,
+        depthWrite: !isUpperDeck,
       })
       architecturalMaterials.push(material)
 
