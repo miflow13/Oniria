@@ -685,6 +685,10 @@ export default function DevWebSurf() {
   const searchInputRef = useRef<HTMLInputElement | null>(null)
 
   const [bootstrap, setBootstrap] = useState<DevBootstrap | null>(null)
+  const [catalogArticles, setCatalogArticles] = useState<
+    DevArticleSummary[]
+  >([])
+  const [catalogLoading, setCatalogLoading] = useState(true)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -716,6 +720,12 @@ export default function DevWebSurf() {
   >([{id: 'dev-home', title: 'Atrium'}])
   const [directoryOpen, setDirectoryOpen] = useState(true)
   const [readingOrigin, setReadingOrigin] = useState<SurfNode | null>(null)
+  const [currentFloor, setCurrentFloor] = useState(0)
+  const [floorNonce, setFloorNonce] = useState(0)
+  const [floorRequest, setFloorRequest] = useState<{
+    floor: number
+    nonce: number
+  } | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -752,12 +762,58 @@ export default function DevWebSurf() {
     }
   }, [])
 
+  useEffect(() => {
+    let cancelled = false
+
+    fetch(
+      '/api/devto?mode=catalog&pages=' +
+        DEEP_CATALOG_PAGES +
+        '&per_page=100',
+    )
+      .then(async (response) => {
+        const data = (await response.json()) as {
+          articles?: DevArticleSummary[]
+          error?: string
+        }
+        if (!response.ok) {
+          throw new Error(data.error ?? 'Could not load deep catalog')
+        }
+        return data
+      })
+      .then((data) => {
+        if (!cancelled) {
+          setCatalogArticles(data.articles ?? [])
+        }
+      })
+      .catch((nextError) => {
+        if (!cancelled) {
+          setError(
+            nextError instanceof Error
+              ? nextError.message
+              : 'Could not load deep catalog',
+          )
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setCatalogLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const graph = useMemo(
     () =>
       bootstrap
-        ? buildLibraryGraph(bootstrap, dynamicArticles, dynamicLabel)
+        ? buildLibraryGraph(
+            bootstrap,
+            catalogArticles,
+            dynamicArticles,
+            dynamicLabel,
+          )
         : {nodes: [], edges: []},
-    [bootstrap, dynamicArticles, dynamicLabel],
+    [bootstrap, catalogArticles, dynamicArticles, dynamicLabel],
   )
 
   const fetchArticle = useCallback(async (node: SurfNode) => {
@@ -956,6 +1012,19 @@ export default function DevWebSurf() {
     setDirectoryOpen(false)
   }
 
+  function requestFloor(floor: number) {
+    const clamped = Math.max(
+      0,
+      Math.min(LIBRARY_FLOOR_COUNT - 1, floor),
+    )
+    if (clamped === currentFloor) return
+    const next = floorNonce + 1
+    setFloorNonce(next)
+    setFloorRequest({floor: clamped, nonce: next})
+    setDirectoryOpen(false)
+    setRouteTargetId(null)
+  }
+
   function returnToReadingShelf() {
     if (!readingOrigin) return
     const origin = readingOrigin
@@ -1071,6 +1140,7 @@ export default function DevWebSurf() {
         ...bootstrap.feed,
         ...bootstrap.latest,
         ...bootstrap.profileArticles,
+        ...catalogArticles,
       ]
         .filter(
           (candidate, index, collection) => {
