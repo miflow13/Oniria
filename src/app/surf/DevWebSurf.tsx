@@ -763,6 +763,7 @@ export default function DevWebSurf() {
   const [locked, setLocked] = useState(false)
   const [currentSection, setCurrentSection] =
     useState<LibrarySection>('atrium')
+  const [wayfindingCue, setWayfindingCue] = useState<string | null>(null)
   const [routeTargetId, setRouteTargetId] = useState<string | null>(null)
   const [travelRequest, setTravelRequest] = useState<{
     id: string
@@ -1381,6 +1382,7 @@ export default function DevWebSurf() {
         onHover={setHovered}
         onPointerLockChange={setLocked}
         onZoneChange={setCurrentSection}
+        onWayfindingCueChange={setWayfindingCue}
         currentFloor={currentFloor}
         floorRequest={floorRequest}
         onFloorChange={setCurrentFloor}
@@ -1515,6 +1517,12 @@ export default function DevWebSurf() {
               ' · keys 1–6'}
         </small>
       </nav>
+
+      {wayfindingCue && (
+        <aside className={styles.aheadHud} aria-live="polite">
+          {wayfindingCue}
+        </aside>
+      )}
 
       <button
         type="button"

@@ -36,6 +36,7 @@ type Props = {
   onHover: (node: SurfNode | null) => void
   onPointerLockChange: (locked: boolean) => void
   onZoneChange: (section: LibrarySection) => void
+  onWayfindingCueChange: (cue: string | null) => void
   currentFloor: number
   floorRequest: FloorRequest
   onFloorChange: (floor: number) => void
@@ -146,6 +147,16 @@ const SECTION_ACCENTS: Record<LibrarySection, number> = {
   creators: 0xae7bff,
   search: 0xff4fd8,
   archive: 0x8b96a8,
+}
+
+const WAYFINDING_DESTINATIONS: Record<LibrarySection, string> = {
+  atrium: 'Central Atrium',
+  featured: 'Featured Shelves',
+  latest: 'New Arrivals',
+  topics: 'Topic Wings',
+  creators: 'Creator Studies',
+  search: 'Card Catalog',
+  archive: 'Deep Archive',
 }
 
 const KIND_GEOMETRY: Record<SurfNodeKind, () => THREE.BufferGeometry> = {
@@ -542,6 +553,7 @@ export default function DevWebSurf3D({
   onHover,
   onPointerLockChange,
   onZoneChange,
+  onWayfindingCueChange,
   currentFloor,
   floorRequest,
   onFloorChange,
@@ -560,6 +572,7 @@ export default function DevWebSurf3D({
   const hoverRef = useRef(onHover)
   const lockRef = useRef(onPointerLockChange)
   const zoneRef = useRef(onZoneChange)
+  const wayfindingCueRef = useRef(onWayfindingCueChange)
   const currentFloorRef = useRef(currentFloor)
   const floorRequestRef = useRef(floorRequest)
   const floorChangeRef = useRef(onFloorChange)
@@ -577,6 +590,7 @@ export default function DevWebSurf3D({
   hoverRef.current = onHover
   lockRef.current = onPointerLockChange
   zoneRef.current = onZoneChange
+  wayfindingCueRef.current = onWayfindingCueChange
   currentFloorRef.current = currentFloor
   floorRequestRef.current = floorRequest
   floorChangeRef.current = onFloorChange
@@ -4201,6 +4215,44 @@ export default function DevWebSurf3D({
     })
     architecturalGeometries.push(floorStripGeometry)
 
+    // A single transparent gradient gives otherwise-neutral transit runs a
+    // gentle pull toward the next threshold without adding lights or routes.
+    const corridorPullCanvas = document.createElement('canvas')
+    corridorPullCanvas.width = 16
+    corridorPullCanvas.height = 256
+    const corridorPullContext = corridorPullCanvas.getContext('2d')
+    if (corridorPullContext) {
+      const gradient = corridorPullContext.createLinearGradient(0, 256, 0, 0)
+      gradient.addColorStop(0, 'rgba(255,255,255,0)')
+      gradient.addColorStop(.45, 'rgba(255,255,255,.025)')
+      gradient.addColorStop(1, 'rgba(255,255,255,.22)')
+      corridorPullContext.fillStyle = gradient
+      corridorPullContext.fillRect(0, 0, 16, 256)
+    }
+    const corridorPullTexture = new THREE.CanvasTexture(corridorPullCanvas)
+    corridorPullTexture.minFilter = THREE.LinearFilter
+    corridorPullTexture.magFilter = THREE.LinearFilter
+    corridorPullTexture.generateMipmaps = false
+    labelsToDispose.push(corridorPullTexture)
+    const corridorPullGeometry = new THREE.PlaneGeometry(.82, 1)
+    const corridorPullMaterial = new THREE.MeshBasicMaterial({
+      color: SECTION_ACCENTS.featured,
+      map: corridorPullTexture,
+      transparent: true,
+      opacity: .46,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+    const corridorPull = new THREE.Mesh(
+      corridorPullGeometry,
+      corridorPullMaterial,
+    )
+    corridorPull.rotation.x = -Math.PI / 2
+    corridorPull.visible = false
+    scene.add(corridorPull)
+    architecturalGeometries.push(corridorPullGeometry)
+    architecturalMaterials.push(corridorPullMaterial)
+
     const arrowShape = new THREE.Shape()
     arrowShape.moveTo(0, .28)
     arrowShape.lineTo(.16, .02)
@@ -4259,6 +4311,7 @@ export default function DevWebSurf3D({
     const sceneRevealStartedAt = performance.now()
     let debugFrameCount = 0
     let debugWindowStartedAt = performance.now()
+    let displayedWayfindingCue: string | null = null
 
     function updateArticleLods(now: number) {
       if (now - lastLodUpdate < .22) return
@@ -5257,6 +5310,66 @@ export default function DevWebSurf3D({
       if (nearestSection !== currentSection) {
         currentSection = nearestSection
         zoneRef.current(nearestSection)
+      }
+
+      const floorBase = currentFloorIndex * LIBRARY_FLOOR_HEIGHT
+      const nearbyHubs: Array<{
+        section: LibrarySection
+        position: THREE.Vector3
+      }> =
+        currentFloorIndex === 0
+          ? (Object.keys(SECTION_DOORWAYS) as LibrarySection[])
+              .filter((section) => section !== currentSection)
+              .map((section) => ({
+                section,
+                position: SECTION_DOORWAYS[section],
+              }))
+          : [
+              {
+                section: 'atrium',
+                position: new THREE.Vector3(0, floorBase + .09, 7),
+              },
+            ]
+      camera.getWorldDirection(tempDirection)
+      let nextHubIndex = -1
+      let nextHubDistance = Number.POSITIVE_INFINITY
+      nearbyHubs.forEach((hub, index) => {
+        const dx = hub.position.x - camera.position.x
+        const dz = hub.position.z - camera.position.z
+        const distance = Math.hypot(dx, dz)
+        if (distance < 3 || distance > 18) return
+        const ahead =
+          (dx * tempDirection.x + dz * tempDirection.z) /
+          Math.max(.001, distance)
+        if (ahead < .58 || distance >= nextHubDistance) return
+        nextHubIndex = index
+        nextHubDistance = distance
+      })
+      const nextHub =
+        nextHubIndex >= 0 ? nearbyHubs[nextHubIndex] : null
+
+      const nextCue = nextHub
+        ? 'AHEAD: ' + WAYFINDING_DESTINATIONS[nextHub.section]
+        : null
+      if (nextCue !== displayedWayfindingCue) {
+        displayedWayfindingCue = nextCue
+        wayfindingCueRef.current(nextCue)
+      }
+
+      if (nextHub) {
+        const dx = nextHub.position.x - camera.position.x
+        const dz = nextHub.position.z - camera.position.z
+        corridorPull.visible = true
+        corridorPull.position.set(
+          camera.position.x + dx / 2,
+          floorBase + .043,
+          camera.position.z + dz / 2,
+        )
+        corridorPull.rotation.set(-Math.PI / 2, Math.atan2(dx, dz), 0)
+        corridorPull.scale.set(1, nextHubDistance, 1)
+        corridorPullMaterial.color.setHex(SECTION_ACCENTS[nextHub.section])
+      } else {
+        corridorPull.visible = false
       }
 
       deskGlow.rotation.z += delta * .12
