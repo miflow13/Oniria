@@ -1176,7 +1176,7 @@ export default function DevWebSurf3D({
 
       const bridgeZ = [7, -10, -27, -45, -63]
       bridgeZ.forEach((z) => {
-        addFloor(0, z, 9.4, 2.7, floorMaterial, base)
+        addFloor(0, z, 9.4, 4.4, floorMaterial, base)
       })
 
       const floorGrid = new THREE.GridHelper(
