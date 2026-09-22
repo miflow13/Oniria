@@ -1032,6 +1032,85 @@ export default function DreamWorld3D({
       return sprite
     })
 
+    const libraryArchiveFogTextures: THREE.Texture[] = []
+    const libraryArchiveFogMaterials: THREE.SpriteMaterial[] = []
+    const libraryArchiveFog: THREE.Sprite[] = []
+
+    if (libraryMode) {
+      const fogTextureColors = [
+        'rgba(136, 177, 204, 0.34)',
+        'rgba(103, 154, 177, 0.34)',
+        'rgba(118, 121, 184, 0.30)',
+      ]
+
+      const fogTextures = fogTextureColors.map((color) => {
+        const texture = createNebulaTexture(color)
+        libraryArchiveFogTextures.push(texture)
+        return texture
+      })
+
+      const fogMaterials = fogTextures.map((texture, index) => {
+        const material = new THREE.SpriteMaterial({
+          map: texture,
+          transparent: true,
+          opacity: index === 2 ? .024 : .03,
+          depthWrite: false,
+          blending: THREE.NormalBlending,
+          toneMapped: true,
+        })
+        libraryArchiveFogMaterials.push(material)
+        return material
+      })
+
+      const fogBankCount =
+        qualityRef.current === 'cinematic'
+          ? 18
+          : qualityRef.current === 'high'
+            ? 14
+            : 10
+
+      for (let index = 0; index < fogBankCount; index += 1) {
+        const t =
+          fogBankCount === 1 ? 0 : index / (fogBankCount - 1)
+        const bay = THREE.MathUtils.lerp(
+          1,
+          ARCHIVE_PATH_RENDER_BAYS - 1,
+          t,
+        )
+        const point = archivePathPoint(bay)
+        const frame = archivePathFrame(bay)
+        const phase = index * 1.71
+        const sideOffset =
+          (index % 2 === 0 ? -1 : 1) *
+          (2.4 + seededUnit(index + 701, 4) * 3.8)
+
+        const sprite = new THREE.Sprite(
+          fogMaterials[index % fogMaterials.length],
+        )
+        sprite.position.set(
+          point[0] + frame.normalX * sideOffset,
+          point[1] +
+            (seededUnit(index + 701, 5) - .5) * 5.5,
+          point[2] + frame.normalZ * sideOffset,
+        )
+
+        const width =
+          16 + seededUnit(index + 701, 6) * 12
+        const height =
+          8 + seededUnit(index + 701, 7) * 7
+        sprite.scale.set(width, height, 1)
+        sprite.userData.baseX = sprite.position.x
+        sprite.userData.baseY = sprite.position.y
+        sprite.userData.baseZ = sprite.position.z
+        sprite.userData.archiveFogPhase = phase
+        sprite.userData.archiveFogBaseOpacity =
+          index % 3 === 2 ? .022 : .03
+        sprite.renderOrder = -1
+        world.add(sprite)
+        libraryArchiveFog.push(sprite)
+      }
+    }
+
     const nearDustCount =
       qualityRef.current === 'cinematic'
         ? 180
@@ -4065,6 +4144,28 @@ export default function DreamWorld3D({
           Math.sin(elapsed * 0.16 + index) * 0.008
       })
 
+      libraryArchiveFog.forEach((sprite, index) => {
+        const phase = sprite.userData.archiveFogPhase as number
+        sprite.position.x =
+          (sprite.userData.baseX as number) +
+          Math.sin(elapsed * .028 + phase) *
+            (1.1 + (index % 3) * .22)
+        sprite.position.y =
+          (sprite.userData.baseY as number) +
+          Math.cos(elapsed * .022 + phase) *
+            (.42 + (index % 4) * .09)
+        sprite.position.z =
+          (sprite.userData.baseZ as number) +
+          Math.sin(elapsed * .017 + phase) * .3
+
+        const material = sprite.material as THREE.SpriteMaterial
+        const baseOpacity =
+          sprite.userData.archiveFogBaseOpacity as number
+        material.opacity =
+          baseOpacity *
+          (.88 + Math.sin(elapsed * .041 + phase) * .12)
+      })
+
       nearDust.rotation.y = Math.sin(elapsed * .045) * .05
       nearDust.position.x = pointerParallax.x * .16
       nearDust.position.y = pointerParallax.y * .1
@@ -5174,6 +5275,16 @@ export default function DreamWorld3D({
         material.dispose()
         scene.remove(sprite)
       })
+
+      libraryArchiveFog.forEach((sprite) => {
+        world.remove(sprite)
+      })
+      libraryArchiveFogMaterials.forEach((material) =>
+        material.dispose(),
+      )
+      libraryArchiveFogTextures.forEach((texture) =>
+        texture.dispose(),
+      )
 
       nearDustGeometry.dispose()
       nearDustMaterial.dispose()
