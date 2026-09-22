@@ -2163,6 +2163,51 @@ export default function DreamWorld3D({
       return nodeRef.current.find((node) => node._id === id) ?? null
     }
 
+    function bookVisualFromObject(object: THREE.Object3D) {
+      const nodeId = object.userData.bookNodeId as string | undefined
+      const index = object.userData.bookIndex as number | undefined
+      if (nodeId === undefined || index === undefined) return null
+      return (
+        libraryBookVisuals.find(
+          (visual) =>
+            visual.nodeId === nodeId &&
+            visual.index === index,
+        ) ?? null
+      )
+    }
+
+    function pickBook(event: PointerEvent) {
+      normalizedPointer(event)
+      raycaster.setFromCamera(pointer, camera)
+      const intersections = raycaster.intersectObjects(
+        bookInteractives,
+        false,
+      )
+      if (!intersections.length) return null
+      return bookVisualFromObject(intersections[0].object)
+    }
+
+    function pickCenterBook() {
+      pointer.set(0, 0)
+      raycaster.setFromCamera(pointer, camera)
+      const intersections = raycaster.intersectObjects(
+        bookInteractives,
+        false,
+      )
+      if (!intersections.length) return null
+      return bookVisualFromObject(intersections[0].object)
+    }
+
+    function beginBookOpen(visual: LibraryBookVisual) {
+      if (openingBook) return
+      hoveredBook = visual
+      openingBook = {
+        visual,
+        startedAt: performance.now() / 1000,
+        fired: false,
+      }
+    }
+
     function nearestFlightNode(maxDistance = 4.2) {
       let nearest:
         | {node: DreamWorldNode; distance: number}
@@ -2252,13 +2297,18 @@ export default function DreamWorld3D({
         }
       }
 
-      const node = pickNode(event)
+      const book = pickBook(event)
+      hoveredBook = book
+      const node = book
+        ? nodeRef.current.find((item) => item._id === book.nodeId) ?? null
+        : pickNode(event)
       const nextId = node?._id ?? null
       if (nextId !== hoveredId) {
         hoveredId = nextId
         onNodeHoverRef.current(node)
       }
-      renderer.domElement.style.cursor = node ? 'pointer' : 'grab'
+      renderer.domElement.style.cursor =
+        book || node ? 'pointer' : 'grab'
     }
 
     function handlePointerDown(event: PointerEvent) {
@@ -2266,8 +2316,13 @@ export default function DreamWorld3D({
         if (document.pointerLockElement !== renderer.domElement) {
           void renderer.domElement.requestPointerLock()
         } else {
-          const node = pickCenterNode()
-          if (node) onNodeSelectRef.current(node)
+          const book = pickCenterBook()
+          if (book) {
+            beginBookOpen(book)
+          } else {
+            const node = pickCenterNode()
+            if (node) onNodeSelectRef.current(node)
+          }
         }
         return
       }
@@ -2326,9 +2381,14 @@ export default function DreamWorld3D({
       }
 
       if (!dragging) {
-        const node = pickNode(event)
-        if (node) onNodeSelectRef.current(node)
-        else onBackgroundClickRef.current()
+        const book = pickBook(event)
+        if (book) {
+          beginBookOpen(book)
+        } else {
+          const node = pickNode(event)
+          if (node) onNodeSelectRef.current(node)
+          else onBackgroundClickRef.current()
+        }
       }
 
       pointerDown = null
@@ -2344,6 +2404,7 @@ export default function DreamWorld3D({
       }
       pointerDown = null
       dragging = false
+      hoveredBook = null
       releasePortalLeak()
       if (hoveredId !== null) {
         hoveredId = null
@@ -2465,8 +2526,13 @@ export default function DreamWorld3D({
 
       if (event.code === 'KeyE') {
         event.preventDefault()
-        const node = pickCenterNode() ?? nearestFlightNode(3.2)
-        if (node) onNodeSelectRef.current(node)
+        const book = pickCenterBook()
+        if (book) {
+          beginBookOpen(book)
+        } else {
+          const node = pickCenterNode() ?? nearestFlightNode(5.5)
+          if (node) onNodeSelectRef.current(node)
+        }
       }
 
       if (event.code === 'KeyF') {
