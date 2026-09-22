@@ -797,6 +797,46 @@ export default function DreamWorld3D({
         : null
     }
 
+    const clusterAudios = [...nodeRef.current]
+      .filter((node) => node.frequency >= 2)
+      .sort((a, b) => b.frequency - a.frequency)
+      .slice(0, 3)
+      .map((node) => {
+        const visual = nodeVisuals.get(node._id)
+        const profile = getProfileForNode(node)
+        if (!visual || !profile) return null
+
+        const audio = createSpatialDreamAudio(
+          listener,
+          node.category,
+          hashString(`cluster:${node._id}`),
+          {
+            mood: profile.mood,
+            lucid: profile.lucid,
+            recurrence: profile.recurrence,
+            mode: 'cluster',
+          },
+        )
+        visual.group.add(audio.audio)
+
+        return {
+          nodeId: node._id,
+          visual,
+          audio,
+          started: false,
+        }
+      })
+      .filter(
+        (
+          value,
+        ): value is {
+          nodeId: string
+          visual: NodeVisual
+          audio: SpatialDreamAudio
+          started: boolean
+        } => Boolean(value),
+      )
+
     const edgeVisuals: EdgeVisual[] = []
     const samples = 28
 
@@ -856,6 +896,15 @@ export default function DreamWorld3D({
     let activeCell: DreamCell | null = null
     let spatialAudio: SpatialDreamAudio | null = null
     let spatialAudioStarted = false
+
+    let activeDive: DreamDive | null = null
+    let diveComposer: EffectComposer | null = null
+    let divePost: ShaderPass | null = null
+    let diveMode: 'none' | 'entering' | 'inside' | 'exiting' = 'none'
+    let diveTransitionStartedAt = 0
+    let lastDiveExitRequest = diveExitRequestRef.current
+    let holdTimer: number | null = null
+    let holdNodeId: string | null = null
 
     function releaseDreamCell() {
       if (activeCellId) {
@@ -926,6 +975,65 @@ export default function DreamWorld3D({
       visual.group.add(spatialAudio.audio)
     }
 
+    function disposeDive() {
+      diveComposer?.dispose()
+      diveComposer = null
+      divePost = null
+      activeDive?.dispose()
+      activeDive = null
+      diveMode = 'none'
+    }
+
+    function beginDreamDive(node: DreamWorldNode) {
+      if (selectedRef.current !== node._id || diveMode !== 'none') return
+
+      const profile = getProfileForNode(node)
+      if (!profile) return
+
+      activeDive = createDreamDive(
+        profile,
+        settings,
+        hashString(`dive:${profile.dreamId}:${node._id}`),
+      )
+
+      diveComposer = new EffectComposer(renderer)
+      const diveRenderPass = new RenderPass(activeDive.scene, activeDive.camera)
+      diveComposer.addPass(diveRenderPass)
+
+      const diveBloom = new UnrealBloomPass(
+        new THREE.Vector2(1, 1),
+        settings.bloomStrength * 0.82,
+        Math.min(0.7, settings.bloomRadius),
+        Math.max(0.38, settings.bloomThreshold),
+      )
+      diveComposer.addPass(diveBloom)
+
+      divePost = new ShaderPass(DreamPostShader)
+      divePost.uniforms.uCinematic.value =
+        qualityRef.current === 'cinematic' ? 1 : 0.35
+      divePost.uniforms.uIntensity.value =
+        qualityRef.current === 'cinematic' ? 0.82 : 0.42
+      diveComposer.addPass(divePost)
+      diveComposer.addPass(new OutputPass())
+
+      const rect = host.getBoundingClientRect()
+      activeDive.resize(rect.width / Math.max(1, rect.height))
+      diveComposer.setSize(rect.width, rect.height)
+
+      diveMode = 'entering'
+      diveTransitionStartedAt = performance.now() / 1000
+      onProjectionChangeRef.current(null)
+      onDiveStateChangeRef.current(true, profile.title)
+    }
+
+    function requestDiveExit() {
+      if (!activeDive || (diveMode !== 'inside' && diveMode !== 'entering')) {
+        return
+      }
+      diveMode = 'exiting'
+      diveTransitionStartedAt = performance.now() / 1000
+    }
+
     function resize() {
       const rect = host.getBoundingClientRect()
       if (!rect.width || !rect.height) return
@@ -934,6 +1042,11 @@ export default function DreamWorld3D({
       bloom.resolution.set(rect.width, rect.height)
       camera.aspect = rect.width / rect.height
       camera.updateProjectionMatrix()
+
+      if (activeDive && diveComposer) {
+        activeDive.resize(rect.width / rect.height)
+        diveComposer.setSize(rect.width, rect.height)
+      }
     }
 
     const resizeObserver = new ResizeObserver(resize)
@@ -957,10 +1070,25 @@ export default function DreamWorld3D({
     }
 
     function handlePointerMove(event: PointerEvent) {
+      normalizedPointer(event)
+
+      if (diveMode === 'inside' || diveMode === 'exiting') {
+        activeDive?.setLookTarget(pointer.x, pointer.y)
+        renderer.domElement.style.cursor = 'crosshair'
+        return
+      }
+
       if (pointerDown) {
         const dx = event.clientX - pointerDown.x
         const dy = event.clientY - pointerDown.y
-        if (Math.abs(dx) + Math.abs(dy) > 4) dragging = true
+        if (Math.abs(dx) + Math.abs(dy) > 4) {
+          dragging = true
+          if (holdTimer !== null) {
+            window.clearTimeout(holdTimer)
+            holdTimer = null
+            holdNodeId = null
+          }
+        }
         if (dragging) {
           onPanChangeRef.current({
             x: pointerDown.pan.x + dx * 1.1,
@@ -981,6 +1109,12 @@ export default function DreamWorld3D({
     }
 
     function handlePointerDown(event: PointerEvent) {
+      if (diveMode === 'inside' || diveMode === 'exiting') {
+        normalizedPointer(event)
+        activeDive?.setLookTarget(pointer.x, pointer.y)
+        return
+      }
+
       pointerDown = {
         x: event.clientX,
         y: event.clientY,
@@ -988,9 +1122,35 @@ export default function DreamWorld3D({
       }
       dragging = false
       renderer.domElement.setPointerCapture(event.pointerId)
+
+      const node = pickNode(event)
+      if (node && selectedRef.current === node._id) {
+        holdNodeId = node._id
+        holdTimer = window.setTimeout(() => {
+          if (
+            holdNodeId === node._id &&
+            !dragging &&
+            selectedRef.current === node._id
+          ) {
+            beginDreamDive(node)
+          }
+          holdTimer = null
+          holdNodeId = null
+        }, 680)
+      }
     }
 
     function handlePointerUp(event: PointerEvent) {
+      if (holdTimer !== null) {
+        window.clearTimeout(holdTimer)
+        holdTimer = null
+        holdNodeId = null
+      }
+
+      if (diveMode === 'inside' || diveMode === 'exiting') {
+        return
+      }
+
       if (renderer.domElement.hasPointerCapture(event.pointerId)) {
         renderer.domElement.releasePointerCapture(event.pointerId)
       }
@@ -1007,6 +1167,11 @@ export default function DreamWorld3D({
     }
 
     function handlePointerLeave() {
+      if (holdTimer !== null) {
+        window.clearTimeout(holdTimer)
+        holdTimer = null
+        holdNodeId = null
+      }
       pointerDown = null
       dragging = false
       if (hoveredId !== null) {
@@ -1017,11 +1182,22 @@ export default function DreamWorld3D({
 
     function handleWheel(event: WheelEvent) {
       event.preventDefault()
+      if (diveMode === 'inside' || diveMode === 'exiting') return
+
       const next = Math.min(
         2.8,
         Math.max(.68, zoomRef.current + (event.deltaY < 0 ? .11 : -.11)),
       )
       onZoomChangeRef.current(next)
+    }
+
+    function handleDoubleClick(event: MouseEvent) {
+      if (diveMode !== 'none') return
+      const pointerEvent = event as unknown as PointerEvent
+      const node = pickNode(pointerEvent)
+      if (node && selectedRef.current === node._id) {
+        beginDreamDive(node)
+      }
     }
 
     renderer.domElement.addEventListener('pointermove', handlePointerMove)
@@ -1030,6 +1206,7 @@ export default function DreamWorld3D({
     renderer.domElement.addEventListener('pointercancel', handlePointerLeave)
     renderer.domElement.addEventListener('pointerleave', handlePointerLeave)
     renderer.domElement.addEventListener('wheel', handleWheel, {passive: false})
+    renderer.domElement.addEventListener('dblclick', handleDoubleClick)
 
     const cameraTarget = new THREE.Vector3()
     const lookTarget = new THREE.Vector3(0, 0, 0)
@@ -1454,7 +1631,14 @@ export default function DreamWorld3D({
       renderer.domElement.removeEventListener('pointercancel', handlePointerLeave)
       renderer.domElement.removeEventListener('pointerleave', handlePointerLeave)
       renderer.domElement.removeEventListener('wheel', handleWheel)
+      renderer.domElement.removeEventListener('dblclick', handleDoubleClick)
 
+      if (holdTimer !== null) window.clearTimeout(holdTimer)
+      clusterAudios.forEach((cluster) => {
+        cluster.visual.group.remove(cluster.audio.audio)
+        cluster.audio.dispose()
+      })
+      disposeDive()
       releaseDreamCell()
       camera.remove(listener)
 
