@@ -947,39 +947,196 @@ export default function DreamWorld3D({
         libraryHazePlanes.push(plane)
       })
 
-      // A handful of ultra-far architectural silhouettes gives the archive a
-      // horizon without adding colliders, raycast targets, or per-object
-      // animation work.
+      // Build a distant archive skyline from one instanced box mesh. These
+      // towers, shelf ribs, index slabs, and bridges are visual-only: no
+      // colliders, raycast targets, or per-object animation.
       librarySilhouetteGeometry = new THREE.BoxGeometry(1, 1, 1)
       librarySilhouetteMaterial = new THREE.MeshBasicMaterial({
-        color: 0x182238,
+        color: 0x16243a,
         transparent: true,
-        opacity: .075,
+        opacity: .068,
         depthWrite: false,
         blending: THREE.NormalBlending,
         toneMapped: true,
       })
+
+      const silhouetteMatrices: THREE.Matrix4[] = []
+      const silhouetteDummy = new THREE.Object3D()
+      const xAxis = new THREE.Vector3(1, 0, 0)
+
+      const pushSilhouetteBox = (
+        position: THREE.Vector3,
+        scale: THREE.Vector3,
+        yaw = 0,
+        roll = 0,
+      ) => {
+        silhouetteDummy.position.copy(position)
+        silhouetteDummy.scale.copy(scale)
+        silhouetteDummy.rotation.set(0, yaw, roll)
+        silhouetteDummy.updateMatrix()
+        silhouetteMatrices.push(silhouetteDummy.matrix.clone())
+      }
+
+      const pushSilhouetteBridge = (
+        start: THREE.Vector3,
+        end: THREE.Vector3,
+        thickness: number,
+        depth: number,
+      ) => {
+        const direction = end.clone().sub(start)
+        const length = direction.length()
+        if (length < .001) return
+        const midpoint = start.clone().add(end).multiplyScalar(.5)
+
+        silhouetteDummy.position.copy(midpoint)
+        silhouetteDummy.scale.set(length, thickness, depth)
+        silhouetteDummy.quaternion.setFromUnitVectors(
+          xAxis,
+          direction.normalize(),
+        )
+        silhouetteDummy.updateMatrix()
+        silhouetteMatrices.push(silhouetteDummy.matrix.clone())
+      }
+
+      const towerAnchors: Array<{
+        left: THREE.Vector3
+        right: THREE.Vector3
+        height: number
+      }> = []
+
+      ARCHIVE_DISTRICTS.slice(1).forEach((district, index) => {
+        const path = new THREE.Vector3(...archivePathPoint(district.bay))
+        const frame = archivePathFrame(district.bay)
+        const normal = new THREE.Vector3(
+          frame.normalX,
+          0,
+          frame.normalZ,
+        )
+        const tangentYaw = Math.atan2(frame.tangentX, frame.tangentZ)
+        const lateralDistance =
+          34 + seededUnit(index + 930, 1) * 24
+        const height =
+          27 + seededUnit(index + 930, 2) * 24
+        const width =
+          6.4 + seededUnit(index + 930, 3) * 4.8
+        const depth =
+          4.2 + seededUnit(index + 930, 4) * 3.8
+
+        const left = path
+          .clone()
+          .addScaledVector(normal, lateralDistance)
+        const right = path
+          .clone()
+          .addScaledVector(normal, -lateralDistance)
+        left.y += height * .5 - 9
+        right.y += height * .5 - 9
+
+        ;[left, right].forEach((center, sideIndex) => {
+          const yaw =
+            tangentYaw +
+            (sideIndex === 0 ? .08 : -.08) +
+            (seededUnit(index + 930, 5 + sideIndex) - .5) * .18
+
+          pushSilhouetteBox(
+            center,
+            new THREE.Vector3(width, height, depth),
+            yaw,
+          )
+
+          ;[-.28, -.04, .2, .42].forEach((heightRatio, ribIndex) => {
+            const ribCenter = center.clone()
+            ribCenter.y += height * heightRatio
+            pushSilhouetteBox(
+              ribCenter,
+              new THREE.Vector3(
+                width * (1.12 + ribIndex * .035),
+                .42,
+                depth * 1.22,
+              ),
+              yaw,
+            )
+          })
+
+          const indexBlade = center.clone()
+          indexBlade.y += height * .37
+          indexBlade.x += normal.x * (sideIndex === 0 ? 1 : -1) * width * .72
+          indexBlade.z += normal.z * (sideIndex === 0 ? 1 : -1) * width * .72
+          pushSilhouetteBox(
+            indexBlade,
+            new THREE.Vector3(.75, height * .36, depth * .48),
+            yaw + .12,
+          )
+        })
+
+        towerAnchors.push({left, right, height})
+
+        if (index % 2 === 0) {
+          const bridgeHeight =
+            Math.min(left.y, right.y) + height * .35
+          const bridgeStart = left.clone()
+          const bridgeEnd = right.clone()
+          bridgeStart.y = bridgeHeight
+          bridgeEnd.y = bridgeHeight
+          pushSilhouetteBridge(
+            bridgeStart,
+            bridgeEnd,
+            .7,
+            1.8,
+          )
+        }
+      })
+
+      towerAnchors.forEach((anchor, index) => {
+        const next = towerAnchors[index + 1]
+        if (!next) return
+
+        if (index % 2 === 0) {
+          const leftStart = anchor.left.clone()
+          const leftEnd = next.left.clone()
+          leftStart.y += anchor.height * .18
+          leftEnd.y += next.height * .16
+          pushSilhouetteBridge(leftStart, leftEnd, .5, 1.5)
+        } else {
+          const rightStart = anchor.right.clone()
+          const rightEnd = next.right.clone()
+          rightStart.y += anchor.height * .18
+          rightEnd.y += next.height * .16
+          pushSilhouetteBridge(rightStart, rightEnd, .5, 1.5)
+        }
+      })
+
+      // Long, low-opacity archive walls behind the tower field make the
+      // library feel like it continues far beyond the playable causeway.
+      ;[18, 42, 66].forEach((bay, index) => {
+        const path = new THREE.Vector3(...archivePathPoint(bay))
+        const frame = archivePathFrame(bay)
+        const normal = new THREE.Vector3(
+          frame.normalX,
+          0,
+          frame.normalZ,
+        )
+        const yaw = Math.atan2(frame.tangentX, frame.tangentZ)
+
+        ;[-1, 1].forEach((sideSign) => {
+          const wall = path
+            .clone()
+            .addScaledVector(normal, sideSign * (72 + index * 9))
+          wall.y += 4 + index * 2
+          pushSilhouetteBox(
+            wall,
+            new THREE.Vector3(3.4, 24 + index * 6, 48),
+            yaw,
+          )
+        })
+      })
+
       librarySilhouettes = new THREE.InstancedMesh(
         librarySilhouetteGeometry,
         librarySilhouetteMaterial,
-        6,
+        silhouetteMatrices.length,
       )
-      const silhouetteDummy = new THREE.Object3D()
-      const silhouetteSpecs = [
-        [-54, -9, -96, 7, 22, 5, .18],
-        [49, 4, -118, 5, 31, 7, -.24],
-        [-31, 15, -166, 9, 38, 6, .31],
-        [61, -15, -192, 8, 28, 8, -.16],
-        [-67, 9, -235, 12, 47, 7, .22],
-        [24, -3, -262, 10, 35, 9, -.3],
-      ] as const
-
-      silhouetteSpecs.forEach((spec, index) => {
-        silhouetteDummy.position.set(spec[0], spec[1], spec[2])
-        silhouetteDummy.scale.set(spec[3], spec[4], spec[5])
-        silhouetteDummy.rotation.set(0, spec[6], spec[6] * .18)
-        silhouetteDummy.updateMatrix()
-        librarySilhouettes?.setMatrixAt(index, silhouetteDummy.matrix)
+      silhouetteMatrices.forEach((matrix, index) => {
+        librarySilhouettes?.setMatrixAt(index, matrix)
       })
       librarySilhouettes.instanceMatrix.needsUpdate = true
       librarySilhouettes.renderOrder = -5
