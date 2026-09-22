@@ -2727,7 +2727,7 @@ export default function DreamWorld3D({
     let libraryRouteDotGeometry: THREE.BufferGeometry | null = null
     let libraryRouteDotMaterial: THREE.PointsMaterial | null = null
     let libraryRouteDots: THREE.Points | null = null
-    const libraryRouteDotCount = 22
+    const libraryRouteDotCount = 54
 
     if (libraryMode) {
       const subdivisionsPerBay = 4
@@ -3278,13 +3278,42 @@ export default function DreamWorld3D({
           3,
         ),
       )
+      const routeDotColors = new Float32Array(
+        libraryRouteDotCount * 3,
+      )
+      const centerEnergyColor = new THREE.Color(0xb9f7ff)
+      const leftEdgeEnergyColor = new THREE.Color(0xa99bff)
+      const rightEdgeEnergyColor = new THREE.Color(0xff8ed8)
+      for (
+        let index = 0;
+        index < libraryRouteDotCount;
+        index += 1
+      ) {
+        const lane = (index % 3) - 1
+        const color =
+          lane === 0
+            ? centerEnergyColor
+            : lane < 0
+              ? leftEdgeEnergyColor
+              : rightEdgeEnergyColor
+        routeDotColors[index * 3] = color.r
+        routeDotColors[index * 3 + 1] = color.g
+        routeDotColors[index * 3 + 2] = color.b
+      }
+      libraryRouteDotGeometry.setAttribute(
+        'color',
+        new THREE.BufferAttribute(routeDotColors, 3),
+      )
       libraryRouteDotMaterial = new THREE.PointsMaterial({
-        color: 0xb9f7ff,
-        size: .075,
+        color: 0xffffff,
+        vertexColors: true,
+        size: .085,
         transparent: true,
-        opacity: .72,
+        opacity: .78,
         depthWrite: false,
+        blending: THREE.AdditiveBlending,
         sizeAttenuation: true,
+        toneMapped: false,
       })
       libraryRouteDots = new THREE.Points(
         libraryRouteDotGeometry,
@@ -5363,9 +5392,19 @@ export default function DreamWorld3D({
 
       if (libraryWalkwayPanelMaterial && libraryWalkwayRailMaterial) {
         const walkwayPulse = Math.sin(elapsed * .42) * .008
-        libraryWalkwayPanelMaterial.opacity = .075 + walkwayPulse
+        const forwardEnergy =
+          Math.max(
+            0,
+            Math.sin(elapsed * .56 - currentArchiveBay * .16),
+          ) * .012
+        libraryWalkwayPanelMaterial.opacity =
+          .075 + walkwayPulse + forwardEnergy
         libraryWalkwayRailMaterial.opacity =
-          .22 + Math.max(0, Math.sin(elapsed * .36 + .8)) * .04
+          .22 +
+          Math.max(
+            0,
+            Math.sin(elapsed * .64 - currentArchiveBay * .22 + .8),
+          ) * .065
       }
 
       const currentArchiveBay = libraryMode
@@ -5530,20 +5569,53 @@ export default function DreamWorld3D({
           libraryRouteDotGeometry.getAttribute(
             'position',
           ) as THREE.BufferAttribute
-        for (let index = 0; index < libraryRouteDotCount; index += 1) {
+        const pulseGroups = Math.max(
+          1,
+          Math.floor(libraryRouteDotCount / 3),
+        )
+
+        for (
+          let index = 0;
+          index < libraryRouteDotCount;
+          index += 1
+        ) {
+          const lane = (index % 3) - 1
+          const pulseIndex = Math.floor(index / 3)
+          const laneOffset = lane === 0 ? 0 : lane * .18
           const bay =
-            (elapsed * .34 +
-              index * (ARCHIVE_PATH_RENDER_BAYS / libraryRouteDotCount)) %
+            (elapsed * .46 +
+              pulseIndex *
+                (ARCHIVE_PATH_RENDER_BAYS / pulseGroups) +
+              laneOffset +
+              ARCHIVE_PATH_RENDER_BAYS) %
             ARCHIVE_PATH_RENDER_BAYS
           const point = archivePathPoint(bay)
+          const frame = archivePathFrame(bay)
+          const halfWidth =
+            archiveWalkwayHalfWidthAtBay(
+              bay,
+              activeDistricts,
+            )
+          const lateral =
+            lane === 0
+              ? 0
+              : lane * Math.max(.4, halfWidth - .3)
+
           routePositions.setXYZ(
             index,
-            point[0],
-            point[1] + ARCHIVE_WALKWAY_Y_OFFSET + .09,
-            point[2],
+            point[0] + frame.normalX * lateral,
+            point[1] +
+              ARCHIVE_WALKWAY_Y_OFFSET +
+              (lane === 0 ? .095 : .13),
+            point[2] + frame.normalZ * lateral,
           )
         }
         routePositions.needsUpdate = true
+        if (libraryRouteDotMaterial) {
+          libraryRouteDotMaterial.opacity =
+            .7 +
+            Math.max(0, Math.sin(elapsed * .72)) * .16
+        }
       }
 
       worldLightShafts.forEach((shaft, index) => {
