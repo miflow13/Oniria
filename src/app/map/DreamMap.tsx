@@ -253,6 +253,7 @@ export default function DreamMap({
   const [diveExitRequest, setDiveExitRequest] = useState(0)
   const [diveBackRequest, setDiveBackRequest] = useState(0)
   const [observatoryMode, setObservatoryMode] = useState(false)
+  const [flightMode, setFlightMode] = useState(false)
   const [closingJournal, setClosingJournal] = useState(false)
   const [motionPositions, setMotionPositions] = useState<Record<string, {x: number; y: number}>>({})
   const [enteringNodeId, setEnteringNodeId] = useState<string | null>(null)
@@ -1174,7 +1175,9 @@ export default function DreamMap({
         sidebarCollapsed ? styles.pageSidebarCollapsed : ''
       } ${selectedNode ? styles.pageFocusMode : ''} ${
         diveActive ? styles.pageDiveMode : ''
-      } ${introStage < 4 ? styles.pageIntroMode : ''}`}
+      } ${introStage < 4 ? styles.pageIntroMode : ''} ${
+        flightMode ? styles.pageFlightMode : ''
+      }`}
     >
       <header className={styles.topbar}>
         <Link href="/" className={styles.brand} aria-label="Oniria journal">
