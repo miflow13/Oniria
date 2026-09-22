@@ -1421,8 +1421,7 @@ export default function DevWebSurf3D({
 
     let travel:
       | {
-          source: THREE.Vector3
-          control: THREE.Vector3
+          curve: THREE.Curve<THREE.Vector3>
           target: THREE.Vector3
           node: SurfNode
           startedAt: number
@@ -1462,22 +1461,22 @@ export default function DevWebSurf3D({
       destination.addScaledVector(tempDirection, standOff)
       destination.y = 1.62
 
-      const control = source.clone().lerp(destination, .5)
-      control.y = reducedMotion ? 1.7 : 1.78
-      control.x +=
-        Math.sin(destination.z * .19) *
-        (reducedMotion ? .14 : .34)
+      const curve = makeArchitecturalGuide(
+        source,
+        destination,
+        currentSection,
+        node.section ?? currentSection,
+      )
 
       travel = {
-        source,
-        control,
+        curve,
         target: destination,
         node,
         startedAt: performance.now() / 1000,
         duration: THREE.MathUtils.clamp(
-          source.distanceTo(destination) / 5.2,
+          curve.getLength() / 4.9,
           1,
-          3.15,
+          3.4,
         ),
         inspectOnArrival,
       }
@@ -2064,30 +2063,17 @@ export default function DevWebSurf3D({
         )
         const eased =
           progress * progress * (3 - 2 * progress)
-        const oneMinus = 1 - eased
-
-        const point = new THREE.Vector3()
-          .copy(travel.source)
-          .multiplyScalar(oneMinus * oneMinus)
-          .addScaledVector(
-            travel.control,
-            2 * oneMinus * eased,
-          )
-          .addScaledVector(travel.target, eased * eased)
-
-        const lookProgress = Math.min(1, eased + .025)
-        const lookOneMinus = 1 - lookProgress
-        const look = new THREE.Vector3()
-          .copy(travel.source)
-          .multiplyScalar(lookOneMinus * lookOneMinus)
-          .addScaledVector(
-            travel.control,
-            2 * lookOneMinus * lookProgress,
-          )
-          .addScaledVector(
-            travel.target,
-            lookProgress * lookProgress,
-          )
+        const point = travel.curve.getPoint(eased)
+        const lookProgress = Math.min(
+          1,
+          eased + (reducedMotion ? .012 : .026),
+        )
+        const look = travel.curve.getPoint(lookProgress)
+        look.y = THREE.MathUtils.lerp(
+          point.y,
+          travel.target.y,
+          .65,
+        )
 
         position.copy(point)
         camera.position.copy(point)
