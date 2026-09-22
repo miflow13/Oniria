@@ -1013,7 +1013,10 @@ export default function DevWebSurf() {
     setDirectoryOpen(false)
   }
 
-  function requestFloor(floor: number) {
+  function requestFloor(
+    floor: number,
+    preserveRoute = false,
+  ) {
     const clamped = Math.max(
       0,
       Math.min(LIBRARY_FLOOR_COUNT - 1, floor),
@@ -1023,7 +1026,7 @@ export default function DevWebSurf() {
     setFloorNonce(next)
     setFloorRequest({floor: clamped, nonce: next})
     setDirectoryOpen(false)
-    setRouteTargetId(null)
+    if (!preserveRoute) setRouteTargetId(null)
   }
 
   function returnToReadingShelf() {
@@ -1438,7 +1441,7 @@ export default function DevWebSurf() {
               type="button"
               onClick={() => {
                 if (routeTargetFloor !== currentFloor) {
-                  requestFloor(routeTargetFloor)
+                  requestFloor(routeTargetFloor, true)
                   return
                 }
                 const canvas = document.querySelector('canvas')
