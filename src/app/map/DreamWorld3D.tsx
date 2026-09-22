@@ -398,7 +398,12 @@ export default function DreamWorld3D({
 
   const graphKey = useMemo(
     () =>
-      `${quality}::${nodes.map((node) => node._id).join('|')}::${edges
+      `${quality}::${nodes
+        .map(
+          (node) =>
+            `${node._id}:${node.articleCount ?? 0}:${node.coverImages?.join(',') ?? ''}:${node.world?.join(',') ?? ''}`,
+        )
+        .join('|')}::${edges
         .map((edge) => `${edge.id}:${edge.weight}`)
         .join('|')}::${dreams
         .map(
