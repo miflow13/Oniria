@@ -70,11 +70,13 @@ export function createPortalSceneTransition(
         vec4 source = texture2D(tSource, sourceUv);
         vec4 destination = texture2D(tDestination, destUv);
 
-        float portal = smoothstep(
-          max(0.0, p - 0.22),
-          min(1.0, p + 0.22),
-          lens
-        );
+        float revealRadius = mix(-0.15, 0.92, p);
+        float portal =
+          1.0 - smoothstep(
+            revealRadius,
+            revealRadius + 0.15,
+            radius
+          );
 
         float chroma = (1.0 - abs(p * 2.0 - 1.0)) * 0.0018;
         float red = texture2D(
