@@ -1541,6 +1541,11 @@ export default function DreamMap({
                 >
                   <span className={styles.noteAnchorPulse} aria-hidden="true" />
                   <span className={styles.noteAnchorBeam} aria-hidden="true" />
+                  <span className={styles.journalParticles} aria-hidden="true">
+                    {Array.from({length: 12}).map((_, index) => (
+                      <i key={index} />
+                    ))}
+                  </span>
 
                   <div className={styles.noteStage}>
                     <button
