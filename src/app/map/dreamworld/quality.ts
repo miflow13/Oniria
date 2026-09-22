@@ -20,9 +20,9 @@ export function getQualitySettings(quality: DreamQuality): DreamQualitySettings 
     case 'low':
       return {
         pixelRatio: 1,
-        bloomStrength: 0.58,
+        bloomStrength: 0.42,
         bloomRadius: 0.42,
-        bloomThreshold: 0.5,
+        bloomThreshold: 0.58,
         starCount: 420,
         debrisCount: 8,
         particleCount: 10,
@@ -35,9 +35,9 @@ export function getQualitySettings(quality: DreamQuality): DreamQualitySettings 
     case 'medium':
       return {
         pixelRatio: 1.2,
-        bloomStrength: 0.82,
+        bloomStrength: 0.58,
         bloomRadius: 0.56,
-        bloomThreshold: 0.42,
+        bloomThreshold: 0.5,
         starCount: 760,
         debrisCount: 14,
         particleCount: 18,
@@ -50,9 +50,9 @@ export function getQualitySettings(quality: DreamQuality): DreamQualitySettings 
     case 'cinematic':
       return {
         pixelRatio: 1.85,
-        bloomStrength: 1.46,
+        bloomStrength: 0.92,
         bloomRadius: 0.84,
-        bloomThreshold: 0.22,
+        bloomThreshold: 0.4,
         starCount: 1700,
         debrisCount: 38,
         particleCount: 44,
@@ -66,7 +66,7 @@ export function getQualitySettings(quality: DreamQuality): DreamQualitySettings 
     default:
       return {
         pixelRatio: 1.5,
-        bloomStrength: 1.08,
+        bloomStrength: 0.72,
         bloomRadius: 0.68,
         bloomThreshold: 0.32,
         starCount: 1180,
