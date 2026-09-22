@@ -1009,6 +1009,133 @@ export default function DevWebSurf3D({
       ),
     )
 
+    // The deep stacks rise above the curated ground floor. Each level
+    // contains ten double-sided shelf rows: 180 real article slots per floor.
+    const stackFloorMaterial = new THREE.MeshStandardMaterial({
+      color: 0x10131b,
+      roughness: .66,
+      metalness: .24,
+      emissive: 0x101735,
+      emissiveIntensity: .08,
+    })
+    architecturalMaterials.push(stackFloorMaterial)
+
+    const stackAccents = [0x4f6dff, 0x53d3ff, 0xae7bff]
+    for (let floor = 1; floor <= STACK_FLOOR_COUNT; floor += 1) {
+      const baseY = floor * STACK_FLOOR_HEIGHT
+      const accent = stackAccents[floor - 1] ?? 0x53d3ff
+
+      addFloor(
+        0,
+        -15,
+        18,
+        58,
+        stackFloorMaterial,
+        baseY,
+      )
+
+      // Perimeter rails keep the upper decks readable and walkable while
+      // leaving the center aisle open from the data lift into the stacks.
+      addWall(-8.85, -15, .16, 58, 1.12, concrete, baseY)
+      addWall(8.85, -15, .16, 58, 1.12, concrete, baseY)
+      addWall(0, 14.4, 17.8, .16, 1.12, concrete, baseY)
+      addWall(0, -44.4, 17.8, .16, 1.12, concrete, baseY)
+
+      for (let row = 0; row < 10; row += 1) {
+        const z = -5.8 - row * 3.85
+        addShelf(-4.75, z, 4.5, 0, baseY)
+        addShelf(4.75, z, 4.5, 0, baseY)
+      }
+
+      const signTexture = createTextTexture(
+        'STACK LEVEL ' + floor,
+        'LIVE DEV ARTICLE COLLECTION',
+        '#' + new THREE.Color(accent).getHexString(),
+      )
+      labelsToDispose.push(signTexture)
+      const signMaterial = new THREE.SpriteMaterial({
+        map: signTexture,
+        transparent: true,
+        opacity: .92,
+        depthWrite: false,
+        toneMapped: false,
+      })
+      architecturalMaterials.push(signMaterial)
+      const sign = new THREE.Sprite(signMaterial)
+      sign.position.set(0, baseY + 3.75, 8.6)
+      sign.scale.set(7.2, 1.8, 1)
+      scene.add(sign)
+
+      const deckGlowGeometry = new THREE.PlaneGeometry(14, 1.2)
+      architecturalGeometries.push(deckGlowGeometry)
+      const deckGlowMaterial = new THREE.MeshBasicMaterial({
+        color: accent,
+        transparent: true,
+        opacity: .028,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      })
+      architecturalMaterials.push(deckGlowMaterial)
+      const deckGlow = new THREE.Mesh(
+        deckGlowGeometry,
+        deckGlowMaterial,
+      )
+      deckGlow.rotation.x = -Math.PI / 2
+      deckGlow.position.set(0, baseY + .015, 8.2)
+      scene.add(deckGlow)
+    }
+
+    // A visible data-lift anchors the floors into one enormous library.
+    const liftHeight =
+      STACK_FLOOR_COUNT * STACK_FLOOR_HEIGHT + 4.2
+    const liftGeometry = new THREE.CylinderGeometry(
+      .72,
+      .72,
+      liftHeight,
+      24,
+      1,
+      true,
+    )
+    architecturalGeometries.push(liftGeometry)
+    const liftMaterial = new THREE.MeshBasicMaterial({
+      color: 0x53d3ff,
+      transparent: true,
+      opacity: .055,
+      wireframe: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+    architecturalMaterials.push(liftMaterial)
+    const liftShaft = new THREE.Mesh(liftGeometry, liftMaterial)
+    liftShaft.position.set(
+      ELEVATOR_X,
+      liftHeight / 2 - .1,
+      ELEVATOR_Z,
+    )
+    scene.add(liftShaft)
+
+    const liftRingGeometry = new THREE.TorusGeometry(.82, .025, 8, 48)
+    architecturalGeometries.push(liftRingGeometry)
+    for (let floor = 0; floor <= STACK_FLOOR_COUNT; floor += 1) {
+      const ringMaterial = new THREE.MeshBasicMaterial({
+        color: floor === 0 ? 0x3b49df : stackAccents[floor - 1],
+        transparent: true,
+        opacity: .52,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })
+      architecturalMaterials.push(ringMaterial)
+      const ring = new THREE.Mesh(liftRingGeometry, ringMaterial)
+      ring.rotation.x = Math.PI / 2
+      ring.position.set(
+        ELEVATOR_X,
+        floorSurfaceY(floor) + .06,
+        ELEVATOR_Z,
+      )
+      scene.add(ring)
+    }
+
     const ceilingRailGeometry = new THREE.BoxGeometry(.035, .035, 52)
     const ceilingRailMaterial = new THREE.MeshBasicMaterial({
       color: 0x3148b5,
