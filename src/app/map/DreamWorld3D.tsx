@@ -2857,6 +2857,7 @@ export default function DreamWorld3D({
         ((selectedVisual ? 15 : 11) - cyanLight.intensity) * 0.025
 
       if (flightActive && flightInitialized) {
+        const routeActive = Boolean(flightRoute)
         const routeProgress = flightRoute
           ? THREE.MathUtils.clamp(
               (elapsed - flightRoute.startedAt) / flightRoute.duration,
@@ -2949,7 +2950,7 @@ export default function DreamWorld3D({
         const desiredVelocity = flightMove.multiplyScalar(flightSpeed)
         const damping = 1 - Math.exp(-delta * 7.5)
 
-        if (!flightRoute) {
+        if (!routeActive) {
           flightVelocity.lerp(desiredVelocity, damping)
           flightPosition.addScaledVector(flightVelocity, delta)
         } else {
@@ -2967,7 +2968,7 @@ export default function DreamWorld3D({
           14,
         )
 
-        if (!flightRoute) {
+        if (!routeActive) {
           nodeVisuals.forEach((visual) => {
             visual.group.getWorldPosition(flightCollisionPoint)
             flightCollisionDelta
@@ -2988,7 +2989,7 @@ export default function DreamWorld3D({
           })
         }
 
-        if (!flightRoute) {
+        if (!routeActive) {
           camera.position.copy(flightPosition)
           camera.rotation.order = 'YXZ'
           camera.rotation.y = flightYaw
@@ -3000,7 +3001,9 @@ export default function DreamWorld3D({
           .08,
         )
 
-        const speedRatio = Math.min(1, flightVelocity.length() / 7.2)
+        const speedRatio = routeActive
+          ? .72 + Math.sin(routeProgress * Math.PI) * .28
+          : Math.min(1, flightVelocity.length() / 7.2)
         camera.fov +=
           ((43 + speedRatio * 9) - camera.fov) * .065
         camera.updateProjectionMatrix()
