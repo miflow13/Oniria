@@ -73,7 +73,7 @@ type Visual = {
   phase: number
 }
 
-const LIBRARY_FLOOR_COUNT = 6
+const LIBRARY_FLOOR_COUNT = 1
 const LIBRARY_FLOOR_HEIGHT = 5.2
 const CAMERA_HEIGHT = 1.62
 const REAL_BOOK_DISTANCE = 19.5
@@ -2452,7 +2452,7 @@ export default function DevWebSurf3D({
       systemWirePositions.push(x1, y1, z1, x2, y2, z2)
     }
     const systemWireBottom = .04
-    const systemWireTop = buildingHeight + 12
+    const systemWireTop = 9.5
     const systemSideX = 18.82
     const systemFrontZ = 14.35
     const systemBackZ = -78.08
@@ -2535,36 +2535,6 @@ export default function DevWebSurf3D({
     )
     systemWireframe.renderOrder = 1
     scene.add(systemWireframe)
-
-    // Sparse vertical bus-lines inside the atrium make the open void feel like
-    // active infrastructure without creating a second wall or roof plane.
-    const busLinePositions: number[] = []
-    ;[-6.4, -3.2, 3.2, 6.4].forEach((x, index) => {
-      const z = index % 2 === 0 ? -21 : -42
-      busLinePositions.push(
-        x,
-        .08,
-        z,
-        x,
-        buildingHeight + 20,
-        z,
-      )
-    })
-    const busLineGeometry = new THREE.BufferGeometry()
-    busLineGeometry.setAttribute(
-      'position',
-      new THREE.Float32BufferAttribute(busLinePositions, 3),
-    )
-    const busLineMaterial = new THREE.LineBasicMaterial({
-      color: 0x6574ff,
-      transparent: true,
-      opacity: .022,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    })
-    architecturalGeometries.push(busLineGeometry)
-    architecturalMaterials.push(busLineMaterial)
-    scene.add(new THREE.LineSegments(busLineGeometry, busLineMaterial))
 
     function addUpperFloor(floor: number) {
       const base = floor * LIBRARY_FLOOR_HEIGHT
@@ -2854,186 +2824,12 @@ export default function DevWebSurf3D({
       }
     }
 
-    for (let floor = 1; floor < LIBRARY_FLOOR_COUNT; floor += 1) {
-      addUpperFloor(floor)
-    }
+    // The main library is intentionally the only playable level. The old
+    // upper-floor generator remains isolated above for now, but is not invoked.
 
-    // Leave the top of the megastructure open to the digital void. The prior
-    // full-size cap made the six levels read like an enclosed warehouse and
-    // flattened the vertical sightline from the atrium.
-    
-    // Central lift shaft ties every floor together visually and is also the
-    // route used by cross-floor travel.
-    const liftColumnGeometry = new THREE.BoxGeometry(.07, buildingHeight, .07)
-    const liftRingGeometry = new THREE.BoxGeometry(3.5, .045, 4.1)
-    architecturalGeometries.push(liftColumnGeometry, liftRingGeometry)
-    const liftMaterial = new THREE.MeshBasicMaterial({
-      color: 0x8d9aad,
-      transparent: true,
-      opacity: .14,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    })
-    architecturalMaterials.push(liftMaterial)
-    ;[-1.65, 1.65].forEach((x) => {
-      ;[5.05, 8.95].forEach((z) => {
-        const column = new THREE.Mesh(liftColumnGeometry, liftMaterial)
-        column.position.set(x, buildingHeight / 2, z)
-        scene.add(column)
-      })
-    })
-    for (let floor = 0; floor < LIBRARY_FLOOR_COUNT; floor += 1) {
-      const ringMaterial = new THREE.MeshBasicMaterial({
-        color: FLOOR_ACCENTS[floor],
-        transparent: true,
-        opacity: .48,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-      })
-      architecturalMaterials.push(ringMaterial)
-      const ring = new THREE.Mesh(liftRingGeometry, ringMaterial)
-      ring.position.set(0, floor * LIBRARY_FLOOR_HEIGHT + .04, 7)
-      scene.add(ring)
-    }
-
-    // Eye-level vertical-travel landmark: the shaft existed before, but
-    // first-time visitors could miss that it was the building's circulation.
-    const liftPortalPostGeometry = new THREE.BoxGeometry(.14, 3.15, .2)
-    const liftPortalBeamGeometry = new THREE.BoxGeometry(4.6, .16, .2)
-    architecturalGeometries.push(
-      liftPortalPostGeometry,
-      liftPortalBeamGeometry,
-    )
-    const liftPortalMaterial = new THREE.MeshStandardMaterial({
-      color: 0x40464d,
-      emissive: 0xc7f3ff,
-      emissiveIntensity: .08,
-      roughness: .58,
-      metalness: .22,
-    })
-    architecturalMaterials.push(liftPortalMaterial)
-    ;[-2.2, 2.2].forEach((x) => {
-      const post = new THREE.Mesh(
-        liftPortalPostGeometry,
-        liftPortalMaterial,
-      )
-      post.position.set(x, 1.58, 4.72)
-      scene.add(post)
-    })
-    const liftPortalBeam = new THREE.Mesh(
-      liftPortalBeamGeometry,
-      liftPortalMaterial,
-    )
-    liftPortalBeam.position.set(0, 3.08, 4.72)
-    scene.add(liftPortalBeam)
-
-    const liftPortalTexture = createTextTexture(
-      '↑  CENTRAL LIFT  ↓',
-      'LEVELS 01–06 · Pg↑ / Pg↓',
-      '#c7f3ff',
-      700,
-      150,
-    )
-    labelsToDispose.push(liftPortalTexture)
-    const liftPortalSignMaterial = new THREE.SpriteMaterial({
-      map: liftPortalTexture,
-      transparent: true,
-      depthWrite: false,
-      toneMapped: false,
-    })
-    architecturalMaterials.push(liftPortalSignMaterial)
-    const liftPortalSign = new THREE.Sprite(liftPortalSignMaterial)
-    liftPortalSign.position.set(0, 2.35, 4.62)
-    liftPortalSign.scale.set(4.15, .9, 1)
-    scene.add(liftPortalSign)
-
+    // Vertical travel is gone. Keep an inert cabin object so the existing
+    // ground-level travel state machine does not need a separate code path.
     const liftCabin = new THREE.Group()
-    liftCabin.position.set(0, currentFloorRef.current * LIBRARY_FLOOR_HEIGHT, 7)
-    const liftDeckGeometry = new THREE.BoxGeometry(3.05, .12, 3.55)
-    const liftCanopyGeometry = new THREE.BoxGeometry(3.05, .06, 3.55)
-    const liftBackGeometry = new THREE.BoxGeometry(3.05, 2.5, .055)
-    architecturalGeometries.push(
-      liftDeckGeometry,
-      liftCanopyGeometry,
-      liftBackGeometry,
-    )
-    const liftDeckMaterial = new THREE.MeshStandardMaterial({
-      color: 0x171d2a,
-      emissive: 0x15275a,
-      emissiveIntensity: .28,
-      roughness: .42,
-      metalness: .55,
-    })
-    const liftGlassMaterial = new THREE.MeshBasicMaterial({
-      color: 0x8ae8ff,
-      transparent: true,
-      opacity: .075,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    })
-    architecturalMaterials.push(liftDeckMaterial, liftGlassMaterial)
-    const liftDeck = new THREE.Mesh(liftDeckGeometry, liftDeckMaterial)
-    liftDeck.position.y = .03
-    liftCabin.add(liftDeck)
-    const liftCanopy = new THREE.Mesh(liftCanopyGeometry, liftGlassMaterial)
-    liftCanopy.position.y = 2.55
-    liftCabin.add(liftCanopy)
-    const liftBack = new THREE.Mesh(liftBackGeometry, liftGlassMaterial)
-    liftBack.position.set(0, 1.28, 1.7)
-    liftCabin.add(liftBack)
-    scene.add(liftCabin)
-
-    for (let floor = 0; floor < LIBRARY_FLOOR_COUNT; floor += 1) {
-      const floorAccentHex =
-        '#' + new THREE.Color(FLOOR_ACCENTS[floor]).getHexString()
-      const liftSignTexture = createTextTexture(
-        'CENTRAL LIFT · LEVEL ' + String(floor + 1).padStart(2, '0'),
-        FLOOR_IDENTITIES[floor] + ' · Pg↑ / Pg↓',
-        floorAccentHex,
-        760,
-        160,
-      )
-      labelsToDispose.push(liftSignTexture)
-      const liftSignMaterial = new THREE.SpriteMaterial({
-        map: liftSignTexture,
-        transparent: true,
-        depthWrite: false,
-        toneMapped: false,
-      })
-      architecturalMaterials.push(liftSignMaterial)
-      const liftSign = new THREE.Sprite(liftSignMaterial)
-      liftSign.position.set(
-        2.65,
-        floor * LIBRARY_FLOOR_HEIGHT + 1.65,
-        6.15,
-      )
-      liftSign.scale.set(4.4, 1.05, 1)
-      scene.add(liftSign)
-
-      const landmarkTexture = createTextTexture(
-        String(floor + 1).padStart(2, '0'),
-        FLOOR_AISLES[floor].join(' · '),
-        floorAccentHex,
-        420,
-        210,
-      )
-      labelsToDispose.push(landmarkTexture)
-      const landmarkMaterial = new THREE.SpriteMaterial({
-        map: landmarkTexture,
-        transparent: true,
-        depthWrite: false,
-        toneMapped: false,
-      })
-      architecturalMaterials.push(landmarkMaterial)
-      const landmark = new THREE.Sprite(landmarkMaterial)
-      landmark.position.set(
-        -5.8,
-        floor * LIBRARY_FLOOR_HEIGHT + 1.55,
-        7.1,
-      )
-      landmark.scale.set(3.4, 1.7, 1)
-      scene.add(landmark)
-    }
 
     // Main library architecture.
     addPracticalFixtures(0, 0)
@@ -3058,12 +2854,42 @@ export default function DevWebSurf3D({
     addFloorInsetSurface(0, -39, 5.6, 10.5, 0, 5, 'threshold')
     addRouteBorder(0, -39, 5.6, 10.5, 0, 5, .2)
 
-    // Level 01 marker sits beside the information desk rather than under it.
-    addLandingMarker(0, -4.15, 6.8, 0)
+    // The real walkable library ends at an overlook. A hidden collision lip
+    // keeps the player on the main level while exposing the archive below.
+    addBoundaryCollision(0, -44.15, 34, .36, 2.4, 0)
 
-    // The playable archive stops around z=-43, but the physical collection
-    // continues another thirty-plus metres into fog.
-    addFloor(0, -61, 38, 34)
+    const lowerArchiveMaterial = new THREE.MeshStandardMaterial({
+      color: 0x111821,
+      emissive: 0x0a1424,
+      emissiveIntensity: .14,
+      roughness: .9,
+      metalness: .06,
+      transparent: true,
+      opacity: .78,
+    })
+    architecturalMaterials.push(lowerArchiveMaterial)
+    addFloor(0, -61, 36, 30, lowerArchiveMaterial, -4.55)
+
+    // Thin atmospheric veil between the overlook and faux stacks below. It
+    // helps the lower archive read as scale/depth rather than a second route.
+    const lowerArchiveHazeGeometry = new THREE.PlaneGeometry(36, 30)
+    const lowerArchiveHazeMaterial = new THREE.MeshBasicMaterial({
+      color: 0x17324b,
+      transparent: true,
+      opacity: .075,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    })
+    architecturalGeometries.push(lowerArchiveHazeGeometry)
+    architecturalMaterials.push(lowerArchiveHazeMaterial)
+    const lowerArchiveHaze = new THREE.Mesh(
+      lowerArchiveHazeGeometry,
+      lowerArchiveHazeMaterial,
+    )
+    lowerArchiveHaze.rotation.x = -Math.PI / 2
+    lowerArchiveHaze.position.set(0, -3.65, -61)
+    scene.add(lowerArchiveHaze)
 
     // The atrium and wings are intentionally wall-free. Shelves, floor
     // treatments, signs, and the exposed system frame now define circulation
@@ -3354,9 +3180,9 @@ export default function DevWebSurf3D({
       })
     }
 
-    // Beyond the collision boundary, banks of cheap shelves keep repeating.
-    // They are deliberately inaccessible: their job is to sell impossible
-    // depth, not add thousands of collision bodies.
+    // Below the overlook, banks of cheap shelves form a non-playable archive.
+    // They reuse the existing instanced shelf/book LOD to suggest thousands of
+    // article volumes without adding interaction or collision cost.
     const distantShelfUnits: DensityShelfUnit[] = []
     const distantRows = [-49.5, -57.5, -65.5, -73.5]
     const distantColumns = [-15.2, -10.3, -5.8, 5.8, 10.3, 15.2]
@@ -3367,7 +3193,7 @@ export default function DevWebSurf3D({
             x,
             z,
             rotationY: row % 2 === 0 ? 0 : Math.PI,
-            floorBase: floor * LIBRARY_FLOOR_HEIGHT,
+            floorBase: -4.55,
             width: 4.15,
             distant: true,
           }
@@ -3385,8 +3211,8 @@ export default function DevWebSurf3D({
       map: architecturalSurfaceTexture,
       roughnessMap: architecturalSurfaceRoughness,
       emissive: 0x0b0e16,
-      emissiveIntensity: .07,
-      roughness: .82,
+      emissiveIntensity: .025,
+      roughness: .9,
       metalness: .12,
     })
     architecturalGeometries.push(
@@ -3469,9 +3295,9 @@ export default function DevWebSurf3D({
     distantUprights.instanceMatrix.needsUpdate = true
     scene.add(distantBacks, distantBoards, distantUprights)
 
-    // One instanced spine field fills every shelf, including the unreachable
-    // archive. Real article objects sit slightly forward and replace these
-    // cheap silhouettes when the player gets close.
+    // One instanced spine field fills every real shelf plus the faux archive
+    // below. Lower books are visual article silhouettes only; real interactive
+    // article objects remain on the main library floor.
     const fillerBooksPerLevel = 18
     const fillerBookGeometry = new THREE.BoxGeometry(1, 1, 1)
     const fillerBookMaterial = new THREE.MeshStandardMaterial({
