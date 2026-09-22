@@ -2042,6 +2042,58 @@ export default function DevWebSurf3D({
     // just another repeated shelf row.
     addLandmarkArch(0, -34.4, 6.4, 3.65, 0, FLOOR_ACCENTS[5])
 
+    const restrictedCanvas = document.createElement('canvas')
+    restrictedCanvas.width = 640
+    restrictedCanvas.height = 300
+    const restrictedContext = restrictedCanvas.getContext('2d')
+    if (restrictedContext) {
+      restrictedContext.fillStyle = 'rgba(10,12,16,.76)'
+      restrictedContext.fillRect(0, 0, 640, 300)
+
+      for (let line = 0; line < 84; line += 1) {
+        const seed = Math.abs(Math.sin(line * 18.917) * 43758.5453)
+        const y = (seed % 1) * 300
+        const alpha = .018 + ((line % 7) / 7) * .04
+        restrictedContext.fillStyle =
+          'rgba(180,190,202,' + alpha + ')'
+        restrictedContext.fillRect(0, y, 640, line % 5 === 0 ? 2 : 1)
+      }
+
+      restrictedContext.textAlign = 'center'
+      restrictedContext.textBaseline = 'middle'
+      restrictedContext.fillStyle = '#c7ccd4'
+      restrictedContext.font = '700 64px system-ui, sans-serif'
+      restrictedContext.fillText('🔒', 320, 102)
+      restrictedContext.fillStyle = '#e4e7eb'
+      restrictedContext.font = '800 34px system-ui, sans-serif'
+      restrictedContext.fillText('RESTRICTED STACKS', 320, 172)
+      restrictedContext.fillStyle = '#8d9aad'
+      restrictedContext.font = '650 18px system-ui, sans-serif'
+      restrictedContext.fillText('DEEP ARCHIVE · AUTHORIZATION THRESHOLD', 320, 220)
+    }
+    const restrictedTexture = new THREE.CanvasTexture(restrictedCanvas)
+    restrictedTexture.colorSpace = THREE.SRGBColorSpace
+    restrictedTexture.minFilter = THREE.LinearFilter
+    restrictedTexture.magFilter = THREE.LinearFilter
+    labelsToDispose.push(restrictedTexture)
+    const restrictedMaterial = new THREE.MeshBasicMaterial({
+      map: restrictedTexture,
+      transparent: true,
+      opacity: .38,
+      depthWrite: false,
+      toneMapped: false,
+      side: THREE.DoubleSide,
+    })
+    architecturalMaterials.push(restrictedMaterial)
+    const restrictedGeometry = new THREE.PlaneGeometry(5.7, 2.75)
+    architecturalGeometries.push(restrictedGeometry)
+    const restrictedGate = new THREE.Mesh(
+      restrictedGeometry,
+      restrictedMaterial,
+    )
+    restrictedGate.position.set(0, 1.72, -34.25)
+    scene.add(restrictedGate)
+
     addWall(-19, archiveCenterZ, .38, archiveDepth, buildingHeight, concrete, 0)
     addWall(19, archiveCenterZ, .38, archiveDepth, buildingHeight, concrete, 0)
     addWall(0, -78.3, 38, .38, buildingHeight, concrete, 0)
@@ -2370,6 +2422,57 @@ export default function DevWebSurf3D({
       ring.position.set(0, floor * LIBRARY_FLOOR_HEIGHT + .04, 7)
       scene.add(ring)
     }
+
+    // Eye-level vertical-travel landmark: the shaft existed before, but
+    // first-time visitors could miss that it was the building's circulation.
+    const liftPortalPostGeometry = new THREE.BoxGeometry(.14, 3.15, .2)
+    const liftPortalBeamGeometry = new THREE.BoxGeometry(4.6, .16, .2)
+    architecturalGeometries.push(
+      liftPortalPostGeometry,
+      liftPortalBeamGeometry,
+    )
+    const liftPortalMaterial = new THREE.MeshStandardMaterial({
+      color: 0x40464d,
+      emissive: 0xc7f3ff,
+      emissiveIntensity: .08,
+      roughness: .58,
+      metalness: .22,
+    })
+    architecturalMaterials.push(liftPortalMaterial)
+    ;[-2.2, 2.2].forEach((x) => {
+      const post = new THREE.Mesh(
+        liftPortalPostGeometry,
+        liftPortalMaterial,
+      )
+      post.position.set(x, 1.58, 4.72)
+      scene.add(post)
+    })
+    const liftPortalBeam = new THREE.Mesh(
+      liftPortalBeamGeometry,
+      liftPortalMaterial,
+    )
+    liftPortalBeam.position.set(0, 3.08, 4.72)
+    scene.add(liftPortalBeam)
+
+    const liftPortalTexture = createTextTexture(
+      '↑  CENTRAL LIFT  ↓',
+      'LEVELS 01–06 · Pg↑ / Pg↓',
+      '#c7f3ff',
+      700,
+      150,
+    )
+    labelsToDispose.push(liftPortalTexture)
+    const liftPortalSignMaterial = new THREE.SpriteMaterial({
+      map: liftPortalTexture,
+      transparent: true,
+      depthWrite: false,
+      toneMapped: false,
+    })
+    architecturalMaterials.push(liftPortalSignMaterial)
+    const liftPortalSign = new THREE.Sprite(liftPortalSignMaterial)
+    liftPortalSign.position.set(0, 2.35, 4.62)
+    liftPortalSign.scale.set(4.15, .9, 1)
+    scene.add(liftPortalSign)
 
     const liftCabin = new THREE.Group()
     liftCabin.position.set(0, currentFloorRef.current * LIBRARY_FLOOR_HEIGHT, 7)
