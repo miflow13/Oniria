@@ -2654,7 +2654,7 @@ export default function DevWebSurf3D({
       }
 
       visuals.forEach((visual) => {
-        ;(visual.body.geometry as THREE.BufferGeometry).dispose()
+        visual.bookTitleTexture?.dispose()
         visual.material.dispose()
         visual.labelMaterial.dispose()
       })
