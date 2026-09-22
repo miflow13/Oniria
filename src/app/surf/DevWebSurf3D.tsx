@@ -549,7 +549,7 @@ export default function DevWebSurf3D({
 
     const scene = new THREE.Scene()
     scene.background = new THREE.Color(0x111319)
-    scene.fog = new THREE.FogExp2(0x111319, .0108)
+    scene.fog = new THREE.FogExp2(0x111319, .0089)
 
     const camera = new THREE.PerspectiveCamera(60, 1, .07, 160)
     camera.position.set(
@@ -564,7 +564,7 @@ export default function DevWebSurf3D({
     })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25))
     renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = 1.18
+    renderer.toneMappingExposure = 1.24
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.shadowMap.enabled = true
     renderer.shadowMap.type = THREE.PCFShadowMap
@@ -574,10 +574,10 @@ export default function DevWebSurf3D({
     renderer.domElement.tabIndex = 0
     container.appendChild(renderer.domElement)
 
-    const ambient = new THREE.HemisphereLight(0xe2e7ed, 0x18191c, 1.2)
+    const ambient = new THREE.HemisphereLight(0xe6ebf0, 0x202126, 1.38)
     scene.add(ambient)
 
-    const baseFill = new THREE.AmbientLight(0xffffff, .28)
+    const baseFill = new THREE.AmbientLight(0xffffff, .42)
     scene.add(baseFill)
 
     const key = new THREE.DirectionalLight(0xf5f2ec, 2.05)
@@ -636,9 +636,9 @@ export default function DevWebSurf3D({
     const practicalLights = practicalLightLayout.map((entry) => {
       const light = new THREE.PointLight(
         entry.color,
-        4.2,
-        14,
-        2,
+        4.5,
+        21,
+        1.45,
       )
       light.position.set(
         entry.x,
@@ -657,9 +657,9 @@ export default function DevWebSurf3D({
     const landingLights = landingLightLayout.map((entry) => {
       const light = new THREE.PointLight(
         0xf7f3ec,
-        3.4,
-        11,
-        2,
+        3.8,
+        16,
+        1.5,
       )
       light.position.set(
         entry.x,
@@ -679,8 +679,8 @@ export default function DevWebSurf3D({
         const light = new THREE.PointLight(
           0xd9e0e5,
           0,
-          13,
-          2,
+          19,
+          1.55,
         )
         light.position.set(entry.x, 0, entry.z)
         light.castShadow = false
