@@ -271,7 +271,9 @@ function megaShelfPlacement(index: number): ShelfPlacement {
   const level = Math.floor(localIndex / 3)
   const slot = localIndex % 3
 
-  const columns = [-12, -4, 4, 12]
+  // Keep catalog stacks on the side balconies so the central atrium
+  // remains a true void with clear bridge approaches.
+  const columns = [-13.2, -7.4, 7.4, 13.2]
   const rows = [-9.5, -15.2, -20.9, -26.6, -32.3, -38]
   const columnIndex = shelfIndex % columns.length
   const rowIndex = Math.floor(shelfIndex / columns.length) % rows.length
