@@ -299,6 +299,23 @@ export default function DevLibraryMap() {
   const shelves = useMemo(() => {
     if (!bootstrap) return []
 
+    const creatorCandidates = uniqueArticles(
+      bootstrap.feed,
+      bootstrap.latest,
+      bootstrap.profileArticles,
+      catalog,
+    )
+    const creatorPreview = creators
+      .map((creator) =>
+        creatorCandidates.find(
+          (article) => article.user.username === creator.username,
+        ),
+      )
+      .filter(
+        (article): article is DevArticleSummary => Boolean(article),
+      )
+      .slice(0, CATALOG_BOOKS_PER_SHELF)
+
     const used = new Set<number>()
     const takeFresh = (
       source: DevArticleSummary[],
@@ -360,7 +377,9 @@ export default function DevLibraryMap() {
         'browse author shelves',
         'creators',
         shelfBayWorld(2, -1),
-        dynamicTitle?.startsWith('@') ? dynamicArticles : [],
+        dynamicTitle?.startsWith('@')
+          ? dynamicArticles
+          : creatorPreview,
       ),
     ]
 
@@ -408,6 +427,7 @@ export default function DevLibraryMap() {
   }, [
     bootstrap,
     catalog,
+    creators,
     dynamicArticles,
     dynamicTitle,
     query,
