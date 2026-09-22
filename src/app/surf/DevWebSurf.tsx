@@ -244,7 +244,7 @@ function buildLibraryGraph(
       payload: article,
       position: shelfPosition('featured', index),
       importance: articleImportance(article) + .2,
-      accent: '#d6b36c',
+      accent: '#3b49df',
     })
     addEdge({
       id: 'featured:' + article.id,
@@ -369,7 +369,7 @@ function buildLibraryGraph(
       section: 'creators',
       position: [13, 1.25, -20.8],
       importance: 2,
-      accent: '#c09aff',
+      accent: '#7c83ff',
     })
     addEdge({
       id: 'creator:primary',
@@ -398,7 +398,7 @@ function buildLibraryGraph(
           payload: article,
           position: shelfPosition('creators', index),
           importance: articleImportance(article) + .18,
-          accent: '#b28be8',
+          accent: '#7c83ff',
         })
       }
       addEdge({
