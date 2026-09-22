@@ -1128,10 +1128,10 @@ export default function DevWebSurf3D({
     architecturalMaterials.push(brass)
 
     const shelfMaterial = new THREE.MeshStandardMaterial({
-      color: 0x414247,
+      color: 0x4a4c52,
       map: architecturalSurfaceTexture,
       roughnessMap: architecturalSurfaceRoughness,
-      roughness: .78,
+      roughness: .7,
       metalness: .16,
     })
     const floorShelfTopMaterials = FLOOR_ACCENTS.map((accent) => {
@@ -1153,10 +1153,10 @@ export default function DevWebSurf3D({
     )
 
     const shelfBackMaterial = new THREE.MeshStandardMaterial({
-      color: 0x373a40,
+      color: 0x292c32,
       map: architecturalSurfaceTexture,
       roughnessMap: architecturalSurfaceRoughness,
-      roughness: .9,
+      roughness: .94,
       metalness: .05,
     })
     architecturalMaterials.push(shelfBackMaterial)
@@ -1590,9 +1590,12 @@ export default function DevWebSurf3D({
         LIBRARY_FLOOR_COUNT - 1,
       )
 
-      const sideGeometry = new THREE.BoxGeometry(.16, 3.56, .66)
-      const boardGeometry = new THREE.BoxGeometry(width, .1, .66)
-      const backGeometry = new THREE.BoxGeometry(width, 3.46, .055)
+      // These are true two-sided stacks, not a single display wall rendered
+      // DoubleSide. The core creates two shadowed cavities with a book face
+      // on either side, while retaining the original aisle footprint.
+      const sideGeometry = new THREE.BoxGeometry(.16, 3.56, 1.32)
+      const boardGeometry = new THREE.BoxGeometry(width, .1, 1.32)
+      const backGeometry = new THREE.BoxGeometry(width, 3.46, .16)
       architecturalGeometries.push(
         sideGeometry,
         boardGeometry,
@@ -1607,7 +1610,7 @@ export default function DevWebSurf3D({
       group.add(left, right)
 
       const back = new THREE.Mesh(backGeometry, shelfBackMaterial)
-      back.position.set(0, 1.74, -.3)
+      back.position.set(0, 1.74, 0)
       back.receiveShadow = true
       group.add(back)
 
@@ -1668,17 +1671,20 @@ export default function DevWebSurf3D({
         })
         architecturalMaterials.push(accentMaterial)
         const accent = new THREE.Mesh(accentGeometry, accentMaterial)
-        accent.position.set(0, .245 + level * 1.1, .35)
-        group.add(accent)
-        shelfAccentBars.push({
-          mesh: accent,
-          material: accentMaterial,
-          center: new THREE.Vector3(
-            x,
-            floorBase + .245 + level * 1.1,
-            z,
-          ),
-          floorIndex: shelfFloorIndex,
+        ;[-1, 1].forEach((face) => {
+          const faceAccent = accent.clone()
+          faceAccent.position.set(0, .245 + level * 1.1, face * .68)
+          group.add(faceAccent)
+          shelfAccentBars.push({
+            mesh: faceAccent,
+            material: accentMaterial,
+            center: new THREE.Vector3(
+              x,
+              floorBase + .245 + level * 1.1,
+              z,
+            ),
+            floorIndex: shelfFloorIndex,
+          })
         })
       }
 
@@ -2802,7 +2808,7 @@ export default function DevWebSurf3D({
     const archivePlaceholderLods = new Map<
       number,
       {
-        shelves: THREE.InstancedMesh
+        shelves: THREE.Group
         books: THREE.InstancedMesh
         shelfMaterial: THREE.MeshStandardMaterial
         bookMaterial: THREE.MeshStandardMaterial
@@ -2810,16 +2816,20 @@ export default function DevWebSurf3D({
       }
     >()
 
-    const placeholderShelfGeometry = new THREE.BoxGeometry(4.2, 3.35, .16)
+    const placeholderCoreGeometry = new THREE.BoxGeometry(1, 1, 1)
+    const placeholderUprightGeometry = new THREE.BoxGeometry(1, 1, 1)
+    const placeholderBoardGeometry = new THREE.BoxGeometry(1, 1, 1)
     const placeholderBookGeometry = new THREE.BoxGeometry(1, 1, 1)
     architecturalGeometries.push(
-      placeholderShelfGeometry,
+      placeholderCoreGeometry,
+      placeholderUprightGeometry,
+      placeholderBoardGeometry,
       placeholderBookGeometry,
     )
 
     const placeholderRows = [-9.5, -15.2, -20.9, -26.6, -32.3, -38, -43.7, -49.4]
     const placeholderColumns = [-13.2, -7.4, 7.4, 13.2]
-    const placeholderBooksPerShelf = 30
+    const placeholderBooksPerShelf = 108
     const placeholderMatrix = new THREE.Matrix4()
     const placeholderPosition = new THREE.Vector3()
     const placeholderQuaternion = new THREE.Quaternion()
@@ -2850,23 +2860,40 @@ export default function DevWebSurf3D({
       })
       architecturalMaterials.push(shelfMaterial, bookMaterial)
 
-      const shelfCount =
-        placeholderRows.length * placeholderColumns.length
-      const shelves = new THREE.InstancedMesh(
-        placeholderShelfGeometry,
+      const shelfCount = placeholderRows.length * placeholderColumns.length
+      // Four shared instanced components make every distant unit physically
+      // legible from either aisle: core, uprights, and shelf boards.
+      const shelves = new THREE.Group()
+      const placeholderCores = new THREE.InstancedMesh(
+        placeholderCoreGeometry,
         shelfMaterial,
         shelfCount,
+      )
+      const placeholderUprights = new THREE.InstancedMesh(
+        placeholderUprightGeometry,
+        shelfMaterial,
+        shelfCount * 2,
+      )
+      const placeholderBoards = new THREE.InstancedMesh(
+        placeholderBoardGeometry,
+        shelfMaterial,
+        shelfCount * 4,
       )
       const books = new THREE.InstancedMesh(
         placeholderBookGeometry,
         bookMaterial,
         shelfCount * placeholderBooksPerShelf,
       )
-      shelves.castShadow = false
-      shelves.receiveShadow = false
+      ;[placeholderCores, placeholderUprights, placeholderBoards].forEach(
+        (mesh) => {
+          mesh.castShadow = false
+          mesh.receiveShadow = false
+          mesh.frustumCulled = true
+          shelves.add(mesh)
+        },
+      )
       books.castShadow = false
       books.receiveShadow = false
-      shelves.frustumCulled = true
       books.frustumCulled = true
 
       let shelfIndex = 0
@@ -2880,20 +2907,52 @@ export default function DevWebSurf3D({
             rotationY,
           )
           placeholderPosition.set(x, floorBase + 1.72, z)
-          placeholderScale.set(1, 1, 1)
+          placeholderScale.set(4.2, 3.35, .16)
           placeholderMatrix.compose(
             placeholderPosition,
             placeholderQuaternion,
             placeholderScale,
           )
-          shelves.setMatrixAt(shelfIndex, placeholderMatrix)
+          placeholderCores.setMatrixAt(shelfIndex, placeholderMatrix)
+
+          ;[-1, 1].forEach((side, sideIndex) => {
+            placeholderPosition.set(
+              x + Math.cos(rotationY) * side * 2.1,
+              floorBase + 1.72,
+              z - Math.sin(rotationY) * side * 2.1,
+            )
+            placeholderScale.set(.16, 3.56, .16)
+            placeholderMatrix.compose(
+              placeholderPosition,
+              placeholderQuaternion,
+              placeholderScale,
+            )
+            placeholderUprights.setMatrixAt(
+              shelfIndex * 2 + sideIndex,
+              placeholderMatrix,
+            )
+          })
+          ;[.18, 1.28, 2.38, 3.48].forEach((boardY, boardIndex) => {
+            placeholderPosition.set(x, floorBase + boardY, z)
+            placeholderScale.set(4.2, .1, 1.32)
+            placeholderMatrix.compose(
+              placeholderPosition,
+              placeholderQuaternion,
+              placeholderScale,
+            )
+            placeholderBoards.setMatrixAt(
+              shelfIndex * 4 + boardIndex,
+              placeholderMatrix,
+            )
+          })
 
           for (let level = 0; level < 3; level += 1) {
-            for (let slot = 0; slot < 10; slot += 1) {
+            for (let face = -1; face <= 1; face += 2) {
+              for (let slot = 0; slot < 18; slot += 1) {
               const localX = THREE.MathUtils.lerp(
                 -1.82,
                 1.82,
-                slot / 9,
+                slot / 17,
               )
               const seed =
                 floor * 997 +
@@ -2902,8 +2961,8 @@ export default function DevWebSurf3D({
                 level * 13 +
                 slot * 5
               const height = .54 + ((seed % 11) / 10) * .25
-              const width = .12 + ((seed % 5) / 4) * .07
-              const front = .125
+              const width = .16 + ((seed % 5) / 4) * .06
+              const front = face * .43
               placeholderPosition.set(
                 x +
                   Math.cos(rotationY) * localX +
@@ -2931,6 +2990,7 @@ export default function DevWebSurf3D({
                 ),
               )
               bookIndex += 1
+              }
             }
           }
 
@@ -2938,7 +2998,9 @@ export default function DevWebSurf3D({
         })
       })
 
-      shelves.instanceMatrix.needsUpdate = true
+      placeholderCores.instanceMatrix.needsUpdate = true
+      placeholderUprights.instanceMatrix.needsUpdate = true
+      placeholderBoards.instanceMatrix.needsUpdate = true
       books.instanceMatrix.needsUpdate = true
       if (books.instanceColor) books.instanceColor.needsUpdate = true
       scene.add(shelves, books)
@@ -2975,7 +3037,8 @@ export default function DevWebSurf3D({
     }
 
     const distantBackGeometry = new THREE.BoxGeometry(1, 1, .12)
-    const distantBoardGeometry = new THREE.BoxGeometry(1, .09, .64)
+    const distantBoardGeometry = new THREE.BoxGeometry(1, .09, 1.32)
+    const distantUprightGeometry = new THREE.BoxGeometry(.16, 3.56, 1.32)
     const distantShelfMaterial = new THREE.MeshStandardMaterial({
       color: 0x202329,
       map: architecturalSurfaceTexture,
@@ -2988,6 +3051,7 @@ export default function DevWebSurf3D({
     architecturalGeometries.push(
       distantBackGeometry,
       distantBoardGeometry,
+      distantUprightGeometry,
     )
     architecturalMaterials.push(distantShelfMaterial)
 
@@ -3000,6 +3064,11 @@ export default function DevWebSurf3D({
       distantBoardGeometry,
       distantShelfMaterial,
       distantShelfUnits.length * 4,
+    )
+    const distantUprights = new THREE.InstancedMesh(
+      distantUprightGeometry,
+      distantShelfMaterial,
+      distantShelfUnits.length * 2,
     )
     const densityMatrix = new THREE.Matrix4()
     const densityPosition = new THREE.Vector3()
@@ -3024,6 +3093,21 @@ export default function DevWebSurf3D({
       )
       distantBacks.setMatrixAt(index, densityMatrix)
 
+      ;[-1, 1].forEach((side, sideIndex) => {
+        densityPosition.set(
+          unit.x + Math.cos(unit.rotationY) * side * unit.width / 2,
+          unit.floorBase + 1.76,
+          unit.z - Math.sin(unit.rotationY) * side * unit.width / 2,
+        )
+        densityScale.set(1, 1, 1)
+        densityMatrix.compose(
+          densityPosition,
+          densityQuaternion,
+          densityScale,
+        )
+        distantUprights.setMatrixAt(index * 2 + sideIndex, densityMatrix)
+      })
+
       ;[.18, 1.28, 2.38, 3.48].forEach((boardY, level) => {
         densityPosition.set(
           unit.x,
@@ -3041,12 +3125,13 @@ export default function DevWebSurf3D({
     })
     distantBacks.instanceMatrix.needsUpdate = true
     distantBoards.instanceMatrix.needsUpdate = true
-    scene.add(distantBacks, distantBoards)
+    distantUprights.instanceMatrix.needsUpdate = true
+    scene.add(distantBacks, distantBoards, distantUprights)
 
     // One instanced spine field fills every shelf, including the unreachable
     // archive. Real article objects sit slightly forward and replace these
     // cheap silhouettes when the player gets close.
-    const fillerBooksPerLevel = 14
+    const fillerBooksPerLevel = 18
     const fillerBookGeometry = new THREE.BoxGeometry(1, 1, 1)
     const fillerBookMaterial = new THREE.MeshStandardMaterial({
       color: 0xffffff,
@@ -3059,7 +3144,7 @@ export default function DevWebSurf3D({
     architecturalGeometries.push(fillerBookGeometry)
     architecturalMaterials.push(fillerBookMaterial)
     const fillerBookCount =
-      densityShelfUnits.length * 3 * fillerBooksPerLevel
+      densityShelfUnits.length * 3 * fillerBooksPerLevel * 2
     const fillerBooks = new THREE.InstancedMesh(
       fillerBookGeometry,
       fillerBookMaterial,
@@ -3083,7 +3168,8 @@ export default function DevWebSurf3D({
         unit.rotationY,
       )
       for (let level = 0; level < 3; level += 1) {
-        for (let slot = 0; slot < fillerBooksPerLevel; slot += 1) {
+        for (let face = -1; face <= 1; face += 2) {
+          for (let slot = 0; slot < fillerBooksPerLevel; slot += 1) {
           const t = slot / (fillerBooksPerLevel - 1)
           const localX = THREE.MathUtils.lerp(
             -unit.width / 2 + .19,
@@ -3092,8 +3178,8 @@ export default function DevWebSurf3D({
           )
           const seed = shelfIndex * 41 + level * 17 + slot * 7
           const height = .58 + ((seed % 9) / 8) * .26
-          const width = .13 + ((seed % 5) / 4) * .07
-          const front = unit.distant ? .34 : .325
+          const width = .16 + ((seed % 5) / 4) * .06
+          const front = face * .43
           densityPosition.set(
             unit.x +
               Math.cos(unit.rotationY) * localX +
@@ -3120,6 +3206,7 @@ export default function DevWebSurf3D({
             ),
           )
           fillerIndex += 1
+          }
         }
       }
     })
