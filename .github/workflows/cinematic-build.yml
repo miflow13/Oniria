@@ -8,6 +8,15 @@ on:
       - 'package-lock.json'
       - 'tsconfig.json'
       - '.github/workflows/cinematic-build.yml'
+  push:
+    branches:
+      - feat/hackathon-demo-flow
+    paths:
+      - 'src/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig.json'
+      - '.github/workflows/cinematic-build.yml'
 
 concurrency:
   group: cinematic-${{ github.workflow }}-${{ github.ref }}
