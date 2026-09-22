@@ -425,11 +425,128 @@
   line-height: 1.08;
 }
 
+.readerHeroImage {
+  display: block;
+  width: 100%;
+  max-height: min(46vh, 390px);
+  margin: 4px 0 24px;
+  object-fit: cover;
+  background: rgba(255, 255, 255, .025);
+  border: 1px solid rgba(178, 197, 224, .09);
+  border-radius: 16px;
+}
+
 .articleBody {
-  white-space: pre-wrap;
   color: #aebccc;
   font-size: .82rem;
   line-height: 1.78;
+}
+
+.articleBody p,
+.articleBody li {
+  white-space: pre-wrap;
+}
+
+.articleBody p {
+  margin: 0 0 1.2em;
+}
+
+.articleBody h1,
+.articleBody h2,
+.articleBody h3,
+.articleBody h4,
+.articleBody h5,
+.articleBody h6 {
+  margin: 1.55em 0 .65em;
+  color: #e7edf8;
+  line-height: 1.25;
+}
+
+.articleBody h2 {
+  font-size: 1.28rem;
+}
+
+.articleBody h3 {
+  font-size: 1.08rem;
+}
+
+.articleBody img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: 70vh;
+  margin: 20px auto;
+  object-fit: contain;
+  background: rgba(255, 255, 255, .02);
+  border: 1px solid rgba(178, 197, 224, .08);
+  border-radius: 14px;
+}
+
+.articleBody figure {
+  margin: 22px 0;
+}
+
+.articleBody figcaption {
+  margin-top: -10px;
+  color: #718299;
+  font-size: .68rem;
+  text-align: center;
+}
+
+.articleBody a {
+  color: #8edfe7;
+  text-decoration-color: rgba(142, 223, 231, .35);
+  text-underline-offset: 3px;
+}
+
+.articleBody blockquote {
+  margin: 18px 0;
+  padding: 3px 0 3px 16px;
+  color: #c3ccda;
+  border-left: 2px solid rgba(174, 137, 244, .45);
+}
+
+.articleBody pre {
+  max-width: 100%;
+  overflow: auto;
+  margin: 18px 0;
+  padding: 14px 16px;
+  color: #d7e1ef;
+  background: #060a12;
+  border: 1px solid rgba(178, 197, 224, .08);
+  border-radius: 12px;
+  font-size: .74rem;
+  line-height: 1.55;
+}
+
+.articleBody code {
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    monospace;
+}
+
+.articleBody :not(pre) > code {
+  padding: .12em .35em;
+  background: rgba(138, 160, 198, .1);
+  border-radius: 5px;
+}
+
+.articleBody table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+.articleBody th,
+.articleBody td {
+  padding: 7px 9px;
+  border: 1px solid rgba(178, 197, 224, .1);
 }
 
 .devLink {
