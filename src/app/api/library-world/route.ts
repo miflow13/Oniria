@@ -8,6 +8,35 @@ import {hasSanityConfig} from '@/sanity/env'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
+type RawDoc = {
+  _id?: string
+  _rev?: string
+  _updatedAt?: string
+  [key: string]: unknown
+}
+
+function logicalId(id: string | undefined) {
+  return (id ?? '').replace(/^drafts\./, '')
+}
+
+function preferDrafts<T extends RawDoc>(docs: T[] | undefined) {
+  const selected = new Map<string, T>()
+
+  for (const doc of docs ?? []) {
+    const key = logicalId(doc._id)
+    if (!key) continue
+    if (!selected.has(key)) selected.set(key, doc)
+  }
+
+  for (const doc of docs ?? []) {
+    if (!doc._id?.startsWith('drafts.')) continue
+    const key = logicalId(doc._id)
+    if (key) selected.set(key, doc)
+  }
+
+  return [...selected.values()]
+}
+
 export async function GET(request: NextRequest) {
   if (!hasSanityConfig) {
     return NextResponse.json(DEFAULT_LIBRARY_WORLD_CONFIG, {
@@ -16,7 +45,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const [{client}, {LIBRARY_WORLD_QUERY}] = await Promise.all([
+    const [{client}, queries] = await Promise.all([
       import('@/sanity/lib/client'),
       import('@/sanity/lib/queries'),
     ])
@@ -26,34 +55,141 @@ export async function GET(request: NextRequest) {
     const previewToken =
       process.env.SANITY_API_READ_TOKEN ??
       process.env.SANITY_API_WRITE_TOKEN
-    const useDraftPerspective =
+
+    let payload: unknown
+    let syncMode: 'drafts' | 'published' = 'published'
+    let revision = ''
+
+    if (
       previewRequested &&
       process.env.NODE_ENV !== 'production' &&
-      Boolean(previewToken)
+      previewToken
+    ) {
+      const raw = (await client
+        .withConfig({
+          useCdn: false,
+          perspective: 'raw',
+          token: previewToken,
+        })
+        .fetch(
+          queries.LIBRARY_WORLD_RAW_QUERY,
+          {},
+          {cache: 'no-store'},
+        )) as {
+        configDocs?: RawDoc[]
+        districtDocs?: RawDoc[]
+        curatedArticleDocs?: RawDoc[]
+        journeyDocs?: RawDoc[]
+      }
 
-    const sanityClient = client.withConfig({
-      useCdn: false,
-      perspective: useDraftPerspective ? 'drafts' : 'published',
-      ...(useDraftPerspective
-        ? {token: previewToken}
-        : {}),
-    })
+      const configDocs = preferDrafts(raw.configDocs)
+      const districtDocs = preferDrafts(raw.districtDocs)
+      const curatedDocs = preferDrafts(raw.curatedArticleDocs).filter(
+        (doc) => doc.enabled !== false,
+      )
+      const journeyDocs = preferDrafts(raw.journeyDocs).filter(
+        (doc) => doc.enabled !== false,
+      )
 
-    const payload = await sanityClient.fetch(
-      LIBRARY_WORLD_QUERY,
-      {},
-      {cache: 'no-store'},
+      const districtSlugById = new Map<string, string>()
+      for (const district of districtDocs) {
+        if (typeof district.id === 'string') {
+          districtSlugById.set(
+            logicalId(district._id),
+            district.id,
+          )
+        }
+      }
+
+      const config = configDocs[0]
+        ? {
+            ...configDocs[0],
+            featuredDistrictId:
+              typeof configDocs[0].featuredDistrictRef === 'string'
+                ? districtSlugById.get(
+                    logicalId(
+                      configDocs[0].featuredDistrictRef as string,
+                    ),
+                  )
+                : undefined,
+          }
+        : undefined
+
+      payload = {
+        config,
+        districts: districtDocs.filter(
+          (doc) => doc.enabled !== false,
+        ),
+        curatedArticles: curatedDocs.map((doc) => ({
+          ...doc,
+          districtId:
+            typeof doc.districtRef === 'string'
+              ? districtSlugById.get(
+                  logicalId(doc.districtRef as string),
+                )
+              : undefined,
+        })),
+        journeys: journeyDocs.map((doc) => ({
+          ...doc,
+          stops: Array.isArray(doc.stops)
+            ? (doc.stops as Array<Record<string, unknown>>).map(
+                (stop) => ({
+                  ...stop,
+                  districtId:
+                    typeof stop.districtRef === 'string'
+                      ? districtSlugById.get(
+                          logicalId(stop.districtRef),
+                        )
+                      : undefined,
+                }),
+              )
+            : [],
+        })),
+      }
+
+      const updated = [
+        ...configDocs,
+        ...districtDocs,
+        ...curatedDocs,
+        ...journeyDocs,
+      ]
+        .map((doc) =>
+          typeof doc._updatedAt === 'string'
+            ? doc._updatedAt
+            : '',
+        )
+        .sort()
+        .at(-1)
+
+      revision = updated ?? ''
+      syncMode = 'drafts'
+    } else {
+      payload = await client
+        .withConfig({
+          useCdn: false,
+          perspective: 'published',
+        })
+        .fetch(
+          queries.LIBRARY_WORLD_QUERY,
+          {},
+          {cache: 'no-store'},
+        )
+    }
+
+    const world = mergeLibraryWorldConfig(
+      payload as Parameters<typeof mergeLibraryWorldConfig>[0],
     )
-    const world = mergeLibraryWorldConfig(payload)
-    world.syncMode = useDraftPerspective
-      ? 'drafts'
-      : 'published'
+    world.syncMode = syncMode
+    world.sanityRevision = revision
 
     return NextResponse.json(world, {
       headers: {
-        'cache-control': 'no-store, max-age=0',
-        'x-oniria-sanity-perspective':
-          world.syncMode ?? 'published',
+        'cache-control':
+          'no-store, no-cache, max-age=0, must-revalidate',
+        pragma: 'no-cache',
+        expires: '0',
+        'x-oniria-sanity-perspective': syncMode,
+        'x-oniria-sanity-revision': revision,
       },
     })
   } catch (error) {
