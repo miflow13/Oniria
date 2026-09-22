@@ -38,7 +38,7 @@ export const DreamPostShader = {
       float blue = texture2D(tDiffuse, vUv - direction * aberration).b;
 
       vec3 color = vec3(red, base.g, blue);
-      float vignette = smoothstep(0.92, 0.24, radius);
+      float vignette = 1.0 - smoothstep(0.24, 0.92, radius);
       color *= mix(1.0, vignette, 0.17 * uIntensity);
 
       float grain = hash(vUv * vec2(1920.0, 1080.0) + uTime * 37.0) - 0.5;
