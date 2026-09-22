@@ -1986,14 +1986,14 @@ export default function DevWebSurf3D({
 
     // Netspace underlay: the library still reads as DEV, but the floor
     // behaves like a data plane rather than a conventional building.
-    const netGrid = new THREE.GridHelper(82, 82, 0x3c4149, 0x252930)
+    const netGrid = new THREE.GridHelper(82, 82, 0x3b49df, 0x203640)
     netGrid.position.set(0, .005, -16)
     const netGridMaterials = Array.isArray(netGrid.material)
       ? netGrid.material
       : [netGrid.material]
     netGridMaterials.forEach((material) => {
       material.transparent = true
-      material.opacity = .022
+      material.opacity = .052
       material.blending = THREE.NormalBlending
       material.depthWrite = false
       architecturalMaterials.push(material)
@@ -2282,6 +2282,136 @@ export default function DevWebSurf3D({
     addWall(0, -78.3, 38, .38, buildingHeight, concrete, 0)
     addWall(-10.4, 14.7, 17.2, .38, buildingHeight, concrete, 0)
     addWall(10.4, 14.7, 17.2, .38, buildingHeight, concrete, 0)
+
+    // TRON-like "inside the system" exoskeleton. Keep this as one batched
+    // LineSegments object so the extra depth language costs a single draw call.
+    // The frame deliberately continues above the walls but never closes across
+    // the top, preserving the newly open vertical sightline.
+    const systemWirePositions: number[] = []
+    const addSystemWire = (
+      x1: number,
+      y1: number,
+      z1: number,
+      x2: number,
+      y2: number,
+      z2: number,
+    ) => {
+      systemWirePositions.push(x1, y1, z1, x2, y2, z2)
+    }
+    const systemWireBottom = .04
+    const systemWireTop = buildingHeight + 12
+    const systemSideX = 18.82
+    const systemFrontZ = 14.35
+    const systemBackZ = -78.08
+
+    for (let z = 10; z >= -74; z -= 7) {
+      addSystemWire(
+        -systemSideX,
+        systemWireBottom,
+        z,
+        -systemSideX,
+        systemWireTop,
+        z,
+      )
+      addSystemWire(
+        systemSideX,
+        systemWireBottom,
+        z,
+        systemSideX,
+        systemWireTop,
+        z,
+      )
+    }
+
+    for (let x = -18; x <= 18; x += 4.5) {
+      addSystemWire(
+        x,
+        systemWireBottom,
+        systemBackZ,
+        x,
+        systemWireTop,
+        systemBackZ,
+      )
+    }
+
+    for (let floor = 0; floor < LIBRARY_FLOOR_COUNT; floor += 1) {
+      const y = floor * LIBRARY_FLOOR_HEIGHT + .08
+      addSystemWire(
+        -systemSideX,
+        y,
+        systemFrontZ,
+        -systemSideX,
+        y,
+        systemBackZ,
+      )
+      addSystemWire(
+        systemSideX,
+        y,
+        systemFrontZ,
+        systemSideX,
+        y,
+        systemBackZ,
+      )
+      addSystemWire(
+        -systemSideX,
+        y,
+        systemBackZ,
+        systemSideX,
+        y,
+        systemBackZ,
+      )
+    }
+
+    const systemWireGeometry = new THREE.BufferGeometry()
+    systemWireGeometry.setAttribute(
+      'position',
+      new THREE.Float32BufferAttribute(systemWirePositions, 3),
+    )
+    const systemWireMaterial = new THREE.LineBasicMaterial({
+      color: 0x53d3ff,
+      transparent: true,
+      opacity: .105,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+    architecturalGeometries.push(systemWireGeometry)
+    architecturalMaterials.push(systemWireMaterial)
+    const systemWireframe = new THREE.LineSegments(
+      systemWireGeometry,
+      systemWireMaterial,
+    )
+    systemWireframe.renderOrder = 1
+    scene.add(systemWireframe)
+
+    // Sparse vertical bus-lines inside the atrium make the open void feel like
+    // active infrastructure without creating a second wall or roof plane.
+    const busLinePositions: number[] = []
+    ;[-6.4, -3.2, 3.2, 6.4].forEach((x, index) => {
+      const z = index % 2 === 0 ? -21 : -42
+      busLinePositions.push(
+        x,
+        .08,
+        z,
+        x,
+        buildingHeight + 20,
+        z,
+      )
+    })
+    const busLineGeometry = new THREE.BufferGeometry()
+    busLineGeometry.setAttribute(
+      'position',
+      new THREE.Float32BufferAttribute(busLinePositions, 3),
+    )
+    const busLineMaterial = new THREE.LineBasicMaterial({
+      color: 0x6574ff,
+      transparent: true,
+      opacity: .065,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+    architecturalGeometries.push(busLineGeometry)
+    architecturalMaterials.push(busLineMaterial)
+    scene.add(new THREE.LineSegments(busLineGeometry, busLineMaterial))
 
     function addUpperFloor(floor: number) {
       const base = floor * LIBRARY_FLOOR_HEIGHT
