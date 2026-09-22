@@ -892,6 +892,7 @@ export default function DreamWorld3D({
       )
       const group = new THREE.Group()
       group.userData.nodeId = node._id
+      group.userData.libraryKind = node.libraryKind
 
       const shellMaterial = createLivingOrbMaterial(color, node.category)
       const shell = new THREE.Mesh(nodeGeometry(node.category), shellMaterial)
@@ -1102,7 +1103,7 @@ export default function DreamWorld3D({
                   )
                   shelfCoverTextures.push(texture)
                   coverMaterial.map = texture
-                  coverMaterial.color.setRGB(.62, .62, .66)
+                  coverMaterial.color.setRGB(.4, .4, .43)
                   coverMaterial.needsUpdate = true
                 },
                 undefined,
@@ -1152,8 +1153,8 @@ export default function DreamWorld3D({
 
         shelf.scale.setScalar(1)
         group.add(shelf)
-        label.position.set(0, -1.75, .18)
-        label.scale.set(2.65, .58, 1)
+        label.position.set(0, -1.82, .2)
+        label.scale.set(3.5, .78, 1)
       }
 
       const start = worldPosition(node, positionsRef.current)
@@ -1590,7 +1591,7 @@ export default function DreamWorld3D({
       const material = new THREE.LineBasicMaterial({
         color: edge.weight > 2 ? 0xc2a7ff : 0x7ecfd8,
         transparent: true,
-        opacity: Math.min(.42, .1 + edge.weight * .07),
+        opacity: .045,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
       })
@@ -1601,7 +1602,7 @@ export default function DreamWorld3D({
       const pulseMaterial = new THREE.MeshBasicMaterial({
         color: edge.weight > 2 ? 0xe0c9ff : 0xa4f2ef,
         transparent: true,
-        opacity: .75,
+        opacity: .11,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
       })
@@ -3286,16 +3287,28 @@ export default function DreamWorld3D({
           ((selected ? .68 : hoveredId === node._id ? .42 : .13) -
             orbitMaterial.opacity) *
           .08
+        const labelDistance = camera.position.distanceTo(
+          visual.group.position,
+        )
+        const shelfDistanceOpacity = THREE.MathUtils.clamp(
+          1 - (labelDistance - 18) / 90,
+          .54,
+          .88,
+        )
         const labelTarget =
-          selected || hoveredId === node._id
-            ? .9
-            : observatoryModeRef.current
-              ? node.frequency >= 4
-                ? .24
-                : .015
-              : node.frequency >= 3
-                ? .42
-                : .07
+          node.libraryKind === 'shelf'
+            ? selected || hoveredId === node._id
+              ? 1
+              : shelfDistanceOpacity
+            : selected || hoveredId === node._id
+              ? .9
+              : observatoryModeRef.current
+                ? node.frequency >= 4
+                  ? .24
+                  : .015
+                : node.frequency >= 3
+                  ? .42
+                  : .07
         labelMaterial.opacity +=
           (((visible ? labelTarget : .04) * introVisibility) -
             labelMaterial.opacity) *
@@ -3351,17 +3364,28 @@ export default function DreamWorld3D({
               : introStageRef.current === 2
                 ? .12
                 : .015
-        const desiredOpacity = edgeHighlighted
-          ? Math.min(
-              .5,
-              (.1 +
-                edgeVisual.weight * .07 +
-                (touchesSelected ? selectionPulseStrength * .22 : 0)) *
-                introEdgeFactor,
-            )
-          : .028 * introEdgeFactor
+        const isFlightRouteEdge = Boolean(
+          flightRoute &&
+            ((edgeVisual.source === flightRoute.sourceId &&
+              edgeVisual.target === flightRoute.targetId) ||
+              (edgeVisual.target === flightRoute.sourceId &&
+                edgeVisual.source === flightRoute.targetId)),
+        )
+        const desiredOpacity = isFlightRouteEdge
+          ? .82 * introEdgeFactor
+          : touchesSelected
+            ? .11 * introEdgeFactor
+            : edgeHighlighted
+              ? .035 * introEdgeFactor
+              : .016 * introEdgeFactor
         edgeVisual.material.opacity +=
-          (desiredOpacity - edgeVisual.material.opacity) * .08
+          (desiredOpacity - edgeVisual.material.opacity) * .1
+        edgeVisual.material.color.lerp(
+          new THREE.Color(
+            isFlightRouteEdge ? 0xcaf7ff : 0x52758a,
+          ),
+          .12,
+        )
 
         const isRelationEdge = Boolean(
           relationTravel &&
@@ -3390,11 +3414,13 @@ export default function DreamWorld3D({
           .addScaledVector(control, 2 * oneMinus * pulseT)
           .addScaledVector(target, pulseT * pulseT)
         ;(edgeVisual.pulse.material as THREE.MeshBasicMaterial).opacity =
-          isRelationEdge
-            ? .92 * (1 - relationProgress * .3)
-            : edgeHighlighted
-              ? Math.min(.5, .34 + (touchesSelected ? selectionPulseStrength * .3 : 0))
-              : .05
+          isFlightRouteEdge
+            ? .96
+            : isRelationEdge
+              ? .46 * (1 - relationProgress * .3)
+              : touchesSelected
+                ? .16
+                : .035
       })
 
       if (
@@ -3452,12 +3478,17 @@ export default function DreamWorld3D({
           (settings.maxBlur - depthOfFieldUniforms.maxblur.value) * 0.05
       }
 
+      const libraryBloomStrength =
+        settings.bloomStrength *
+        (selectedVisual?.group.userData.libraryKind === 'shelf'
+          ? .42
+          : .52)
       bloom.strength +=
         ((selectedVisual
-          ? settings.bloomStrength * 1.1
-          : settings.bloomStrength) -
+          ? libraryBloomStrength * 1.05
+          : settings.bloomStrength * .52) -
           bloom.strength) *
-        0.035
+        0.04
 
       dreamPost.uniforms.uTime.value = elapsed
       if (diveMode !== 'entering') {
@@ -3466,8 +3497,13 @@ export default function DreamWorld3D({
           .03
       }
       renderer.toneMappingExposure +=
-        ((selectedVisual ? 0.9 : 0.94) - renderer.toneMappingExposure) *
-        .025
+        ((selectedVisual?.group.userData.libraryKind === 'shelf'
+          ? .78
+          : selectedVisual
+            ? .84
+            : .86) -
+          renderer.toneMappingExposure) *
+        .03
 
       if (scene.fog instanceof THREE.FogExp2) {
         const sceneReveal = Math.min(1, elapsed / 1.7)
@@ -3481,9 +3517,9 @@ export default function DreamWorld3D({
       }
 
       violetLight.intensity +=
-        ((selectedVisual ? 16 : 12) - violetLight.intensity) * 0.025
+        ((selectedVisual ? 8.5 : 7) - violetLight.intensity) * .03
       cyanLight.intensity +=
-        ((selectedVisual ? 15 : 11) - cyanLight.intensity) * 0.025
+        ((selectedVisual ? 8 : 6.5) - cyanLight.intensity) * .03
 
       if (flightActive && flightInitialized) {
         const routeActive = Boolean(flightRoute)
@@ -3640,12 +3676,24 @@ export default function DreamWorld3D({
           ((43 + speedRatio * 9) - camera.fov) * .065
         camera.updateProjectionMatrix()
 
-        const nearest = nearestFlightNode(3.5)
+        const nearest = nearestFlightNode(10)
         const nearestId = nearest?._id ?? null
         if (nearestId !== flightNearestId) {
           flightNearestId = nearestId
           hoveredId = nearestId
           onNodeHoverRef.current(nearest)
+        }
+
+        const navigationKey =
+          (nearestId ?? '') +
+          '|' +
+          (flightRoute?.targetId ?? '')
+        if (navigationKey !== lastPublishedNavigation) {
+          lastPublishedNavigation = navigationKey
+          onFlightNavigationChangeRef.current?.({
+            nearestId,
+            routeTargetId: flightRoute?.targetId ?? null,
+          })
         }
 
         depthOfField.enabled = false
