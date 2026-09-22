@@ -1059,7 +1059,7 @@ At minimum verify:
 - [x] move audio cleanup
 - [x] replace renderer internals with controller calls
 - [x] document responsibilities
-- [ ] CI verification
+- [x] CI verification — Cinematic branch checks #321 passed
 - [ ] manual browser smoke test
 
 ## Phase 2 — Reading ritual
