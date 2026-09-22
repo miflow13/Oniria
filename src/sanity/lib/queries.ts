@@ -33,3 +33,21 @@ export const SYMBOLS_QUERY = defineQuery(`
     )
   }
 `)
+
+
+export const DREAM_BY_ID_QUERY = defineQuery(`
+  *[_type == "dream" && _id == $id][0] {
+    _id,
+    date,
+    title,
+    body,
+    mood,
+    lucid,
+    "symbols": symbols[]->{
+      _id,
+      name,
+      category,
+      icon
+    }
+  }
+`)

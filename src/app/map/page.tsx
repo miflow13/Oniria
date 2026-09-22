@@ -5,7 +5,12 @@ import type {Dream} from '@/types/dream'
 
 export const revalidate = 15
 
-export default async function MapPage() {
+export default async function MapPage({
+  searchParams,
+}: {
+  searchParams: Promise<{dream?: string}>
+}) {
+  const {dream: dreamId} = await searchParams
   let dreams: Dream[] = DEMO_DREAMS
 
   if (hasSanityConfig) {
@@ -17,5 +22,11 @@ export default async function MapPage() {
     dreams = await client.fetch<Dream[]>(DREAMS_QUERY)
   }
 
-  return <DreamMap initialDreams={dreams} demoMode={!hasSanityConfig} />
+  return (
+    <DreamMap
+      initialDreams={dreams}
+      demoMode={!hasSanityConfig}
+      initialDreamId={dreamId ?? null}
+    />
+  )
 }
