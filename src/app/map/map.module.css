@@ -4083,3 +4083,161 @@
     display: none;
   }
 }
+
+
+/* ==========================================================================
+   Dream Portals / Observatory / nonlinear memory time
+   ========================================================================== */
+
+.observatoryButton,
+.observatoryButtonActive {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 11px;
+  cursor: pointer;
+  color: #7887a2;
+  background: rgba(9, 14, 29, .76);
+  border: 1px solid rgba(167, 185, 216, .1);
+  border-radius: 999px;
+  box-shadow:
+    0 12px 34px rgba(0, 0, 0, .18),
+    inset 0 1px rgba(255,255,255,.025);
+  backdrop-filter: blur(14px);
+  font-size: .63rem;
+  transition:
+    color 220ms ease,
+    background 280ms ease,
+    border-color 280ms ease,
+    box-shadow 360ms ease,
+    transform 240ms ease;
+}
+
+.observatoryButton:hover,
+.observatoryButtonActive:hover {
+  transform: translateY(-1px);
+}
+
+.observatoryButtonActive {
+  color: #d5f2f1;
+  background:
+    radial-gradient(circle at 22% 50%, rgba(100, 203, 200, .1), transparent 45%),
+    rgba(11, 19, 35, .86);
+  border-color: rgba(116, 221, 215, .2);
+  box-shadow:
+    0 12px 34px rgba(0, 0, 0, .2),
+    0 0 28px rgba(91, 197, 194, .055);
+}
+
+.observatoryButton > span,
+.observatoryButtonActive > span {
+  font-size: .8rem;
+}
+
+.diveHud {
+  align-items: flex-start;
+}
+
+.diveTime {
+  pointer-events: auto;
+  min-width: min(360px, 34vw);
+  display: grid;
+  grid-template-columns: auto minmax(120px, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 12px;
+  color: #8aa0b5;
+  background:
+    linear-gradient(145deg, rgba(7, 12, 27, .58), rgba(14, 21, 39, .34));
+  border: 1px solid rgba(177, 205, 229, .08);
+  border-radius: 16px;
+  box-shadow: 0 14px 42px rgba(0,0,0,.18);
+  backdrop-filter: blur(17px) saturate(112%);
+}
+
+.diveTime > span {
+  font-size: .58rem;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.diveTime > small {
+  min-width: 74px;
+  color: #667c91;
+  text-align: right;
+  font-size: .58rem;
+}
+
+.diveTime input[type='range'] {
+  width: 100%;
+  accent-color: #8bded9;
+  cursor: ew-resize;
+  opacity: .76;
+}
+
+.diveTime input[type='range']:hover {
+  opacity: 1;
+}
+
+.pageDiveMode .diveHud {
+  opacity: 1 !important;
+  transform: none !important;
+  pointer-events: none !important;
+}
+
+.pageDiveMode .diveHud .diveTime,
+.pageDiveMode .diveHud .diveReturn {
+  pointer-events: auto !important;
+}
+
+.pageFocusMode .observatoryButton,
+.pageFocusMode .observatoryButtonActive {
+  opacity: .72;
+}
+
+@media (max-width: 980px) {
+  .observatoryButton,
+  .observatoryButtonActive {
+    width: 36px;
+    justify-content: center;
+    overflow: hidden;
+    padding: 0;
+    font-size: 0;
+  }
+
+  .observatoryButton > span,
+  .observatoryButtonActive > span {
+    font-size: .8rem;
+  }
+
+  .diveTime {
+    min-width: min(320px, 42vw);
+  }
+}
+
+@media (max-width: 700px) {
+  .diveHud {
+    gap: 8px;
+  }
+
+  .diveTime {
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .diveTime > span,
+  .diveTime > small {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .observatoryButton,
+  .observatoryButtonActive {
+    display: none;
+  }
+}
