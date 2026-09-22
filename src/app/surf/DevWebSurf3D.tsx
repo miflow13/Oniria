@@ -63,11 +63,21 @@ const SECTION_DOORWAYS: Record<LibrarySection, THREE.Vector3> = {
   archive: new THREE.Vector3(0, .09, -34.4),
 }
 
+const SECTION_ACCENTS: Record<LibrarySection, number> = {
+  atrium: 0xf5f5f5,
+  featured: 0x3b49df,
+  latest: 0x5b6cff,
+  topics: 0x53d3ff,
+  creators: 0xae7bff,
+  search: 0xff4fd8,
+  archive: 0x8b96a8,
+}
+
 const KIND_GEOMETRY: Record<SurfNodeKind, () => THREE.BufferGeometry> = {
   home: () => new THREE.CylinderGeometry(.8, 1.05, .72, 8),
   section: () => new THREE.BoxGeometry(1.6, 2.5, .18),
   profile: () => new THREE.BoxGeometry(1.42, 1.8, .16),
-  article: () => new THREE.BoxGeometry(.78, 1.12, .18),
+  article: () => new THREE.BoxGeometry(.68, .82, .16),
   tag: () => new THREE.BoxGeometry(1.35, 2.15, .14),
   search: () => new THREE.BoxGeometry(1.45, 1.15, .26),
 }
@@ -308,10 +318,10 @@ export default function DevWebSurf3D({
     const container = host
 
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color(0x0d0d0d)
-    scene.fog = new THREE.FogExp2(0x111111, .014)
+    scene.background = new THREE.Color(0x090a0f)
+    scene.fog = new THREE.FogExp2(0x0c0e16, .0115)
 
-    const camera = new THREE.PerspectiveCamera(68, 1, .05, 140)
+    const camera = new THREE.PerspectiveCamera(62, 1, .07, 140)
     camera.position.set(0, 1.62, 13)
 
     const renderer = new THREE.WebGLRenderer({
@@ -320,7 +330,7 @@ export default function DevWebSurf3D({
     })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5))
     renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = 1
+    renderer.toneMappingExposure = 1.06
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.shadowMap.enabled = true
     renderer.shadowMap.type = THREE.PCFSoftShadowMap
@@ -503,9 +513,9 @@ export default function DevWebSurf3D({
     }
 
     const floorMaterial = new THREE.MeshStandardMaterial({
-      color: 0x171717,
-      roughness: .78,
-      metalness: .12,
+      color: 0x14161d,
+      roughness: .72,
+      metalness: .18,
     })
     architecturalMaterials.push(floorMaterial)
 
@@ -519,16 +529,16 @@ export default function DevWebSurf3D({
     architecturalMaterials.push(brass)
 
     const shelfMaterial = new THREE.MeshStandardMaterial({
-      color: 0x202020,
-      roughness: .7,
-      metalness: .22,
+      color: 0x1d2028,
+      roughness: .62,
+      metalness: .28,
     })
     architecturalMaterials.push(shelfMaterial)
 
     const concrete = new THREE.MeshStandardMaterial({
-      color: 0x181818,
-      roughness: .92,
-      metalness: .04,
+      color: 0x15171d,
+      roughness: .88,
+      metalness: .08,
     })
     architecturalMaterials.push(concrete)
 
@@ -577,6 +587,15 @@ export default function DevWebSurf3D({
       material: THREE.MeshBasicMaterial
       center: THREE.Vector3
     }> = []
+    const sectionFloorGlows: Array<{
+      section: LibrarySection
+      mesh: THREE.Mesh
+      material: THREE.MeshBasicMaterial
+    }> = []
+    const sectionBeacons: Array<{
+      section: LibrarySection
+      materials: THREE.MeshBasicMaterial[]
+    }> = []
 
     function addShelf(
       x: number,
@@ -588,35 +607,46 @@ export default function DevWebSurf3D({
       group.position.set(x, 0, z)
       group.rotation.y = rotationY
 
-      const sideGeometry = new THREE.BoxGeometry(.18, 3.15, .72)
-      const boardGeometry = new THREE.BoxGeometry(width, .12, .72)
-      architecturalGeometries.push(sideGeometry, boardGeometry)
+      const sideGeometry = new THREE.BoxGeometry(.16, 3.56, .66)
+      const boardGeometry = new THREE.BoxGeometry(width, .1, .66)
+      const backGeometry = new THREE.BoxGeometry(width, 3.46, .055)
+      architecturalGeometries.push(
+        sideGeometry,
+        boardGeometry,
+        backGeometry,
+      )
 
       const left = new THREE.Mesh(sideGeometry, shelfMaterial)
       const right = new THREE.Mesh(sideGeometry, shelfMaterial)
-      left.position.set(-width / 2, 1.5, 0)
-      right.position.set(width / 2, 1.5, 0)
+      left.position.set(-width / 2, 1.76, 0)
+      right.position.set(width / 2, 1.76, 0)
       left.castShadow = right.castShadow = true
       group.add(left, right)
 
-      for (let level = 0; level < 3; level += 1) {
+      const back = new THREE.Mesh(backGeometry, concrete)
+      back.position.set(0, 1.74, -.3)
+      back.receiveShadow = true
+      group.add(back)
+
+      const boardLevels = [.18, 1.28, 2.38]
+      boardLevels.forEach((boardY) => {
         const board = new THREE.Mesh(boardGeometry, shelfMaterial)
-        board.position.set(0, .48 + level * 1.05, 0)
+        board.position.set(0, boardY, 0)
         board.castShadow = true
         board.receiveShadow = true
         group.add(board)
-      }
+      })
 
       const top = new THREE.Mesh(boardGeometry, brass)
-      top.position.set(0, 3.06, 0)
-      top.scale.y = 1.2
+      top.position.set(0, 3.48, 0)
+      top.scale.y = 1.15
       group.add(top)
 
       for (let level = 0; level < 3; level += 1) {
         const accentGeometry = new THREE.BoxGeometry(
-          width - .28,
-          .025,
-          .035,
+          width - .24,
+          .024,
+          .032,
         )
         architecturalGeometries.push(accentGeometry)
         const accentMaterial = new THREE.MeshBasicMaterial({
@@ -628,14 +658,22 @@ export default function DevWebSurf3D({
         })
         architecturalMaterials.push(accentMaterial)
         const accent = new THREE.Mesh(accentGeometry, accentMaterial)
-        accent.position.set(0, .57 + level * 1.05, .385)
+        accent.position.set(0, .245 + level * 1.1, .35)
         group.add(accent)
         shelfAccentBars.push({
           mesh: accent,
           material: accentMaterial,
-          center: new THREE.Vector3(x, .57 + level * 1.05, z),
+          center: new THREE.Vector3(x, .245 + level * 1.1, z),
         })
       }
+
+      const rotated = Math.abs(Math.sin(rotationY)) > .5
+      collisionRects.push({
+        minX: x - (rotated ? .33 : width / 2),
+        maxX: x + (rotated ? .33 : width / 2),
+        minZ: z - (rotated ? width / 2 : .33),
+        maxZ: z + (rotated ? width / 2 : .33),
+      })
 
       scene.add(group)
       return group
@@ -670,6 +708,78 @@ export default function DevWebSurf3D({
       return sprite
     }
 
+    function addSectionFloorGlow(
+      section: LibrarySection,
+      x: number,
+      z: number,
+      radius: number,
+    ) {
+      const geometry = new THREE.CircleGeometry(radius, 48)
+      architecturalGeometries.push(geometry)
+      const material = new THREE.MeshBasicMaterial({
+        color: SECTION_ACCENTS[section],
+        transparent: true,
+        opacity: .018,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      })
+      architecturalMaterials.push(material)
+      const mesh = new THREE.Mesh(geometry, material)
+      mesh.rotation.x = -Math.PI / 2
+      mesh.position.set(x, .012, z)
+      scene.add(mesh)
+      sectionFloorGlows.push({section, mesh, material})
+    }
+
+    function addDoorwayBeacon(
+      section: LibrarySection,
+      x: number,
+      z: number,
+      rotationY = 0,
+    ) {
+      const group = new THREE.Group()
+      group.position.set(x, 0, z)
+      group.rotation.y = rotationY
+
+      const materials: THREE.MeshBasicMaterial[] = []
+      const makeMaterial = (opacity: number) => {
+        const material = new THREE.MeshBasicMaterial({
+          color: SECTION_ACCENTS[section],
+          transparent: true,
+          opacity,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        })
+        architecturalMaterials.push(material)
+        materials.push(material)
+        return material
+      }
+
+      const thresholdGeometry = new THREE.BoxGeometry(2.35, .018, .075)
+      const pylonGeometry = new THREE.BoxGeometry(.035, 2.45, .045)
+      architecturalGeometries.push(thresholdGeometry, pylonGeometry)
+
+      const threshold = new THREE.Mesh(
+        thresholdGeometry,
+        makeMaterial(.12),
+      )
+      threshold.position.set(0, .026, 0)
+      group.add(threshold)
+
+      ;[-1.06, 1.06].forEach((offset) => {
+        const pylon = new THREE.Mesh(
+          pylonGeometry,
+          makeMaterial(.065),
+        )
+        pylon.position.set(offset, 1.22, 0)
+        group.add(pylon)
+      })
+
+      scene.add(group)
+      sectionBeacons.push({section, materials})
+    }
+
     // Netspace underlay: the library still reads as DEV, but the floor
     // behaves like a data plane rather than a conventional building.
     const netGrid = new THREE.GridHelper(82, 82, 0x3b49df, 0x1d223b)
@@ -685,7 +795,7 @@ export default function DevWebSurf3D({
     })
     scene.add(netGrid)
 
-    const rainCount = 420
+    const rainCount = 280
     const rainPositions = new Float32Array(rainCount * 3)
     for (let index = 0; index < rainCount; index += 1) {
       const offset = index * 3
@@ -700,9 +810,9 @@ export default function DevWebSurf3D({
     )
     const rainMaterial = new THREE.PointsMaterial({
       color: 0x53d3ff,
-      size: .025,
+      size: .021,
       transparent: true,
-      opacity: .3,
+      opacity: .2,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     })
@@ -732,6 +842,21 @@ export default function DevWebSurf3D({
     })
     architecturalGeometries.push(scanGateGeometry)
 
+    addSectionFloorGlow('atrium', 0, 7, 4.2)
+    addSectionFloorGlow('featured', 0, -12.5, 5.4)
+    addSectionFloorGlow('latest', -13, -14, 4.8)
+    addSectionFloorGlow('topics', 13, -14, 4.8)
+    addSectionFloorGlow('creators', 13, -25.5, 4.4)
+    addSectionFloorGlow('search', -13, -25.5, 4.4)
+    addSectionFloorGlow('archive', 0, -39.5, 4.3)
+
+    addDoorwayBeacon('featured', 0, -5.4, 0)
+    addDoorwayBeacon('latest', -8.35, -5.2, Math.PI / 2)
+    addDoorwayBeacon('topics', 8.35, -5.2, Math.PI / 2)
+    addDoorwayBeacon('creators', 8.35, -21.1, Math.PI / 2)
+    addDoorwayBeacon('search', -8.35, -21.1, Math.PI / 2)
+    addDoorwayBeacon('archive', 0, -34.4, 0)
+
     // Main library architecture.
     addFloor(0, -15, 34, 58)
     addFloor(-13, -13, 16, 28)
@@ -757,24 +882,24 @@ export default function DevWebSurf3D({
 
     // Shelves define readable aisles instead of an open node cloud.
     ;[
-      [-4.9, -10, 6.6, 0],
-      [4.9, -10, 6.6, 0],
-      [-4.9, -17, 6.6, 0],
-      [4.9, -17, 6.6, 0],
-      [-14.8, -10, 5.8, Math.PI / 2],
-      [-11.1, -10, 5.8, Math.PI / 2],
-      [-14.8, -18, 5.8, Math.PI / 2],
-      [-11.1, -18, 5.8, Math.PI / 2],
-      [11.1, -10, 5.8, Math.PI / 2],
-      [14.8, -10, 5.8, Math.PI / 2],
-      [11.1, -18, 5.8, Math.PI / 2],
-      [14.8, -18, 5.8, Math.PI / 2],
-      [11.1, -25.5, 5.8, Math.PI / 2],
-      [14.8, -25.5, 5.8, Math.PI / 2],
-      [-14.8, -25.5, 5.8, Math.PI / 2],
-      [-11.1, -25.5, 5.8, Math.PI / 2],
-      [-4.6, -39.5, 6.2, 0],
-      [4.6, -39.5, 6.2, 0],
+      [-4.9, -10, 4.5, 0],
+      [4.9, -10, 4.5, 0],
+      [-4.9, -17, 4.5, 0],
+      [4.9, -17, 4.5, 0],
+      [-14.8, -10, 4.5, Math.PI / 2],
+      [-11.1, -10, 4.5, Math.PI / 2],
+      [-14.8, -18, 4.5, Math.PI / 2],
+      [-11.1, -18, 4.5, Math.PI / 2],
+      [11.1, -10, 4.5, Math.PI / 2],
+      [14.8, -10, 4.5, Math.PI / 2],
+      [11.1, -18, 4.5, Math.PI / 2],
+      [14.8, -18, 4.5, Math.PI / 2],
+      [11.1, -25.5, 4.5, Math.PI / 2],
+      [14.8, -25.5, 4.5, Math.PI / 2],
+      [-14.8, -25.5, 4.5, Math.PI / 2],
+      [-11.1, -25.5, 4.5, Math.PI / 2],
+      [-4.6, -39.5, 4.8, 0],
+      [4.6, -39.5, 4.8, 0],
     ].forEach(([x, z, width, rotation]) =>
       addShelf(
         x as number,
@@ -783,6 +908,36 @@ export default function DevWebSurf3D({
         rotation as number,
       ),
     )
+
+    const ceilingRailGeometry = new THREE.BoxGeometry(.035, .035, 52)
+    const ceilingRailMaterial = new THREE.MeshBasicMaterial({
+      color: 0x3148b5,
+      transparent: true,
+      opacity: .28,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+    architecturalGeometries.push(ceilingRailGeometry)
+    architecturalMaterials.push(ceilingRailMaterial)
+    ;[-2.25, 2.25].forEach((x) => {
+      const rail = new THREE.Mesh(
+        ceilingRailGeometry,
+        ceilingRailMaterial,
+      )
+      rail.position.set(x, 4.72, -15)
+      scene.add(rail)
+    })
+
+    const wingRailGeometry = new THREE.BoxGeometry(.03, .03, 22)
+    architecturalGeometries.push(wingRailGeometry)
+    ;[-13, 13].forEach((x) => {
+      const rail = new THREE.Mesh(
+        wingRailGeometry,
+        ceilingRailMaterial,
+      )
+      rail.position.set(x, 4.15, -15.5)
+      scene.add(rail)
+    })
 
     addSectionSign('atrium', 0, 4.6, 5.5, '#f5f5f5')
     addSectionSign('featured', 0, 4.1, -5.8, '#3b49df')
@@ -799,6 +954,12 @@ export default function DevWebSurf3D({
     desk.position.set(0, .48, 7)
     desk.castShadow = true
     scene.add(desk)
+    collisionRects.push({
+      minX: -1.7,
+      maxX: 1.7,
+      minZ: 5.3,
+      maxZ: 8.7,
+    })
 
     const deskGlowGeometry = new THREE.TorusGeometry(1.15, .028, 8, 72)
     const deskGlowMaterial = new THREE.MeshBasicMaterial({
@@ -864,7 +1025,7 @@ export default function DevWebSurf3D({
         material.metalness = .2
         material.clearcoat = .62
 
-        const spineGeometry = new THREE.BoxGeometry(.085, 1.08, .205)
+        const spineGeometry = new THREE.BoxGeometry(.07, .8, .185)
         architecturalGeometries.push(spineGeometry)
         const spineMaterial = new THREE.MeshStandardMaterial({
           color: 0x3b49df,
@@ -878,7 +1039,7 @@ export default function DevWebSurf3D({
         spine.position.set(-.39, 0, 0)
         group.add(spine)
 
-        const coverGeometry = new THREE.PlaneGeometry(.66, .63)
+        const coverGeometry = new THREE.PlaneGeometry(.56, .44)
         architecturalGeometries.push(coverGeometry)
         const coverMaterial = new THREE.MeshBasicMaterial({
           color: 0x161a27,
@@ -888,7 +1049,7 @@ export default function DevWebSurf3D({
         })
         architecturalMaterials.push(coverMaterial)
         const cover = new THREE.Mesh(coverGeometry, coverMaterial)
-        cover.position.set(.015, .19, .096)
+        cover.position.set(.012, .12, .086)
         group.add(cover)
 
         const remoteCover =
@@ -910,13 +1071,13 @@ export default function DevWebSurf3D({
           depthWrite: false,
         })
         architecturalMaterials.push(bookTitleMaterial)
-        const titleGeometry = new THREE.PlaneGeometry(.67, .31)
+        const titleGeometry = new THREE.PlaneGeometry(.58, .22)
         architecturalGeometries.push(titleGeometry)
         const titlePanel = new THREE.Mesh(titleGeometry, bookTitleMaterial)
-        titlePanel.position.set(.015, -.31, .1)
+        titlePanel.position.set(.012, -.26, .09)
         group.add(titlePanel)
 
-        const glowGeometry = new THREE.PlaneGeometry(.86, 1.22)
+        const glowGeometry = new THREE.PlaneGeometry(.76, .92)
         architecturalGeometries.push(glowGeometry)
         bookGlowMaterial = new THREE.MeshBasicMaterial({
           color: color.clone().lerp(new THREE.Color(0x53d3ff), .3),
@@ -928,7 +1089,7 @@ export default function DevWebSurf3D({
         })
         architecturalMaterials.push(bookGlowMaterial)
         const glow = new THREE.Mesh(glowGeometry, bookGlowMaterial)
-        glow.position.z = -.105
+        glow.position.z = -.095
         group.add(glow)
 
         const edgeGeometry = new THREE.EdgesGeometry(body.geometry, 28)
@@ -1005,15 +1166,15 @@ export default function DevWebSurf3D({
       label.position.set(
         0,
         node.kind === 'article'
-          ? 1.08
+          ? .86
           : node.kind === 'profile'
             ? 1.5
             : 1.75,
         0,
       )
       label.scale.set(
-        node.kind === 'article' ? 3.55 : 4.7,
-        node.kind === 'article' ? .9 : 1.12,
+        node.kind === 'article' ? 2.8 : 4.7,
+        node.kind === 'article' ? .66 : 1.12,
         1,
       )
       group.add(label)
