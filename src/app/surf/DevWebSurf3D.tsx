@@ -758,9 +758,9 @@ export default function DevWebSurf3D({
     const skyStars = makeStarField(980, .58, .78)
     const skyBrightStars = makeStarField(120, 1.05, .92, true)
 
-    // Non-interactive website worlds: instanced architectural silhouettes
-    // scattered around the DEV Library. They never enter routing, collision,
-    // selection, or graph systems.
+    // Non-interactive website worlds: lightweight instanced site-islands that
+    // feel inhabited without becoming destinations. They never enter routing,
+    // collision, selection, or graph systems.
     const distantWorldCount = 52
     const distantWorldGroup = new THREE.Group()
     scene.add(distantWorldGroup)
@@ -768,6 +768,8 @@ export default function DevWebSurf3D({
     const distantPlatformGeometry = new THREE.BoxGeometry(1, 1, 1)
     const distantStructureGeometry = new THREE.BoxGeometry(1, 1, 1)
     const distantBeaconGeometry = new THREE.BoxGeometry(1, 1, 1)
+    const distantWindowGeometry = new THREE.BoxGeometry(1, 1, 1)
+    const distantOrbGeometry = new THREE.SphereGeometry(.16, 8, 6)
 
     const distantPlatformMaterial = new THREE.MeshStandardMaterial({
       color: 0x151a22,
@@ -790,7 +792,25 @@ export default function DevWebSurf3D({
     const distantBeaconMaterial = new THREE.MeshBasicMaterial({
       color: 0xffffff,
       transparent: true,
-      opacity: .24,
+      opacity: .3,
+      depthWrite: false,
+      vertexColors: true,
+      fog: true,
+    })
+    const distantWindowMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: .42,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      vertexColors: true,
+      fog: true,
+    })
+    const distantOrbMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: .62,
+      blending: THREE.AdditiveBlending,
       depthWrite: false,
       vertexColors: true,
       fog: true,
@@ -811,7 +831,42 @@ export default function DevWebSurf3D({
       distantBeaconMaterial,
       distantWorldCount,
     )
+    const distantWindows = new THREE.InstancedMesh(
+      distantWindowGeometry,
+      distantWindowMaterial,
+      distantWorldCount * 4,
+    )
+    const distantOrbs = new THREE.InstancedMesh(
+      distantOrbGeometry,
+      distantOrbMaterial,
+      distantWorldCount,
+    )
 
+    type DistantWorldState = {
+      x: number
+      y: number
+      z: number
+      width: number
+      depth: number
+      platformHeight: number
+      rotationY: number
+      phase: number
+      bobAmplitude: number
+      bobSpeed: number
+      driftSpeed: number
+      beaconHeight: number
+      accent: THREE.Color
+      structures: Array<{
+        localX: number
+        localZ: number
+        centerY: number
+        width: number
+        height: number
+        depth: number
+      }>
+    }
+
+    const distantWorldStates: DistantWorldState[] = []
     const worldMatrix = new THREE.Matrix4()
     const worldPosition = new THREE.Vector3()
     const worldScale = new THREE.Vector3()
@@ -832,75 +887,211 @@ export default function DevWebSurf3D({
         (index / distantWorldCount) * Math.PI * 2 +
         (worldRandom() - .5) * .11
       const radius = 58 + worldRandom() * 74
-      const y = -9 + worldRandom() * 23
       const width = 7 + worldRandom() * 13
       const depth = 5 + worldRandom() * 10
       const rotationY = angle + (worldRandom() - .5) * .7
-      const x = Math.cos(angle) * radius
-      const z = -22 + Math.sin(angle) * radius
-
-      worldQuaternion.setFromAxisAngle(worldUp, rotationY)
-      worldPosition.set(x, y, z)
-      worldScale.set(width, .55 + worldRandom() * .45, depth)
-      worldMatrix.compose(worldPosition, worldQuaternion, worldScale)
-      distantPlatforms.setMatrixAt(index, worldMatrix)
-
       const accent =
         index % 3 === 0
-          ? worldAccentA
+          ? worldAccentA.clone()
           : index % 3 === 1
-            ? worldAccentB
-            : worldAccentC
+            ? worldAccentB.clone()
+            : worldAccentC.clone()
+
+      const state: DistantWorldState = {
+        x: Math.cos(angle) * radius,
+        y: -9 + worldRandom() * 23,
+        z: -22 + Math.sin(angle) * radius,
+        width,
+        depth,
+        platformHeight: .55 + worldRandom() * .45,
+        rotationY,
+        phase: worldRandom() * Math.PI * 2,
+        bobAmplitude: .35 + worldRandom() * .75,
+        bobSpeed: .16 + worldRandom() * .22,
+        driftSpeed: .018 + worldRandom() * .026,
+        beaconHeight: 2.2 + worldRandom() * 2.8,
+        accent,
+        structures: [],
+      }
+
+      for (let blockIndex = 0; blockIndex < 2; blockIndex += 1) {
+        state.structures.push({
+          localX:
+            (blockIndex === 0 ? -.22 : .22) * width +
+            (worldRandom() - .5) * width * .12,
+          localZ: (worldRandom() - .5) * depth * .42,
+          centerY: 1.2 + worldRandom() * (2.2 + width * .08),
+          width: width * (.16 + worldRandom() * .18),
+          height: 1.8 + worldRandom() * 5.5,
+          depth: depth * (.12 + worldRandom() * .22),
+        })
+      }
+
+      distantWorldStates.push(state)
       distantPlatforms.setColorAt(
         index,
         new THREE.Color(0x10151d).lerp(accent, .08),
       )
-
-      for (let block = 0; block < 2; block += 1) {
-        const localX =
-          (block === 0 ? -.22 : .22) * width +
-          (worldRandom() - .5) * width * .12
-        const localZ = (worldRandom() - .5) * depth * .42
-        const localY =
-          y + 1.2 + worldRandom() * (2.2 + width * .08)
-        const cos = Math.cos(rotationY)
-        const sin = Math.sin(rotationY)
-        worldPosition.set(
-          x + cos * localX + sin * localZ,
-          localY,
-          z - sin * localX + cos * localZ,
-        )
-        worldScale.set(
-          width * (.16 + worldRandom() * .18),
-          1.8 + worldRandom() * 5.5,
-          depth * (.12 + worldRandom() * .22),
-        )
-        worldMatrix.compose(worldPosition, worldQuaternion, worldScale)
-        const structureIndex = index * 2 + block
-        distantStructures.setMatrixAt(structureIndex, worldMatrix)
+      state.structures.forEach((_, blockIndex) => {
         distantStructures.setColorAt(
-          structureIndex,
+          index * 2 + blockIndex,
           new THREE.Color(0x171d26).lerp(accent, .13),
         )
+      })
+      for (let windowIndex = 0; windowIndex < 4; windowIndex += 1) {
+        const glow = accent.clone().lerp(
+          new THREE.Color(0xffffff),
+          windowIndex % 2 ? .18 : .08,
+        )
+        distantWindows.setColorAt(index * 4 + windowIndex, glow)
       }
-
-      const beaconOffsetX = width * .34
-      const beaconCos = Math.cos(rotationY)
-      const beaconSin = Math.sin(rotationY)
-      worldPosition.set(
-        x + beaconCos * beaconOffsetX,
-        y + 1.35,
-        z - beaconSin * beaconOffsetX,
-      )
-      worldScale.set(.12, 2.2 + worldRandom() * 2.8, .12)
-      worldMatrix.compose(worldPosition, worldQuaternion, worldScale)
-      distantBeacons.setMatrixAt(index, worldMatrix)
       distantBeacons.setColorAt(index, accent)
+      distantOrbs.setColorAt(index, accent)
     }
 
-    distantPlatforms.instanceMatrix.needsUpdate = true
-    distantStructures.instanceMatrix.needsUpdate = true
-    distantBeacons.instanceMatrix.needsUpdate = true
+    function updateDistantWorlds(now: number) {
+      distantWorldStates.forEach((state, index) => {
+        const bob =
+          Math.sin(now * state.bobSpeed + state.phase) *
+          state.bobAmplitude
+        const drift =
+          Math.sin(now * state.driftSpeed + state.phase) * .065
+        const rotationY = state.rotationY + drift
+        const baseY = state.y + bob
+        const cos = Math.cos(rotationY)
+        const sin = Math.sin(rotationY)
+
+        worldQuaternion.setFromAxisAngle(worldUp, rotationY)
+        worldPosition.set(state.x, baseY, state.z)
+        worldScale.set(
+          state.width,
+          state.platformHeight,
+          state.depth,
+        )
+        worldMatrix.compose(
+          worldPosition,
+          worldQuaternion,
+          worldScale,
+        )
+        distantPlatforms.setMatrixAt(index, worldMatrix)
+
+        state.structures.forEach((structure, blockIndex) => {
+          worldPosition.set(
+            state.x +
+              cos * structure.localX +
+              sin * structure.localZ,
+            baseY + structure.centerY,
+            state.z -
+              sin * structure.localX +
+              cos * structure.localZ,
+          )
+          worldScale.set(
+            structure.width,
+            structure.height,
+            structure.depth,
+          )
+          worldMatrix.compose(
+            worldPosition,
+            worldQuaternion,
+            worldScale,
+          )
+          distantStructures.setMatrixAt(
+            index * 2 + blockIndex,
+            worldMatrix,
+          )
+
+          for (let panel = 0; panel < 2; panel += 1) {
+            const localPanelX =
+              structure.localX +
+              (panel === 0 ? -.18 : .18) * structure.width
+            const localPanelZ =
+              structure.localZ + structure.depth * .52
+            worldPosition.set(
+              state.x +
+                cos * localPanelX +
+                sin * localPanelZ,
+              baseY +
+                structure.centerY +
+                (panel === 0 ? .18 : -.18) * structure.height,
+              state.z -
+                sin * localPanelX +
+                cos * localPanelZ,
+            )
+            worldScale.set(
+              Math.max(.18, structure.width * .26),
+              Math.max(.2, structure.height * .18),
+              .08,
+            )
+            worldMatrix.compose(
+              worldPosition,
+              worldQuaternion,
+              worldScale,
+            )
+            distantWindows.setMatrixAt(
+              index * 4 + blockIndex * 2 + panel,
+              worldMatrix,
+            )
+          }
+        })
+
+        const beaconLocalX = state.width * .34
+        const beaconPulse =
+          .82 + (Math.sin(now * .9 + state.phase) + 1) * .16
+        worldPosition.set(
+          state.x + cos * beaconLocalX,
+          baseY + .8 + state.beaconHeight / 2,
+          state.z - sin * beaconLocalX,
+        )
+        worldScale.set(
+          .12 * beaconPulse,
+          state.beaconHeight * beaconPulse,
+          .12 * beaconPulse,
+        )
+        worldMatrix.compose(
+          worldPosition,
+          worldQuaternion,
+          worldScale,
+        )
+        distantBeacons.setMatrixAt(index, worldMatrix)
+
+        const orbitAngle =
+          now * (.13 + index % 5 * .008) + state.phase
+        const orbitRadius =
+          Math.max(state.width, state.depth) * .48 + 1.2
+        worldPosition.set(
+          state.x + Math.cos(orbitAngle) * orbitRadius,
+          baseY + 1.5 + Math.sin(orbitAngle * 1.7) * .45,
+          state.z + Math.sin(orbitAngle) * orbitRadius,
+        )
+        worldScale.setScalar(
+          .72 + (Math.sin(now * 1.2 + state.phase) + 1) * .14,
+        )
+        worldMatrix.compose(
+          worldPosition,
+          worldQuaternion,
+          worldScale,
+        )
+        distantOrbs.setMatrixAt(index, worldMatrix)
+      })
+
+      distantPlatforms.instanceMatrix.needsUpdate = true
+      distantStructures.instanceMatrix.needsUpdate = true
+      distantBeacons.instanceMatrix.needsUpdate = true
+      distantWindows.instanceMatrix.needsUpdate = true
+      distantOrbs.instanceMatrix.needsUpdate = true
+    }
+
+    updateDistantWorlds(0)
+    ;[
+      distantPlatforms,
+      distantStructures,
+      distantBeacons,
+      distantWindows,
+      distantOrbs,
+    ].forEach((mesh) => {
+      mesh.castShadow = false
+      mesh.receiveShadow = false
+    })
     if (distantPlatforms.instanceColor) {
       distantPlatforms.instanceColor.needsUpdate = true
     }
@@ -910,13 +1101,18 @@ export default function DevWebSurf3D({
     if (distantBeacons.instanceColor) {
       distantBeacons.instanceColor.needsUpdate = true
     }
-    distantPlatforms.castShadow = false
-    distantStructures.castShadow = false
-    distantBeacons.castShadow = false
+    if (distantWindows.instanceColor) {
+      distantWindows.instanceColor.needsUpdate = true
+    }
+    if (distantOrbs.instanceColor) {
+      distantOrbs.instanceColor.needsUpdate = true
+    }
     distantWorldGroup.add(
       distantPlatforms,
       distantStructures,
       distantBeacons,
+      distantWindows,
+      distantOrbs,
     )
 
     const ambient = new THREE.HemisphereLight(0xe6ebf0, 0x202126, 1.38)
@@ -5557,6 +5753,7 @@ export default function DevWebSurf3D({
       skyGroup.rotation.y = now * .00055
       skyBrightStars.material.opacity =
         .86 + Math.sin(now * .72) * .045
+      updateDistantWorlds(now)
 
       const streamReveal = THREE.MathUtils.smoothstep(
         nowMs - sceneRevealStartedAt,
@@ -6555,9 +6752,13 @@ export default function DevWebSurf3D({
       distantPlatformGeometry.dispose()
       distantStructureGeometry.dispose()
       distantBeaconGeometry.dispose()
+      distantWindowGeometry.dispose()
+      distantOrbGeometry.dispose()
       distantPlatformMaterial.dispose()
       distantStructureMaterial.dispose()
       distantBeaconMaterial.dispose()
+      distantWindowMaterial.dispose()
+      distantOrbMaterial.dispose()
       rainGeometry.dispose()
       rainMaterial.dispose()
       destroyed = true
