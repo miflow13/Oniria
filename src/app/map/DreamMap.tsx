@@ -1470,9 +1470,9 @@ export default function DreamMap({
                 </div>
                 <div className={styles.flightInstructions}>
                   <span>First-person travel</span>
-                  <strong>WASD · mouse · Shift to boost</strong>
+                  <strong>WASD · mouse · Shift boost · R ride tether</strong>
                   <small>
-                    Click to capture pointer · E or center-click to inspect a memory · Esc to leave
+                    Click to capture pointer · E or center-click to inspect · Esc to leave
                   </small>
                 </div>
               </div>
@@ -1668,7 +1668,7 @@ export default function DreamMap({
               {focusedDream
                 ? 'Focused constellation · select a symbol to inspect it'
                 : flightMode
-                  ? 'First-person travel · WASD to move · mouse to look · Shift to boost · E to inspect'
+                  ? 'First-person travel · WASD move · mouse look · Shift boost · R ride tether · E inspect'
                   : observatoryMode
                     ? 'Observatory · recurring concepts become stellar bodies · click any memory to descend'
                     : 'Hover to hear · click to inspect · double-click or hold a selected orb to enter the dream'}
