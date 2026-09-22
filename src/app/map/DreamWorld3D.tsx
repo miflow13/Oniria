@@ -1000,7 +1000,7 @@ export default function DreamWorld3D({
     renderer.toneMapping = THREE.ACESFilmicToneMapping
     renderer.toneMappingExposure = libraryMode ? .84 : .94
     renderer.shadowMap.enabled = settings.miniWorldDetail > 0
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap
+    renderer.shadowMap.type = THREE.PCFShadowMap
     renderer.domElement.className = styles.webglCanvas
     container.appendChild(renderer.domElement)
 
@@ -1311,9 +1311,9 @@ export default function DreamWorld3D({
         libraryHazePlanes.push(plane)
       })
 
-      // Build a distant archive skyline from one instanced box mesh. These
-      // towers, shelf ribs, index slabs, and bridges are visual-only: no
-      // colliders, raycast targets, or per-object animation.
+      // Build a distant archive skyline from instanced stepped tower masses.
+      // Facade windows and neon are decorative only: no colliders, raycast
+      // targets, or per-building animation.
       librarySilhouetteGeometry = new THREE.BoxGeometry(1, 1, 1)
       librarySilhouetteMaterial = new THREE.MeshBasicMaterial({
         color: 0x203957,
@@ -1648,31 +1648,19 @@ export default function DreamWorld3D({
             skylineWindowColors.push(new THREE.Color(0xffd7a0))
           }
 
-          ;[-.29, -.12, .08, .27].forEach(
-            (heightRatio, bandIndex) => {
-              const bandCenter = center.clone()
-              bandCenter.y += height * heightRatio
-              pushSilhouetteBox(
-                bandCenter,
-                new THREE.Vector3(
-                  width * (1.035 - bandIndex * .025),
-                  .16,
-                  depth * 1.035,
-                ),
-                yaw,
-              )
-            },
-          )
-
-          const indexBlade = center.clone()
-          indexBlade.y += height * .37
-          indexBlade.x += normal.x * (sideIndex === 0 ? 1 : -1) * width * .72
-          indexBlade.z += normal.z * (sideIndex === 0 ? 1 : -1) * width * .72
-          pushSilhouetteBox(
-            indexBlade,
-            new THREE.Vector3(.75, height * .36, depth * .48),
-            yaw + .12,
-          )
+          ;[-.19, .18].forEach((heightRatio, bandIndex) => {
+            const bandCenter = center.clone()
+            bandCenter.y += height * heightRatio
+            pushSilhouetteBox(
+              bandCenter,
+              new THREE.Vector3(
+                width * (1.025 - bandIndex * .035),
+                .1,
+                depth * 1.025,
+              ),
+              yaw,
+            )
+          })
         })
 
 
@@ -1726,6 +1714,68 @@ export default function DreamWorld3D({
               depth * .74,
             ),
             yaw,
+          )
+
+          const inward = normal
+            .clone()
+            .multiplyScalar(sideSign > 0 ? -1 : 1)
+          const tangent = new THREE.Vector3(
+            frame.tangentX,
+            0,
+            frame.tangentZ,
+          )
+          const facadeOffset = depth * .56 + .08
+
+          for (let row = 0; row < 6; row += 1) {
+            for (let column = 0; column < 3; column += 1) {
+              const seed = index * 200 + sideIndex * 37 + row * 5 + column
+              if (seededUnit(seed + 1910, 2) < .28) continue
+
+              const windowPosition = center
+                .clone()
+                .addScaledVector(
+                  tangent,
+                  ((column + .5) / 3 - .5) * width * .58,
+                )
+                .addScaledVector(inward, facadeOffset)
+              windowPosition.y +=
+                -height * .3 + (row / 5) * height * .58
+
+              silhouetteDummy.position.copy(windowPosition)
+              silhouetteDummy.rotation.set(0, yaw, 0)
+              silhouetteDummy.scale.set(
+                Math.max(.28, width * .075),
+                Math.max(.16, height * .012),
+                .065,
+              )
+              silhouetteDummy.updateMatrix()
+              skylineWindowMatrices.push(
+                silhouetteDummy.matrix.clone(),
+              )
+
+              const secondaryColor =
+                seededUnit(seed + 1910, 4) > .55
+                  ? new THREE.Color(0x9cefff)
+                  : new THREE.Color(0xffd7a3)
+              skylineWindowColors.push(secondaryColor)
+            }
+          }
+
+          const secondaryCrown = center
+            .clone()
+            .addScaledVector(inward, facadeOffset + .03)
+          secondaryCrown.y += height * .47
+          silhouetteDummy.position.copy(secondaryCrown)
+          silhouetteDummy.rotation.set(0, yaw, 0)
+          silhouetteDummy.scale.set(width * .58, .07, .07)
+          silhouetteDummy.updateMatrix()
+          skylineNeonMatrices.push(
+            silhouetteDummy.matrix.clone(),
+          )
+          skylineNeonColors.push(
+            sideIndex === 0
+              ? new THREE.Color(0x63f5ff)
+              : new THREE.Color(0xa87cff),
           )
         })
       })
