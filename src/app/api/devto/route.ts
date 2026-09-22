@@ -154,7 +154,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (mode === 'stacks') {
-      const pages = [1, 2, 3, 4]
+      const pages = [1, 2, 3, 4, 5, 6]
       const batches = await Promise.all(
         pages.map((page) =>
           devFetch(
