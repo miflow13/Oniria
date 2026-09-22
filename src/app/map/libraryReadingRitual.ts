@@ -171,12 +171,17 @@ export function createLibraryReadingRitual(
           positionTarget.z += .34 * ritualAmount
           positionTarget.y += .08 * ritualAmount
           positionTarget.x += .035 * ritualAmount
-        } else {
-          positionTarget.z += isHovered
-            ? .2
-            : isApproachedShelf
-              ? .075
-              : 0
+        } else if (isHovered) {
+          positionTarget.z += .22
+        } else if (isApproachedShelf) {
+          // Give the closest shelf a little breathing room at natural
+          // walking distance so covers read as individual books rather than
+          // one flat wall of texture.
+          positionTarget.z += .11
+          positionTarget.x +=
+            Math.sign(bookVisual.basePosition.x) * .045
+          positionTarget.y +=
+            Math.sign(bookVisual.basePosition.y) * .022
         }
 
         bookVisual.group.position.lerp(
@@ -200,9 +205,9 @@ export function createLibraryReadingRitual(
         const targetScale = isOpening
           ? 1 + .06 * ritualAmount
           : isHovered
-            ? 1.045
+            ? 1.07
             : isApproachedShelf
-              ? 1.018
+              ? 1.03
               : 1
 
         scaleTarget.setScalar(targetScale)
