@@ -104,6 +104,7 @@ type Props = {
   diveTimelineProgress: number
   observatoryMode: boolean
   flightMode: boolean
+  guidedNodeId: string | null
   onZoomChange: (zoom: number) => void
   onPanChange: (pan: Pan) => void
   onNodeHover: (node: DreamWorldNode | null) => void
@@ -315,6 +316,7 @@ export default function DreamWorld3D({
   diveTimelineProgress,
   observatoryMode,
   flightMode,
+  guidedNodeId,
   onZoomChange,
   onPanChange,
   onNodeHover,
@@ -350,6 +352,7 @@ export default function DreamWorld3D({
   const diveTimelineProgressRef = useRef(diveTimelineProgress)
   const observatoryModeRef = useRef(observatoryMode)
   const flightModeRef = useRef(flightMode)
+  const guidedNodeIdRef = useRef(guidedNodeId)
   const onDiveStateChangeRef = useRef(onDiveStateChange)
   const onDiveDreamChangeRef = useRef(onDiveDreamChange)
   const onFlightModeChangeRef = useRef(onFlightModeChange)
@@ -378,6 +381,7 @@ export default function DreamWorld3D({
   diveTimelineProgressRef.current = diveTimelineProgress
   observatoryModeRef.current = observatoryMode
   flightModeRef.current = flightMode
+  guidedNodeIdRef.current = guidedNodeId
   onDiveStateChangeRef.current = onDiveStateChange
   onDiveDreamChangeRef.current = onDiveDreamChange
   onFlightModeChangeRef.current = onFlightModeChange
@@ -1346,6 +1350,7 @@ export default function DreamWorld3D({
     let flightInitialized = false
     let previousFlightMode = false
     let flightNearestId: string | null = null
+    let guidedAutoSelectedId: string | null = null
     let flightRoute:
       | {
           source: THREE.Vector3
@@ -2197,6 +2202,7 @@ export default function DreamWorld3D({
     const cameraTarget = new THREE.Vector3()
     const lookTarget = new THREE.Vector3(0, 0, 0)
     const tempVector = new THREE.Vector3()
+    const proximityPoint = new THREE.Vector3()
     const control = new THREE.Vector3()
     const curvePoint = new THREE.Vector3()
 
@@ -2262,6 +2268,24 @@ export default function DreamWorld3D({
 
       if (flightActive && !previousFlightMode) {
         flightPosition.copy(camera.position)
+
+        const entryNode = [...nodeRef.current].sort(
+          (a, b) =>
+            b.frequency - a.frequency ||
+            b.dreamIds.length - a.dreamIds.length ||
+            hashString(a._id) - hashString(b._id),
+        )[0]
+        const entryVisual = entryNode
+          ? nodeVisuals.get(entryNode._id)
+          : null
+
+        if (entryVisual) {
+          const entryTarget = entryVisual.group.getWorldPosition(
+            new THREE.Vector3(),
+          )
+          camera.lookAt(entryTarget)
+        }
+
         flightEuler.setFromQuaternion(camera.quaternion, 'YXZ')
         flightYaw = flightEuler.y
         flightPitch = flightEuler.x
@@ -2736,11 +2760,36 @@ export default function DreamWorld3D({
                     : .015
                   : .006
 
-        const scaleBoost = selected ? 1.32 : hoveredId === node._id ? 1.14 : 1
+        const guided =
+          flightActive &&
+          guidedNodeIdRef.current === node._id &&
+          selectedRef.current !== node._id
+        const proximityDistance = flightActive
+          ? visual.group
+              .getWorldPosition(proximityPoint)
+              .distanceTo(camera.position)
+          : Number.POSITIVE_INFINITY
+        const rawProximityWake = flightActive
+          ? THREE.MathUtils.clamp(
+              (4.8 - proximityDistance) / 3.4,
+              0,
+              1,
+            )
+          : 0
+        const proximityWake = Math.max(
+          rawProximityWake,
+          guided ? .22 : 0,
+        )
+
+        const scaleBoost = selected
+          ? 1.32
+          : hoveredId === node._id
+            ? 1.14
+            : 1 + proximityWake * .12
         const desiredScale = visual.baseScale * scaleBoost
         visual.group.scale.lerp(
           new THREE.Vector3(desiredScale, desiredScale, desiredScale),
-          selected ? .13 : .08,
+          selected ? .13 : proximityWake > 0 ? .1 : .08,
         )
 
         visual.group.rotation.y += selected ? .007 : .0022
@@ -2758,8 +2807,12 @@ export default function DreamWorld3D({
         shellMaterial.uniforms.uTime.value = elapsed
         shellMaterial.uniforms.uPulse.value =
           0.5 + 0.5 * Math.sin(elapsed * 1.15 + visual.phase)
+        const proximityFocus = Math.max(
+          hoveredId === node._id ? .55 : 0,
+          proximityWake * .62,
+        )
         shellMaterial.uniforms.uFocus.value +=
-          ((selected ? 1 : hoveredId === node._id ? 0.55 : 0) -
+          ((selected ? 1 : proximityFocus) -
             shellMaterial.uniforms.uFocus.value) *
           0.08
         shellMaterial.uniforms.uOpacity.value +=
@@ -2768,7 +2821,7 @@ export default function DreamWorld3D({
           0.08
         visual.miniWorld.update(
           elapsed,
-          selected ? 1 : hoveredId === node._id ? 0.55 : 0,
+          selected ? 1 : Math.max(proximityFocus, proximityWake * .7),
         )
         if (!selected) {
           visual.miniWorld.group.visible = true
@@ -2779,9 +2832,11 @@ export default function DreamWorld3D({
             ? .24
             : hoveredId === node._id
               ? .19
-              : visible
-                ? .12
-                : .035) -
+              : proximityWake > 0
+                ? .12 + proximityWake * .07
+                : visible
+                  ? .12
+                  : .035) -
             reflectionMaterial.opacity) *
           .07
         reflectionMaterial.envMapIntensity +=
@@ -2792,27 +2847,49 @@ export default function DreamWorld3D({
           .05
 
         glowMaterial.opacity +=
-          ((selected ? .2 : hoveredId === node._id ? .14 : visible ? .06 : .01) -
+          ((selected
+            ? .2
+            : hoveredId === node._id
+              ? .14
+              : proximityWake > 0
+                ? .06 + proximityWake * .075
+                : visible
+                  ? .06
+                  : .01) -
             glowMaterial.opacity) *
           .08
         coreMaterial.emissiveIntensity +=
-          ((selected ? 3.45 : hoveredId === node._id ? 2.65 : 1.45) -
+          ((selected
+            ? 3.45
+            : hoveredId === node._id
+              ? 2.65
+              : 1.45 + proximityWake * .92) -
             coreMaterial.emissiveIntensity) *
           .07
         orbitMaterial.opacity +=
-          ((selected ? .68 : hoveredId === node._id ? .42 : .13) -
+          ((selected
+            ? .68
+            : hoveredId === node._id
+              ? .42
+              : guided
+                ? .3
+                : .13) -
             orbitMaterial.opacity) *
           .08
         const labelTarget =
           selected || hoveredId === node._id
             ? .9
-            : observatoryModeRef.current
-              ? node.frequency >= 4
-                ? .24
-                : .015
-              : node.frequency >= 3
-                ? .42
-                : .07
+            : guided
+              ? .76
+              : proximityWake > .12
+                ? .08 + proximityWake * .68
+              : observatoryModeRef.current
+                ? node.frequency >= 4
+                  ? .24
+                  : .015
+                : node.frequency >= 3
+                  ? .42
+                  : .07
         labelMaterial.opacity +=
           (((visible ? labelTarget : .04) * introVisibility) -
             labelMaterial.opacity) *
@@ -3163,6 +3240,29 @@ export default function DreamWorld3D({
           flightNearestId = nearestId
           hoveredId = nearestId
           onNodeHoverRef.current(nearest)
+        }
+
+        const guidedId = guidedNodeIdRef.current
+        if (guidedId && guidedAutoSelectedId !== guidedId) {
+          const guidedNode = nodeRef.current.find(
+            (node) => node._id === guidedId,
+          )
+          const guidedVisual = guidedNode
+            ? nodeVisuals.get(guidedNode._id)
+            : null
+
+          if (guidedNode && guidedVisual) {
+            const guidedDistance = guidedVisual.group
+              .getWorldPosition(proximityPoint)
+              .distanceTo(camera.position)
+
+            if (guidedDistance <= 2.05) {
+              guidedAutoSelectedId = guidedId
+              onNodeSelectRef.current(guidedNode)
+            }
+          }
+        } else if (!guidedId) {
+          guidedAutoSelectedId = null
         }
 
         depthOfField.enabled = false
