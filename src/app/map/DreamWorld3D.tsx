@@ -719,6 +719,106 @@ export default function DreamWorld3D({
       farWorld.add(libraryFarParticles)
     }
 
+    const libraryHazeGeometry = libraryMode
+      ? new THREE.PlaneGeometry(1, 1)
+      : null
+    const libraryHazeTextures: THREE.Texture[] = []
+    const libraryHazeMaterials: THREE.MeshBasicMaterial[] = []
+    const libraryHazePlanes: THREE.Mesh[] = []
+    let librarySilhouetteGeometry: THREE.BoxGeometry | null = null
+    let librarySilhouetteMaterial: THREE.MeshBasicMaterial | null = null
+    let librarySilhouettes: THREE.InstancedMesh | null = null
+
+    if (libraryMode && libraryHazeGeometry) {
+      const hazeSpecs = [
+        {
+          color: 'rgba(73, 132, 176, 0.36)',
+          position: [-28, 7, -72] as const,
+          scale: [92, 42] as const,
+          opacity: .052,
+          rotation: -.035,
+        },
+        {
+          color: 'rgba(111, 82, 176, 0.36)',
+          position: [32, -4, -145] as const,
+          scale: [126, 54] as const,
+          opacity: .045,
+          rotation: .045,
+        },
+        {
+          color: 'rgba(52, 153, 157, 0.36)',
+          position: [-18, 13, -228] as const,
+          scale: [158, 64] as const,
+          opacity: .038,
+          rotation: -.02,
+        },
+      ]
+
+      hazeSpecs.forEach((spec, index) => {
+        const texture = createNebulaTexture(spec.color)
+        const material = new THREE.MeshBasicMaterial({
+          map: texture,
+          transparent: true,
+          opacity: spec.opacity,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+          blending: THREE.NormalBlending,
+          toneMapped: true,
+        })
+        const plane = new THREE.Mesh(libraryHazeGeometry, material)
+        plane.position.set(...spec.position)
+        plane.scale.set(spec.scale[0], spec.scale[1], 1)
+        plane.rotation.z = spec.rotation
+        plane.userData.baseX = spec.position[0]
+        plane.userData.baseY = spec.position[1]
+        plane.userData.baseOpacity = spec.opacity
+        plane.userData.hazePhase = index * 1.73
+        plane.renderOrder = -4
+        farWorld.add(plane)
+        libraryHazeTextures.push(texture)
+        libraryHazeMaterials.push(material)
+        libraryHazePlanes.push(plane)
+      })
+
+      // A handful of ultra-far architectural silhouettes gives the archive a
+      // horizon without adding colliders, raycast targets, or per-object
+      // animation work.
+      librarySilhouetteGeometry = new THREE.BoxGeometry(1, 1, 1)
+      librarySilhouetteMaterial = new THREE.MeshBasicMaterial({
+        color: 0x182238,
+        transparent: true,
+        opacity: .075,
+        depthWrite: false,
+        blending: THREE.NormalBlending,
+        toneMapped: true,
+      })
+      librarySilhouettes = new THREE.InstancedMesh(
+        librarySilhouetteGeometry,
+        librarySilhouetteMaterial,
+        6,
+      )
+      const silhouetteDummy = new THREE.Object3D()
+      const silhouetteSpecs = [
+        [-54, -9, -96, 7, 22, 5, .18],
+        [49, 4, -118, 5, 31, 7, -.24],
+        [-31, 15, -166, 9, 38, 6, .31],
+        [61, -15, -192, 8, 28, 8, -.16],
+        [-67, 9, -235, 12, 47, 7, .22],
+        [24, -3, -262, 10, 35, 9, -.3],
+      ] as const
+
+      silhouetteSpecs.forEach((spec, index) => {
+        silhouetteDummy.position.set(spec[0], spec[1], spec[2])
+        silhouetteDummy.scale.set(spec[3], spec[4], spec[5])
+        silhouetteDummy.rotation.set(0, spec[6], spec[6] * .18)
+        silhouetteDummy.updateMatrix()
+        librarySilhouettes?.setMatrixAt(index, silhouetteDummy.matrix)
+      })
+      librarySilhouettes.instanceMatrix.needsUpdate = true
+      librarySilhouettes.renderOrder = -5
+      farWorld.add(librarySilhouettes)
+    }
+
     const nebulaTextures = [
       createNebulaTexture('rgba(108, 76, 181, 0.36)'),
       createNebulaTexture('rgba(59, 174, 181, 0.36)'),
@@ -3114,6 +3214,24 @@ export default function DreamWorld3D({
         libraryFarParticles.position.y = Math.cos(elapsed * .017) * .16
       }
 
+      libraryHazePlanes.forEach((plane, index) => {
+        const material = plane.material as THREE.MeshBasicMaterial
+        const phase = plane.userData.hazePhase as number
+        plane.position.x =
+          (plane.userData.baseX as number) +
+          Math.sin(elapsed * .018 + phase) * (1.4 + index * .35)
+        plane.position.y =
+          (plane.userData.baseY as number) +
+          Math.cos(elapsed * .014 + phase) * (.65 + index * .22)
+        material.opacity =
+          (plane.userData.baseOpacity as number) *
+          (.9 + Math.sin(elapsed * .032 + phase) * .1)
+      })
+      if (librarySilhouettes) {
+        librarySilhouettes.rotation.y = Math.sin(elapsed * .008) * .018
+        librarySilhouettes.position.y = Math.sin(elapsed * .012) * .3
+      }
+
       nebulae.forEach((sprite, index) => {
         sprite.material.opacity = .22 + Math.sin(elapsed * .13 + index) * .06
         sprite.position.x += Math.sin(elapsed * .06 + index) * .0008
@@ -3689,10 +3807,11 @@ export default function DreamWorld3D({
       if (scene.fog instanceof THREE.FogExp2) {
         const sceneReveal = Math.min(1, elapsed / 1.7)
         const birthFog = (1 - sceneReveal) * 0.072
+        const libraryFogScale = libraryMode ? 1.18 : 1
         scene.fog.density +=
           ((selectedVisual
-            ? settings.fogDensity * 1.18 + birthFog
-            : settings.fogDensity + birthFog) -
+            ? settings.fogDensity * libraryFogScale * 1.12 + birthFog
+            : settings.fogDensity * libraryFogScale + birthFog) -
             scene.fog.density) *
           0.04
       }
@@ -4127,6 +4246,11 @@ export default function DreamWorld3D({
 
       libraryFarParticleGeometry?.dispose()
       libraryFarParticleMaterial?.dispose()
+      libraryHazeGeometry?.dispose()
+      libraryHazeTextures.forEach((texture) => texture.dispose())
+      libraryHazeMaterials.forEach((material) => material.dispose())
+      librarySilhouetteGeometry?.dispose()
+      librarySilhouetteMaterial?.dispose()
 
       starGeometry.dispose()
       starMaterial.dispose()
