@@ -1435,40 +1435,41 @@ export default function DevWebSurf3D({
         group.add(arch)
       }
 
-      const labelTexture = createTextTexture(
-        node.title,
-        node.subtitle,
-        node.accent,
-      )
-      disposableTextures.push(labelTexture)
+      const labelTexture =
+        node.kind === 'article'
+          ? null
+          : createTextTexture(
+              node.title,
+              node.subtitle,
+              node.accent,
+            )
+      if (labelTexture) {
+        disposableTextures.push(labelTexture)
+      }
       const labelMaterial = new THREE.SpriteMaterial({
-        map: labelTexture,
+        map: labelTexture ?? undefined,
         transparent: true,
         opacity:
-          node.kind === 'section' || node.kind === 'home'
-            ? .98
-            : node.kind === 'profile' || node.kind === 'tag'
-              ? .82
-              : .7,
+          node.kind === 'article'
+            ? 0
+            : node.kind === 'section' || node.kind === 'home'
+              ? .98
+              : node.kind === 'profile' || node.kind === 'tag'
+                ? .82
+                : .7,
         depthWrite: false,
         toneMapped: false,
       })
       const label = new THREE.Sprite(labelMaterial)
       label.position.set(
         0,
-        node.kind === 'article'
-          ? .86
-          : node.kind === 'profile'
-            ? 1.5
-            : 1.75,
+        node.kind === 'profile' ? 1.5 : 1.75,
         0,
       )
-      label.scale.set(
-        node.kind === 'article' ? 2.8 : 4.7,
-        node.kind === 'article' ? .66 : 1.12,
-        1,
-      )
-      group.add(label)
+      label.scale.set(4.7, 1.12, 1)
+      if (node.kind !== 'article') {
+        group.add(label)
+      }
 
       const baseScale =
         node.kind === 'section'
@@ -1484,6 +1485,7 @@ export default function DevWebSurf3D({
       group.scale.setScalar(baseScale)
 
       visuals.set(node.id, {
+        id: node.id,
         group,
         body,
         material,
@@ -1491,12 +1493,19 @@ export default function DevWebSurf3D({
         labelMaterial,
         bookGlowMaterial,
         bookTitleMaterial,
+        bookTitle: node.kind === 'article' ? node.title : undefined,
+        bookSubtitle:
+          node.kind === 'article'
+            ? '@' + (node.username ?? node.payload?.user.username ?? 'dev')
+            : undefined,
+        bookAccent: node.kind === 'article' ? node.accent : undefined,
         coverMaterial: coverMaterialRef,
         coverUrl,
         archMaterial: archMaterialRef,
         basePosition: new THREE.Vector3(...node.position),
         baseRotationY: node.rotationY ?? 0,
         shelfKey: node.shelfKey,
+        floorIndex: node.floorIndex ?? 0,
         baseScale,
         phase: index * .67,
       })
