@@ -119,6 +119,10 @@ type Props = {
   onNodeHover: (node: DreamWorldNode | null) => void
   onNodeSelect: (node: DreamWorldNode) => void
   onBookSelect?: (nodeId: string, bookIndex: number) => void
+  onFlightNavigationChange?: (state: {
+    nearestId: string | null
+    routeTargetId: string | null
+  }) => void
   onBackgroundClick: () => void
   onProjectionChange: (projection: ProjectionPoint | null) => void
   onDiveStateChange: (active: boolean, title?: string) => void
@@ -339,6 +343,7 @@ export default function DreamWorld3D({
   onNodeHover,
   onNodeSelect,
   onBookSelect,
+  onFlightNavigationChange,
   onBackgroundClick,
   onProjectionChange,
   onDiveStateChange,
@@ -361,6 +366,7 @@ export default function DreamWorld3D({
   const onNodeHoverRef = useRef(onNodeHover)
   const onNodeSelectRef = useRef(onNodeSelect)
   const onBookSelectRef = useRef(onBookSelect)
+  const onFlightNavigationChangeRef = useRef(onFlightNavigationChange)
   const onBackgroundClickRef = useRef(onBackgroundClick)
   const onProjectionChangeRef = useRef(onProjectionChange)
   const qualityRef = useRef(quality)
@@ -390,6 +396,7 @@ export default function DreamWorld3D({
   onNodeHoverRef.current = onNodeHover
   onNodeSelectRef.current = onNodeSelect
   onBookSelectRef.current = onBookSelect
+  onFlightNavigationChangeRef.current = onFlightNavigationChange
   onBackgroundClickRef.current = onBackgroundClick
   onProjectionChangeRef.current = onProjectionChange
   qualityRef.current = quality
@@ -1641,11 +1648,13 @@ export default function DreamWorld3D({
     let flightInitialized = false
     let previousFlightMode = false
     let flightNearestId: string | null = null
+    let lastPublishedNavigation = ''
     let flightRoute:
       | {
           source: THREE.Vector3
           control: THREE.Vector3
           target: THREE.Vector3
+          sourceId: string
           targetId: string
           startedAt: number
           duration: number
@@ -2440,6 +2449,7 @@ export default function DreamWorld3D({
                 source: start,
                 control: controlPoint,
                 target,
+                sourceId: sourceNode._id,
                 targetId,
                 startedAt: performance.now() / 1000,
                 duration: THREE.MathUtils.clamp(
