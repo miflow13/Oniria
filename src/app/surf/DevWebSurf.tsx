@@ -526,6 +526,18 @@ export default function DevWebSurf() {
         setArticle(null)
         setDynamicArticles(data.articles ?? [])
         setDynamicLabel('@' + data.profile.username)
+        setSelectedId('profile:' + data.profile.username)
+        setActiveNode({
+          id: 'profile:' + data.profile.username,
+          kind: 'profile',
+          title: '@' + data.profile.username,
+          subtitle: data.profile.name,
+          href: 'https://dev.to/' + data.profile.username,
+          username: data.profile.username,
+          position: [0, 0, 0],
+          importance: 1.4,
+          accent: '#b48cff',
+        })
       } else if (value.startsWith('#')) {
         await loadTag(value.slice(1).trim())
       } else {
@@ -737,7 +749,30 @@ export default function DevWebSurf() {
               <div className={styles.pageActions}>
                 <button
                   type="button"
-                  onClick={() => void fetchProfile(article.user.username)}
+                  onClick={() => {
+                    const username = article.user.username
+                    const existing = graph.nodes.find(
+                      (node) =>
+                        node.kind === 'profile' &&
+                        node.username === username,
+                    )
+                    const target =
+                      existing ?? {
+                        id: 'profile:' + username,
+                        kind: 'profile' as const,
+                        title: '@' + username,
+                        subtitle: article.user.name,
+                        href: 'https://dev.to/' + username,
+                        username,
+                        position: [0, 0, 0] as [number, number, number],
+                        importance: 1.2,
+                        accent: '#b48cff',
+                      }
+
+                    setSelectedId(existing?.id ?? null)
+                    setActiveNode(target)
+                    void fetchProfile(username)
+                  }}
                 >
                   Visit @{article.user.username}
                 </button>
