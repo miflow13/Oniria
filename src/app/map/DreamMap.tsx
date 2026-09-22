@@ -244,6 +244,7 @@ export default function DreamMap({
   const [isDragging, setIsDragging] = useState(false)
   const [soundEnabled, setSoundEnabled] = useState(false)
   const [quality, setQuality] = useState<DreamQuality>('high')
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [motionPositions, setMotionPositions] = useState<Record<string, {x: number; y: number}>>({})
   const [enteringNodeId, setEnteringNodeId] = useState<string | null>(null)
   const [enteringDreamTitle, setEnteringDreamTitle] = useState<string | null>(null)
@@ -620,6 +621,9 @@ export default function DreamMap({
 
     try {
       const stored = window.localStorage.getItem('oniria-dream-quality')
+      const storedSidebar = window.localStorage.getItem('oniria-map-sidebar')
+      if (storedSidebar === 'collapsed') setSidebarCollapsed(true)
+
       if (
         stored === 'low' ||
         stored === 'medium' ||
@@ -640,6 +644,17 @@ export default function DreamMap({
       // Ignore storage failures.
     }
   }, [quality])
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        'oniria-map-sidebar',
+        sidebarCollapsed ? 'collapsed' : 'expanded',
+      )
+    } catch {
+      // Ignore storage failures.
+    }
+  }, [sidebarCollapsed])
 
   useEffect(() => {
     return () => {
@@ -1070,7 +1085,11 @@ export default function DreamMap({
   }
 
   return (
-    <main className={styles.page}>
+    <main
+      className={`${styles.page} ${
+        sidebarCollapsed ? styles.pageSidebarCollapsed : ''
+      } ${selectedNode ? styles.pageFocusMode : ''}`}
+    >
       <header className={styles.topbar}>
         <Link href="/" className={styles.brand} aria-label="Oniria journal">
           <span className={styles.brandMark}>◌</span>
@@ -1086,10 +1105,25 @@ export default function DreamMap({
       </header>
 
       <div className={styles.workspace}>
-        <aside className={styles.sidebar}>
+        <aside
+          className={`${styles.sidebar} ${
+            sidebarCollapsed ? styles.sidebarCollapsed : ''
+          }`}
+        >
           <div className={styles.sidebarHeader}>
-            <p>Recent fragments</p>
-            <span>{visibleDreams.length}</span>
+            <div className={styles.sidebarHeading}>
+              <p>Recent fragments</p>
+              <span>{visibleDreams.length}</span>
+            </div>
+            <button
+              type="button"
+              className={styles.sidebarToggle}
+              onClick={() => setSidebarCollapsed((current) => !current)}
+              aria-label={sidebarCollapsed ? 'Expand dream panel' : 'Collapse dream panel'}
+              title={sidebarCollapsed ? 'Expand dream panel' : 'Collapse dream panel'}
+            >
+              {sidebarCollapsed ? '›' : '‹'}
+            </button>
           </div>
 
           <div className={styles.dreamList}>
@@ -1129,7 +1163,7 @@ export default function DreamMap({
           <div className={styles.mapHeader}>
             <div>
               <p className={styles.eyebrow}>Dream map</p>
-              <h1>Your recurring symbols, connected.</h1>
+              <h1>Your dream universe.</h1>
             </div>
             {demoMode && <span className={styles.demoPill}>Local demo data</span>}
           </div>
