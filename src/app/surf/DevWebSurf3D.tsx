@@ -4992,6 +4992,7 @@ export default function DevWebSurf3D({
         const hovered = hoverId === id
         const routed = routeTargetRef.current === id
         const node = nodeById.get(id)
+        const isFeaturedLandmark = id === 'section:featured'
 
         const sameShelf =
           Boolean(activeShelfKey) &&
@@ -5003,7 +5004,21 @@ export default function DevWebSurf3D({
 
         const targetScale =
           visual.baseScale *
-          (selected ? 1.13 : hovered ? 1.075 : routed ? 1.05 : 1)
+          (isFeaturedLandmark
+            ? selected
+              ? 1.018
+              : hovered
+                ? 1.012
+                : routed
+                  ? 1.008
+                  : 1
+            : selected
+              ? 1.13
+              : hovered
+                ? 1.075
+                : routed
+                  ? 1.05
+                  : 1)
 
         tempScale.set(targetScale, targetScale, targetScale)
         visual.group.scale.lerp(
@@ -5102,8 +5117,15 @@ export default function DevWebSurf3D({
             Math.sin(now * .15 + visual.phase) * .025
         }
 
-        visual.material.emissiveIntensity +=
-          ((selected
+        const emissiveTarget = isFeaturedLandmark
+          ? selected
+            ? .16
+            : hovered
+              ? .135
+              : routed
+                ? .12
+                : .09
+          : selected
             ? 1.35
             : hovered
               ? 1.04
@@ -5113,9 +5135,9 @@ export default function DevWebSurf3D({
                   ? .84
                   : unrelatedShelf
                     ? .12
-                    : .38) -
-            visual.material.emissiveIntensity) *
-          .08
+                    : .38
+        visual.material.emissiveIntensity +=
+          (emissiveTarget - visual.material.emissiveIntensity) * .08
 
         if (visual.bookGlowMaterial) {
           visual.bookGlowMaterial.opacity +=
