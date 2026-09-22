@@ -3386,71 +3386,9 @@ export default function DevWebSurf3D({
     fillerBooks.receiveShadow = false
     scene.add(fillerBooks)
 
-    addSectionSign('atrium', 0, 4.6, 5.5, '#f5f5f5')
-    addSectionSign('featured', 0, 4.1, -5.8, '#3b49df')
-    addSectionSign(
-      'latest',
-      -13,
-      4.1,
-      -6.6,
-      '#5b6cff',
-      Math.PI / 2,
-    )
-    addSectionSign(
-      'topics',
-      13,
-      4.1,
-      -6.6,
-      '#53d3ff',
-      -Math.PI / 2,
-    )
-    addSectionSign(
-      'creators',
-      13,
-      4.1,
-      -21.4,
-      '#ae7bff',
-      -Math.PI / 2,
-    )
-    addSectionSign(
-      'search',
-      -13,
-      4.1,
-      -21.4,
-      '#ff4fd8',
-      Math.PI / 2,
-    )
-    addSectionSign('archive', 0, 4.1, -35.5, '#a3a3a3')
-
-    // A retro-futuristic information desk in the atrium.
-    const deskGeometry = new THREE.CylinderGeometry(1.5, 1.75, .95, 10)
-    architecturalGeometries.push(deskGeometry)
-    const desk = new THREE.Mesh(deskGeometry, brass)
-    desk.position.set(0, .48, 7)
-    desk.castShadow = true
-    scene.add(desk)
-    collisionRects.push({
-      minX: -1.7,
-      maxX: 1.7,
-      minZ: 5.3,
-      maxZ: 8.7,
-      minY: 0,
-      maxY: 1.2,
-    })
-
-    const deskGlowGeometry = new THREE.TorusGeometry(1.15, .028, 8, 72)
-    const deskGlowMaterial = new THREE.MeshBasicMaterial({
-      color: 0x77d9d1,
-      transparent: true,
-      opacity: .35,
-      blending: THREE.AdditiveBlending,
-    })
-    architecturalGeometries.push(deskGlowGeometry)
-    architecturalMaterials.push(deskGlowMaterial)
-    const deskGlow = new THREE.Mesh(deskGlowGeometry, deskGlowMaterial)
-    deskGlow.rotation.x = Math.PI / 2
-    deskGlow.position.set(0, 1.04, 7)
-    scene.add(deskGlow)
+    // Section hubs remain interactive, but duplicate floating architecture
+    // labels and the old information-desk sculpture are intentionally omitted.
+    // The wing rail + Directory are the navigation labels for this simple mode.
 
     const nodeById = new Map(nodes.map((node) => [node.id, node]))
     const visuals = new Map<string, Visual>()
@@ -6167,10 +6105,6 @@ export default function DevWebSurf3D({
       } else {
         corridorPull.visible = false
       }
-
-      deskGlow.rotation.z += delta * .12
-      deskGlowMaterial.opacity =
-        .28 + Math.max(0, Math.sin(now * .7)) * .13
 
       const rainAttribute = rainGeometry.getAttribute(
         'position',
