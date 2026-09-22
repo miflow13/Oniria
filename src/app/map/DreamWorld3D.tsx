@@ -1875,6 +1875,27 @@ export default function DreamWorld3D({
       blending: THREE.AdditiveBlending,
       toneMapped: true,
     })
+    const shelfActivityGeometry = new THREE.BoxGeometry(
+      .045,
+      .34,
+      .025,
+    )
+    const shelfFreshMaterial = new THREE.MeshBasicMaterial({
+      color: 0x73f1ff,
+      transparent: true,
+      opacity: .82,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      toneMapped: false,
+    })
+    const shelfActiveMaterial = new THREE.MeshBasicMaterial({
+      color: 0xc28cff,
+      transparent: true,
+      opacity: .66,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      toneMapped: false,
+    })
     const shelfFrameMaterial = new THREE.MeshStandardMaterial({
       color: 0x080b11,
       emissive: 0x000000,
@@ -2274,6 +2295,25 @@ export default function DreamWorld3D({
             bookmark.renderOrder = 6
             bookGroup.add(bookmark)
 
+            if (bookData.fresh || (bookData.activity ?? 0) >= .16) {
+              const activityMarker = new THREE.Mesh(
+                shelfActivityGeometry,
+                bookData.fresh
+                  ? shelfFreshMaterial
+                  : shelfActiveMaterial,
+              )
+              activityMarker.position.set(
+                .33,
+                0,
+                -.073,
+              )
+              activityMarker.scale.y =
+                .7 + (bookData.activity ?? 0) * .55
+              activityMarker.renderOrder = 6
+              activityMarker.userData.libraryDecorative = true
+              bookGroup.add(activityMarker)
+            }
+
             shelf.add(bookGroup)
             libraryBookVisuals.push({
               nodeId: node._id,
@@ -2357,8 +2397,10 @@ export default function DreamWorld3D({
     let libraryWalkwayGeometry: THREE.BufferGeometry | null = null
     let libraryWalkwayRailGeometry: THREE.BufferGeometry | null = null
     let libraryWalkwayPanelMaterial: THREE.MeshBasicMaterial | null = null
+    let libraryWalkwayUnderlayMaterial: THREE.MeshBasicMaterial | null = null
     let libraryWalkwayRailMaterial: THREE.LineBasicMaterial | null = null
     let libraryWalkway: THREE.Mesh | null = null
+    let libraryWalkwayUnderlay: THREE.Mesh | null = null
     let libraryWalkwayRails: THREE.LineSegments | null = null
     const libraryRouteTextures: THREE.Texture[] = []
     const libraryRouteMaterials: THREE.Material[] = []
@@ -2513,6 +2555,16 @@ export default function DreamWorld3D({
         blending: THREE.NormalBlending,
         toneMapped: true,
       })
+      libraryWalkwayUnderlayMaterial =
+        new THREE.MeshBasicMaterial({
+          color: 0x6654b8,
+          transparent: true,
+          opacity: .04,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          toneMapped: false,
+        })
       libraryWalkwayRailMaterial = new THREE.LineBasicMaterial({
         color: 0xa99be8,
         transparent: true,
@@ -2521,6 +2573,14 @@ export default function DreamWorld3D({
         blending: THREE.NormalBlending,
         toneMapped: true,
       })
+
+      libraryWalkwayUnderlay = new THREE.Mesh(
+        libraryWalkwayGeometry,
+        libraryWalkwayUnderlayMaterial,
+      )
+      libraryWalkwayUnderlay.position.y = -.085
+      libraryWalkwayUnderlay.renderOrder = 0
+      libraryWalkwayUnderlay.userData.libraryDecorative = true
 
       libraryWalkway = new THREE.Mesh(
         libraryWalkwayGeometry,
@@ -2535,7 +2595,11 @@ export default function DreamWorld3D({
       libraryWalkway.userData.walkableSurface = true
       libraryWalkway.userData.libraryDecorative = true
       libraryWalkwayRails.userData.libraryDecorative = true
-      world.add(libraryWalkway, libraryWalkwayRails)
+      world.add(
+        libraryWalkwayUnderlay,
+        libraryWalkway,
+        libraryWalkwayRails,
+      )
 
       activeDistricts.forEach((district, index) => {
         const center = new THREE.Vector3(...archivePathPoint(district.bay))
@@ -2669,6 +2733,21 @@ export default function DreamWorld3D({
           landmarkHeight
         landmarkGroup.userData.libraryLandmarkBay =
           district.bay
+        const landmarkBaseScale =
+          district.landmarkType === 'archive-tower'
+            ? 1.28
+            : district.landmarkType === 'terminal-wall'
+              ? 1.2
+              : district.landmarkType === 'neural-lattice'
+                ? 1.18
+                : district.landmarkType === 'syntax-tree'
+                  ? 1.16
+                  : district.landmarkType === 'dev-monument'
+                    ? 1.14
+                    : 1.08
+        landmarkGroup.userData.libraryLandmarkBaseScale =
+          landmarkBaseScale
+        landmarkGroup.scale.setScalar(landmarkBaseScale)
 
         const landmarkCore = new THREE.Mesh(
           landmarkGeometry,
@@ -5076,7 +5155,10 @@ export default function DreamWorld3D({
       nearDustMaterial.opacity =
         .14 + Math.max(0, Math.sin(elapsed * .19)) * .06
 
-      if (libraryWalkwayPanelMaterial && libraryWalkwayRailMaterial) {
+      if (
+        libraryWalkwayPanelMaterial &&
+        libraryWalkwayRailMaterial
+      ) {
         const walkwayPulse = Math.sin(elapsed * .42) * .008
         const walkwayBay =
           archiveBayFromWorldZ(camera.position.z)
@@ -5093,6 +5175,14 @@ export default function DreamWorld3D({
             0,
             Math.sin(elapsed * .64 - walkwayBay * .22 + .8),
           ) * .065
+        if (libraryWalkwayUnderlayMaterial) {
+          libraryWalkwayUnderlayMaterial.opacity =
+            .035 +
+            Math.max(
+              0,
+              Math.sin(elapsed * .34 - walkwayBay * .12 + 1.4),
+            ) * .022
+        }
       }
 
       const currentArchiveBay = libraryMode
@@ -5139,14 +5229,19 @@ export default function DreamWorld3D({
               .08,
               .62,
             )
+          const landmarkBaseScale =
+            (object.userData.libraryLandmarkBaseScale as
+              | number
+              | undefined) ?? 1
           const heroScale =
-            1 +
-            heroWake * .055 +
-            Math.max(
-              0,
-              Math.sin(elapsed * .48 + phase),
-            ) *
-              .008
+            landmarkBaseScale *
+            (1 +
+              heroWake * .055 +
+              Math.max(
+                0,
+                Math.sin(elapsed * .48 + phase),
+              ) *
+                .008)
 
           object.position.y =
             baseY +
@@ -5611,19 +5706,19 @@ export default function DreamWorld3D({
             focusStrength > .2
               ? THREE.MathUtils.lerp(
                   1,
-                  .78,
+                  .72,
                   focusStrength,
                 )
               : 1
           const targetTint =
             (presented
               ? .76
-              : .22 +
+              : .26 +
                 Math.max(
                   awake,
-                  distanceWake * .45,
+                  distanceWake * .5,
                 ) *
-                  .34) *
+                  .42) *
             neighborDim
           const tint = bookVisual.coverMaterial.color
           tint.r += (targetTint - tint.r) * .08
@@ -5795,7 +5890,7 @@ export default function DreamWorld3D({
 
           if (frameMaterial) {
             frameMaterial.emissiveIntensity +=
-              ((.018 + reactiveStrength * .3) -
+              ((.018 + reactiveStrength * .42) -
                 frameMaterial.emissiveIntensity) *
               .09
             frameMaterial.envMapIntensity +=
@@ -5806,13 +5901,13 @@ export default function DreamWorld3D({
           }
           if (boardMaterial) {
             boardMaterial.emissiveIntensity +=
-              ((.016 + reactiveStrength * .2) -
+              ((.016 + reactiveStrength * .3) -
                 boardMaterial.emissiveIntensity) *
               .09
           }
           if (accentMaterial) {
             accentMaterial.opacity +=
-              ((.1 + reactiveStrength * .55) -
+              ((.1 + reactiveStrength * .7) -
                 accentMaterial.opacity) *
               .11
           }
@@ -6671,6 +6766,9 @@ export default function DreamWorld3D({
       shelfPickGeometry.dispose()
       shelfBookmarkGeometry.dispose()
       shelfBookmarkMaterial.dispose()
+      shelfActivityGeometry.dispose()
+      shelfFreshMaterial.dispose()
+      shelfActiveMaterial.dispose()
       shelfFrameMaterial.dispose()
       shelfBoardMaterial.dispose()
       shelfBookMaterials.forEach((material) => material.dispose())
@@ -6751,6 +6849,7 @@ export default function DreamWorld3D({
       libraryWalkwayGeometry?.dispose()
       libraryWalkwayRailGeometry?.dispose()
       libraryWalkwayPanelMaterial?.dispose()
+      libraryWalkwayUnderlayMaterial?.dispose()
       libraryWalkwayRailMaterial?.dispose()
       libraryArrowGeometry?.dispose()
       libraryArrowMaterial?.dispose()
@@ -6775,6 +6874,9 @@ export default function DreamWorld3D({
       if (libraryGuards) world.remove(libraryGuards)
       if (libraryJunctions) world.remove(libraryJunctions)
       if (libraryRouteDots) world.remove(libraryRouteDots)
+      if (libraryWalkwayUnderlay) {
+        world.remove(libraryWalkwayUnderlay)
+      }
       if (libraryWalkway) world.remove(libraryWalkway)
       if (libraryWalkwayRails) world.remove(libraryWalkwayRails)
       shaftGeometries.forEach((geometry) => geometry.dispose())
