@@ -3130,3 +3130,88 @@
     display: none;
   }
 }
+
+
+/* ==========================================================================
+   Content-density legend + restricted archive treatment
+   ========================================================================== */
+
+.wingLegend span b {
+  margin-left: auto;
+  color: #6f7784;
+  font-size: .45rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.archiveLink {
+  position: relative;
+  min-height: 42px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  overflow: hidden;
+  padding: 8px 9px;
+  background:
+    repeating-linear-gradient(
+      0deg,
+      rgba(255,255,255,.018) 0,
+      rgba(255,255,255,.018) 1px,
+      transparent 1px,
+      transparent 4px
+    ),
+    rgba(11,13,17,.52);
+  border: 1px solid rgba(141,154,173,.11);
+  border-radius: 8px;
+}
+
+.archiveLink::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      90deg,
+      transparent,
+      rgba(255,255,255,.02),
+      transparent
+    );
+  transform: translateX(-100%);
+  animation: restrictedScan 4.8s linear infinite;
+}
+
+.archiveLink > span:first-child {
+  filter: grayscale(1);
+  opacity: .72;
+  font-size: .72rem;
+}
+
+.archiveLink > span:nth-child(2) {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.archiveLink small {
+  color: #5f6773;
+  font-size: .43rem;
+}
+
+.archiveLink > b {
+  color: #7d8694;
+  font-size: .64rem;
+}
+
+@keyframes restrictedScan {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .archiveLink::after {
+    animation: none;
+  }
+}
