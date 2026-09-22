@@ -2,6 +2,13 @@
 
 import {useEffect, useRef, type RefObject} from 'react'
 import * as THREE from 'three'
+import {TransformControls} from 'three/addons/controls/TransformControls.js'
+import type {
+  LayoutEditorMode,
+  LayoutEditorSelection,
+  ShelfLayoutTransform,
+} from './layout'
+import {shelfLayoutKey} from './layout'
 import type {LibrarySection, SurfEdge, SurfNode, SurfNodeKind} from './types'
 import styles from './surf.module.css'
 
@@ -44,6 +51,16 @@ type Props = {
   catalogLoading: boolean
   debugEnabled: boolean
   onDebugMetrics: (metrics: SurfDebugMetrics) => void
+  layoutEditorEnabled?: boolean
+  layoutEditorMode?: LayoutEditorMode
+  layoutEditorSnap?: boolean
+  onLayoutSelectionChange?: (
+    selection: LayoutEditorSelection | null,
+  ) => void
+  onLayoutTransformChange?: (
+    key: string,
+    transform: ShelfLayoutTransform,
+  ) => void
 }
 
 type Visual = {
@@ -588,6 +605,11 @@ export default function DevWebSurf3D({
   catalogLoading,
   debugEnabled,
   onDebugMetrics,
+  layoutEditorEnabled = false,
+  layoutEditorMode = 'translate',
+  layoutEditorSnap = true,
+  onLayoutSelectionChange,
+  onLayoutTransformChange,
 }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const selectedRef = useRef(selectedId)
@@ -607,6 +629,11 @@ export default function DevWebSurf3D({
   const catalogLoadingRef = useRef(catalogLoading)
   const debugEnabledRef = useRef(debugEnabled)
   const debugMetricsRef = useRef(onDebugMetrics)
+  const layoutEditorEnabledRef = useRef(layoutEditorEnabled)
+  const layoutEditorModeRef = useRef(layoutEditorMode)
+  const layoutEditorSnapRef = useRef(layoutEditorSnap)
+  const layoutSelectionRef = useRef(onLayoutSelectionChange)
+  const layoutTransformRef = useRef(onLayoutTransformChange)
 
   selectedRef.current = selectedId
   routeTargetRef.current = routeTargetId
@@ -625,6 +652,11 @@ export default function DevWebSurf3D({
   catalogLoadingRef.current = catalogLoading
   debugEnabledRef.current = debugEnabled
   debugMetricsRef.current = onDebugMetrics
+  layoutEditorEnabledRef.current = layoutEditorEnabled
+  layoutEditorModeRef.current = layoutEditorMode
+  layoutEditorSnapRef.current = layoutEditorSnap
+  layoutSelectionRef.current = onLayoutSelectionChange
+  layoutTransformRef.current = onLayoutTransformChange
 
   useEffect(() => {
     const host = hostRef.current
@@ -1635,6 +1667,16 @@ export default function DevWebSurf3D({
       decal.position.y = .039
       decal.renderOrder = 6
       group.add(decal)
+      if (layoutKey && floorBase === 0) {
+        const label = layoutKey
+          .replace(/^0:/, '')
+          .replace(/:/g, ' · ')
+        group.userData.layoutKey = layoutKey
+        group.userData.layoutLabel = label
+        editableShelves.push({key: layoutKey, label, group})
+        editableShelfRoots.push(group)
+      }
+
       scene.add(group)
       return group
     }
@@ -1788,12 +1830,21 @@ export default function DevWebSurf3D({
       })
     }
 
+    type EditableShelf = {
+      key: string
+      label: string
+      group: THREE.Group
+    }
+    const editableShelves: EditableShelf[] = []
+    const editableShelfRoots: THREE.Object3D[] = []
+
     function addShelf(
       x: number,
       z: number,
       width: number,
       rotationY = 0,
       floorBase = 0,
+      layoutKey?: string,
     ) {
       const group = new THREE.Group()
       group.position.set(x, floorBase, z)
@@ -2941,9 +2992,9 @@ export default function DevWebSurf3D({
     })
 
     occupiedShelfUnits.forEach(
-      ({x, z, rotationY, floorBase}) => {
+      ({x, z, rotationY, floorBase}, layoutKey) => {
         const width = floorBase === 0 ? 4.5 : 4.45
-        addShelf(x, z, width, rotationY, floorBase)
+        addShelf(x, z, width, rotationY, floorBase, layoutKey)
         densityShelfUnits.push({
           x,
           z,
@@ -4005,6 +4056,140 @@ export default function DevWebSurf3D({
       visualsByFloor.set(visual.floorIndex, floorEntries)
     })
 
+    const transformControls = new TransformControls(
+      camera,
+      renderer.domElement,
+    )
+    const transformHelper = transformControls.getHelper()
+    transformHelper.visible = false
+    scene.add(transformHelper)
+
+    let selectedEditableShelf: EditableShelf | null = null
+    let selectedShelfArticles: Array<{
+      visual: Visual
+      node: SurfNode
+      localPosition: THREE.Vector3
+      rotationOffset: number
+    }> = []
+    let lastEditorEnabled = false
+
+    function publishLayoutSelection() {
+      if (!selectedEditableShelf) {
+        layoutSelectionRef.current?.(null)
+        return
+      }
+      const {group, key, label} = selectedEditableShelf
+      layoutSelectionRef.current?.({
+        key,
+        label,
+        x: group.position.x,
+        z: group.position.z,
+        rotationY: group.rotation.y,
+      })
+    }
+
+    function attachEditableShelf(editable: EditableShelf | null) {
+      selectedEditableShelf = editable
+      selectedShelfArticles = []
+
+      if (!editable) {
+        transformControls.detach()
+        transformHelper.visible = false
+        publishLayoutSelection()
+        return
+      }
+
+      editable.group.updateMatrixWorld(true)
+      visuals.forEach((visual) => {
+        const node = nodeById.get(visual.id)
+        if (!node || node.kind !== 'article') return
+        const key = shelfLayoutKey(
+          node.shelfKey,
+          node.floorIndex ?? 0,
+        )
+        if (key !== editable.key) return
+
+        const localPosition = editable.group.worldToLocal(
+          visual.group.position.clone(),
+        )
+        selectedShelfArticles.push({
+          visual,
+          node,
+          localPosition,
+          rotationOffset:
+            visual.group.rotation.y - editable.group.rotation.y,
+        })
+      })
+
+      transformControls.attach(editable.group)
+      transformHelper.visible = true
+      publishLayoutSelection()
+    }
+
+    function syncEditableShelfContents() {
+      if (!selectedEditableShelf) return
+      const {group, key} = selectedEditableShelf
+      group.updateMatrixWorld(true)
+
+      selectedShelfArticles.forEach(
+        ({visual, node, localPosition, rotationOffset}) => {
+          const world = group.localToWorld(localPosition.clone())
+          visual.group.position.copy(world)
+          visual.group.rotation.y = group.rotation.y + rotationOffset
+          visual.basePosition.copy(world)
+          visual.baseRotationY = visual.group.rotation.y
+          node.position = [world.x, world.y, world.z]
+          node.rotationY = visual.group.rotation.y
+        },
+      )
+
+      const transform = {
+        x: group.position.x,
+        z: group.position.z,
+        rotationY: group.rotation.y,
+      }
+      layoutTransformRef.current?.(key, transform)
+      publishLayoutSelection()
+    }
+
+    transformControls.addEventListener(
+      'objectChange',
+      syncEditableShelfContents,
+    )
+
+    function selectShelfFromPointer(event: MouseEvent) {
+      if (!layoutEditorEnabledRef.current) return
+      const rect = renderer.domElement.getBoundingClientRect()
+      const pointer = new THREE.Vector2(
+        ((event.clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1,
+        -((event.clientY - rect.top) / Math.max(1, rect.height)) * 2 + 1,
+      )
+      const editorRaycaster = new THREE.Raycaster()
+      editorRaycaster.setFromCamera(pointer, camera)
+      const hit = editorRaycaster.intersectObjects(
+        editableShelfRoots,
+        true,
+      )[0]
+
+      if (!hit) {
+        attachEditableShelf(null)
+        return
+      }
+
+      let current: THREE.Object3D | null = hit.object
+      while (current && !current.userData.layoutKey) {
+        current = current.parent
+      }
+      const key =
+        typeof current?.userData.layoutKey === 'string'
+          ? current.userData.layoutKey
+          : null
+      const editable = key
+        ? editableShelves.find((entry) => entry.key === key) ?? null
+        : null
+      attachEditableShelf(editable)
+    }
+
     type ShelfCoverAtlasLod = {
       mesh: THREE.Mesh
       material: THREE.MeshBasicMaterial
@@ -4943,6 +5128,7 @@ export default function DevWebSurf3D({
 
     function onMouseMove(event: MouseEvent) {
       if (
+        layoutEditorEnabledRef.current ||
         document.pointerLockElement !== renderer.domElement ||
         travel ||
         floorTravel
@@ -4961,6 +5147,11 @@ export default function DevWebSurf3D({
         target instanceof HTMLTextAreaElement ||
         target instanceof HTMLSelectElement
       ) {
+        return
+      }
+
+      if (layoutEditorEnabledRef.current) {
+        keys.clear()
         return
       }
 
@@ -5037,7 +5228,12 @@ export default function DevWebSurf3D({
       keys.delete(event.code)
     }
 
-    function onCanvasClick() {
+    function onCanvasClick(event: MouseEvent) {
+      if (layoutEditorEnabledRef.current) {
+        selectShelfFromPointer(event)
+        return
+      }
+
       if (document.pointerLockElement !== renderer.domElement) {
         void renderer.domElement.requestPointerLock().catch(() => {
           // Browsers reject immediate re-lock attempts after Escape. A failed
@@ -5076,6 +5272,32 @@ export default function DevWebSurf3D({
     function animate(nowMs: number) {
       frame = requestAnimationFrame(animate)
       const now = nowMs / 1000
+
+      const editorEnabled = layoutEditorEnabledRef.current
+      if (editorEnabled !== lastEditorEnabled) {
+        lastEditorEnabled = editorEnabled
+        keys.clear()
+        if (
+          editorEnabled &&
+          document.pointerLockElement === renderer.domElement
+        ) {
+          document.exitPointerLock?.()
+        }
+        if (!editorEnabled) {
+          attachEditableShelf(null)
+        }
+      }
+
+      transformControls.setMode(layoutEditorModeRef.current)
+      transformControls.setTranslationSnap(
+        layoutEditorSnapRef.current ? .5 : null,
+      )
+      transformControls.setRotationSnap(
+        layoutEditorSnapRef.current ? Math.PI / 12 : null,
+      )
+      transformHelper.visible =
+        editorEnabled && selectedEditableShelf !== null
+      fillerBooks.visible = !editorEnabled
 
       // Keep the distant field centered on the player for skybox-like depth.
       // A nearly imperceptible drift preserves the dream-journal atmosphere
@@ -6031,6 +6253,13 @@ export default function DevWebSurf3D({
     return () => {
       cancelAnimationFrame(frame)
       resizeObserver.disconnect()
+      transformControls.removeEventListener(
+        'objectChange',
+        syncEditableShelfContents,
+      )
+      transformControls.detach()
+      transformControls.dispose()
+      scene.remove(transformHelper)
       renderer.domElement.removeEventListener('click', onCanvasClick)
       document.removeEventListener('mousemove', onMouseMove)
       document.removeEventListener('pointerlockchange', onPointerLock)
