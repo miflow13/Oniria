@@ -735,12 +735,12 @@ export default function DevWebSurf() {
 
   const loadTag = useCallback(
     async (tag: string, preserveReadingOrigin = false) => {
-    if (!preserveReadingOrigin) setReadingOrigin(null)
-    setRouteLoading(true)
-    setArticle(null)
-    setProfile(null)
-    setSelectedId('tag:' + tag)
-    setActiveNode({
+      if (!preserveReadingOrigin) setReadingOrigin(null)
+      setRouteLoading(true)
+      setArticle(null)
+      setProfile(null)
+      setSelectedId('tag:' + tag)
+      setActiveNode({
       id: 'tag:' + tag,
       kind: 'tag',
       title: '#' + tag,
@@ -750,10 +750,10 @@ export default function DevWebSurf() {
       section: 'topics',
       position: [13, 1.2, -20.4],
       importance: 1.3,
-      accent: SECTION_COPY.topics.accent,
-    })
+        accent: SECTION_COPY.topics.accent,
+      })
 
-    try {
+      try {
       const response = await fetch(
         '/api/devto?mode=tag&tag=' + encodeURIComponent(tag),
       )
@@ -765,14 +765,16 @@ export default function DevWebSurf() {
       setDynamicArticles(data.articles ?? [])
       setDynamicLabel('#' + tag)
       setRouteTargetId('tag:' + tag)
-    } catch (nextError) {
-      setError(
-        nextError instanceof Error ? nextError.message : 'Tag failed to load',
-      )
-    } finally {
-      setRouteLoading(false)
-    }
-  }, [])
+      } catch (nextError) {
+        setError(
+          nextError instanceof Error ? nextError.message : 'Tag failed to load',
+        )
+      } finally {
+        setRouteLoading(false)
+      }
+    },
+    [],
+  )
 
   const inspectNode = useCallback(
     (node: SurfNode) => {
@@ -827,6 +829,7 @@ export default function DevWebSurf() {
 
   function putBackArticle() {
     if (!activeNode || activeNode.kind !== 'article') return
+    setReadingOrigin(null)
     setActiveNode(null)
     setSelectedId(null)
     setArticle(null)
@@ -1266,7 +1269,10 @@ export default function DevWebSurf() {
       <section className={styles.controls}>
         <span><kbd>WASD</kbd> walk</span>
         <span><kbd>mouse</kbd> look</span>
-        <span><kbd>E</kbd> inspect</span>
+        <span>
+          <kbd>E</kbd>{' '}
+          {activeNode?.kind === 'article' ? 'put back' : 'inspect'}
+        </span>
         <span><kbd>F</kbd> travel</span>
         <span><kbd>Shift</kbd> hurry</span>
         <span><kbd>Esc</kbd> cursor</span>
@@ -1304,9 +1310,13 @@ export default function DevWebSurf() {
             type="button"
             className={styles.closeLens}
             onClick={() => {
-              setActiveNode(null)
-              setSelectedId(null)
-              setArticle(null)
+              if (activeNode.kind === 'article') {
+                putBackArticle()
+              } else {
+                setActiveNode(null)
+                setSelectedId(null)
+                setArticle(null)
+              }
             }}
             aria-label="Close page"
           >
