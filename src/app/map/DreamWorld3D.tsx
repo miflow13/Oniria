@@ -409,7 +409,7 @@ export default function DreamWorld3D({
       `${quality}::${nodes
         .map(
           (node) =>
-            `${node._id}:${node.articleCount ?? 0}:${node.coverImages?.join(',') ?? ''}:${node.world?.join(',') ?? ''}`,
+            `${node._id}:${node.articleCount ?? 0}:${node.libraryBooks?.map((book) => book.id + ':' + (book.coverUrl ?? '')).join('|') ?? ''}:${node.world?.join(',') ?? ''}`,
         )
         .join('|')}::${edges
         .map((edge) => `${edge.id}:${edge.weight}`)
@@ -764,6 +764,23 @@ export default function DreamWorld3D({
 
     const nodeVisuals = new Map<string, NodeVisual>()
     const interactive: THREE.Object3D[] = []
+    type LibraryBookVisual = {
+      nodeId: string
+      index: number
+      group: THREE.Group
+      coverHinge: THREE.Group
+      basePosition: THREE.Vector3
+    }
+    const libraryBookVisuals: LibraryBookVisual[] = []
+    const bookInteractives: THREE.Object3D[] = []
+    let hoveredBook: LibraryBookVisual | null = null
+    let openingBook:
+      | {
+          visual: LibraryBookVisual
+          startedAt: number
+          fired: boolean
+        }
+      | null = null
 
     // Reusable shelf kit for cinematic library mode.
     const shelfSideGeometry = new THREE.BoxGeometry(.18, 2.65, .56)
@@ -1000,34 +1017,41 @@ export default function DreamWorld3D({
           shelf.add(board)
         })
 
-        const displaySlots = 9
-        for (let index = 0; index < displaySlots; index += 1) {
-          const row = Math.floor(index / 3)
-          const column = index % 3
-          const backing = new THREE.Mesh(
-            shelfBookGeometry,
-            shelfBookMaterials[
-              (seed + index * 7) % shelfBookMaterials.length
-            ],
-          )
-          backing.position.set(
-            -1.08 + column * 1.08,
-            -.84 + row * .84,
-            -.235,
-          )
-          backing.scale.set(
-            1,
-            .94 + seededUnit(seed, index + 90) * .06,
-            1,
-          )
-          shelf.add(backing)
-        }
+        ;(node.libraryBooks ?? []).slice(0, 9).forEach(
+          (bookData, index) => {
+            const row = Math.floor(index / 3)
+            const column = index % 3
+            const bookGroup = new THREE.Group()
+            const basePosition = new THREE.Vector3(
+              -1.08 + column * 1.08,
+              -.84 + row * .84,
+              -.235,
+            )
+            bookGroup.position.copy(basePosition)
 
-        ;(node.coverImages ?? []).slice(0, 9).forEach(
-          (coverUrl, index) => {
+            const backing = new THREE.Mesh(
+              shelfBookGeometry,
+              shelfBookMaterials[
+                (seed + index * 7) % shelfBookMaterials.length
+              ],
+            )
+            backing.scale.set(
+              1,
+              .94 + seededUnit(seed, index + 90) * .06,
+              1,
+            )
+            backing.userData.bookNodeId = node._id
+            backing.userData.bookIndex = index
+            bookGroup.add(backing)
+            bookInteractives.push(backing)
+
+            const coverHinge = new THREE.Group()
+            coverHinge.position.set(-.46, 0, -.056)
+            bookGroup.add(coverHinge)
+
             const coverMaterial = new THREE.MeshStandardMaterial({
-              color: 0x242b38,
-              roughness: .96,
+              color: 0x555b67,
+              roughness: .98,
               metalness: 0,
               emissive: 0x000000,
               emissiveIntensity: 0,
@@ -1036,41 +1060,49 @@ export default function DreamWorld3D({
             })
             shelfCoverMaterials.push(coverMaterial)
 
-            shelfTextureLoader.load(
-              coverUrl,
-              (texture) => {
-                texture.colorSpace = THREE.SRGBColorSpace
-                texture.minFilter = THREE.LinearFilter
-                texture.magFilter = THREE.LinearFilter
-                texture.anisotropy = Math.min(
-                  4,
-                  renderer.capabilities.getMaxAnisotropy(),
-                )
-                shelfCoverTextures.push(texture)
-                coverMaterial.map = texture
-                coverMaterial.color.setHex(0xffffff)
-                coverMaterial.needsUpdate = true
-              },
-              undefined,
-              () => {
-                coverMaterial.color.setHex(0x303746)
-              },
-            )
+            if (bookData.coverUrl) {
+              shelfTextureLoader.load(
+                bookData.coverUrl,
+                (texture) => {
+                  texture.colorSpace = THREE.SRGBColorSpace
+                  texture.minFilter = THREE.LinearFilter
+                  texture.magFilter = THREE.LinearFilter
+                  texture.anisotropy = Math.min(
+                    4,
+                    renderer.capabilities.getMaxAnisotropy(),
+                  )
+                  shelfCoverTextures.push(texture)
+                  coverMaterial.map = texture
+                  coverMaterial.color.setRGB(.62, .62, .66)
+                  coverMaterial.needsUpdate = true
+                },
+                undefined,
+                () => {
+                  coverMaterial.color.setHex(0x303746)
+                },
+              )
+            }
 
             const cover = new THREE.Mesh(
               shelfCoverGeometry,
               coverMaterial,
             )
-            const row = Math.floor(index / 3)
-            const column = index % 3
-            cover.position.set(
-              -1.08 + column * 1.08,
-              -.84 + row * .84,
-              -.291,
-            )
+            cover.position.set(.42, 0, -.002)
             cover.rotation.y = Math.PI
             cover.renderOrder = 5
-            shelf.add(cover)
+            cover.userData.bookNodeId = node._id
+            cover.userData.bookIndex = index
+            coverHinge.add(cover)
+            bookInteractives.push(cover)
+
+            shelf.add(bookGroup)
+            libraryBookVisuals.push({
+              nodeId: node._id,
+              index,
+              group: bookGroup,
+              coverHinge,
+              basePosition,
+            })
           },
         )
 
@@ -1089,7 +1121,7 @@ export default function DreamWorld3D({
         shelf.add(pick)
         interactive.push(pick)
 
-        shelf.scale.setScalar(.9)
+        shelf.scale.setScalar(1)
         group.add(shelf)
         label.position.set(0, -1.75, .18)
         label.scale.set(2.65, .58, 1)
@@ -1100,7 +1132,7 @@ export default function DreamWorld3D({
 
       const baseScale =
         node.libraryKind === 'shelf'
-          ? .9
+          ? 1.22
           : .72 +
             Math.min(node.frequency, 6) * .095 +
             Math.min(
