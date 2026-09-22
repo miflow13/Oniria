@@ -830,31 +830,51 @@ They should be done one at a time with a green build between them.
 
 ## Phase 2 — Reading ritual
 
-Likely module:
+Status: **extracted**
 
-`libraryReadingRitual.ts`
+Path:
 
-Should own:
+`src/app/map/libraryReadingRitual.ts`
+
+The reading controller now owns:
 
 - opening-book state
-- original transform capture
-- pull-out animation
-- camera presentation target
+- pull-out progress
+- shelf-local presentation transforms
 - cover opening
 - reader handoff timing
-- return animation
-- bookmark state
+- automatic return timing
+- bookmark visibility
+- safety-envelope displacement clamp
+- last-resort stuck-book reset
+- reading light creation/update/disposal
+- book detail/hover presentation that was previously coupled directly to the ritual loop
 
-Renderer supplies:
+The public surface is intentionally small:
 
-- camera transform
-- selected book
-- elapsed time
+```ts
+createLibraryReadingRitual(scene)
 
-Controller reports:
+ritual.begin(book)
+ritual.update({...})
+ritual.isActive()
+ritual.isPresenting(book)
+ritual.dispose()
+```
 
-- when the React reader should open
-- when ritual is idle
+`DreamWorld3D.tsx` now provides world facts such as the hovered book, current approached shelf, shelf distance, and reader callback. It no longer owns the reading state machine itself.
+
+### Cleanup-discovered timing bug
+
+During extraction, the old implementation revealed a hidden clock mismatch.
+
+`beginBookOpen()` recorded `performance.now()`, but the animation code was reading an unrelated scene-start `Date.now()` constant used by the supernova/recent-dream calculation.
+
+That mixed two incompatible time bases and could cause the opening/return progress to jump immediately.
+
+The extracted controller now uses one consistent clock: the animation frame's `performance.now()`-compatible seconds.
+
+This was treated as a lifecycle bug uncovered by cleanup rather than a new feature.
 
 ---
 
@@ -1064,7 +1084,17 @@ At minimum verify:
 
 ## Phase 2 — Reading ritual
 
-- [ ] not started
+- [x] identify controller boundary
+- [x] create `libraryReadingRitual.ts`
+- [x] move opening/return state machine
+- [x] move book presentation animation
+- [x] move bookmark handoff behavior
+- [x] move reading light ownership
+- [x] remove inline `openingBook` state
+- [x] fix mixed-clock timing bug uncovered during extraction
+- [x] source-level stale-reference audit
+- [ ] CI verification
+- [ ] manual browser smoke test
 
 ## Phase 3 — Atmosphere
 
