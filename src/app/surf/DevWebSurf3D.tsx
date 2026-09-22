@@ -2901,6 +2901,53 @@ export default function DevWebSurf3D({
     dataRain.renderOrder = 7
     scene.add(dataRain)
 
+    // Imported from the dream world's atmospheric language: extremely faint
+    // additive shafts that breathe around the island without becoming walls.
+    const dreamLightShaftGroup = new THREE.Group()
+    dreamLightShaftGroup.name = 'dream-light-shafts'
+    scene.add(dreamLightShaftGroup)
+
+    const dreamLightShafts: Array<{
+      mesh: THREE.Mesh
+      material: THREE.MeshBasicMaterial
+      phase: number
+    }> = []
+    ;[
+      {x: -14.5, z: -10, height: 15, tilt: .08},
+      {x: 14.2, z: -24, height: 18, tilt: -.09},
+      {x: -10.5, z: -38, height: 16.5, tilt: .06},
+    ].forEach((entry, index) => {
+      const geometry = new THREE.CylinderGeometry(
+        .22 + index * .06,
+        1.55 + index * .28,
+        entry.height,
+        24,
+        1,
+        true,
+      )
+      const material = new THREE.MeshBasicMaterial({
+        color: index % 2 ? 0x8bded9 : 0xb69ce7,
+        transparent: true,
+        opacity: .012 + index * .003,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        fog: true,
+      })
+      architecturalGeometries.push(geometry)
+      architecturalMaterials.push(material)
+      const shaft = new THREE.Mesh(geometry, material)
+      shaft.position.set(entry.x, entry.height / 2 - .1, entry.z)
+      shaft.rotation.z = entry.tilt
+      shaft.renderOrder = 2
+      dreamLightShaftGroup.add(shaft)
+      dreamLightShafts.push({
+        mesh: shaft,
+        material,
+        phase: index * 1.73,
+      })
+    })
+
     type DensityShelfUnit = {
       x: number
       z: number
@@ -3181,210 +3228,13 @@ export default function DevWebSurf3D({
       })
     }
 
-    // Below the overlook, banks of cheap shelves form a non-playable archive.
-    // They reuse the existing instanced shelf/book LOD to suggest thousands of
-    // article volumes without adding interaction or collision cost.
-    const distantShelfUnits: DensityShelfUnit[] = []
-    const distantRows = [-49.5, -57.5, -65.5, -73.5]
-    const distantColumns = [-15.2, -10.3, -5.8, 5.8, 10.3, 15.2]
-    for (let floor = 0; floor < LIBRARY_FLOOR_COUNT; floor += 1) {
-      distantRows.forEach((z, row) => {
-        distantColumns.forEach((x, column) => {
-          const unit: DensityShelfUnit = {
-            x,
-            z,
-            rotationY: row % 2 === 0 ? 0 : Math.PI,
-            floorBase: -4.55,
-            width: 4.15,
-            distant: true,
-          }
-          distantShelfUnits.push(unit)
-          densityShelfUnits.push(unit)
-        })
-      })
-    }
-
-    const distantBackGeometry = new THREE.BoxGeometry(1, 1, .12)
-    const distantBoardGeometry = new THREE.BoxGeometry(1, .09, 1.32)
-    const distantUprightGeometry = new THREE.BoxGeometry(.16, 3.56, 1.32)
-    const distantShelfMaterial = new THREE.MeshStandardMaterial({
-      color: 0x202329,
-      map: architecturalSurfaceTexture,
-      roughnessMap: architecturalSurfaceRoughness,
-      emissive: 0x0b0e16,
-      emissiveIntensity: .025,
-      roughness: .9,
-      metalness: .12,
-    })
-    architecturalGeometries.push(
-      distantBackGeometry,
-      distantBoardGeometry,
-      distantUprightGeometry,
-    )
-    architecturalMaterials.push(distantShelfMaterial)
-
-    const distantBacks = new THREE.InstancedMesh(
-      distantBackGeometry,
-      distantShelfMaterial,
-      distantShelfUnits.length,
-    )
-    const distantBoards = new THREE.InstancedMesh(
-      distantBoardGeometry,
-      distantShelfMaterial,
-      distantShelfUnits.length * 4,
-    )
-    const distantUprights = new THREE.InstancedMesh(
-      distantUprightGeometry,
-      distantShelfMaterial,
-      distantShelfUnits.length * 2,
-    )
-    const densityMatrix = new THREE.Matrix4()
-    const densityPosition = new THREE.Vector3()
-    const densityQuaternion = new THREE.Quaternion()
-    const densityScale = new THREE.Vector3()
-
-    distantShelfUnits.forEach((unit, index) => {
-      densityQuaternion.setFromAxisAngle(
-        new THREE.Vector3(0, 1, 0),
-        unit.rotationY,
-      )
-      densityPosition.set(
-        unit.x,
-        unit.floorBase + 1.74,
-        unit.z - Math.cos(unit.rotationY) * .29,
-      )
-      densityScale.set(unit.width, 3.46, 1)
-      densityMatrix.compose(
-        densityPosition,
-        densityQuaternion,
-        densityScale,
-      )
-      distantBacks.setMatrixAt(index, densityMatrix)
-
-      ;[-1, 1].forEach((side, sideIndex) => {
-        densityPosition.set(
-          unit.x + Math.cos(unit.rotationY) * side * unit.width / 2,
-          unit.floorBase + 1.76,
-          unit.z - Math.sin(unit.rotationY) * side * unit.width / 2,
-        )
-        densityScale.set(1, 1, 1)
-        densityMatrix.compose(
-          densityPosition,
-          densityQuaternion,
-          densityScale,
-        )
-        distantUprights.setMatrixAt(index * 2 + sideIndex, densityMatrix)
-      })
-
-      ;[.18, 1.28, 2.38, 3.48].forEach((boardY, level) => {
-        densityPosition.set(
-          unit.x,
-          unit.floorBase + boardY,
-          unit.z,
-        )
-        densityScale.set(unit.width, 1, 1)
-        densityMatrix.compose(
-          densityPosition,
-          densityQuaternion,
-          densityScale,
-        )
-        distantBoards.setMatrixAt(index * 4 + level, densityMatrix)
-      })
-    })
-    distantBacks.instanceMatrix.needsUpdate = true
-    distantBoards.instanceMatrix.needsUpdate = true
-    distantUprights.instanceMatrix.needsUpdate = true
-    scene.add(distantBacks, distantBoards, distantUprights)
-
-    // One instanced spine field fills only the faux archive below. Main-floor
-    // shelves use real article objects, which keeps layout editing coherent and
-    // avoids static decorative books remaining at a shelf's old coordinates.
-    const fillerBooksPerLevel = 18
-    const fillerBookGeometry = new THREE.BoxGeometry(1, 1, 1)
-    const fillerBookMaterial = new THREE.MeshStandardMaterial({
-      color: 0xffffff,
-      vertexColors: true,
-      emissive: 0x080b12,
-      emissiveIntensity: .07,
-      roughness: .72,
-      metalness: .16,
-    })
-    architecturalGeometries.push(fillerBookGeometry)
-    architecturalMaterials.push(fillerBookMaterial)
-    const fillerBookCount =
-      densityShelfUnits.length * 3 * fillerBooksPerLevel * 2
-    const fillerBooks = new THREE.InstancedMesh(
-      fillerBookGeometry,
-      fillerBookMaterial,
-      fillerBookCount,
-    )
-    const fillerPalette = [
-      0x354257,
-      0x3b4861,
-      0x304b59,
-      0x493953,
-      0x315762,
-      0x424b7c,
-      0x4d557d,
-      0x3a404b,
-    ]
-
-    let fillerIndex = 0
-    densityShelfUnits.forEach((unit, shelfIndex) => {
-      densityQuaternion.setFromAxisAngle(
-        new THREE.Vector3(0, 1, 0),
-        unit.rotationY,
-      )
-      for (let level = 0; level < 3; level += 1) {
-        for (let face = -1; face <= 1; face += 2) {
-          for (let slot = 0; slot < fillerBooksPerLevel; slot += 1) {
-          const t = slot / (fillerBooksPerLevel - 1)
-          const localX = THREE.MathUtils.lerp(
-            -unit.width / 2 + .19,
-            unit.width / 2 - .19,
-            t,
-          )
-          const seed = shelfIndex * 41 + level * 17 + slot * 7
-          const height = .58 + ((seed % 9) / 8) * .26
-          const width = .16 + ((seed % 5) / 4) * .06
-          const front = face * .43
-          densityPosition.set(
-            unit.x +
-              Math.cos(unit.rotationY) * localX +
-              Math.sin(unit.rotationY) * front,
-            unit.floorBase + .23 + level * 1.1 + height / 2,
-            unit.z -
-              Math.sin(unit.rotationY) * localX +
-              Math.cos(unit.rotationY) * front,
-          )
-          densityScale.set(width, height, .13)
-          densityMatrix.compose(
-            densityPosition,
-            densityQuaternion,
-            densityScale,
-          )
-          fillerBooks.setMatrixAt(fillerIndex, densityMatrix)
-          fillerBooks.setColorAt(
-            fillerIndex,
-            new THREE.Color(
-              fillerPalette[
-                (seed + level + (unit.distant ? 2 : 0)) %
-                  fillerPalette.length
-              ],
-            ),
-          )
-          fillerIndex += 1
-          }
-        }
-      }
-    })
-    fillerBooks.instanceMatrix.needsUpdate = true
-    if (fillerBooks.instanceColor) {
-      fillerBooks.instanceColor.needsUpdate = true
-    }
-    fillerBooks.castShadow = false
-    fillerBooks.receiveShadow = false
+    // No fake lower library in simple mode. Every visible shelf belongs to the
+    // real ground-level collection. Keep an inert group only because Layout
+    // Mode toggles its visibility in shared editor code.
+    const fillerBooks = new THREE.Group()
+    fillerBooks.visible = false
     scene.add(fillerBooks)
+
 
     // Section hubs remain interactive, but duplicate floating architecture
     // labels and the old information-desk sculpture are intentionally omitted.
@@ -3973,6 +3823,7 @@ export default function DevWebSurf3D({
       skyGroup,
       distantWorldGroup,
       dreamSpaceGroup,
+      dreamLightShaftGroup,
       transformHelper,
       dataRain,
     ])
@@ -6112,16 +5963,27 @@ export default function DevWebSurf3D({
       for (let index = 0; index < rainCount; index += 1) {
         const offset = index * 3 + 1
         let y = rainAttribute.array[offset] as number
-        y -= delta * (1.2 + (index % 7) * .16)
-        if (y < .15) y = 8 + (index % 5) * .45
+        y += delta * (.018 + (index % 7) * .004)
+        if (y > 7.9) y = .35 + (index % 5) * .08
         rainAttribute.array[offset] = y
       }
       rainAttribute.needsUpdate = true
-      dataRain.rotation.y = Math.sin(now * .05) * .018
+      dataRain.rotation.y = reducedMotion
+        ? 0
+        : Math.sin(now * .045) * .012
       rainMaterial.opacity =
         reducedMotion
           ? .1
-          : .13 + Math.max(0, Math.sin(now * .52)) * .07
+          : .13 + Math.sin(now * .31) * .025
+
+      dreamLightShafts.forEach(({mesh, material, phase}, index) => {
+        if (reducedMotion) return
+        mesh.rotation.y = Math.sin(now * .035 + phase) * .08
+        material.opacity =
+          .009 +
+          index * .002 +
+          Math.max(0, Math.sin(now * .16 + phase)) * .007
+      })
 
       scanGates.forEach(({mesh, material, phase}) => {
         material.opacity =
