@@ -1,15 +1,26 @@
 import * as THREE from 'three'
+import type {Dream} from '@/types/dream'
 import type {DreamProfile} from '../dreamProfile'
 import {profileAccent} from '../dreamProfile'
+import type {DreamRelation} from '../dreamRelations'
 import type {DreamQualitySettings} from '../quality'
+import {
+  createImpossibleSpace,
+  type DiveInteraction,
+} from './createImpossibleSpace'
 
 export type DreamDive = {
   scene: THREE.Scene
   camera: THREE.PerspectiveCamera
   accent: THREE.Color
   title: string
+  dreamId: string
+  depth: number
   secret: DreamProfile['secret']
   setLookTarget: (x: number, y: number) => void
+  setTimeline: (progress: number) => void
+  renderPreviews: (renderer: THREE.WebGLRenderer, time: number) => void
+  pick: (ndcX: number, ndcY: number) => DiveInteraction
   update: (time: number, delta: number) => void
   resize: (aspect: number) => void
   dispose: () => void
@@ -66,6 +77,53 @@ function createSoftCircleTexture(color: THREE.Color) {
   const texture = new THREE.CanvasTexture(canvas)
   texture.colorSpace = THREE.SRGBColorSpace
   return texture
+}
+
+function createJournalFragment(
+  text: string,
+  accent: THREE.Color,
+) {
+  const canvas = document.createElement('canvas')
+  canvas.width = 1024
+  canvas.height = 256
+  const context = canvas.getContext('2d')
+
+  if (context) {
+    context.clearRect(0, 0, canvas.width, canvas.height)
+    const gradient = context.createLinearGradient(0, 0, canvas.width, 0)
+    gradient.addColorStop(0, 'rgba(8,12,26,0)')
+    gradient.addColorStop(.12, 'rgba(8,12,26,.62)')
+    gradient.addColorStop(.88, 'rgba(8,12,26,.52)')
+    gradient.addColorStop(1, 'rgba(8,12,26,0)')
+    context.fillStyle = gradient
+    context.fillRect(0, 48, canvas.width, 160)
+
+    context.textAlign = 'center'
+    context.textBaseline = 'middle'
+    context.font = '500 38px system-ui, sans-serif'
+    context.shadowBlur = 18
+    context.shadowColor = `#${accent.getHexString()}`
+    context.fillStyle = 'rgba(229,239,255,.82)'
+    const clean = text.replace(/\s+/g, ' ').trim()
+    context.fillText(
+      clean.length > 78 ? `${clean.slice(0, 77)}…` : clean,
+      canvas.width / 2,
+      canvas.height / 2,
+    )
+  }
+
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.colorSpace = THREE.SRGBColorSpace
+  const material = new THREE.SpriteMaterial({
+    map: texture,
+    transparent: true,
+    opacity: .5,
+    depthWrite: false,
+  })
+  const sprite = new THREE.Sprite(material)
+  sprite.scale.set(5.4, 1.35, 1)
+
+  return {sprite, texture, material}
 }
 
 function createWaterMaterial(accent: THREE.Color) {
@@ -412,7 +470,16 @@ export function createDreamDive(
   profile: DreamProfile,
   settings: DreamQualitySettings,
   seed: number,
+  options: {
+    currentDream: Dream
+    dreams: Dream[]
+    relations: DreamRelation[]
+    depth?: number
+    maxDepth?: number
+  },
 ): DreamDive {
+  const depth = options.depth ?? 0
+  const maxDepth = options.maxDepth ?? 2
   const accent = new THREE.Color(profileAccent(profile))
   const scene = new THREE.Scene()
 
@@ -432,6 +499,18 @@ export function createDreamDive(
 
   const disposables: Disposable[] = []
   const animated: Array<(time: number, delta: number) => void> = []
+
+  const impossibleSpace = createImpossibleSpace({
+    profile,
+    currentDream: options.currentDream,
+    dreams: options.dreams,
+    relations: options.relations,
+    settings,
+    seed,
+    depth,
+    maxDepth,
+  })
+  scene.add(impossibleSpace.group)
 
   const ambient = new THREE.HemisphereLight(
     profile.lucid ? 0xbdeeff : 0x8790c5,
@@ -716,26 +795,56 @@ export function createDreamDive(
   scene.add(lightShaft)
   disposables.push(lightShaftGeometry, lightShaftMaterial)
 
+  const journalFragments = profile.body
+    .split(/[.!?]+/)
+    .map((fragment) => fragment.trim())
+    .filter((fragment) => fragment.length > 12)
+    .slice(0, settings.miniWorldDetail > 1 ? 6 : 3)
+    .map((fragment, index) => {
+      const item = createJournalFragment(fragment, accent)
+      item.sprite.position.set(
+        (seeded(seed + index, 31) - .5) * 12,
+        1.3 + seeded(seed + index, 32) * 4.5,
+        -5 - seeded(seed + index, 33) * 18,
+      )
+      item.sprite.rotation.z = (seeded(seed + index, 34) - .5) * .12
+      scene.add(item.sprite)
+      disposables.push(item.texture, item.material)
+      return item
+    })
+
   let lookX = 0
   let lookY = 0
   let currentYaw = 0
   let currentPitch = 0
+  let temporalProgress = 1
+  let entryTime = 0
 
   return {
     scene,
     camera,
     accent,
     title: profile.title,
+    dreamId: profile.dreamId,
+    depth,
     secret: profile.secret,
     setLookTarget: (x, y) => {
       lookX = THREE.MathUtils.clamp(x, -1, 1)
       lookY = THREE.MathUtils.clamp(y, -1, 1)
     },
+    setTimeline: (progress) => {
+      temporalProgress = THREE.MathUtils.clamp(progress, 0, 1)
+    },
+    renderPreviews: (renderer, time) => {
+      impossibleSpace.renderPreviews(renderer, time)
+    },
+    pick: (ndcX, ndcY) => impossibleSpace.pick(camera, ndcX, ndcY),
     resize: (aspect) => {
       camera.aspect = aspect
       camera.updateProjectionMatrix()
     },
     update: (time, delta) => {
+      entryTime += delta
       const particleAttribute = particleGeometry.getAttribute('position') as THREE.BufferAttribute
       const particleArray = particleAttribute.array as Float32Array
       const fallDirection = profile.motifs.falling ? -1 : profile.mood >= 4 ? 1 : .22
@@ -761,26 +870,78 @@ export function createDreamDive(
         fragment.rotation.x += delta * (.05 + index * .001)
         fragment.rotation.y -= delta * (.04 + index * .001)
         fragment.position.y += Math.sin(time * .16 + index) * delta * .03
+
+        const effectiveDecay = profile.decay * temporalProgress
+        const threshold = (index + 1) / Math.max(1, decayFragments.length)
+        fragment.visible = threshold <= effectiveDecay + .12
+        const scale = .25 + effectiveDecay * .9
+        fragment.scale.lerp(new THREE.Vector3(scale, scale, scale), .06)
       })
 
-      const lookStrength = profile.lucid ? .34 : .48
+      journalFragments.forEach((fragment, index) => {
+        fragment.sprite.position.y +=
+          Math.sin(time * .11 + index * 1.4) * delta * .035
+        fragment.sprite.position.x +=
+          Math.cos(time * .07 + index) * delta * .018
+        fragment.material.opacity =
+          (.16 + (1 - profile.decay * temporalProgress) * .42) *
+          (profile.lucid ? .86 : .64)
+      })
+
+      impossibleSpace.update(
+        time,
+        delta,
+        temporalProgress,
+        lookX,
+        lookY,
+      )
+
+      const lookStrength = profile.lucid ? .28 : .48
       currentYaw = THREE.MathUtils.lerp(currentYaw, -lookX * lookStrength, .055)
-      currentPitch = THREE.MathUtils.lerp(currentPitch, lookY * lookStrength * .62, .055)
+      currentPitch = THREE.MathUtils.lerp(
+        currentPitch,
+        lookY * lookStrength * .62,
+        .055,
+      )
 
       const breathing = profile.lucid
-        ? Math.sin(time * .42) * .008
+        ? Math.sin(time * .42) * .004
         : Math.sin(time * .34) * (.018 + (1 - profile.stability) * .018)
 
-      camera.position.x = Math.sin(time * .065) * .18 + currentYaw * .24
-      camera.position.y = 1.4 + breathing
-      camera.position.z = 4.8 + Math.cos(time * .052) * .12
+      const entryProgress = Math.min(1, entryTime / 4.2)
+      const entryEase = 1 - Math.pow(1 - entryProgress, 3)
+      const secretBias = profile.secret ? .13 * (1 - entryEase) : 0
+      const portalBias = options.relations.length ? -.18 * (1 - entryEase) : 0
+
+      camera.position.x =
+        Math.sin(time * .065) * .18 * (profile.lucid ? .35 : 1) +
+        currentYaw * .24 +
+        secretBias
+      camera.position.y =
+        1.4 +
+        breathing +
+        Math.sin(entryProgress * Math.PI) * .12
+      camera.position.z =
+        THREE.MathUtils.lerp(6.8, 4.8, entryEase) +
+        Math.cos(time * .052) * .12
       camera.rotation.order = 'YXZ'
-      camera.rotation.y = currentYaw
+      camera.rotation.y =
+        currentYaw +
+        portalBias +
+        (profile.secret ? .08 * (1 - entryEase) : 0)
       camera.rotation.x = currentPitch + breathing * .15
 
       if (scene.fog instanceof THREE.FogExp2) {
-        const weatherPulse = Math.sin(time * .13) * .005 * (1 - profile.stability)
-        scene.fog.density = Math.max(.008, profile.fogDensity + weatherPulse)
+        const weatherPulse =
+          Math.sin(time * .13) * .005 * (1 - profile.stability)
+        const historicalRepair = 1 - temporalProgress
+        const lucidClarity = profile.lucid ? .72 : 1
+        scene.fog.density = Math.max(
+          .006,
+          (profile.fogDensity + weatherPulse) *
+            lucidClarity *
+            (1 - historicalRepair * .28),
+        )
       }
 
       lightShaft.material = lightShaftMaterial
@@ -788,9 +949,15 @@ export function createDreamDive(
         (profile.lucid ? .05 : .024) +
         Math.max(0, Math.sin(time * .2)) * .012
 
-      root.rotation.y = Math.sin(time * .025) * .012 * (1 - profile.stability)
+      root.rotation.y =
+        Math.sin(time * .025) *
+        .012 *
+        (1 - profile.stability) *
+        (profile.lucid ? .22 : 1)
     },
     dispose: () => {
+      impossibleSpace.dispose()
+      journalFragments.forEach((fragment) => scene.remove(fragment.sprite))
       disposables.forEach((item) => item.dispose())
     },
   }

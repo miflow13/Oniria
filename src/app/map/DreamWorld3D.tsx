@@ -35,6 +35,15 @@ import {
   type DreamProfile,
 } from './dreamworld/dreamProfile'
 import {
+  dreamRecurrence,
+  getDreamRelations,
+  type DreamRelation,
+} from './dreamworld/dreamRelations'
+import {
+  createDreamMusic,
+  type DreamMusic,
+} from './dreamworld/audio/createDreamMusic'
+import {
   createDreamDive,
   type DreamDive,
 } from './dreamworld/dive/createDreamDive'
@@ -85,6 +94,9 @@ type Props = {
   soundEnabled: boolean
   introStage: number
   diveExitRequest: number
+  diveBackRequest: number
+  diveTimelineProgress: number
+  observatoryMode: boolean
   onZoomChange: (zoom: number) => void
   onPanChange: (pan: Pan) => void
   onNodeHover: (node: DreamWorldNode | null) => void
@@ -92,6 +104,7 @@ type Props = {
   onBackgroundClick: () => void
   onProjectionChange: (projection: ProjectionPoint | null) => void
   onDiveStateChange: (active: boolean, title?: string) => void
+  onDiveDreamChange: (dreamId: string, title: string, depth: number) => void
 }
 
 type NodeVisual = {
@@ -283,6 +296,9 @@ export default function DreamWorld3D({
   soundEnabled,
   introStage,
   diveExitRequest,
+  diveBackRequest,
+  diveTimelineProgress,
+  observatoryMode,
   onZoomChange,
   onPanChange,
   onNodeHover,
@@ -290,6 +306,7 @@ export default function DreamWorld3D({
   onBackgroundClick,
   onProjectionChange,
   onDiveStateChange,
+  onDiveDreamChange,
 }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const nodeRef = useRef(nodes)
@@ -312,7 +329,11 @@ export default function DreamWorld3D({
   const soundEnabledRef = useRef(soundEnabled)
   const introStageRef = useRef(introStage)
   const diveExitRequestRef = useRef(diveExitRequest)
+  const diveBackRequestRef = useRef(diveBackRequest)
+  const diveTimelineProgressRef = useRef(diveTimelineProgress)
+  const observatoryModeRef = useRef(observatoryMode)
   const onDiveStateChangeRef = useRef(onDiveStateChange)
+  const onDiveDreamChangeRef = useRef(onDiveDreamChange)
 
   nodeRef.current = nodes
   positionsRef.current = positions
@@ -334,7 +355,11 @@ export default function DreamWorld3D({
   soundEnabledRef.current = soundEnabled
   introStageRef.current = introStage
   diveExitRequestRef.current = diveExitRequest
+  diveBackRequestRef.current = diveBackRequest
+  diveTimelineProgressRef.current = diveTimelineProgress
+  observatoryModeRef.current = observatoryMode
   onDiveStateChangeRef.current = onDiveStateChange
+  onDiveDreamChangeRef.current = onDiveDreamChange
 
   const graphKey = useMemo(
     () =>
@@ -728,6 +753,24 @@ export default function DreamWorld3D({
     }
 
     const nodeDataById = new Map(nodeRef.current.map((node) => [node._id, node]))
+    const newestDreamTime = Math.max(
+      ...dreamsRef.current.map((dream) => new Date(dream.date).getTime()),
+      Date.now(),
+    )
+    const nodeMemoryAge = new Map(
+      nodeRef.current.map((node) => {
+        const times = dreamsRef.current
+          .filter((dream) => node.dreamIds.includes(dream._id))
+          .map((dream) => new Date(dream.date).getTime())
+        const averageTime =
+          times.length > 0
+            ? times.reduce((sum, value) => sum + value, 0) / times.length
+            : newestDreamTime
+        const ageDays = Math.max(0, (newestDreamTime - averageTime) / 86_400_000)
+        const normalizedAge = Math.min(1, Math.log2(ageDays + 1) / 7)
+        return [node._id, normalizedAge] as const
+      }),
+    )
     const introWakeOrder = new Map(
       [...nodeRef.current]
         .sort(
@@ -941,6 +984,146 @@ export default function DreamWorld3D({
       })
     }
 
+    const categoryNebulae = (Object.keys(CATEGORY_COLORS) as SymbolCategory[])
+      .map((category, index) => {
+        const categoryNodes = nodeRef.current.filter(
+          (node) => node.category === category,
+        )
+        if (!categoryNodes.length) return null
+
+        const center = categoryNodes.reduce(
+          (sum, node) => {
+            const position = nodeVisuals.get(node._id)?.group.position
+            if (position) sum.add(position)
+            return sum
+          },
+          new THREE.Vector3(),
+        )
+        center.divideScalar(Math.max(1, categoryNodes.length))
+
+        const color = new THREE.Color(CATEGORY_COLORS[category])
+        const css = `rgba(${Math.round(color.r * 255)}, ${Math.round(
+          color.g * 255,
+        )}, ${Math.round(color.b * 255)}, 0.36)`
+        const texture = createNebulaTexture(css)
+        const material = new THREE.SpriteMaterial({
+          map: texture,
+          transparent: true,
+          opacity: .018,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        })
+        const sprite = new THREE.Sprite(material)
+        sprite.position.copy(center)
+        sprite.position.z -= 2.5 + index * .22
+        const size = 4.5 + Math.min(categoryNodes.length, 5) * .7
+        sprite.scale.set(size * 1.45, size, 1)
+        scene.add(sprite)
+
+        return {sprite, material, texture, phase: index * 1.7}
+      })
+      .filter(
+        (
+          value,
+        ): value is {
+          sprite: THREE.Sprite
+          material: THREE.SpriteMaterial
+          texture: THREE.Texture
+          phase: number
+        } => Boolean(value),
+      )
+
+    const lucidDreamIds = new Set(
+      dreamsRef.current
+        .filter((dream) => dream.lucid)
+        .map((dream) => dream._id),
+    )
+    const lucidRiverNodeIds = nodeRef.current
+      .filter((node) =>
+        node.dreamIds.some((dreamId) => lucidDreamIds.has(dreamId)),
+      )
+      .sort((a, b) => b.frequency - a.frequency)
+      .slice(0, 9)
+      .map((node) => node._id)
+
+    let lucidRiver:
+      | {
+          line: THREE.Line
+          geometry: THREE.BufferGeometry
+          material: THREE.LineBasicMaterial
+          positions: Float32Array
+        }
+      | null = null
+
+    if (lucidRiverNodeIds.length >= 3) {
+      const positions = new Float32Array(lucidRiverNodeIds.length * 3)
+      const geometry = new THREE.BufferGeometry()
+      geometry.setAttribute(
+        'position',
+        new THREE.BufferAttribute(positions, 3),
+      )
+      const material = new THREE.LineBasicMaterial({
+        color: 0xa8f2f1,
+        transparent: true,
+        opacity: .16,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })
+      const line = new THREE.Line(geometry, material)
+      world.add(line)
+      lucidRiver = {line, geometry, material, positions}
+    }
+
+    const now = Date.now()
+    const supernovae = nodeRef.current
+      .filter((node) => {
+        const recentMatches = dreamsRef.current.filter(
+          (dream) =>
+            node.dreamIds.includes(dream._id) &&
+            now - new Date(dream.date).getTime() <= 30 * 86_400_000,
+        )
+        return node.frequency >= 3 && recentMatches.length >= 2
+      })
+      .slice(0, 4)
+      .map((node) => {
+        const visual = nodeVisuals.get(node._id)
+        if (!visual) return null
+
+        const group = new THREE.Group()
+        const color = new THREE.Color(CATEGORY_COLORS[node.category])
+        const geometry = new THREE.TorusGeometry(.86, .015, 8, 72)
+        const material = new THREE.MeshBasicMaterial({
+          color: color.clone().lerp(new THREE.Color(0xffffff), .38),
+          transparent: true,
+          opacity: .17,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        })
+        const ring = new THREE.Mesh(geometry, material)
+        ring.rotation.x = Math.PI / 2.2
+        group.add(ring)
+        visual.group.add(group)
+
+        return {
+          nodeId: node._id,
+          group,
+          geometry,
+          material,
+          phase: seededUnit(hashString(`supernova:${node._id}`), 71) * Math.PI * 2,
+        }
+      })
+      .filter(
+        (
+          value,
+        ): value is {
+          nodeId: string
+          group: THREE.Group
+          geometry: THREE.BufferGeometry
+          material: THREE.MeshBasicMaterial
+          phase: number
+        } => Boolean(value),
+      )
+
     const clusterAudios = [...nodeRef.current]
       .filter((node) => node.frequency >= 2)
       .sort((a, b) => b.frequency - a.frequency)
@@ -1044,13 +1227,31 @@ export default function DreamWorld3D({
     let activeDive: DreamDive | null = null
     let diveComposer: EffectComposer | null = null
     let divePost: ShaderPass | null = null
+    let diveBokeh: BokehPass | null = null
     let diveAudio: SpatialDreamAudio | null = null
     let diveAudioStarted = false
-    let diveMode: 'none' | 'entering' | 'inside' | 'exiting' = 'none'
+    let diveMusic: DreamMusic | null = null
+    let diveMusicStarted = false
+    let diveMode:
+      | 'none'
+      | 'entering'
+      | 'inside'
+      | 'portal'
+      | 'exiting' = 'none'
     let diveTransitionStartedAt = 0
     let lastDiveExitRequest = diveExitRequestRef.current
+    let lastDiveBackRequest = diveBackRequestRef.current
     let holdTimer: number | null = null
     let holdNodeId: string | null = null
+    let pendingPortal:
+      | {
+          dreamId: string
+          title: string
+          depth: number
+          focus?: {x: number; y: number; z: number}
+        }
+      | null = null
+    let diveStack: string[] = []
 
     function releaseDreamCell() {
       if (activeCellId) {
@@ -1121,35 +1322,85 @@ export default function DreamWorld3D({
       visual.group.add(spatialAudio.audio)
     }
 
-    function disposeDive() {
+    function categoryForDream(dream: Dream): SymbolCategory {
+      const symbols = dream.symbols ?? []
+      const counts: Record<SymbolCategory, number> = {
+        person: 0,
+        place: 0,
+        object: 0,
+        feeling: 0,
+        action: 0,
+      }
+      symbols.forEach((symbol) => {
+        counts[symbol.category] += 1
+      })
+      return (Object.keys(counts) as SymbolCategory[]).sort(
+        (a, b) => counts[b] - counts[a],
+      )[0] ?? 'place'
+    }
+
+    function disposeDive(options: {
+      restoreListener?: boolean
+      clearMode?: boolean
+    } = {}) {
+      const restoreListener = options.restoreListener ?? true
+      const clearMode = options.clearMode ?? true
+
       if (activeDive) {
         activeDive.camera.remove(listener)
       }
+
       diveAudio?.dispose()
       diveAudio = null
       diveAudioStarted = false
-      if (listener.parent !== camera) {
+
+      diveMusic?.dispose()
+      diveMusic = null
+      diveMusicStarted = false
+
+      if (restoreListener && listener.parent !== camera) {
         listener.removeFromParent()
         camera.add(listener)
       }
+
       diveComposer?.dispose()
       diveComposer = null
       divePost = null
+      diveBokeh = null
       activeDive?.dispose()
       activeDive = null
-      diveMode = 'none'
+      pendingPortal = null
+
+      if (clearMode) diveMode = 'none'
     }
 
-    function beginDreamDive(node: DreamWorldNode) {
-      if (selectedRef.current !== node._id || diveMode !== 'none') return
+    function installDive(
+      dream: Dream,
+      depth: number,
+      options: {resetStack?: boolean; fromPortal?: boolean} = {},
+    ) {
+      disposeDive({restoreListener: false, clearMode: false})
 
-      const profile = getProfileForNode(node)
-      if (!profile) return
+      const recurrence = dreamRecurrence(dream, dreamsRef.current)
+      const profile = createDreamProfile(dream, recurrence)
+      const relations: DreamRelation[] = getDreamRelations(
+        dream,
+        dreamsRef.current,
+        4,
+      )
+      const category = categoryForDream(dream)
 
       activeDive = createDreamDive(
         profile,
         settings,
-        hashString(`dive:${profile.dreamId}:${node._id}`),
+        hashString(`dive:${dream._id}:${depth}`),
+        {
+          currentDream: dream,
+          dreams: dreamsRef.current,
+          relations,
+          depth,
+          maxDepth: 2,
+        },
       )
 
       listener.removeFromParent()
@@ -1157,8 +1408,8 @@ export default function DreamWorld3D({
 
       diveAudio = createSpatialDreamAudio(
         listener,
-        node.category,
-        hashString(`dive-audio:${profile.dreamId}:${node._id}`),
+        category,
+        hashString(`dive-audio:${dream._id}:${depth}`),
         {
           mood: profile.mood,
           lucid: profile.lucid,
@@ -1168,6 +1419,16 @@ export default function DreamWorld3D({
       )
       diveAudio.audio.position.set(0, 1.2, -4.2)
       activeDive.scene.add(diveAudio.audio)
+
+      diveMusic = createDreamMusic(
+        listener,
+        profile,
+        hashString(`music:${dream._id}:${depth}`),
+        {
+          relationshipStrength: relations[0]?.score ?? 0,
+        },
+      )
+      activeDive.scene.add(diveMusic.audio)
 
       if (spatialAudio?.audio.isPlaying) spatialAudio.audio.pause()
       spatialAudioStarted = false
@@ -1180,11 +1441,21 @@ export default function DreamWorld3D({
       const diveRenderPass = new RenderPass(activeDive.scene, activeDive.camera)
       diveComposer.addPass(diveRenderPass)
 
+      diveBokeh = new BokehPass(activeDive.scene, activeDive.camera, {
+        focus: 7,
+        aperture: 0.00005,
+        maxblur: settings.maxBlur * 1.1,
+        width: 1,
+        height: 1,
+      })
+      diveBokeh.enabled = false
+      diveComposer.addPass(diveBokeh)
+
       const diveBloom = new UnrealBloomPass(
         new THREE.Vector2(1, 1),
-        settings.bloomStrength * 0.82,
-        Math.min(0.7, settings.bloomRadius),
-        Math.max(0.38, settings.bloomThreshold),
+        settings.bloomStrength * 0.74,
+        Math.min(0.66, settings.bloomRadius),
+        Math.max(0.4, settings.bloomThreshold),
       )
       diveComposer.addPass(diveBloom)
 
@@ -1192,26 +1463,82 @@ export default function DreamWorld3D({
       divePost.uniforms.uCinematic.value =
         qualityRef.current === 'cinematic' ? 1 : 0.35
       divePost.uniforms.uIntensity.value =
-        qualityRef.current === 'cinematic' ? 0.82 : 0.42
+        qualityRef.current === 'cinematic' ? 0.78 : 0.4
       diveComposer.addPass(divePost)
       diveComposer.addPass(new OutputPass())
 
       const rect = host.getBoundingClientRect()
       activeDive.resize(rect.width / Math.max(1, rect.height))
       diveComposer.setSize(rect.width, rect.height)
+      activeDive.setTimeline(diveTimelineProgressRef.current)
 
-      diveMode = 'entering'
+      if (options.resetStack) {
+        diveStack = [dream._id]
+      } else if (diveStack[diveStack.length - 1] !== dream._id) {
+        diveStack = [...diveStack, dream._id].slice(-3)
+      }
+
+      diveMode = options.fromPortal ? 'inside' : 'entering'
       diveTransitionStartedAt = performance.now() / 1000
       onProjectionChangeRef.current(null)
       onDiveStateChangeRef.current(true, profile.title)
+      onDiveDreamChangeRef.current(dream._id, profile.title, depth)
+    }
+
+    function beginDreamDive(node: DreamWorldNode) {
+      if (selectedRef.current !== node._id || diveMode !== 'none') return
+
+      const dream = getDreamForNode(node)
+      if (!dream) return
+      installDive(dream, 0, {resetStack: true})
+    }
+
+    function beginPortalTransition(action: {
+      dreamId: string
+      title: string
+      depth: number
+      focus?: {x: number; y: number; z: number}
+    }) {
+      if (!activeDive || diveMode !== 'inside') return
+      if (action.depth > 2) return
+      if (diveStack.length >= 3 && !diveStack.includes(action.dreamId)) return
+
+      pendingPortal = action
+      diveMode = 'portal'
+      diveTransitionStartedAt = performance.now() / 1000
+      onDiveDreamChangeRef.current(action.dreamId, action.title, action.depth)
     }
 
     function requestDiveExit() {
-      if (!activeDive || (diveMode !== 'inside' && diveMode !== 'entering')) {
+      if (
+        !activeDive ||
+        (diveMode !== 'inside' &&
+          diveMode !== 'entering' &&
+          diveMode !== 'portal')
+      ) {
         return
       }
+      pendingPortal = null
       diveMode = 'exiting'
       diveTransitionStartedAt = performance.now() / 1000
+    }
+
+    function requestDiveBack() {
+      if (!activeDive || diveMode !== 'inside' || diveStack.length <= 1) {
+        return
+      }
+
+      const previousStack = diveStack.slice(0, -1)
+      const previousDreamId = previousStack[previousStack.length - 1]
+      const previousDream = dreamsRef.current.find(
+        (dream) => dream._id === previousDreamId,
+      )
+      if (!previousDream) return
+
+      diveStack = previousStack
+      installDive(previousDream, Math.max(0, previousStack.length - 1), {
+        fromPortal: true,
+      })
     }
 
     function resize() {
@@ -1254,7 +1581,11 @@ export default function DreamWorld3D({
 
       if (diveMode !== 'none') {
         activeDive?.setLookTarget(pointer.x, pointer.y)
-        renderer.domElement.style.cursor = 'crosshair'
+        const interaction =
+          diveMode === 'inside'
+            ? activeDive?.pick(pointer.x, pointer.y)
+            : null
+        renderer.domElement.style.cursor = interaction ? 'pointer' : 'crosshair'
         return
       }
 
@@ -1328,6 +1659,13 @@ export default function DreamWorld3D({
       }
 
       if (diveMode !== 'none') {
+        normalizedPointer(event)
+        if (diveMode === 'inside') {
+          const interaction = activeDive?.pick(pointer.x, pointer.y)
+          if (interaction) {
+            beginPortalTransition(interaction)
+          }
+        }
         return
       }
 
@@ -1411,12 +1749,45 @@ export default function DreamWorld3D({
         requestDiveExit()
       }
 
-      if (activeDive && (diveMode === 'inside' || diveMode === 'exiting')) {
+      if (diveBackRequestRef.current !== lastDiveBackRequest) {
+        lastDiveBackRequest = diveBackRequestRef.current
+        requestDiveBack()
+      }
+
+      if (
+        activeDive &&
+        (diveMode === 'inside' ||
+          diveMode === 'portal' ||
+          diveMode === 'exiting')
+      ) {
         activeDive.setLookTarget(pointerTarget.x, pointerTarget.y)
+        activeDive.setTimeline(diveTimelineProgressRef.current)
         activeDive.update(elapsed, delta)
 
+        if (diveMode === 'portal' && pendingPortal?.focus) {
+          const portalProgress = Math.min(
+            1,
+            Math.max(0, (elapsed - diveTransitionStartedAt) / .72),
+          )
+          const eased = 1 - Math.pow(1 - portalProgress, 3)
+          const focus = new THREE.Vector3(
+            pendingPortal.focus.x,
+            pendingPortal.focus.y,
+            pendingPortal.focus.z,
+          )
+          const travelTarget = focus.clone().add(
+            new THREE.Vector3(0, 0, .32 * (1 - eased)),
+          )
+          activeDive.camera.position.lerp(travelTarget, .08 + eased * .13)
+          activeDive.camera.lookAt(focus)
+        }
+
+        activeDive.renderPreviews(renderer, elapsed)
+
         if (diveAudio) {
-          diveAudio.setFocus(diveMode === 'exiting' ? .45 : 1)
+          diveAudio.setFocus(
+            diveMode === 'exiting' ? .35 : diveMode === 'portal' ? .72 : 1,
+          )
           if (soundEnabledRef.current && !diveAudioStarted) {
             diveAudioStarted = true
             void diveAudio.ensurePlaying().catch(() => {
@@ -1428,18 +1799,92 @@ export default function DreamWorld3D({
           }
         }
 
+        if (diveMusic) {
+          const intensity =
+            diveMode === 'portal'
+              ? .92
+              : diveMode === 'exiting'
+                ? .28
+                : .72
+          diveMusic.setIntensity(intensity)
+
+          if (soundEnabledRef.current && !diveMusicStarted) {
+            diveMusicStarted = true
+            void diveMusic.ensurePlaying().catch(() => {
+              diveMusicStarted = false
+            })
+          } else if (!soundEnabledRef.current && diveMusicStarted) {
+            if (diveMusic.audio.isPlaying) diveMusic.audio.pause()
+            diveMusicStarted = false
+          }
+        }
+
         const exitProgress =
           diveMode === 'exiting'
             ? Math.min(1, (elapsed - diveTransitionStartedAt) / .78)
             : 0
+        const portalProgress =
+          diveMode === 'portal'
+            ? Math.min(1, (elapsed - diveTransitionStartedAt) / .72)
+            : 0
+
+        if (diveBokeh) {
+          diveBokeh.enabled =
+            settings.depthOfField &&
+            (diveMode === 'portal' || diveMode === 'exiting')
+
+          if (diveBokeh.enabled) {
+            const focusTarget =
+              diveMode === 'portal'
+                ? 6.2 - portalProgress * 2.4
+                : 4.8 + exitProgress * 2.8
+            diveBokeh.uniforms.focus.value +=
+              (focusTarget - diveBokeh.uniforms.focus.value) * .09
+            diveBokeh.uniforms.aperture.value +=
+              ((diveMode === 'portal' ? .000085 : .000055) -
+                diveBokeh.uniforms.aperture.value) *
+              .08
+          }
+        }
 
         if (divePost) {
           divePost.uniforms.uTime.value = elapsed
           divePost.uniforms.uTravel.value =
-            diveMode === 'exiting' ? exitProgress : .06
+            diveMode === 'exiting'
+              ? exitProgress
+              : diveMode === 'portal'
+                ? portalProgress
+                : .06
           divePost.uniforms.uFlarePosition.value.set(.62, .34)
           divePost.uniforms.uFlareStrength.value =
-            qualityRef.current === 'cinematic' ? .22 : .08
+            qualityRef.current === 'cinematic'
+              ? diveMode === 'portal'
+                ? .42
+                : .22
+              : diveMode === 'portal'
+                ? .18
+                : .08
+        }
+
+        if (
+          diveMode === 'portal' &&
+          portalProgress >= 1 &&
+          pendingPortal
+        ) {
+          const destination = dreamsRef.current.find(
+            (dream) => dream._id === pendingPortal?.dreamId,
+          )
+          const depth = pendingPortal.depth
+          pendingPortal = null
+
+          if (destination) {
+            installDive(destination, depth, {fromPortal: true})
+            pointerTarget.set(0, 0)
+            renderer.domElement.style.cursor = 'crosshair'
+            return
+          }
+
+          diveMode = 'inside'
         }
 
         if (diveMode === 'exiting' && exitProgress >= 1) {
@@ -1453,6 +1898,7 @@ export default function DreamWorld3D({
           }
 
           disposeDive()
+          diveStack = []
           onDiveStateChangeRef.current(false)
           pointerTarget.set(0, 0)
           pointerParallax.set(0, 0)
@@ -1510,6 +1956,55 @@ export default function DreamWorld3D({
       })
 
       pointerParallax.lerp(pointerTarget, 0.035)
+
+      const observatoryScale = observatoryModeRef.current ? .7 : 1
+      world.scale.lerp(
+        new THREE.Vector3(
+          observatoryScale,
+          observatoryScale,
+          observatoryScale,
+        ),
+        .035,
+      )
+
+      if (lucidRiver) {
+        lucidRiverNodeIds.forEach((nodeId, index) => {
+          const position = nodeVisuals.get(nodeId)?.group.position
+          if (!position) return
+          const offset = index * 3
+          lucidRiver.positions[offset] = position.x
+          lucidRiver.positions[offset + 1] = position.y
+          lucidRiver.positions[offset + 2] = position.z
+        })
+        ;(
+          lucidRiver.geometry.getAttribute('position') as THREE.BufferAttribute
+        ).needsUpdate = true
+        lucidRiver.material.opacity =
+          .1 + Math.max(0, Math.sin(elapsed * .23)) * .08
+      }
+
+      categoryNebulae.forEach((cluster) => {
+        cluster.material.opacity +=
+          ((observatoryModeRef.current ? .12 : .018) -
+            cluster.material.opacity) *
+          .035
+        cluster.sprite.rotation.z += .00018
+        cluster.sprite.position.y +=
+          Math.sin(elapsed * .08 + cluster.phase) * .0004
+      })
+
+      supernovae.forEach((event, index) => {
+        event.group.rotation.z += .002 + index * .0003
+        event.group.rotation.y = Math.sin(elapsed * .11 + event.phase) * .25
+        const scale =
+          1 +
+          Math.sin(elapsed * .7 + event.phase) * .08 +
+          (observatoryModeRef.current ? .18 : 0)
+        event.group.scale.setScalar(scale)
+        event.material.opacity =
+          .12 +
+          Math.max(0, Math.sin(elapsed * .52 + event.phase)) * .12
+      })
 
       clusterAudios.forEach((cluster) => {
         const isFocused = selectedRef.current === cluster.nodeId
@@ -1582,7 +2077,11 @@ export default function DreamWorld3D({
         if (!visual) continue
 
         const target = worldPosition(node, positionsRef.current)
-        target.z = visual.z + Math.sin(elapsed * .21 + visual.phase) * .22
+        const memoryAge = nodeMemoryAge.get(node._id) ?? 0
+        target.z =
+          visual.z -
+          memoryAge * (node.frequency <= 1 ? 1.35 : .48) +
+          Math.sin(elapsed * .21 + visual.phase) * .22
         target.y +=
           Math.sin(elapsed * .37 + visual.phase) * .08 +
           Math.cos(elapsed * .105) * .055
@@ -1695,9 +2194,13 @@ export default function DreamWorld3D({
         const labelTarget =
           selected || hoveredId === node._id
             ? .9
-            : node.frequency >= 3
-              ? .42
-              : .07
+            : observatoryModeRef.current
+              ? node.frequency >= 4
+                ? .24
+                : .015
+              : node.frequency >= 3
+                ? .42
+                : .07
         labelMaterial.opacity +=
           (((visible ? labelTarget : .04) * introVisibility) -
             labelMaterial.opacity) *
@@ -1920,18 +2423,25 @@ export default function DreamWorld3D({
           lookTarget.lerp(position, .085)
         }
       } else {
+        const observatory = observatoryModeRef.current
         cameraTarget.set(
-          panRef.current.x / 125 + pointerParallax.x * 0.34,
-          -panRef.current.y / 125 + pointerParallax.y * 0.2,
-          10.8 / Math.max(.68, zoomRef.current),
+          observatory
+            ? pointerParallax.x * .7
+            : panRef.current.x / 125 + pointerParallax.x * .34,
+          observatory
+            ? pointerParallax.y * .42
+            : -panRef.current.y / 125 + pointerParallax.y * .2,
+          observatory
+            ? 22.5 / Math.max(.72, Math.min(2.35, zoomRef.current))
+            : 10.8 / Math.max(.68, zoomRef.current),
         )
         lookTarget.lerp(
           tempVector.set(
-            panRef.current.x / 180,
-            -panRef.current.y / 180,
+            observatory ? 0 : panRef.current.x / 180,
+            observatory ? 0 : -panRef.current.y / 180,
             0,
           ),
-          .06,
+          observatory ? .035 : .06,
         )
       }
 
@@ -2036,6 +2546,18 @@ export default function DreamWorld3D({
         edgeVisual.material.dispose()
         ;(edgeVisual.pulse.geometry as THREE.BufferGeometry).dispose()
         ;(edgeVisual.pulse.material as THREE.Material).dispose()
+      })
+
+      lucidRiver?.geometry.dispose()
+      lucidRiver?.material.dispose()
+      categoryNebulae.forEach((cluster) => {
+        cluster.texture.dispose()
+        cluster.material.dispose()
+        scene.remove(cluster.sprite)
+      })
+      supernovae.forEach((event) => {
+        event.geometry.dispose()
+        event.material.dispose()
       })
 
       fragments.forEach((fragment) => {

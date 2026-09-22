@@ -248,7 +248,11 @@ export default function DreamMap({
   const [introStage, setIntroStage] = useState(0)
   const [diveActive, setDiveActive] = useState(false)
   const [diveTitle, setDiveTitle] = useState<string | null>(null)
+  const [diveDepth, setDiveDepth] = useState(0)
+  const [diveTimelineProgress, setDiveTimelineProgress] = useState(1)
   const [diveExitRequest, setDiveExitRequest] = useState(0)
+  const [diveBackRequest, setDiveBackRequest] = useState(0)
+  const [observatoryMode, setObservatoryMode] = useState(false)
   const [closingJournal, setClosingJournal] = useState(false)
   const [motionPositions, setMotionPositions] = useState<Record<string, {x: number; y: number}>>({})
   const [enteringNodeId, setEnteringNodeId] = useState<string | null>(null)
@@ -1297,17 +1301,57 @@ export default function DreamMap({
             {diveActive && (
               <div className={styles.diveHud} aria-live="polite">
                 <div className={styles.diveIdentity}>
-                  <span>Dream Dive</span>
+                  <span>
+                    Dream Dive · layer {diveDepth + 1}/3
+                  </span>
                   <strong>{diveTitle || openDream?.title || 'Dream'}</strong>
-                  <small>Move the pointer to look around · no controls to learn</small>
+                  <small>
+                    Look with the pointer · click a live doorway or memory orb to travel deeper
+                  </small>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setDiveExitRequest((value) => value + 1)}
-                  className={styles.diveReturn}
-                >
-                  ← Return to Dream Map
-                </button>
+
+                <div className={styles.diveTime}>
+                  <span>Memory time</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={Math.round(diveTimelineProgress * 100)}
+                    onChange={(event) =>
+                      setDiveTimelineProgress(
+                        Number(event.target.value) / 100,
+                      )
+                    }
+                    aria-label="Reconstruct or age this dream"
+                  />
+                  <small>
+                    {diveTimelineProgress < .34
+                      ? 'reconstructing'
+                      : diveTimelineProgress < .7
+                        ? 'remembering'
+                        : 'present memory'}
+                  </small>
+                </div>
+
+                <div className={styles.diveActions}>
+                  {diveDepth > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setDiveBackRequest((value) => value + 1)}
+                      className={styles.diveBack}
+                    >
+                      ← Previous dream
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setDiveExitRequest((value) => value + 1)}
+                    className={styles.diveReturn}
+                  >
+                    Return to Dream Map
+                  </button>
+                </div>
               </div>
             )}
 
@@ -1321,6 +1365,28 @@ export default function DreamMap({
               >
                 <span aria-hidden="true">{soundEnabled ? '◉' : '○'}</span>
                 {soundEnabled ? 'Soundscape' : 'Sound off'}
+              </button>
+
+              <button
+                type="button"
+                className={
+                  observatoryMode
+                    ? styles.observatoryButtonActive
+                    : styles.observatoryButton
+                }
+                onClick={() => {
+                  setObservatoryMode((current) => !current)
+                  setSelectedId(null)
+                  setHoveredId(null)
+                  setOpenDreamId(null)
+                  setFocusedDreamId(null)
+                  window.history.replaceState(null, '', '/map')
+                }}
+                aria-pressed={observatoryMode}
+                title="Pull back to the Observatory"
+              >
+                <span aria-hidden="true">◎</span>
+                {observatoryMode ? 'Observatory' : 'Observe'}
               </button>
 
               <label className={styles.qualityControl}>
@@ -1422,24 +1488,55 @@ export default function DreamMap({
                 soundEnabled={soundEnabled}
                 introStage={introStage}
                 diveExitRequest={diveExitRequest}
+                diveBackRequest={diveBackRequest}
+                diveTimelineProgress={diveTimelineProgress}
+                observatoryMode={observatoryMode}
                 onZoomChange={changeZoom}
                 onPanChange={setPan}
                 onNodeHover={(node) => {
                   setHoveredId(node?._id ?? null)
                   if (node) void playNodeTone(node)
                 }}
-                onNodeSelect={enterNode}
+                onNodeSelect={(node) => {
+                  setObservatoryMode(false)
+                  enterNode(node)
+                }}
                 onBackgroundClick={() => {
                   if (selectedNode) closeDreamNote()
                 }}
                 onProjectionChange={setSelectedProjection}
                 onDiveStateChange={(active, title) => {
                   setDiveActive(active)
-                  setDiveTitle(active ? title ?? openDream?.title ?? 'Dream' : null)
+                  setDiveTitle(
+                    active
+                      ? title ?? openDream?.title ?? 'Dream'
+                      : null,
+                  )
                   if (active) {
+                    setObservatoryMode(false)
                     setEnteringNodeId(null)
                     setClosingJournal(false)
+                    setDiveTimelineProgress(1)
+                  } else {
+                    setDiveDepth(0)
+                    setDiveTimelineProgress(1)
+                    window.history.replaceState(
+                      null,
+                      '',
+                      openDream
+                        ? `/map?dream=${encodeURIComponent(openDream._id)}`
+                        : '/map',
+                    )
                   }
+                }}
+                onDiveDreamChange={(dreamId, title, depth) => {
+                  setDiveTitle(title)
+                  setDiveDepth(depth)
+                  window.history.replaceState(
+                    null,
+                    '',
+                    `/map?dream=${encodeURIComponent(dreamId)}&dive=${depth}`,
+                  )
                 }}
               />
             )}
@@ -1520,7 +1617,9 @@ export default function DreamMap({
             <div className={styles.mapHint}>
               {focusedDream
                 ? 'Focused constellation · select a symbol to inspect it'
-                : 'Hover to hear · click to inspect · double-click or hold a selected orb to enter the dream'}
+                : observatoryMode
+                  ? 'Observatory · recurring concepts become stellar bodies · click any memory to descend'
+                  : 'Hover to hear · click to inspect · double-click or hold a selected orb to enter the dream'}
             </div>
 
             {selectedNode &&
