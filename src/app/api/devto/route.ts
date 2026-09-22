@@ -153,6 +153,51 @@ export async function GET(request: NextRequest) {
       })
     }
 
+    if (mode === 'catalog') {
+      const pageCount = Math.min(
+        10,
+        Math.max(1, Number(searchParams.get('pages') ?? 6) || 6),
+      )
+      const perPage = Math.min(
+        100,
+        Math.max(20, Number(searchParams.get('per_page') ?? 100) || 100),
+      )
+
+      const pages: unknown[][] = []
+      for (let index = 0; index < pageCount; index += 4) {
+        const wave = Array.from(
+          {length: Math.min(4, pageCount - index)},
+          (_, offset) => index + offset + 1,
+        )
+        const results = await Promise.all(
+          wave.map((page) =>
+            devFetch(
+              `/articles?per_page=${perPage}&page=${page}`,
+            ).catch(() => []),
+          ),
+        )
+        pages.push(...results)
+      }
+
+      const seen = new Set<number>()
+      const articles = pages
+        .flatMap((page) => normalizeArticles(page))
+        .filter((article) => {
+          if (!article || typeof article !== 'object') return false
+          const id = Number((article as {id?: unknown}).id)
+          if (!Number.isFinite(id) || seen.has(id)) return false
+          seen.add(id)
+          return true
+        })
+
+      return NextResponse.json({
+        articles,
+        pageCount,
+        perPage,
+        count: articles.length,
+      })
+    }
+
     if (mode === 'article') {
       const id = safeValue(searchParams.get('id'))
       if (!/^\d+$/.test(id)) {

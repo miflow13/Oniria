@@ -22,6 +22,11 @@ import type {
 import styles from './surf.module.css'
 
 const DEFAULT_USERNAME = 'mikachu'
+const LIBRARY_FLOOR_COUNT = 4
+const LIBRARY_FLOOR_HEIGHT = 5.2
+const DEEP_CATALOG_PAGES = 8
+const MEGA_SHELF_CAPACITY =
+  (LIBRARY_FLOOR_COUNT - 1) * 4 * 6 * 9
 
 const SECTION_COPY: Record<
   LibrarySection,
@@ -152,6 +157,7 @@ type ShelfPlacement = Pick<
   | 'shelfLevel'
   | 'shelfSlot'
   | 'shelfOrder'
+  | 'floorIndex'
 >
 
 const SHELF_ANCHORS: Partial<
@@ -211,6 +217,7 @@ function shelfPlacement(
       shelfLevel: 0,
       shelfSlot: index,
       shelfOrder: index,
+      floorIndex: 0,
     }
   }
 
@@ -242,11 +249,54 @@ function shelfPlacement(
     shelfLevel: level,
     shelfSlot: slot,
     shelfOrder: localIndex,
+    floorIndex: 0,
+  }
+}
+
+function megaShelfPlacement(index: number): ShelfPlacement {
+  const catalogFloorCount = LIBRARY_FLOOR_COUNT - 1
+  const floorIndex = 1 + (index % catalogFloorCount)
+  const floorBookIndex = Math.floor(index / catalogFloorCount)
+  const booksPerShelf = 9
+  const shelfIndex = Math.floor(floorBookIndex / booksPerShelf)
+  const localIndex = floorBookIndex % booksPerShelf
+  const level = Math.floor(localIndex / 3)
+  const slot = localIndex % 3
+
+  const columns = [-12, -4, 4, 12]
+  const rows = [-9.5, -15.2, -20.9, -26.6, -32.3, -38]
+  const columnIndex = shelfIndex % columns.length
+  const rowIndex = Math.floor(shelfIndex / columns.length) % rows.length
+  const rotationY = rowIndex % 2 === 0 ? 0 : Math.PI
+  const localOffset = (slot - 1) * .96
+  const floorBase = floorIndex * LIBRARY_FLOOR_HEIGHT
+
+  return {
+    position: [
+      columns[columnIndex] + localOffset,
+      floorBase + .7 + level * 1.1,
+      rows[rowIndex] + (rotationY === 0 ? .42 : -.42),
+    ],
+    rotationY,
+    shelfKey:
+      'catalog:f' +
+      floorIndex +
+      ':r' +
+      rowIndex +
+      ':c' +
+      columnIndex +
+      ':level-' +
+      level,
+    shelfLevel: level,
+    shelfSlot: slot,
+    shelfOrder: localIndex,
+    floorIndex,
   }
 }
 
 function buildLibraryGraph(
   bootstrap: DevBootstrap,
+  catalogArticles: DevArticleSummary[],
   dynamicArticles: DevArticleSummary[],
   dynamicLabel: string | null,
 ) {
@@ -274,6 +324,7 @@ function buildLibraryGraph(
     href: 'https://dev.to/',
     section: 'atrium',
     position: [0, .55, 7],
+    floorIndex: 0,
     importance: 2,
     accent: SECTION_COPY.atrium.accent,
   })
@@ -300,6 +351,7 @@ function buildLibraryGraph(
       subtitle: copy.subtitle,
       section,
       position,
+      floorIndex: 0,
       importance: 1.7,
       accent: copy.accent,
     })
@@ -393,6 +445,7 @@ function buildLibraryGraph(
         1.15,
         -9.3 - row * 2.7,
       ],
+      floorIndex: 0,
       importance: 1.1,
       accent: safeTagColor(tag),
     })
@@ -432,6 +485,7 @@ function buildLibraryGraph(
         1.2,
         -22.5 - Math.floor(index / 2) * 3,
       ],
+      floorIndex: 0,
       importance: 1 + articles.length * .12,
       accent: SECTION_COPY.creators.accent,
     })
@@ -455,6 +509,7 @@ function buildLibraryGraph(
       username: bootstrap.profile.username,
       section: 'creators',
       position: [13, 1.25, -20.8],
+      floorIndex: 0,
       importance: 2,
       accent: '#7c83ff',
     })
@@ -524,6 +579,42 @@ function buildLibraryGraph(
       })
     })
   }
+
+  const alreadyPlaced = new Set(
+    nodes
+      .filter((node) => node.kind === 'article')
+      .map((node) => node.articleId)
+      .filter((id): id is number => typeof id === 'number'),
+  )
+
+  catalogArticles
+    .filter((article) => !alreadyPlaced.has(article.id))
+    .slice(0, MEGA_SHELF_CAPACITY)
+    .forEach((article, index) => {
+      const id = 'article:' + article.id
+      const placement = megaShelfPlacement(index)
+      addNode({
+        id,
+        kind: 'article',
+        title: article.title,
+        subtitle:
+          '@' +
+          article.user.username +
+          ' · floor ' +
+          ((placement.floorIndex ?? 0) + 1),
+        href: article.url,
+        articleId: article.id,
+        username: article.user.username,
+        section: 'archive',
+        payload: article,
+        ...placement,
+        importance: articleImportance(article) * .82,
+        accent:
+          (placement.floorIndex ?? 0) % 2 === 0
+            ? '#3b49df'
+            : '#53d3ff',
+      })
+    })
 
   if (dynamicLabel && dynamicArticles.length) {
     const isTag = dynamicLabel.startsWith('#')
@@ -598,6 +689,10 @@ export default function DevWebSurf() {
   const searchInputRef = useRef<HTMLInputElement | null>(null)
 
   const [bootstrap, setBootstrap] = useState<DevBootstrap | null>(null)
+  const [catalogArticles, setCatalogArticles] = useState<
+    DevArticleSummary[]
+  >([])
+  const [catalogLoading, setCatalogLoading] = useState(true)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -629,6 +724,12 @@ export default function DevWebSurf() {
   >([{id: 'dev-home', title: 'Atrium'}])
   const [directoryOpen, setDirectoryOpen] = useState(true)
   const [readingOrigin, setReadingOrigin] = useState<SurfNode | null>(null)
+  const [currentFloor, setCurrentFloor] = useState(0)
+  const [floorNonce, setFloorNonce] = useState(0)
+  const [floorRequest, setFloorRequest] = useState<{
+    floor: number
+    nonce: number
+  } | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -665,12 +766,58 @@ export default function DevWebSurf() {
     }
   }, [])
 
+  useEffect(() => {
+    let cancelled = false
+
+    fetch(
+      '/api/devto?mode=catalog&pages=' +
+        DEEP_CATALOG_PAGES +
+        '&per_page=100',
+    )
+      .then(async (response) => {
+        const data = (await response.json()) as {
+          articles?: DevArticleSummary[]
+          error?: string
+        }
+        if (!response.ok) {
+          throw new Error(data.error ?? 'Could not load deep catalog')
+        }
+        return data
+      })
+      .then((data) => {
+        if (!cancelled) {
+          setCatalogArticles(data.articles ?? [])
+        }
+      })
+      .catch((nextError) => {
+        if (!cancelled) {
+          setError(
+            nextError instanceof Error
+              ? nextError.message
+              : 'Could not load deep catalog',
+          )
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setCatalogLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const graph = useMemo(
     () =>
       bootstrap
-        ? buildLibraryGraph(bootstrap, dynamicArticles, dynamicLabel)
+        ? buildLibraryGraph(
+            bootstrap,
+            catalogArticles,
+            dynamicArticles,
+            dynamicLabel,
+          )
         : {nodes: [], edges: []},
-    [bootstrap, dynamicArticles, dynamicLabel],
+    [bootstrap, catalogArticles, dynamicArticles, dynamicLabel],
   )
 
   const fetchArticle = useCallback(async (node: SurfNode) => {
@@ -869,6 +1016,22 @@ export default function DevWebSurf() {
     setDirectoryOpen(false)
   }
 
+  function requestFloor(
+    floor: number,
+    preserveRoute = false,
+  ) {
+    const clamped = Math.max(
+      0,
+      Math.min(LIBRARY_FLOOR_COUNT - 1, floor),
+    )
+    if (clamped === currentFloor) return
+    const next = floorNonce + 1
+    setFloorNonce(next)
+    setFloorRequest({floor: clamped, nonce: next})
+    setDirectoryOpen(false)
+    if (!preserveRoute) setRouteTargetId(null)
+  }
+
   function returnToReadingShelf() {
     if (!readingOrigin) return
     const origin = readingOrigin
@@ -979,11 +1142,14 @@ export default function DevWebSurf() {
     ? graph.nodes.find((node) => node.id === routeTargetId) ?? null
     : null
 
+  const routeTargetFloor = routeTarget?.floorIndex ?? 0
+
   const relatedArticles = article
     ? [
         ...bootstrap.feed,
         ...bootstrap.latest,
         ...bootstrap.profileArticles,
+        ...catalogArticles,
       ]
         .filter(
           (candidate, index, collection) => {
@@ -1081,6 +1247,7 @@ export default function DevWebSurf() {
         onPutBack={putBackArticle}
         onTravel={(node, inspectOnArrival) => {
           setRouteTargetId(null)
+          setCurrentFloor(node.floorIndex ?? currentFloor)
           if (inspectOnArrival) {
             inspectNode(node)
           } else {
@@ -1090,6 +1257,9 @@ export default function DevWebSurf() {
         onHover={setHovered}
         onPointerLockChange={setLocked}
         onZoneChange={setCurrentSection}
+        currentFloor={currentFloor}
+        floorRequest={floorRequest}
+        onFloorChange={setCurrentFloor}
       />
 
       <header className={styles.chrome}>
@@ -1132,31 +1302,59 @@ export default function DevWebSurf() {
         ))}
       </nav>
 
-      <nav className={styles.wingRail} aria-label="Browse library wings">
-        {wingLinks.map((item) => (
+      {currentFloor === 0 && (
+        <nav className={styles.wingRail} aria-label="Browse library wings">
+          {wingLinks.map((item) => (
+            <button
+              type="button"
+              key={item.section}
+              className={
+                currentSection === item.section
+                  ? styles.wingRailActive
+                  : ''
+              }
+              onClick={() => {
+                if (item.section === 'search') {
+                  walkTo(item.target)
+                  window.setTimeout(
+                    () => searchInputRef.current?.focus(),
+                    140,
+                  )
+                } else {
+                  walkTo(item.target)
+                }
+              }}
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
+      )}
+
+      <nav className={styles.floorRail} aria-label="Library floors">
+        <span>Floor</span>
+        {Array.from({length: LIBRARY_FLOOR_COUNT}, (_, floor) => (
           <button
             type="button"
-            key={item.section}
+            key={floor}
             className={
-              currentSection === item.section
-                ? styles.wingRailActive
+              currentFloor === floor
+                ? styles.floorRailActive
                 : ''
             }
-            onClick={() => {
-              if (item.section === 'search') {
-                walkTo(item.target)
-                window.setTimeout(
-                  () => searchInputRef.current?.focus(),
-                  140,
-                )
-              } else {
-                walkTo(item.target)
-              }
-            }}
+            onClick={() => requestFloor(floor)}
           >
-            {item.label}
+            {String(floor + 1).padStart(2, '0')}
           </button>
         ))}
+        <small>
+          {catalogLoading
+            ? 'cataloging…'
+            : Math.min(catalogArticles.length, MEGA_SHELF_CAPACITY) +
+              '/' +
+              MEGA_SHELF_CAPACITY +
+              ' shelf books · keys 1–4'}
+        </small>
       </nav>
 
       <button
@@ -1242,19 +1440,27 @@ export default function DevWebSurf() {
           <span>Route ready · follow cyan light</span>
           <strong>{routeTarget.title}</strong>
           <p>
-            Follow the floor strips through the lit doorway.
+            {routeTargetFloor !== currentFloor
+              ? 'Take the central lift, then follow the cyan floor strips.'
+              : 'Follow the floor strips through the lit doorway.'}
           </p>
           <div>
             <button
               type="button"
               onClick={() => {
+                if (routeTargetFloor !== currentFloor) {
+                  requestFloor(routeTargetFloor, true)
+                  return
+                }
                 const canvas = document.querySelector('canvas')
                 if (canvas instanceof HTMLCanvasElement) {
                   void canvas.requestPointerLock()
                 }
               }}
             >
-              Walk route
+              {routeTargetFloor !== currentFloor
+                ? 'Take lift'
+                : 'Walk route'}
             </button>
             <button type="button" onClick={() => jumpTo(routeTarget.id)}>
               Jump there
@@ -1276,6 +1482,8 @@ export default function DevWebSurf() {
           {activeNode?.kind === 'article' ? 'put back' : 'inspect'}
         </span>
         <span><kbd>F</kbd> travel</span>
+        <span><kbd>1–4</kbd> floors</span>
+        <span><kbd>Pg↑↓</kbd> lift</span>
         <span><kbd>Shift</kbd> hurry</span>
         <span><kbd>Esc</kbd> cursor</span>
       </section>
@@ -1343,6 +1551,13 @@ export default function DevWebSurf() {
                 <span><b>{bootstrap.feed.length}</b> featured pages</span>
                 <span><b>{bootstrap.latest.length}</b> new arrivals</span>
                 <span><b>{bootstrap.tags.length}</b> cataloged topics</span>
+                <span>
+                  <b>{Math.min(catalogArticles.length, MEGA_SHELF_CAPACITY)}</b>{' '}
+                  deep-catalog shelf books
+                </span>
+                <span>
+                  <b>{LIBRARY_FLOOR_COUNT}</b> physical floors
+                </span>
               </div>
               <div className={styles.pageActions}>
                 <button

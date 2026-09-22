@@ -93,6 +93,7 @@ export type SurfNode = {
   shelfLevel?: number
   shelfSlot?: number
   shelfOrder?: number
+  floorIndex?: number
   importance: number
   accent: string
   payload?: DevArticleSummary
