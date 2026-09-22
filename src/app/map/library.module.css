@@ -374,17 +374,42 @@
   inset: 0;
   display: grid;
   place-items: center;
+  overflow: hidden;
   padding: 76px 20px 20px;
   background: rgba(2, 5, 12, .64);
   backdrop-filter: blur(14px);
+  animation: readerVeilIn 360ms cubic-bezier(.2, .72, .25, 1) both;
+}
+
+.reader::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(54vw, 660px);
+  aspect-ratio: 1;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      circle,
+      rgba(211, 142, 236, .16) 0%,
+      rgba(108, 208, 220, .07) 28%,
+      transparent 68%
+    );
+  filter: blur(10px);
+  transform: translate(-50%, -50%) scale(.42);
+  opacity: 0;
+  animation: readerHandoffBloom 620ms cubic-bezier(.18, .74, .18, 1) both;
 }
 
 .readerCard {
   position: relative;
+  z-index: 1;
   width: min(820px, 100%);
   max-height: 100%;
   overflow: auto;
   padding: 26px 28px 30px;
+  animation: readerCardIn 440ms cubic-bezier(.16, .78, .22, 1) both;
   background:
     radial-gradient(circle at 85% 0%, rgba(107, 85, 204, .08), transparent 34%),
     rgba(8, 13, 25, .95);
@@ -417,6 +442,56 @@
   border: 1px solid rgba(118, 208, 210, .13);
   border-radius: 999px;
   font-size: .62rem;
+}
+
+@keyframes readerVeilIn {
+  from {
+    opacity: 0;
+    backdrop-filter: blur(2px);
+  }
+
+  to {
+    opacity: 1;
+    backdrop-filter: blur(14px);
+  }
+}
+
+@keyframes readerCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(.975);
+    filter: blur(5px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes readerHandoffBloom {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(.35);
+  }
+
+  34% {
+    opacity: .9;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.25);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reader,
+  .reader::before,
+  .readerCard {
+    animation: none;
+  }
 }
 
 @media (max-width: 860px) {
