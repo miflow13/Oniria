@@ -25,6 +25,7 @@ import type {
 import styles from './library.module.css'
 import {
   archiveShelfPlacement,
+  resolveArchiveShelfClearance,
   type ArchiveShelfPlacement,
 } from './libraryLayout'
 
@@ -446,7 +447,22 @@ export default function DevLibraryMap() {
       )
     }
 
-    return result
+    const resolvedPlacements = resolveArchiveShelfClearance(
+      result.map((shelf) => ({
+        world: shelf.world,
+        yaw: shelf.yaw,
+        pathBay: shelf.pathBay,
+        districtId: shelf.districtId,
+      })),
+    )
+
+    return result.map((shelf, index) => ({
+      ...shelf,
+      world: resolvedPlacements[index].world,
+      yaw: resolvedPlacements[index].yaw,
+      pathBay: resolvedPlacements[index].pathBay,
+      districtId: resolvedPlacements[index].districtId,
+    }))
   }, [
     bootstrap,
     catalog,
