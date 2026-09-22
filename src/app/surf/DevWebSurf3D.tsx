@@ -601,6 +601,38 @@ export default function DevWebSurf3D({
       })
     }
 
+    const TITLE_LOAD_DISTANCE = 7.5
+    const TITLE_KEEP_DISTANCE = 11.5
+
+    function attachBookTitle(visual: Visual) {
+      if (
+        !visual.bookTitleMaterial ||
+        !visual.bookTitleMeta ||
+        visual.bookTitleTexture
+      ) {
+        return
+      }
+
+      const texture = createBookTitleTexture(
+        visual.bookTitleMeta.title,
+        visual.bookTitleMeta.subtitle,
+        visual.bookTitleMeta.accent,
+      )
+      visual.bookTitleTexture = texture
+      visual.bookTitleMaterial.map = texture
+      visual.bookTitleMaterial.color.set(0xffffff)
+      visual.bookTitleMaterial.needsUpdate = true
+    }
+
+    function downgradeBookTitle(visual: Visual) {
+      if (!visual.bookTitleTexture || !visual.bookTitleMaterial) return
+      visual.bookTitleMaterial.map = null
+      visual.bookTitleMaterial.color.set(0x1b2030)
+      visual.bookTitleMaterial.needsUpdate = true
+      visual.bookTitleTexture.dispose()
+      visual.bookTitleTexture = undefined
+    }
+
     const floorMaterial = new THREE.MeshStandardMaterial({
       color: 0x14161d,
       roughness: .72,
@@ -1216,57 +1248,83 @@ export default function DevWebSurf3D({
       scene.add(group)
 
       const color = new THREE.Color(node.accent)
-      const material = new THREE.MeshPhysicalMaterial({
-        color: color.clone().multiplyScalar(
-          node.kind === 'article' ? .36 : .48,
-        ),
-        emissive: color.clone(),
-        emissiveIntensity:
-          node.kind === 'section' ? .62 : .34 + node.importance * .34,
-        roughness:
-          node.kind === 'article' ? .52 : node.kind === 'profile' ? .3 : .38,
-        metalness:
-          node.kind === 'profile' || node.kind === 'section' ? .32 : .12,
-        clearcoat: node.kind === 'article' ? .35 : .72,
-        clearcoatRoughness: .16,
-        transparent: true,
-        opacity: node.kind === 'section' ? .72 : .94,
-      })
+      const isBulkStack = (node.floor ?? 0) > 0
+      const material: THREE.MeshStandardMaterial = isBulkStack
+        ? new THREE.MeshStandardMaterial({
+            color: color.clone().multiplyScalar(.26),
+            emissive: color.clone().multiplyScalar(.42),
+            emissiveIntensity: .34,
+            roughness: .46,
+            metalness: .18,
+            transparent: true,
+            opacity: .94,
+          })
+        : new THREE.MeshPhysicalMaterial({
+            color: color.clone().multiplyScalar(
+              node.kind === 'article' ? .36 : .48,
+            ),
+            emissive: color.clone(),
+            emissiveIntensity:
+              node.kind === 'section'
+                ? .62
+                : .34 + node.importance * .34,
+            roughness:
+              node.kind === 'article'
+                ? .52
+                : node.kind === 'profile'
+                  ? .3
+                  : .38,
+            metalness:
+              node.kind === 'profile' || node.kind === 'section'
+                ? .32
+                : .12,
+            clearcoat: node.kind === 'article' ? .35 : .72,
+            clearcoatRoughness: .16,
+            transparent: true,
+            opacity: node.kind === 'section' ? .72 : .94,
+          })
 
       const body = new THREE.Mesh(KIND_GEOMETRY[node.kind](), material)
       body.userData.nodeId = node.id
-      body.castShadow = true
-      body.receiveShadow = true
+      body.castShadow = !isBulkStack
+      body.receiveShadow = !isBulkStack
       interactive.push(body)
       group.add(body)
 
       let bookGlowMaterial: THREE.MeshBasicMaterial | undefined
       let bookTitleMaterial: THREE.MeshBasicMaterial | undefined
+      let bookTitleMeta:
+        | {title: string; subtitle: string; accent: string}
+        | undefined
       let coverMaterialRef: THREE.MeshBasicMaterial | undefined
       let coverUrl: string | undefined
       let archMaterialRef: THREE.MeshBasicMaterial | undefined
 
       if (node.kind === 'article') {
-        material.color.set(0x11131a)
+        material.color.set(isBulkStack ? 0x111522 : 0x11131a)
         material.emissive.copy(color.clone().multiplyScalar(.26))
-        material.emissiveIntensity = .48
-        material.roughness = .34
+        material.emissiveIntensity = isBulkStack ? .34 : .48
+        material.roughness = isBulkStack ? .44 : .34
         material.metalness = .2
-        material.clearcoat = .62
+        if (material instanceof THREE.MeshPhysicalMaterial) {
+          material.clearcoat = .62
+        }
 
-        const spineGeometry = new THREE.BoxGeometry(.07, .8, .185)
-        architecturalGeometries.push(spineGeometry)
-        const spineMaterial = new THREE.MeshStandardMaterial({
-          color: 0x3b49df,
-          emissive: color.clone().lerp(new THREE.Color(0x53d3ff), .45),
-          emissiveIntensity: .72,
-          roughness: .3,
-          metalness: .48,
-        })
-        architecturalMaterials.push(spineMaterial)
-        const spine = new THREE.Mesh(spineGeometry, spineMaterial)
-        spine.position.set(-.39, 0, 0)
-        group.add(spine)
+        if (!isBulkStack) {
+          const spineGeometry = new THREE.BoxGeometry(.07, .8, .185)
+          architecturalGeometries.push(spineGeometry)
+          const spineMaterial = new THREE.MeshStandardMaterial({
+            color: 0x3b49df,
+            emissive: color.clone().lerp(new THREE.Color(0x53d3ff), .45),
+            emissiveIntensity: .72,
+            roughness: .3,
+            metalness: .48,
+          })
+          architecturalMaterials.push(spineMaterial)
+          const spine = new THREE.Mesh(spineGeometry, spineMaterial)
+          spine.position.set(-.39, 0, 0)
+          group.add(spine)
+        }
 
         const coverGeometry = new THREE.PlaneGeometry(.56, .44)
         architecturalGeometries.push(coverGeometry)
@@ -1286,14 +1344,15 @@ export default function DevWebSurf3D({
         coverMaterialRef = coverMaterial
         coverUrl = remoteCover ?? undefined
 
-        const titleTexture = createBookTitleTexture(
-          node.title,
-          '@' + (node.username ?? node.payload?.user.username ?? 'dev'),
-          node.accent,
-        )
-        disposableTextures.push(titleTexture)
+        bookTitleMeta = {
+          title: node.title,
+          subtitle:
+            '@' +
+            (node.username ?? node.payload?.user.username ?? 'dev'),
+          accent: node.accent,
+        }
         bookTitleMaterial = new THREE.MeshBasicMaterial({
-          map: titleTexture,
+          color: 0x1b2030,
           transparent: true,
           opacity: .97,
           toneMapped: false,
@@ -1306,32 +1365,34 @@ export default function DevWebSurf3D({
         titlePanel.position.set(.012, -.26, .09)
         group.add(titlePanel)
 
-        const glowGeometry = new THREE.PlaneGeometry(.76, .92)
-        architecturalGeometries.push(glowGeometry)
-        bookGlowMaterial = new THREE.MeshBasicMaterial({
-          color: color.clone().lerp(new THREE.Color(0x53d3ff), .3),
-          transparent: true,
-          opacity: .055,
-          blending: THREE.AdditiveBlending,
-          depthWrite: false,
-          side: THREE.DoubleSide,
-        })
-        architecturalMaterials.push(bookGlowMaterial)
-        const glow = new THREE.Mesh(glowGeometry, bookGlowMaterial)
-        glow.position.z = -.095
-        group.add(glow)
+        if (!isBulkStack) {
+          const glowGeometry = new THREE.PlaneGeometry(.76, .92)
+          architecturalGeometries.push(glowGeometry)
+          bookGlowMaterial = new THREE.MeshBasicMaterial({
+            color: color.clone().lerp(new THREE.Color(0x53d3ff), .3),
+            transparent: true,
+            opacity: .055,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            side: THREE.DoubleSide,
+          })
+          architecturalMaterials.push(bookGlowMaterial)
+          const glow = new THREE.Mesh(glowGeometry, bookGlowMaterial)
+          glow.position.z = -.095
+          group.add(glow)
 
-        const edgeGeometry = new THREE.EdgesGeometry(body.geometry, 28)
-        architecturalGeometries.push(edgeGeometry)
-        const edgeMaterial = new THREE.LineBasicMaterial({
-          color: node.accent,
-          transparent: true,
-          opacity: .45,
-          blending: THREE.AdditiveBlending,
-        })
-        architecturalMaterials.push(edgeMaterial)
-        const edges = new THREE.LineSegments(edgeGeometry, edgeMaterial)
-        group.add(edges)
+          const edgeGeometry = new THREE.EdgesGeometry(body.geometry, 28)
+          architecturalGeometries.push(edgeGeometry)
+          const edgeMaterial = new THREE.LineBasicMaterial({
+            color: node.accent,
+            transparent: true,
+            opacity: .45,
+            blending: THREE.AdditiveBlending,
+          })
+          architecturalMaterials.push(edgeMaterial)
+          const edges = new THREE.LineSegments(edgeGeometry, edgeMaterial)
+          group.add(edges)
+        }
       }
 
       if (node.kind === 'profile') {
@@ -1373,21 +1434,26 @@ export default function DevWebSurf3D({
         group.add(arch)
       }
 
-      const labelTexture = createTextTexture(
-        node.title,
-        node.subtitle,
-        node.accent,
-      )
-      disposableTextures.push(labelTexture)
+      const showFloatingLabel =
+        node.kind !== 'article' || (node.floor ?? 0) === 0
+      const labelTexture = showFloatingLabel
+        ? createTextTexture(
+            node.title,
+            node.subtitle,
+            node.accent,
+          )
+        : null
+      if (labelTexture) disposableTextures.push(labelTexture)
       const labelMaterial = new THREE.SpriteMaterial({
         map: labelTexture,
         transparent: true,
-        opacity:
-          node.kind === 'section' || node.kind === 'home'
+        opacity: showFloatingLabel
+          ? node.kind === 'section' || node.kind === 'home'
             ? .98
             : node.kind === 'profile' || node.kind === 'tag'
               ? .82
-              : .7,
+              : .7
+          : 0,
         depthWrite: false,
         toneMapped: false,
       })
@@ -1429,12 +1495,14 @@ export default function DevWebSurf3D({
         labelMaterial,
         bookGlowMaterial,
         bookTitleMaterial,
+        bookTitleMeta,
         coverMaterial: coverMaterialRef,
         coverUrl,
         archMaterial: archMaterialRef,
         basePosition: new THREE.Vector3(...node.position),
         baseRotationY: node.rotationY ?? 0,
         shelfKey: node.shelfKey,
+        floor: node.floor ?? 0,
         baseScale,
         phase: index * .67,
       })
