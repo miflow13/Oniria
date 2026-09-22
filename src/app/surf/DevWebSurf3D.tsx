@@ -671,6 +671,31 @@ export default function DevWebSurf3D({
       return light
     })
 
+    const bridgeEntryLightLayout = [
+      {x: -4.15, z: -10},
+      {x: 4.15, z: -10},
+      {x: -4.15, z: -27},
+      {x: 4.15, z: -27},
+      {x: -4.15, z: -45},
+      {x: 4.15, z: -45},
+    ] as const
+    const bridgeEntryLights = bridgeEntryLightLayout.map((entry) => {
+      const light = new THREE.PointLight(
+        0xe6e9e8,
+        2.4,
+        11.5,
+        1.45,
+      )
+      light.position.set(
+        entry.x,
+        currentFloorRef.current * LIBRARY_FLOOR_HEIGHT + 2.75,
+        entry.z,
+      )
+      light.castShadow = false
+      scene.add(light)
+      return light
+    })
+
     const adjacentFloorLights = [-1, 1].flatMap((direction) =>
       [
         {x: -9, z: -18},
@@ -1711,13 +1736,31 @@ export default function DevWebSurf3D({
     architecturalGeometries.push(practicalFixtureGeometry)
     const practicalFixtureMaterials = FLOOR_ACCENTS.map((accent) => {
       const material = new THREE.MeshBasicMaterial({
-        color: new THREE.Color(0xe6e8e7).lerp(
+        color: new THREE.Color(0xf3f1eb).lerp(
           new THREE.Color(accent),
-          .055,
+          .025,
         ),
         transparent: true,
-        opacity: .52,
+        opacity: .72,
         toneMapped: false,
+      })
+      architecturalMaterials.push(material)
+      return material
+    })
+
+    const balconyUndersideStripGeometry = new THREE.BoxGeometry(
+      .09,
+      .045,
+      88,
+    )
+    architecturalGeometries.push(balconyUndersideStripGeometry)
+    const balconyUndersideStripMaterials = FLOOR_ACCENTS.map(() => {
+      const material = new THREE.MeshBasicMaterial({
+        color: 0xe4e5e2,
+        transparent: true,
+        opacity: .18,
+        toneMapped: false,
+        depthWrite: false,
       })
       architecturalMaterials.push(material)
       return material
@@ -1752,6 +1795,15 @@ export default function DevWebSurf3D({
         '#' + new THREE.Color(floorAccent).getHexString()
 
       addPracticalFixtures(floor, base)
+
+      ;[-4.7, 4.7].forEach((x) => {
+        const strip = new THREE.Mesh(
+          balconyUndersideStripGeometry,
+          balconyUndersideStripMaterials[floor],
+        )
+        strip.position.set(x, base - .27, archiveCenterZ)
+        scene.add(strip)
+      })
 
       // Wide side balconies leave a continuous central void. From any level
       // the player can read the floors above and below as one megastructure.
@@ -3277,6 +3329,15 @@ export default function DevWebSurf3D({
         )
         light.intensity = floor === 0 ? 3.1 : 3.6
       })
+      bridgeEntryLights.forEach((light, index) => {
+        const layout = bridgeEntryLightLayout[index]
+        light.position.set(
+          layout.x,
+          floor * LIBRARY_FLOOR_HEIGHT + 2.75,
+          layout.z,
+        )
+        light.intensity = floor === 0 ? 1.9 : 2.5
+      })
       adjacentFloorLights.forEach(({light, direction, entry}) => {
         const targetFloor = floor + direction
         const valid =
@@ -3287,18 +3348,29 @@ export default function DevWebSurf3D({
           targetFloor * LIBRARY_FLOOR_HEIGHT + 3.9,
           entry.z,
         )
-        light.intensity = valid ? 1.15 : 0
+        light.intensity = valid ? 2.15 : 0
       })
       practicalFixtureMaterials.forEach((material, floorIndex) => {
         const distance = Math.abs(floorIndex - floor)
         material.opacity =
           distance === 0
-            ? .58
+            ? .84
             : distance === 1
-              ? .22
+              ? .44
               : distance === 2
-                ? .09
-                : .035
+                ? .18
+                : .07
+      })
+      balconyUndersideStripMaterials.forEach((material, floorIndex) => {
+        const distance = Math.abs(floorIndex - floor)
+        material.opacity =
+          distance === 0
+            ? .26
+            : distance === 1
+              ? .16
+              : distance === 2
+                ? .07
+                : .025
       })
       floorShelfTopMaterials.forEach((material, floorIndex) => {
         const distance = Math.abs(floorIndex - floor)
