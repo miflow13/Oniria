@@ -34,13 +34,36 @@ const CATALOG_BOOKS_PER_SHELF = 9
 function catalogShelfPlacement(
   index: number,
 ): ArchiveShelfPlacement {
-  const bay = 3 + Math.floor(index / 2)
-  const side: -1 | 1 = index % 2 === 0 ? -1 : 1
-  return archiveShelfPlacement(
-    'shelf:catalog:' + index,
-    bay,
-    side,
-  )
+  const block = Math.floor(index / 20)
+  const within = index % 20
+  const blockStartBay = 3 + block * 10
+  const key = 'shelf:catalog:' + index
+
+  if (within < 8) {
+    const bay = blockStartBay + Math.floor(within / 2)
+    const side: -1 | 1 = within % 2 === 0 ? -1 : 1
+    return archiveShelfPlacement(key, bay, side)
+  }
+
+  if (within < 12) {
+    const slot = within - 8
+    const offsets = [-.46, -.16, .16, .46] as const
+    const sides = [-1, 1, -1, 1] as const
+    return archiveShelfPlacement(
+      key,
+      blockStartBay + 4.5 + offsets[slot],
+      sides[slot],
+      {
+        laneBias: -.62,
+        heightBias: slot % 2 === 0 ? .28 : -.18,
+      },
+    )
+  }
+
+  const local = within - 12
+  const bay = blockStartBay + 5 + Math.floor(local / 2)
+  const side: -1 | 1 = local % 2 === 0 ? -1 : 1
+  return archiveShelfPlacement(key, bay, side)
 }
 
 const SHELF_ACCENTS: Record<LibraryShelfKind, string> = {
@@ -81,6 +104,7 @@ function makeShelf(
     world: placement.world,
     yaw: placement.yaw,
     pathBay: placement.pathBay,
+    districtId: placement.districtId,
     articles,
   }
 }
@@ -446,6 +470,7 @@ export default function DevLibraryMap() {
         world: shelf.world,
         libraryYaw: shelf.yaw,
         libraryPathBay: shelf.pathBay,
+        libraryDistrictId: shelf.districtId,
         libraryBooks: shelf.articles.slice(0, 9).map((article) => {
           const image = article.cover_image ?? article.social_image ?? undefined
           return {
