@@ -1247,6 +1247,7 @@ export default function DreamMap({
                 zoom={zoom}
                 pan={pan}
                 quality={quality}
+                soundEnabled={soundEnabled}
                 onZoomChange={changeZoom}
                 onPanChange={setPan}
                 onNodeHover={(node) => {
@@ -1337,7 +1338,7 @@ export default function DreamMap({
             <div className={styles.mapHint}>
               {focusedDream
                 ? 'Focused constellation · select a symbol to inspect it'
-                : 'Hover to hear · drag through space · scroll to zoom · click an orb to open its journal'}
+                : 'Hover to hear · drag through space · scroll to zoom · select an orb to awaken its Dream Cell'}
             </div>
 
             {selectedNode &&
