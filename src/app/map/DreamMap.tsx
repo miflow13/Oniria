@@ -1505,6 +1505,14 @@ export default function DreamMap({
                     setDiveTimelineProgress(1)
                   } else {
                     setDiveDepth(0)
+                    setDiveTimelineProgress(1)
+                    window.history.replaceState(
+                      null,
+                      '',
+                      openDream
+                        ? `/map?dream=${encodeURIComponent(openDream._id)}`
+                        : '/map',
+                    )
                   }
                 }}
                 onDiveDreamChange={(dreamId, title, depth) => {
