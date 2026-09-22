@@ -1339,7 +1339,9 @@ export default function DevWebSurf() {
 
   const breadcrumb = [
     'DEV Library',
-    SECTION_COPY[currentSection].title,
+    currentSection === 'atrium'
+      ? null
+      : SECTION_COPY[currentSection].title,
     activeNode?.title,
   ].filter(Boolean)
 
