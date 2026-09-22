@@ -428,6 +428,8 @@ export default function DevWebSurf3D({
       maxX: number
       minZ: number
       maxZ: number
+      minY: number
+      maxY: number
     }> = []
     const remoteTextures = new Set<THREE.Texture>()
     const textureLoader = new THREE.TextureLoader()
@@ -596,11 +598,12 @@ export default function DevWebSurf3D({
       width: number,
       depth: number,
       material = floorMaterial,
+      floorBase = 0,
     ) {
       const geometry = new THREE.BoxGeometry(width, .18, depth)
       architecturalGeometries.push(geometry)
       const mesh = new THREE.Mesh(geometry, material)
-      mesh.position.set(x, -.11, z)
+      mesh.position.set(x, floorBase - .11, z)
       mesh.receiveShadow = true
       scene.add(mesh)
       return mesh
@@ -613,11 +616,12 @@ export default function DevWebSurf3D({
       depth: number,
       height: number,
       material = concrete,
+      floorBase = 0,
     ) {
       const geometry = new THREE.BoxGeometry(width, height, depth)
       architecturalGeometries.push(geometry)
       const mesh = new THREE.Mesh(geometry, material)
-      mesh.position.set(x, height / 2 - .02, z)
+      mesh.position.set(x, floorBase + height / 2 - .02, z)
       mesh.castShadow = true
       mesh.receiveShadow = true
       scene.add(mesh)
@@ -626,6 +630,8 @@ export default function DevWebSurf3D({
         maxX: x + width / 2,
         minZ: z - depth / 2,
         maxZ: z + depth / 2,
+        minY: floorBase,
+        maxY: floorBase + height,
       })
       return mesh
     }
@@ -650,9 +656,10 @@ export default function DevWebSurf3D({
       z: number,
       width: number,
       rotationY = 0,
+      floorBase = 0,
     ) {
       const group = new THREE.Group()
-      group.position.set(x, 0, z)
+      group.position.set(x, floorBase, z)
       group.rotation.y = rotationY
 
       const sideGeometry = new THREE.BoxGeometry(.16, 3.56, .66)
@@ -711,7 +718,11 @@ export default function DevWebSurf3D({
         shelfAccentBars.push({
           mesh: accent,
           material: accentMaterial,
-          center: new THREE.Vector3(x, .245 + level * 1.1, z),
+          center: new THREE.Vector3(
+            x,
+            floorBase + .245 + level * 1.1,
+            z,
+          ),
         })
       }
 
@@ -721,6 +732,8 @@ export default function DevWebSurf3D({
         maxX: x + (rotated ? .33 : width / 2),
         minZ: z - (rotated ? width / 2 : .33),
         maxZ: z + (rotated ? width / 2 : .33),
+        minY: floorBase,
+        maxY: floorBase + 3.7,
       })
 
       scene.add(group)
