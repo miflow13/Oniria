@@ -3615,14 +3615,17 @@ export default function DevWebSurf3D({
         : getNodeGeometry(node.kind)
       if (isFeaturedDevLandmark) {
         architecturalGeometries.push(bodyGeometry)
-        material.color.set(0x111315)
-        material.emissive.set(0x3b49df)
-        material.emissiveIntensity = .09
-        material.roughness = .5
-        material.metalness = .3
-        material.clearcoat = .22
-        material.clearcoatRoughness = .34
+        material.color.set(0x171a1e)
+        material.map = architecturalSurfaceTexture
+        material.roughnessMap = architecturalSurfaceRoughness
+        material.emissive.set(0x20284f)
+        material.emissiveIntensity = .055
+        material.roughness = .7
+        material.metalness = .34
+        material.clearcoat = .16
+        material.clearcoatRoughness = .48
         material.opacity = 1
+        material.needsUpdate = true
       }
 
       const body = new THREE.Mesh(bodyGeometry, material)
@@ -3640,33 +3643,83 @@ export default function DevWebSurf3D({
         body.position.set(0, .08, -1.45)
 
         const devPlinthGeometry = new THREE.BoxGeometry(3.35, .3, .9)
-        const devLetterStrokeGeometry = new THREE.BoxGeometry(1, 1, .11)
+        const devPlinthCapGeometry = new THREE.BoxGeometry(3.08, .065, .74)
+        const devFaceGeometry = new THREE.BoxGeometry(2.62, 1.82, .08)
+        const devFrameHorizontalGeometry = new THREE.BoxGeometry(2.76, .045, .045)
+        const devFrameVerticalGeometry = new THREE.BoxGeometry(.045, 1.94, .045)
+        const devAccentStripGeometry = new THREE.BoxGeometry(2.86, .035, .055)
+        const devLetterStrokeGeometry = new THREE.BoxGeometry(1, 1, .13)
         const devOutlineGeometry = new THREE.EdgesGeometry(bodyGeometry, 30)
         architecturalGeometries.push(
           devPlinthGeometry,
+          devPlinthCapGeometry,
+          devFaceGeometry,
+          devFrameHorizontalGeometry,
+          devFrameVerticalGeometry,
+          devAccentStripGeometry,
           devLetterStrokeGeometry,
           devOutlineGeometry,
         )
 
         const devPlinthMaterial = new THREE.MeshStandardMaterial({
-          color: 0x1c2024,
-          roughness: .76,
-          metalness: .16,
+          color: 0x20242a,
+          map: architecturalSurfaceTexture,
+          roughnessMap: architecturalSurfaceRoughness,
+          roughness: .86,
+          metalness: .18,
         })
-        const devLetterMaterial = new THREE.MeshStandardMaterial({
-          color: 0xf2f2f2,
-          emissive: 0xffffff,
-          emissiveIntensity: .025,
-          roughness: .34,
-          metalness: .16,
+        const devPlinthCapMaterial = new THREE.MeshStandardMaterial({
+          color: 0x2d3239,
+          map: architecturalSurfaceTexture,
+          roughnessMap: architecturalSurfaceRoughness,
+          emissive: 0x161d39,
+          emissiveIntensity: .055,
+          roughness: .72,
+          metalness: .24,
+        })
+        const devFaceMaterial = new THREE.MeshStandardMaterial({
+          color: 0x0d1015,
+          map: architecturalSurfaceTexture,
+          roughnessMap: architecturalSurfaceRoughness,
+          emissive: 0x111a34,
+          emissiveIntensity: .1,
+          roughness: .6,
+          metalness: .42,
+        })
+        const devFrameMaterial = new THREE.MeshStandardMaterial({
+          color: 0x303c63,
+          emissive: 0x6170ff,
+          emissiveIntensity: .2,
+          roughness: .4,
+          metalness: .62,
+        })
+        const devAccentStripMaterial = new THREE.MeshStandardMaterial({
+          color: 0x425078,
+          emissive: 0x53d3ff,
+          emissiveIntensity: .34,
+          roughness: .32,
+          metalness: .66,
+        })
+        const devLetterMaterial = new THREE.MeshPhysicalMaterial({
+          color: 0xe8edf2,
+          emissive: 0xbddfff,
+          emissiveIntensity: .045,
+          roughness: .25,
+          metalness: .12,
+          clearcoat: .58,
+          clearcoatRoughness: .2,
         })
         const devOutlineMaterial = new THREE.LineBasicMaterial({
           color: 0x6170ff,
           transparent: true,
-          opacity: .26,
+          opacity: .16,
         })
         architecturalMaterials.push(
           devPlinthMaterial,
+          devPlinthCapMaterial,
+          devFaceMaterial,
+          devFrameMaterial,
+          devAccentStripMaterial,
           devLetterMaterial,
           devOutlineMaterial,
         )
@@ -3679,6 +3732,58 @@ export default function DevWebSurf3D({
         devPlinth.castShadow = true
         devPlinth.receiveShadow = true
         group.add(devPlinth)
+
+        const devPlinthCap = new THREE.Mesh(
+          devPlinthCapGeometry,
+          devPlinthCapMaterial,
+        )
+        devPlinthCap.position.set(0, -.945, -1.45)
+        devPlinthCap.castShadow = true
+        devPlinthCap.receiveShadow = true
+        group.add(devPlinthCap)
+
+        // A recessed architectural face keeps the mark from reading as
+        // lettering pasted onto a flat box. The surrounding trim catches
+        // highlights while the shared surface map ties it to the library.
+        const devFace = new THREE.Mesh(
+          devFaceGeometry,
+          devFaceMaterial,
+        )
+        devFace.position.set(0, .08, -1.17)
+        devFace.castShadow = true
+        devFace.receiveShadow = true
+        group.add(devFace)
+
+        const devFrameTop = new THREE.Mesh(
+          devFrameHorizontalGeometry,
+          devFrameMaterial,
+        )
+        devFrameTop.position.set(0, 1.045, -1.105)
+        group.add(devFrameTop)
+
+        const devFrameBottom = devFrameTop.clone()
+        devFrameBottom.position.y = -.885
+        group.add(devFrameBottom)
+
+        const devFrameLeft = new THREE.Mesh(
+          devFrameVerticalGeometry,
+          devFrameMaterial,
+        )
+        devFrameLeft.position.set(-1.38, .08, -1.105)
+        group.add(devFrameLeft)
+
+        const devFrameRight = devFrameLeft.clone()
+        devFrameRight.position.x = 1.38
+        group.add(devFrameRight)
+
+        // A single restrained cyan seam gives the base a fabricated,
+        // assembled quality without turning the sculpture into neon signage.
+        const devAccentStrip = new THREE.Mesh(
+          devAccentStripGeometry,
+          devAccentStripMaterial,
+        )
+        devAccentStrip.position.set(0, -.94, -1.055)
+        group.add(devAccentStrip)
 
         const devOutline = new THREE.LineSegments(
           devOutlineGeometry,
@@ -3698,14 +3803,16 @@ export default function DevWebSurf3D({
             devLetterStrokeGeometry,
             devLetterMaterial,
           )
-          stroke.position.set(x, y, -1.185)
+          stroke.position.set(x, y, -1.065)
           stroke.scale.set(width, height, 1)
           stroke.rotation.z = rotation
           stroke.castShadow = true
+          stroke.receiveShadow = true
           group.add(stroke)
         }
 
-        // Block-built DEV mark: physical raised geometry rather than a sprite.
+        // Block-built DEV mark: raised, enamel-like channel letters with
+        // enough depth to cast their own small shadows against the inset face.
         // D
         addDevStroke(-1.03, .08, .13, 1.12)
         addDevStroke(-.76, .575, .5, .13)
