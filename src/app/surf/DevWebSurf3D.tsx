@@ -40,6 +40,7 @@ type Props = {
   floorRequest: FloorRequest
   onFloorChange: (floor: number) => void
   uiPanelRefs: Array<RefObject<HTMLElement | null>>
+  catalogLoading: boolean
   debugEnabled: boolean
   onDebugMetrics: (metrics: SurfDebugMetrics) => void
 }
@@ -545,6 +546,7 @@ export default function DevWebSurf3D({
   floorRequest,
   onFloorChange,
   uiPanelRefs,
+  catalogLoading,
   debugEnabled,
   onDebugMetrics,
 }: Props) {
@@ -562,6 +564,7 @@ export default function DevWebSurf3D({
   const floorRequestRef = useRef(floorRequest)
   const floorChangeRef = useRef(onFloorChange)
   const uiPanelRefsRef = useRef(uiPanelRefs)
+  const catalogLoadingRef = useRef(catalogLoading)
   const debugEnabledRef = useRef(debugEnabled)
   const debugMetricsRef = useRef(onDebugMetrics)
 
@@ -578,6 +581,7 @@ export default function DevWebSurf3D({
   floorRequestRef.current = floorRequest
   floorChangeRef.current = onFloorChange
   uiPanelRefsRef.current = uiPanelRefs
+  catalogLoadingRef.current = catalogLoading
   debugEnabledRef.current = debugEnabled
   debugMetricsRef.current = onDebugMetrics
 
@@ -4107,6 +4111,7 @@ export default function DevWebSurf3D({
     let lastFloorNonce = floorRequestRef.current?.nonce ?? -1
     let currentFloorIndex = currentFloorRef.current
     let lastLodUpdate = -1
+    const sceneRevealStartedAt = performance.now()
     let debugFrameCount = 0
     let debugWindowStartedAt = performance.now()
 
@@ -4465,6 +4470,11 @@ export default function DevWebSurf3D({
     function animate(nowMs: number) {
       frame = requestAnimationFrame(animate)
       const now = nowMs / 1000
+      const streamReveal = THREE.MathUtils.smoothstep(
+        nowMs - sceneRevealStartedAt,
+        0,
+        680,
+      )
       const delta = Math.min(
         .05,
         Math.max(.001, (nowMs - lastTime) / 1000),
@@ -4694,9 +4704,11 @@ export default function DevWebSurf3D({
             1 - Math.exp(-delta * 9),
           )
 
+          const articleReveal =
+            node?.kind === 'article' ? streamReveal : 1
           visual.material.opacity +=
-            (((unrelatedShelf ? .3 : 1)) -
-              visual.material.opacity) *
+            (((unrelatedShelf ? .3 : 1) * articleReveal -
+              visual.material.opacity)) *
             .08
         }
 
@@ -4778,6 +4790,62 @@ export default function DevWebSurf3D({
             .12,
           )
         }
+      })
+
+      archivePlaceholderLods.forEach((placeholder, floorIndex) => {
+        const isCurrentFloor = floorIndex === currentFloorIndex
+        const floorDistance = Math.abs(floorIndex - currentFloorIndex)
+        const sparseCurrentFloor =
+          isCurrentFloor && placeholder.articleCount < 36
+        const catalogPulse =
+          .5 + .5 * Math.sin(now * 3.1 + floorIndex * .8)
+
+        const normalShelfTarget =
+          isCurrentFloor
+            ? sparseCurrentFloor
+              ? .12
+              : 0
+            : floorDistance <= 1
+              ? .46
+              : floorDistance === 2
+                ? .26
+                : .12
+        const normalBookTarget =
+          isCurrentFloor
+            ? sparseCurrentFloor
+              ? .12
+              : 0
+            : floorDistance <= 1
+              ? .34
+              : floorDistance === 2
+                ? .2
+                : .09
+
+        const shelfTarget = catalogLoadingRef.current
+          ? Math.max(normalShelfTarget, isCurrentFloor ? .16 + catalogPulse * .035 : normalShelfTarget)
+          : normalShelfTarget
+        const bookTarget = catalogLoadingRef.current
+          ? Math.max(normalBookTarget, isCurrentFloor ? .18 + catalogPulse * .055 : normalBookTarget)
+          : normalBookTarget
+
+        placeholder.shelves.visible = shelfTarget > .01
+        placeholder.books.visible = bookTarget > .01
+        placeholder.shelfMaterial.opacity +=
+          (shelfTarget - placeholder.shelfMaterial.opacity) *
+          (1 - Math.exp(-delta * 5))
+        placeholder.bookMaterial.opacity +=
+          (bookTarget - placeholder.bookMaterial.opacity) *
+          (1 - Math.exp(-delta * 5))
+        placeholder.bookMaterial.emissiveIntensity +=
+          ((catalogLoadingRef.current && isCurrentFloor
+            ? .035 + catalogPulse * .018
+            : isCurrentFloor
+              ? .018
+              : floorDistance <= 1
+                ? .035
+                : .012) -
+            placeholder.bookMaterial.emissiveIntensity) *
+          (1 - Math.exp(-delta * 4))
       })
 
       const activeShelfVisual =
