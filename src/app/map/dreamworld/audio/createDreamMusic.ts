@@ -25,7 +25,7 @@ function hzFromMidi(midi: number) {
   return 440 * Math.pow(2, (midi - 69) / 12)
 }
 
-export function createProceduralDreamMusic(
+export function createDreamMusic(
   listener: THREE.AudioListener,
   profile: DreamProfile,
   seed: number,
