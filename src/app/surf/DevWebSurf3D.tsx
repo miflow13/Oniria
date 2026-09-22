@@ -1435,6 +1435,10 @@ export default function DevWebSurf3D({
       section: LibrarySection
       materials: THREE.MeshBasicMaterial[]
     }> = []
+    const wayfindingPaths: Array<{
+      section: LibrarySection
+      material: THREE.MeshBasicMaterial
+    }> = []
 
     function addShelf(
       x: number,
@@ -1703,6 +1707,37 @@ export default function DevWebSurf3D({
       scene.add(group)
       sectionBeacons.push({section, materials})
     }
+
+    function addWayfindingPath(
+      section: LibrarySection,
+      x: number,
+      z: number,
+      width: number,
+      depth: number,
+    ) {
+      const geometry = new THREE.BoxGeometry(width, .012, depth)
+      architecturalGeometries.push(geometry)
+      const material = new THREE.MeshBasicMaterial({
+        color: SECTION_ACCENTS[section],
+        transparent: true,
+        opacity: .026,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        toneMapped: false,
+      })
+      architecturalMaterials.push(material)
+      const mesh = new THREE.Mesh(geometry, material)
+      mesh.position.set(x, .048, z)
+      scene.add(mesh)
+      wayfindingPaths.push({section, material})
+    }
+
+    addWayfindingPath('featured', 0, .15, .07, 10.4)
+    addWayfindingPath('latest', -4.15, -5.2, 8.25, .07)
+    addWayfindingPath('topics', 4.15, -5.2, 8.25, .07)
+    addWayfindingPath('search', -8.35, -13.15, .07, 15.9)
+    addWayfindingPath('creators', 8.35, -13.15, .07, 15.9)
+    addWayfindingPath('archive', 0, -20, .07, 28.8)
 
     // Netspace underlay: the library still reads as DEV, but the floor
     // behaves like a data plane rather than a conventional building.
@@ -4471,6 +4506,15 @@ export default function DevWebSurf3D({
           tempScale.set(targetScale, targetScale, targetScale),
           1 - Math.exp(-delta * 3.5),
         )
+      })
+
+      wayfindingPaths.forEach(({section, material}) => {
+        const isCurrent = section === currentSection
+        const isRouted = section === routedSection
+        const targetOpacity = isRouted ? .19 : isCurrent ? .095 : .028
+        material.opacity +=
+          (targetOpacity - material.opacity) *
+          (1 - Math.exp(-delta * 5.5))
       })
 
       sectionBeacons.forEach(({section, materials}) => {
