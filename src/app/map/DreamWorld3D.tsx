@@ -2791,6 +2791,8 @@ export default function DreamWorld3D({
     const libraryRouteTextures: THREE.Texture[] = []
     const libraryRouteMaterials: THREE.Material[] = []
     const libraryRouteObjects: THREE.Object3D[] = []
+    const libraryDistrictLandmarkGeometries: THREE.BufferGeometry[] = []
+    const libraryDistrictLandmarkMaterials: THREE.Material[] = []
     let libraryArrowGeometry: THREE.BufferGeometry | null = null
     let libraryArrowMaterial: THREE.MeshBasicMaterial | null = null
     let libraryArrows: THREE.InstancedMesh | null = null
@@ -2993,6 +2995,109 @@ export default function DreamWorld3D({
         libraryRouteTextures.push(texture)
         libraryRouteMaterials.push(material)
         libraryRouteObjects.push(marker)
+
+        const pathCenter = new THREE.Vector3(
+          ...archivePathPoint(district.bay),
+        )
+        const frame = archivePathFrame(district.bay)
+        const side = new THREE.Vector3(
+          frame.normalX,
+          0,
+          frame.normalZ,
+        )
+        const sideSign = index % 2 === 0 ? 1 : -1
+        const halfWidth = archiveWalkwayHalfWidthAtBay(
+          district.bay,
+          activeDistricts,
+        )
+        const landmarkPosition = pathCenter
+          .clone()
+          .addScaledVector(side, sideSign * (halfWidth + 2.35))
+        landmarkPosition.y += ARCHIVE_WALKWAY_Y_OFFSET + 1.2
+
+        let landmarkGeometry: THREE.BufferGeometry
+        switch (district.landmarkType) {
+          case 'neural-lattice':
+            landmarkGeometry = new THREE.IcosahedronGeometry(1.15, 1)
+            break
+          case 'terminal-wall':
+            landmarkGeometry = new THREE.BoxGeometry(2.35, 1.45, .16)
+            break
+          case 'syntax-tree':
+            landmarkGeometry = new THREE.ConeGeometry(1.05, 2.3, 6)
+            break
+          case 'dev-monument':
+            landmarkGeometry = new THREE.BoxGeometry(1.65, 1.65, 1.65)
+            break
+          case 'archive-tower':
+            landmarkGeometry = new THREE.CylinderGeometry(.72, 1, 2.8, 8)
+            break
+          case 'index':
+          default:
+            landmarkGeometry = new THREE.TorusGeometry(.95, .16, 8, 36)
+            break
+        }
+
+        const landmarkMaterial = new THREE.MeshBasicMaterial({
+          color: district.accent,
+          transparent: true,
+          opacity: .54,
+          wireframe: district.landmarkType !== 'archive-tower',
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          toneMapped: false,
+        })
+        const landmark = new THREE.Mesh(
+          landmarkGeometry,
+          landmarkMaterial,
+        )
+        landmark.position.copy(landmarkPosition)
+        landmark.rotation.y =
+          Math.atan2(frame.tangentX, frame.tangentZ) +
+          (district.landmarkType === 'dev-monument'
+            ? Math.PI / 4
+            : 0)
+        landmark.renderOrder = 3
+        landmark.userData.libraryDecorative = true
+        world.add(landmark)
+        libraryRouteObjects.push(landmark)
+        libraryDistrictLandmarkGeometries.push(landmarkGeometry)
+        libraryDistrictLandmarkMaterials.push(landmarkMaterial)
+
+        const atmosphereColor =
+          district.atmosphere === 'crystalline'
+            ? 0x70f3ff
+            : district.atmosphere === 'industrial'
+              ? 0x7892a8
+              : district.atmosphere === 'deep-void'
+                ? 0x8c63d8
+                : 0xd782e8
+        const auraGeometry = new THREE.RingGeometry(1.35, 1.7, 36)
+        const auraMaterial = new THREE.MeshBasicMaterial({
+          color: atmosphereColor,
+          transparent: true,
+          opacity:
+            district.atmosphere === 'deep-void'
+              ? .12
+              : district.atmosphere === 'industrial'
+                ? .16
+                : .24,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          toneMapped: false,
+        })
+        const aura = new THREE.Mesh(auraGeometry, auraMaterial)
+        aura.position.copy(landmarkPosition)
+        aura.position.y =
+          pathCenter.y + ARCHIVE_WALKWAY_Y_OFFSET + .055
+        aura.rotation.x = -Math.PI / 2
+        aura.renderOrder = 2
+        aura.userData.libraryDecorative = true
+        world.add(aura)
+        libraryRouteObjects.push(aura)
+        libraryDistrictLandmarkGeometries.push(auraGeometry)
+        libraryDistrictLandmarkMaterials.push(auraMaterial)
       })
 
       const welcomePoint = new THREE.Vector3(...archivePathPoint(.35))
@@ -6774,6 +6879,12 @@ export default function DreamWorld3D({
       libraryRouteDotMaterial?.dispose()
       libraryRouteTextures.forEach((texture) => texture.dispose())
       libraryRouteMaterials.forEach((material) => material.dispose())
+      libraryDistrictLandmarkGeometries.forEach((geometry) =>
+        geometry.dispose(),
+      )
+      libraryDistrictLandmarkMaterials.forEach((material) =>
+        material.dispose(),
+      )
       libraryRouteObjects.forEach((object) => {
         if (object instanceof THREE.Object3D) world.remove(object)
       })
