@@ -2112,6 +2112,7 @@ export default function DreamWorld3D({
     let libraryArrowGeometry: THREE.BufferGeometry | null = null
     let libraryArrowMaterial: THREE.MeshBasicMaterial | null = null
     let libraryArrows: THREE.InstancedMesh | null = null
+    const libraryArrowBays: number[] = []
     let libraryGuardGeometry: THREE.BoxGeometry | null = null
     let libraryGuardMaterial: THREE.MeshBasicMaterial | null = null
     let libraryGuards: THREE.InstancedMesh | null = null
@@ -2303,6 +2304,8 @@ export default function DreamWorld3D({
         marker.userData.libraryDecorative = true
         marker.userData.routeMarkerBaseY = center.y
         marker.userData.routeMarkerPhase = index * 1.43
+        marker.userData.routeMarkerBay = district.bay
+        marker.userData.routeMarkerBaseScale = 6.2
         world.add(marker)
         libraryRouteTextures.push(texture)
         libraryRouteMaterials.push(material)
@@ -2373,24 +2376,27 @@ export default function DreamWorld3D({
       )
       libraryArrowGeometry.setIndex([0, 1, 2])
       libraryArrowMaterial = new THREE.MeshBasicMaterial({
-        color: 0x9ee9f1,
+        color: 0xffffff,
+        vertexColors: true,
         transparent: true,
-        opacity: .33,
+        opacity: .38,
         side: THREE.DoubleSide,
         depthWrite: false,
         toneMapped: true,
       })
-      const arrowBays: number[] = []
       for (let bay = 2.5; bay < ARCHIVE_PATH_RENDER_BAYS; bay += 2.75) {
-        if (archiveDistrictInfluence(bay) < .68) arrowBays.push(bay)
+        if (archiveDistrictInfluence(bay) < .68) {
+          libraryArrowBays.push(bay)
+        }
       }
       libraryArrows = new THREE.InstancedMesh(
         libraryArrowGeometry,
         libraryArrowMaterial,
-        arrowBays.length,
+        libraryArrowBays.length,
       )
       const arrowDummy = new THREE.Object3D()
-      arrowBays.forEach((bay, index) => {
+      const arrowIdleColor = new THREE.Color(0x24465a)
+      libraryArrowBays.forEach((bay, index) => {
         const center = new THREE.Vector3(...archivePathPoint(bay))
         const frame = archivePathFrame(bay)
         center.y += ARCHIVE_WALKWAY_Y_OFFSET + .055
@@ -2402,8 +2408,12 @@ export default function DreamWorld3D({
         )
         arrowDummy.updateMatrix()
         libraryArrows?.setMatrixAt(index, arrowDummy.matrix)
+        libraryArrows?.setColorAt(index, arrowIdleColor)
       })
       libraryArrows.instanceMatrix.needsUpdate = true
+      if (libraryArrows.instanceColor) {
+        libraryArrows.instanceColor.needsUpdate = true
+      }
       libraryArrows.renderOrder = 3
       libraryArrows.userData.libraryDecorative = true
       world.add(libraryArrows)
@@ -4484,9 +4494,18 @@ export default function DreamWorld3D({
         const material = sprite.material as THREE.SpriteMaterial
         const baseOpacity =
           sprite.userData.archiveFogBaseOpacity as number
+        const cameraDistance = sprite.position.distanceTo(
+          camera.position,
+        )
+        const clearance = THREE.MathUtils.smoothstep(
+          cameraDistance,
+          4,
+          13,
+        )
         material.opacity =
           baseOpacity *
-          (.88 + Math.sin(elapsed * .041 + phase) * .12)
+          (.88 + Math.sin(elapsed * .041 + phase) * .12) *
+          (.24 + clearance * .76)
       })
 
       nearDust.rotation.y = Math.sin(elapsed * .045) * .05
@@ -4502,13 +4521,61 @@ export default function DreamWorld3D({
           .22 + Math.max(0, Math.sin(elapsed * .36 + .8)) * .04
       }
 
+      const currentArchiveBay = libraryMode
+        ? archiveBayFromWorldZ(camera.position.z)
+        : 0
+
       libraryRouteObjects.forEach((object) => {
         if (!object.userData.routeMarkerBaseY) return
         const phase = object.userData.routeMarkerPhase as number
         const baseY = object.userData.routeMarkerBaseY as number
         object.position.y =
           baseY + Math.sin(elapsed * .42 + phase) * .08
+
+        const markerBay = object.userData.routeMarkerBay
+        if (
+          typeof markerBay === 'number' &&
+          object instanceof THREE.Sprite
+        ) {
+          const distance = Math.abs(markerBay - currentArchiveBay)
+          const wake = 1 - THREE.MathUtils.smoothstep(
+            distance,
+            1.2,
+            5.5,
+          )
+          const material = object.material as THREE.SpriteMaterial
+          material.opacity +=
+            ((.42 + wake * .52) - material.opacity) * .09
+          const baseScale =
+            (object.userData.routeMarkerBaseScale as number) || 6.2
+          const scale = baseScale * (1 + wake * .07)
+          object.scale.lerp(
+            new THREE.Vector3(scale, scale / 4, 1),
+            .08,
+          )
+        }
       })
+
+      if (libraryArrows) {
+        const awakeColor = new THREE.Color(0xb7f8ff)
+        const idleColor = new THREE.Color(0x24465a)
+        const color = new THREE.Color()
+        libraryArrowBays.forEach((bay, index) => {
+          const deltaBay = bay - currentArchiveBay
+          const aheadBias = deltaBay >= -.5 ? 1 : .62
+          const wake =
+            (1 - THREE.MathUtils.smoothstep(
+              Math.abs(deltaBay),
+              .4,
+              5.8,
+            )) * aheadBias
+          color.copy(idleColor).lerp(awakeColor, wake)
+          libraryArrows?.setColorAt(index, color)
+        })
+        if (libraryArrows.instanceColor) {
+          libraryArrows.instanceColor.needsUpdate = true
+        }
+      }
 
       if (libraryRouteDots && libraryRouteDotGeometry) {
         const routePositions =
@@ -4703,6 +4770,35 @@ export default function DreamWorld3D({
           }
         } else if (libraryShelfSparkles) {
           libraryShelfSparkles.visible = false
+        }
+
+        libraryBookVisuals.forEach((bookVisual) => {
+          const awake =
+            bookVisual.nodeId === nearestLibraryShelfId
+              ? focusStrength
+              : 0
+          const presented =
+            openingBook?.visual === bookVisual
+          bookVisual.coverMaterial.emissive.setHex(
+            presented ? 0x6d2f73 : 0x163744,
+          )
+          const targetEmissive = presented
+            ? 1.35
+            : awake * .5
+          bookVisual.coverMaterial.emissiveIntensity +=
+            (targetEmissive -
+              bookVisual.coverMaterial.emissiveIntensity) *
+            .1
+        })
+
+        if (libraryReadingLight && openingBook) {
+          const worldPosition = new THREE.Vector3()
+          openingBook.visual.group.getWorldPosition(worldPosition)
+          libraryReadingLight.position.copy(worldPosition)
+          libraryReadingLight.intensity +=
+            (2.6 - libraryReadingLight.intensity) * .1
+        } else if (libraryReadingLight) {
+          libraryReadingLight.intensity *= .88
         }
       }
 
