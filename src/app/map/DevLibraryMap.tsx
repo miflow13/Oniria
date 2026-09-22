@@ -48,17 +48,17 @@ function catalogShelfPlacement(
 
   if (within < 12) {
     const slot = within - 8
-    const offsets = [-.82, -.34, .34, .82] as const
+    const offsets = [-.98, -.38, .38, .98] as const
     const sides = [-1, 1, -1, 1] as const
     return archiveShelfPlacement(
       key,
       blockStartBay + 4.5 + offsets[slot],
       sides[slot],
       {
-        laneBias: -.3,
-        heightBias: slot % 2 === 0 ? .24 : -.14,
-        alongJitterScale: .18,
-        yawJitterScale: .32,
+        laneBias: -.12,
+        heightBias: slot % 2 === 0 ? .08 : -.06,
+        alongJitterScale: .08,
+        yawJitterScale: .16,
       },
     )
   }
