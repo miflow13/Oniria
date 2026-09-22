@@ -78,8 +78,8 @@ function createTextTexture(
     context.textBaseline = 'middle'
     context.shadowColor = accent
     context.shadowBlur = 16
-    context.fillStyle = '#f2f1ea'
-    context.font = '600 38px Georgia, serif'
+    context.fillStyle = '#f5f5f5'
+    context.font = '700 38px system-ui, sans-serif'
     const cleanTitle =
       title.length > 42 ? title.slice(0, 41) + '…' : title
     context.fillText(cleanTitle, width / 2, 105)
@@ -164,8 +164,8 @@ export default function DevWebSurf3D({
     const container = host
 
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color(0x050607)
-    scene.fog = new THREE.FogExp2(0x07090a, .017)
+    scene.background = new THREE.Color(0x0d0d0d)
+    scene.fog = new THREE.FogExp2(0x111111, .014)
 
     const camera = new THREE.PerspectiveCamera(68, 1, .05, 140)
     camera.position.set(0, 1.62, 13)
@@ -184,25 +184,25 @@ export default function DevWebSurf3D({
     renderer.domElement.tabIndex = 0
     container.appendChild(renderer.domElement)
 
-    const ambient = new THREE.HemisphereLight(0x91a6b0, 0x17120d, 1.15)
+    const ambient = new THREE.HemisphereLight(0xd7defd, 0x101010, 1.35)
     scene.add(ambient)
 
-    const key = new THREE.DirectionalLight(0xf0dcc2, 2.4)
+    const key = new THREE.DirectionalLight(0xf5f5f5, 2.65)
     key.position.set(-9, 13, 9)
     key.castShadow = true
     key.shadow.mapSize.set(2048, 2048)
     key.shadow.bias = -0.0002
     scene.add(key)
 
-    const cyan = new THREE.PointLight(0x4bd8d0, 10, 30, 2)
+    const cyan = new THREE.PointLight(0x3b49df, 10, 34, 2)
     cyan.position.set(-13, 4, -18)
     scene.add(cyan)
 
-    const violet = new THREE.PointLight(0x9879dc, 9, 30, 2)
+    const violet = new THREE.PointLight(0x5965e8, 8, 32, 2)
     violet.position.set(13, 4, -22)
     scene.add(violet)
 
-    const warm = new THREE.PointLight(0xd7a45d, 7, 26, 2)
+    const warm = new THREE.PointLight(0xffffff, 4.5, 24, 2)
     warm.position.set(0, 5, -5)
     scene.add(warm)
 
@@ -217,30 +217,30 @@ export default function DevWebSurf3D({
     }> = []
 
     const floorMaterial = new THREE.MeshStandardMaterial({
-      color: 0x101316,
+      color: 0x171717,
       roughness: .78,
       metalness: .12,
     })
     architecturalMaterials.push(floorMaterial)
 
     const brass = new THREE.MeshStandardMaterial({
-      color: 0x6a5838,
+      color: 0x3b49df,
       roughness: .48,
       metalness: .55,
-      emissive: 0x211a0e,
+      emissive: 0x11173f,
       emissiveIntensity: .14,
     })
     architecturalMaterials.push(brass)
 
     const shelfMaterial = new THREE.MeshStandardMaterial({
-      color: 0x191b1d,
+      color: 0x202020,
       roughness: .7,
       metalness: .22,
     })
     architecturalMaterials.push(shelfMaterial)
 
     const concrete = new THREE.MeshStandardMaterial({
-      color: 0x151617,
+      color: 0x181818,
       roughness: .92,
       metalness: .04,
     })
@@ -405,13 +405,13 @@ export default function DevWebSurf3D({
       ),
     )
 
-    addSectionSign('atrium', 0, 4.6, 5.5, '#d7a45d')
-    addSectionSign('featured', 0, 4.1, -5.8, '#d7a45d')
-    addSectionSign('latest', -13, 4.1, -6.6, '#67cfd0')
-    addSectionSign('topics', 13, 4.1, -6.6, '#62d7a5')
-    addSectionSign('creators', 13, 4.1, -21.4, '#a98ae5')
-    addSectionSign('search', -13, 4.1, -21.4, '#e5b760')
-    addSectionSign('archive', 0, 4.1, -35.5, '#697582')
+    addSectionSign('atrium', 0, 4.6, 5.5, '#f5f5f5')
+    addSectionSign('featured', 0, 4.1, -5.8, '#3b49df')
+    addSectionSign('latest', -13, 4.1, -6.6, '#5b6cff')
+    addSectionSign('topics', 13, 4.1, -6.6, '#3b49df')
+    addSectionSign('creators', 13, 4.1, -21.4, '#7c83ff')
+    addSectionSign('search', -13, 4.1, -21.4, '#3b49df')
+    addSectionSign('archive', 0, 4.1, -35.5, '#a3a3a3')
 
     // A retro-futuristic information desk in the atrium.
     const deskGeometry = new THREE.CylinderGeometry(1.5, 1.75, .95, 10)
@@ -601,14 +601,14 @@ export default function DevWebSurf3D({
         const material = new THREE.MeshBasicMaterial({
           color:
             edge.kind === 'author'
-              ? 0xa786e8
+              ? 0x7c83ff
               : edge.kind === 'tag'
                 ? 0x5ad39f
                 : edge.kind === 'search'
                   ? 0xe1b25b
                   : edge.kind === 'corridor'
                     ? 0x6b7c82
-                    : 0x4aa8ae,
+                    : 0x5965e8,
           transparent: true,
           opacity: edge.kind === 'corridor' ? .18 : .11,
           blending: THREE.AdditiveBlending,
@@ -644,11 +644,11 @@ export default function DevWebSurf3D({
     // Route guidance is a museum/library breadcrumb painted on the floor.
     const guideGeometry = new THREE.BufferGeometry()
     const guideMaterial = new THREE.LineDashedMaterial({
-      color: 0xf0c879,
+      color: 0x3b49df,
       transparent: true,
-      opacity: .72,
-      dashSize: .34,
-      gapSize: .2,
+      opacity: .92,
+      dashSize: .42,
+      gapSize: .14,
     })
     const guideLine = new THREE.Line(guideGeometry, guideMaterial)
     guideLine.visible = false
