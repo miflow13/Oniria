@@ -66,5 +66,6 @@ export type LibraryShelf = {
   kind: LibraryShelfKind
   accent: string
   world: [number, number, number]
+  yaw: number
   articles: DevArticleSummary[]
 }
