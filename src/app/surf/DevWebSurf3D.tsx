@@ -337,6 +337,33 @@ function createArchitecturalSurfaceTexture() {
   return texture
 }
 
+function createFloorRoughnessTexture() {
+  const canvas = document.createElement('canvas')
+  canvas.width = 128
+  canvas.height = 128
+  const context = canvas.getContext('2d')
+
+  if (context) {
+    for (let y = 0; y < canvas.height; y += 1) {
+      for (let x = 0; x < canvas.width; x += 1) {
+        const noise = Math.sin(x * 17.13 + y * 9.71) * .5 + .5
+        const value = Math.round(222 + noise * 24)
+        context.fillStyle = 'rgb(' + value + ',' + value + ',' + value + ')'
+        context.fillRect(x, y, 1, 1)
+      }
+    }
+  }
+
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.wrapS = THREE.RepeatWrapping
+  texture.wrapT = THREE.RepeatWrapping
+  texture.repeat.set(5, 5)
+  texture.colorSpace = THREE.NoColorSpace
+  texture.minFilter = THREE.LinearMipmapLinearFilter
+  texture.magFilter = THREE.LinearFilter
+  return texture
+}
+
 function makeCurve(a: THREE.Vector3, b: THREE.Vector3, lift = .2) {
   const start = a.clone()
   const end = b.clone()
@@ -1102,6 +1129,8 @@ export default function DevWebSurf3D({
     architecturalSurfaceRoughness.colorSpace =
       THREE.NoColorSpace
     architecturalSurfaceRoughness.needsUpdate = true
+    const floorRoughnessTexture = createFloorRoughnessTexture()
+    labelsToDispose.push(floorRoughnessTexture)
 
     // One material family for floors + walls. The floor now reads as the
     // horizontal face of the same megastructure instead of a separate skin.
@@ -1116,14 +1145,19 @@ export default function DevWebSurf3D({
     // modest value lift so walkable space can be parsed without a neon grid.
     const floorMaterial = concrete.clone()
     floorMaterial.color.setHex(0x3d4149)
-    floorMaterial.roughness = .9
+    // The architectural color map is mid-value by design; using it directly
+    // as roughness made floor highlights read wet. A high-value noisy map
+    // preserves cheap breakup while keeping the walking surface matte-satin.
+    floorMaterial.roughnessMap = floorRoughnessTexture
+    floorMaterial.roughness = .96
+    floorMaterial.metalness = .008
     const floorMaterials = FLOOR_SURFACE_TINTS.map((tint, floor) => {
       const material = floorMaterial.clone()
       material.color.setHex(tint)
       material.emissive = new THREE.Color(0x17191d)
       material.emissiveIntensity = .11
-      material.roughness = .84
-      material.metalness = .025
+      material.roughness = .95
+      material.metalness = .006
       return material
     })
     // Each upper level gets a restrained, physically present wall finish.
@@ -1305,9 +1339,9 @@ export default function DevWebSurf3D({
         map: architecturalSurfaceTexture,
         roughnessMap: architecturalSurfaceRoughness,
         roughness:
-          variant === 'landing' || variant === 'threshold' ? .8 : .88,
+          variant === 'landing' || variant === 'threshold' ? .91 : .95,
         metalness:
-          variant === 'landing' || variant === 'threshold' ? .07 : .035,
+          variant === 'landing' || variant === 'threshold' ? .025 : .008,
         emissive: FLOOR_ACCENTS[floorIndex],
         emissiveIntensity:
           variant === 'threshold' || variant === 'landing'
