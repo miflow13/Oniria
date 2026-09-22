@@ -154,14 +154,33 @@ export async function GET(request: NextRequest) {
     }
 
     if (mode === 'stacks') {
-      const pages = [1, 2, 3, 4, 5, 6]
-      const batches = await Promise.all(
-        pages.map((page) =>
-          devFetch(
-            `/articles?per_page=100&page=${page}`,
-          ).catch(() => []),
-        ),
+      const requestedPages = Number.parseInt(
+        safeValue(searchParams.get('pages'), '12'),
+        10,
       )
+      const pageCount = Number.isFinite(requestedPages)
+        ? Math.max(1, Math.min(16, requestedPages))
+        : 12
+      const pages = Array.from(
+        {length: pageCount},
+        (_, index) => index + 1,
+      )
+
+      // Fetch in small waves rather than opening a dozen upstream
+      // connections at once. The result is still returned as one stable
+      // catalog so the Three.js scene only rebuilds once.
+      const batches: unknown[][] = []
+      for (let index = 0; index < pages.length; index += 4) {
+        const wave = pages.slice(index, index + 4)
+        const results = await Promise.all(
+          wave.map((page) =>
+            devFetch(
+              `/articles?per_page=100&page=${page}`,
+            ).catch(() => []),
+          ),
+        )
+        batches.push(...results)
+      }
 
       const seen = new Set<number>()
       const articles = normalizeArticles(
@@ -182,6 +201,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         articles,
         pages: pages.length,
+        hasMore:
+          Array.isArray(batches[batches.length - 1]) &&
+          batches[batches.length - 1].length === 100,
       })
     }
 

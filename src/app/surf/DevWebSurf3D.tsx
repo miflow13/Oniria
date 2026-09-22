@@ -78,7 +78,7 @@ const SECTION_DOORWAYS: Record<LibrarySection, THREE.Vector3> = {
 }
 
 const STACK_FLOOR_HEIGHT = 4.6
-const STACK_FLOOR_COUNT = 4
+const STACK_FLOOR_COUNT = 6
 const ELEVATOR_X = 6.6
 const ELEVATOR_Z = 10.8
 
@@ -419,12 +419,14 @@ export default function DevWebSurf3D({
       antialias: true,
       powerPreference: 'high-performance',
     })
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5))
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25))
     renderer.toneMapping = THREE.ACESFilmicToneMapping
     renderer.toneMappingExposure = 1.06
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.shadowMap.enabled = true
     renderer.shadowMap.type = THREE.PCFSoftShadowMap
+    renderer.shadowMap.autoUpdate = false
+    renderer.shadowMap.needsUpdate = true
     renderer.domElement.className = styles.canvas
     renderer.domElement.tabIndex = 0
     container.appendChild(renderer.domElement)
@@ -435,7 +437,7 @@ export default function DevWebSurf3D({
     const key = new THREE.DirectionalLight(0xf5f5f5, 2.65)
     key.position.set(-9, 13, 9)
     key.castShadow = true
-    key.shadow.mapSize.set(2048, 2048)
+    key.shadow.mapSize.set(1024, 1024)
     key.shadow.bias = -0.0002
     scene.add(key)
 
@@ -486,9 +488,10 @@ export default function DevWebSurf3D({
         lastUsed: number
       }
     >()
-    const MAX_RESIDENT_COVERS = 14
-    const COVER_LOAD_DISTANCE = 11
-    const COVER_KEEP_DISTANCE = 17
+    const MAX_RESIDENT_COVERS = 32
+    const COVER_LOAD_DISTANCE = 10
+    const COVER_KEEP_DISTANCE = 18
+    const COVER_EVICT_AGE = 4.5
     let lastCoverTrim = 0
     let destroyed = false
 
@@ -515,7 +518,7 @@ export default function DevWebSurf3D({
         if (visual.coverMaterial.map !== entry.texture) {
           visual.coverMaterial.map = entry.texture
           visual.coverMaterial.color.set(0xffffff)
-          visual.coverMaterial.opacity = .98
+          visual.coverMaterial.opacity = 1
           visual.coverMaterial.needsUpdate = true
         }
         return
@@ -551,7 +554,7 @@ export default function DevWebSurf3D({
           if (visual.coverMaterial) {
             visual.coverMaterial.map = texture
             visual.coverMaterial.color.set(0xffffff)
-            visual.coverMaterial.opacity = .98
+            visual.coverMaterial.opacity = 1
             visual.coverMaterial.needsUpdate = true
           }
         },
@@ -573,7 +576,7 @@ export default function DevWebSurf3D({
       if (!visual.coverMaterial || !visual.coverMaterial.map) return
       visual.coverMaterial.map = null
       visual.coverMaterial.color.set(0x171b28)
-      visual.coverMaterial.opacity = .72
+      visual.coverMaterial.opacity = 1
       visual.coverMaterial.needsUpdate = true
     }
 
@@ -585,24 +588,27 @@ export default function DevWebSurf3D({
         .filter(([, entry]) => entry.texture)
         .sort((a, b) => b[1].lastUsed - a[1].lastUsed)
 
-      resident.slice(MAX_RESIDENT_COVERS).forEach(([url, entry]) => {
-        const texture = entry.texture
-        if (!texture) return
+      resident
+        .slice(MAX_RESIDENT_COVERS)
+        .filter(([, entry]) => now - entry.lastUsed > COVER_EVICT_AGE)
+        .forEach(([url, entry]) => {
+          const texture = entry.texture
+          if (!texture) return
 
-        visuals.forEach((visual) => {
-          if (
-            visual.coverUrl === url &&
-            visual.coverMaterial?.map === texture
-          ) {
-            downgradeCover(visual)
-          }
+          visuals.forEach((visual) => {
+            if (
+              visual.coverUrl === url &&
+              visual.coverMaterial?.map === texture
+            ) {
+              downgradeCover(visual)
+            }
+          })
+
+          remoteTextures.delete(texture)
+          texture.dispose()
+          entry.texture = null
+          entry.loading = false
         })
-
-        remoteTextures.delete(texture)
-        texture.dispose()
-        entry.texture = null
-        entry.loading = false
-      })
     }
 
     const TITLE_LOAD_DISTANCE = 7.5
@@ -750,7 +756,7 @@ export default function DevWebSurf3D({
       const right = new THREE.Mesh(sideGeometry, shelfMaterial)
       left.position.set(-width / 2, 1.76, 0)
       right.position.set(width / 2, 1.76, 0)
-      left.castShadow = right.castShadow = true
+      left.castShadow = right.castShadow = baseY === 0
       group.add(left, right)
 
       const back = new THREE.Mesh(backGeometry, concrete)
@@ -762,7 +768,7 @@ export default function DevWebSurf3D({
       boardLevels.forEach((boardY) => {
         const board = new THREE.Mesh(boardGeometry, shelfMaterial)
         board.position.set(0, boardY, 0)
-        board.castShadow = true
+        board.castShadow = baseY === 0
         board.receiveShadow = true
         group.add(board)
       })
@@ -1056,26 +1062,60 @@ export default function DevWebSurf3D({
     })
     architecturalMaterials.push(stackFloorMaterial)
 
-    const stackAccents = [0x4f6dff, 0x53d3ff, 0xae7bff, 0xff4fd8]
+    const stackAccents = [0x4f6dff, 0x53d3ff, 0x7f8cff, 0xae7bff, 0xd06dff, 0xff4fd8]
     for (let floor = 1; floor <= STACK_FLOOR_COUNT; floor += 1) {
       const baseY = floor * STACK_FLOOR_HEIGHT
       const accent = stackAccents[floor - 1] ?? 0x53d3ff
 
+      // Two long gallery decks leave a four-metre central void.
+      // Looking up from the atrium now reveals every stack level instead of
+      // seeing the underside of one giant solid slab.
       addFloor(
-        0,
+        -5.45,
         -15,
-        18,
+        7.1,
+        58,
+        stackFloorMaterial,
+        baseY,
+      )
+      addFloor(
+        5.45,
+        -15,
+        7.1,
         58,
         stackFloorMaterial,
         baseY,
       )
 
-      // Perimeter rails keep the upper decks readable and walkable while
-      // leaving the center aisle open from the data lift into the stacks.
-      addWall(-8.85, -15, .16, 58, 1.12, concrete, baseY)
-      addWall(8.85, -15, .16, 58, 1.12, concrete, baseY)
-      addWall(0, 14.4, 17.8, .16, 1.12, concrete, baseY)
-      addWall(0, -44.4, 17.8, .16, 1.12, concrete, baseY)
+      // Front and rear bridges connect the two gallery decks while keeping
+      // the long center atrium open. The lift arrives on the front bridge.
+      addFloor(
+        0,
+        9.2,
+        18,
+        4.2,
+        stackFloorMaterial,
+        baseY,
+      )
+      addFloor(
+        0,
+        -41.6,
+        18,
+        4.6,
+        stackFloorMaterial,
+        baseY,
+      )
+
+      // Outer guard rails.
+      addWall(-8.95, -15, .12, 58, 1.04, concrete, baseY)
+      addWall(8.95, -15, .12, 58, 1.04, concrete, baseY)
+      addWall(0, 14.4, 17.9, .12, 1.04, concrete, baseY)
+      addWall(0, -44.4, 17.9, .12, 1.04, concrete, baseY)
+
+      // Inner balcony rails outline the atrium void so the vertical structure
+      // reads immediately from the ground floor.
+      addWall(-1.95, -15, .07, 58, .82, brass, baseY)
+      addWall(1.95, -15, .07, 58, .82, brass, baseY)
 
       for (let row = 0; row < 10; row += 1) {
         const z = -5.8 - row * 3.85
@@ -1121,6 +1161,64 @@ export default function DevWebSurf3D({
       deckGlow.position.set(0, baseY + .015, 8.2)
       scene.add(deckGlow)
     }
+
+    // Full-height building frame: outer columns and roof trusses turn
+    // the stacks into an actual multi-storey institution instead of shelves
+    // floating over the ground scene.
+    const towerHeight =
+      STACK_FLOOR_COUNT * STACK_FLOOR_HEIGHT + 4.5
+    const columnGeometry = new THREE.BoxGeometry(.28, towerHeight, .28)
+    architecturalGeometries.push(columnGeometry)
+    ;[
+      [-9.05, 14.35],
+      [9.05, 14.35],
+      [-9.05, -44.35],
+      [9.05, -44.35],
+      [-2.05, 14.35],
+      [2.05, 14.35],
+      [-2.05, -44.35],
+      [2.05, -44.35],
+    ].forEach(([x, z]) => {
+      const column = new THREE.Mesh(columnGeometry, concrete)
+      column.position.set(x, towerHeight / 2, z)
+      column.receiveShadow = true
+      scene.add(column)
+    })
+
+    const roofY =
+      STACK_FLOOR_COUNT * STACK_FLOOR_HEIGHT + 4
+    const roofBeamLong = new THREE.BoxGeometry(.16, .16, 59)
+    const roofBeamWide = new THREE.BoxGeometry(18, .16, .16)
+    architecturalGeometries.push(roofBeamLong, roofBeamWide)
+    ;[-9, -2, 2, 9].forEach((x) => {
+      const beam = new THREE.Mesh(roofBeamLong, brass)
+      beam.position.set(x, roofY, -15)
+      scene.add(beam)
+    })
+    ;[-44, -34, -24, -14, -4, 6, 14].forEach((z) => {
+      const beam = new THREE.Mesh(roofBeamWide, brass)
+      beam.position.set(0, roofY, z)
+      scene.add(beam)
+    })
+
+    const atriumLightGeometry = new THREE.PlaneGeometry(3.65, 58)
+    architecturalGeometries.push(atriumLightGeometry)
+    const atriumLightMaterial = new THREE.MeshBasicMaterial({
+      color: 0x3b49df,
+      transparent: true,
+      opacity: .022,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    })
+    architecturalMaterials.push(atriumLightMaterial)
+    const atriumLight = new THREE.Mesh(
+      atriumLightGeometry,
+      atriumLightMaterial,
+    )
+    atriumLight.rotation.x = -Math.PI / 2
+    atriumLight.position.set(0, roofY - .12, -15)
+    scene.add(atriumLight)
 
     // A visible data-lift anchors the floors into one enormous library.
     const liftHeight =
@@ -1244,6 +1342,30 @@ export default function DevWebSurf3D({
     const visuals = new Map<string, Visual>()
     const interactive: THREE.Object3D[] = []
     const disposableTextures: THREE.Texture[] = []
+    const sharedNodeGeometries = new Map<
+      SurfNodeKind,
+      THREE.BufferGeometry
+    >()
+
+    function nodeGeometry(kind: SurfNodeKind) {
+      let geometry = sharedNodeGeometries.get(kind)
+      if (!geometry) {
+        geometry = KIND_GEOMETRY[kind]()
+        sharedNodeGeometries.set(kind, geometry)
+      }
+      return geometry
+    }
+
+    const articleSpineGeometry = new THREE.BoxGeometry(.07, .8, .185)
+    const articleCoverGeometry = new THREE.PlaneGeometry(.56, .44)
+    const articleTitleGeometry = new THREE.PlaneGeometry(.58, .22)
+    const articleGlowGeometry = new THREE.PlaneGeometry(.76, .92)
+    architecturalGeometries.push(
+      articleSpineGeometry,
+      articleCoverGeometry,
+      articleTitleGeometry,
+      articleGlowGeometry,
+    )
 
     nodes.forEach((node, index) => {
       const group = new THREE.Group()
@@ -1288,7 +1410,7 @@ export default function DevWebSurf3D({
             opacity: node.kind === 'section' ? .72 : .94,
           })
 
-      const body = new THREE.Mesh(KIND_GEOMETRY[node.kind](), material)
+      const body = new THREE.Mesh(nodeGeometry(node.kind), material)
       body.userData.nodeId = node.id
       body.castShadow = !isBulkStack
       body.receiveShadow = !isBulkStack
@@ -1315,8 +1437,6 @@ export default function DevWebSurf3D({
         }
 
         if (!isBulkStack) {
-          const spineGeometry = new THREE.BoxGeometry(.07, .8, .185)
-          architecturalGeometries.push(spineGeometry)
           const spineMaterial = new THREE.MeshStandardMaterial({
             color: 0x3b49df,
             emissive: color.clone().lerp(new THREE.Color(0x53d3ff), .45),
@@ -1325,22 +1445,30 @@ export default function DevWebSurf3D({
             metalness: .48,
           })
           architecturalMaterials.push(spineMaterial)
-          const spine = new THREE.Mesh(spineGeometry, spineMaterial)
+          const spine = new THREE.Mesh(
+            articleSpineGeometry,
+            spineMaterial,
+          )
           spine.position.set(-.39, 0, 0)
           group.add(spine)
         }
 
-        const coverGeometry = new THREE.PlaneGeometry(.56, .44)
-        architecturalGeometries.push(coverGeometry)
         const coverMaterial = new THREE.MeshBasicMaterial({
           color: 0x161a27,
-          transparent: true,
-          opacity: .98,
+          transparent: false,
+          opacity: 1,
           toneMapped: false,
+          depthWrite: true,
+          polygonOffset: true,
+          polygonOffsetFactor: -2,
+          polygonOffsetUnits: -2,
         })
         architecturalMaterials.push(coverMaterial)
-        const cover = new THREE.Mesh(coverGeometry, coverMaterial)
-        cover.position.set(.012, .12, .086)
+        const cover = new THREE.Mesh(
+          articleCoverGeometry,
+          coverMaterial,
+        )
+        cover.position.set(.012, .12, .096)
         group.add(cover)
 
         const remoteCover =
@@ -1357,21 +1485,23 @@ export default function DevWebSurf3D({
         }
         bookTitleMaterial = new THREE.MeshBasicMaterial({
           color: 0x1b2030,
-          transparent: true,
-          opacity: .97,
+          transparent: false,
+          opacity: 1,
           toneMapped: false,
-          depthWrite: false,
+          depthWrite: true,
+          polygonOffset: true,
+          polygonOffsetFactor: -3,
+          polygonOffsetUnits: -3,
         })
         architecturalMaterials.push(bookTitleMaterial)
-        const titleGeometry = new THREE.PlaneGeometry(.58, .22)
-        architecturalGeometries.push(titleGeometry)
-        const titlePanel = new THREE.Mesh(titleGeometry, bookTitleMaterial)
-        titlePanel.position.set(.012, -.26, .09)
+        const titlePanel = new THREE.Mesh(
+          articleTitleGeometry,
+          bookTitleMaterial,
+        )
+        titlePanel.position.set(.012, -.26, .101)
         group.add(titlePanel)
 
         if (!isBulkStack) {
-          const glowGeometry = new THREE.PlaneGeometry(.76, .92)
-          architecturalGeometries.push(glowGeometry)
           bookGlowMaterial = new THREE.MeshBasicMaterial({
             color: color.clone().lerp(new THREE.Color(0x53d3ff), .3),
             transparent: true,
@@ -1381,7 +1511,10 @@ export default function DevWebSurf3D({
             side: THREE.DoubleSide,
           })
           architecturalMaterials.push(bookGlowMaterial)
-          const glow = new THREE.Mesh(glowGeometry, bookGlowMaterial)
+          const glow = new THREE.Mesh(
+            articleGlowGeometry,
+            bookGlowMaterial,
+          )
           glow.position.z = -.095
           group.add(glow)
 
@@ -1546,9 +1679,9 @@ export default function DevWebSurf3D({
         )
         const geometry = new THREE.TubeGeometry(
           curve,
-          48,
+          32,
           edge.kind === 'corridor' ? .052 : .027,
-          8,
+          6,
           false,
         )
         const material = new THREE.MeshBasicMaterial({
@@ -1563,9 +1696,9 @@ export default function DevWebSurf3D({
 
         const glowGeometry = new THREE.TubeGeometry(
           curve,
-          48,
+          32,
           edge.kind === 'corridor' ? .105 : .057,
-          8,
+          6,
           false,
         )
         const glowMaterial = new THREE.MeshBasicMaterial({
@@ -1578,7 +1711,7 @@ export default function DevWebSurf3D({
         const glowRoute = new THREE.Mesh(glowGeometry, glowMaterial)
         scene.add(glowRoute)
 
-        const packetGeometry = new THREE.SphereGeometry(.035, 10, 10)
+        const packetGeometry = new THREE.SphereGeometry(.035, 7, 7)
         const packetMaterial = new THREE.MeshBasicMaterial({
           color: baseColor,
           transparent: true,
@@ -2030,6 +2163,30 @@ export default function DevWebSurf3D({
         const hovered = hoverId === id
         const routed = routeTargetRef.current === id
         const node = nodeById.get(id)
+
+        if (
+          node?.kind === 'article' &&
+          (node.floor ?? 0) > 0
+        ) {
+          const floor = node.floor ?? 0
+          const targetFloor = floorTravel?.targetFloor
+          const shouldRender =
+            selected ||
+            routed ||
+            floor === currentFloorLevel ||
+            targetFloor === floor ||
+            (currentFloorLevel === 0 && floor === 1)
+
+          visual.group.visible = shouldRender
+          if (!shouldRender) {
+            downgradeCover(visual)
+            downgradeBookTitle(visual)
+            return
+          }
+        } else {
+          visual.group.visible = true
+        }
+
         const sameShelf =
           Boolean(activeShelfKey) &&
           visual.shelfKey === activeShelfKey
@@ -2615,11 +2772,11 @@ export default function DevWebSurf3D({
       }
 
       visuals.forEach((visual) => {
-        ;(visual.body.geometry as THREE.BufferGeometry).dispose()
         visual.material.dispose()
         visual.labelMaterial.dispose()
         visual.bookTitleTexture?.dispose()
       })
+      sharedNodeGeometries.forEach((geometry) => geometry.dispose())
       disposableTextures.forEach((texture) => texture.dispose())
 
       routeVisuals.forEach((routeVisual) => {
