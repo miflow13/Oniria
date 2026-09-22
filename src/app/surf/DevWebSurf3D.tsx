@@ -2317,7 +2317,7 @@ export default function DevWebSurf3D({
       group.rotation.y = rotationY
       group.name = 'section-sign:' + section
       group.userData.layoutObjectKey = group.name
-      group.userData.layoutLabel = SECTION_LABELS[section]
+      group.userData.layoutLabel = sectionLabel(section)
 
       const panelGeometry = new THREE.BoxGeometry(4.75, 1.38, .11)
       const faceGeometry = new THREE.PlaneGeometry(4.5, 1.16)
