@@ -1487,8 +1487,7 @@ export default function DreamWorld3D({
               : 14
 
       for (let index = 0; index < fogBankCount; index += 1) {
-        const t =
-          fogBankCount === 1 ? 0 : index / (fogBankCount - 1)
+        const t = index / (fogBankCount - 1)
         const bay = THREE.MathUtils.lerp(
           .25,
           ARCHIVE_PATH_RENDER_BAYS - .4,
