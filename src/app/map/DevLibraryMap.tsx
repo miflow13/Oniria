@@ -11,6 +11,7 @@ import {
 import DreamWorld3D, {
   type DreamWorldEdge,
   type DreamWorldNode,
+  type LibraryMovementMode,
 } from './DreamWorld3D'
 import type {DreamQuality} from './dreamworld/quality'
 import type {
@@ -159,6 +160,8 @@ export default function DevLibraryMap() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [flightMode, setFlightMode] = useState(true)
+  const [movementMode, setMovementMode] =
+    useState<LibraryMovementMode>('walk')
   const [navigation, setNavigation] = useState<{
     nearestId: string | null
     routeTargetId: string | null
@@ -653,6 +656,7 @@ export default function DevLibraryMap() {
         diveTimelineProgress={1}
         observatoryMode={false}
         flightMode={flightMode}
+        libraryMovementMode={movementMode}
         inputBlocked={Boolean(article)}
         onZoomChange={() => {}}
         onPanChange={() => {}}
@@ -674,6 +678,7 @@ export default function DevLibraryMap() {
         onDiveStateChange={() => {}}
         onDiveDreamChange={() => {}}
         onFlightModeChange={setFlightMode}
+        onLibraryMovementModeChange={setMovementMode}
       />
 
       <header className={styles.topbar}>
@@ -707,11 +712,15 @@ export default function DevLibraryMap() {
           </strong>
           {routeShelf ? (
             <small className={styles.routeActive}>
-              R ROUTE → {routeShelf.title}
+              {movementMode === 'fly'
+                ? 'R ROUTE → ' + routeShelf.title
+                : 'G · WALK · switch to FLY for auto-route'}
             </small>
           ) : (
             <small>
-              R · fly to next shelf · E · inspect / close book
+              G · {movementMode === 'walk' ? 'WALK' : 'FLY'} · WASD move
+              · E inspect / close book
+              {movementMode === 'fly' ? ' · R auto-route' : ''}
               {catalogLoading
                 ? ' · extending catalogue…'
                 : catalogHasMore
