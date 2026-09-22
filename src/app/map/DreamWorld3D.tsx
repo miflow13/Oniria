@@ -2404,7 +2404,7 @@ export default function DreamWorld3D({
             ? pointerParallax.y * .42
             : -panRef.current.y / 125 + pointerParallax.y * .2,
           observatory
-            ? 22.5
+            ? 22.5 / Math.max(.72, Math.min(2.35, zoomRef.current))
             : 10.8 / Math.max(.68, zoomRef.current),
         )
         lookTarget.lerp(
