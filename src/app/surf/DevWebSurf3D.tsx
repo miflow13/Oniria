@@ -359,9 +359,14 @@ export default function DevWebSurf3D({
     addFloor(13, -13, 16, 28)
     addFloor(0, -39, 18, 12)
 
-    // Atrium shell and long central nave.
-    addWall(-8.9, -14, .35, 48, 5.8)
-    addWall(8.9, -14, .35, 48, 5.8)
+    // Atrium shell and central nave. Side walls are segmented so the
+    // library has actual doorways into each wing instead of invisible
+    // graph-style travel through walls.
+    ;[-8.9, 8.9].forEach((x) => {
+      addWall(x, 7, .35, 10, 5.8)
+      addWall(x, -12.5, .35, 11, 5.8)
+      addWall(x, -32.5, .35, 17, 5.8)
+    })
     addWall(0, 14.5, 18, .35, 5.8)
     addWall(0, -44.5, 18, .35, 5.8)
 
