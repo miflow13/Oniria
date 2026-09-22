@@ -3,11 +3,11 @@ import {
   type LibraryDistrictConfig,
 } from '@/lib/libraryWorldConfig'
 
-export const ARCHIVE_PATH_RENDER_BAYS = 72
+export const ARCHIVE_PATH_RENDER_BAYS = 36
 export const ARCHIVE_WALKWAY_HALF_WIDTH = 4.1
 export const ARCHIVE_WALKWAY_Y_OFFSET = -2.08
 
-export const ARCHIVE_BAY_SPACING = 9.2
+export const ARCHIVE_BAY_SPACING = 6.8
 const ARCHIVE_LANE_MIN = 8.15
 const ARCHIVE_LANE_VARIATION = .9
 
@@ -198,8 +198,8 @@ export function archiveShelfPlacement(
 }
 
 
-const ARCHIVE_SHELF_MIN_CENTER_DISTANCE = 6.25
-const ARCHIVE_SHELF_CLEARANCE_STEP_BAYS = .14
+const ARCHIVE_SHELF_MIN_CENTER_DISTANCE = 5.35
+const ARCHIVE_SHELF_CLEARANCE_STEP_BAYS = .1
 const ARCHIVE_SHELF_MAX_CLEARANCE_STEPS = 48
 
 function wrapAngle(angle: number) {
