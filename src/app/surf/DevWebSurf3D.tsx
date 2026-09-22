@@ -1231,6 +1231,51 @@ export default function DevWebSurf3D({
     const interactive: THREE.Object3D[] = []
     const disposableTextures: THREE.Texture[] = []
 
+    const nodeGeometryCache = new Map<SurfNodeKind, THREE.BufferGeometry>()
+    function getNodeGeometry(kind: SurfNodeKind) {
+      let geometry = nodeGeometryCache.get(kind)
+      if (!geometry) {
+        geometry = KIND_GEOMETRY[kind]()
+        nodeGeometryCache.set(kind, geometry)
+        architecturalGeometries.push(geometry)
+      }
+      return geometry
+    }
+
+    const articleSpineGeometry = new THREE.BoxGeometry(.07, .8, .185)
+    const articleCoverGeometry = new THREE.PlaneGeometry(.56, .44)
+    const articleTitleGeometry = new THREE.PlaneGeometry(.58, .22)
+    const articleGlowGeometry = new THREE.PlaneGeometry(.76, .92)
+    const articleEdgeGeometry = new THREE.EdgesGeometry(
+      getNodeGeometry('article'),
+      28,
+    )
+    architecturalGeometries.push(
+      articleSpineGeometry,
+      articleCoverGeometry,
+      articleTitleGeometry,
+      articleGlowGeometry,
+      articleEdgeGeometry,
+    )
+
+    const sharedArticleSpineMaterial = new THREE.MeshStandardMaterial({
+      color: 0x3b49df,
+      emissive: 0x1c2a88,
+      emissiveIntensity: .72,
+      roughness: .3,
+      metalness: .48,
+    })
+    const sharedArticleEdgeMaterial = new THREE.LineBasicMaterial({
+      color: 0x5267ff,
+      transparent: true,
+      opacity: .34,
+      blending: THREE.AdditiveBlending,
+    })
+    architecturalMaterials.push(
+      sharedArticleSpineMaterial,
+      sharedArticleEdgeMaterial,
+    )
+
     nodes.forEach((node, index) => {
       const group = new THREE.Group()
       group.position.set(...node.position)
@@ -1255,7 +1300,7 @@ export default function DevWebSurf3D({
         opacity: node.kind === 'section' ? .72 : .94,
       })
 
-      const body = new THREE.Mesh(KIND_GEOMETRY[node.kind](), material)
+      const body = new THREE.Mesh(getNodeGeometry(node.kind), material)
       body.userData.nodeId = node.id
       body.castShadow = true
       body.receiveShadow = true
@@ -1276,31 +1321,30 @@ export default function DevWebSurf3D({
         material.metalness = .2
         material.clearcoat = .62
 
-        const spineGeometry = new THREE.BoxGeometry(.07, .8, .185)
-        architecturalGeometries.push(spineGeometry)
-        const spineMaterial = new THREE.MeshStandardMaterial({
-          color: 0x3b49df,
-          emissive: color.clone().lerp(new THREE.Color(0x53d3ff), .45),
-          emissiveIntensity: .72,
-          roughness: .3,
-          metalness: .48,
-        })
-        architecturalMaterials.push(spineMaterial)
-        const spine = new THREE.Mesh(spineGeometry, spineMaterial)
+        const spine = new THREE.Mesh(
+          articleSpineGeometry,
+          sharedArticleSpineMaterial,
+        )
         spine.position.set(-.39, 0, 0)
         group.add(spine)
 
-        const coverGeometry = new THREE.PlaneGeometry(.56, .44)
-        architecturalGeometries.push(coverGeometry)
         const coverMaterial = new THREE.MeshBasicMaterial({
           color: 0x161a27,
           transparent: true,
-          opacity: .98,
+          opacity: .9,
           toneMapped: false,
+          depthWrite: false,
+          polygonOffset: true,
+          polygonOffsetFactor: -2,
+          polygonOffsetUnits: -2,
         })
         architecturalMaterials.push(coverMaterial)
-        const cover = new THREE.Mesh(coverGeometry, coverMaterial)
-        cover.position.set(.012, .12, .086)
+        const cover = new THREE.Mesh(
+          articleCoverGeometry,
+          coverMaterial,
+        )
+        cover.position.set(.012, .12, .091)
+        cover.renderOrder = 4
         group.add(cover)
 
         const remoteCover =
@@ -1308,28 +1352,26 @@ export default function DevWebSurf3D({
         coverMaterialRef = coverMaterial
         coverUrl = remoteCover ?? undefined
 
-        const titleTexture = createBookTitleTexture(
-          node.title,
-          '@' + (node.username ?? node.payload?.user.username ?? 'dev'),
-          node.accent,
-        )
-        disposableTextures.push(titleTexture)
         bookTitleMaterial = new THREE.MeshBasicMaterial({
-          map: titleTexture,
+          color: 0x171b28,
           transparent: true,
-          opacity: .97,
+          opacity: .92,
           toneMapped: false,
           depthWrite: false,
+          polygonOffset: true,
+          polygonOffsetFactor: -3,
+          polygonOffsetUnits: -3,
         })
         architecturalMaterials.push(bookTitleMaterial)
-        const titleGeometry = new THREE.PlaneGeometry(.58, .22)
-        architecturalGeometries.push(titleGeometry)
-        const titlePanel = new THREE.Mesh(titleGeometry, bookTitleMaterial)
-        titlePanel.position.set(.012, -.26, .09)
+        const titlePanel = new THREE.Mesh(
+          articleTitleGeometry,
+          bookTitleMaterial,
+        )
+        titlePanel.position.set(.012, -.26, .094)
+        titlePanel.renderOrder = 5
         group.add(titlePanel)
 
-        const glowGeometry = new THREE.PlaneGeometry(.76, .92)
-        architecturalGeometries.push(glowGeometry)
+        
         bookGlowMaterial = new THREE.MeshBasicMaterial({
           color: color.clone().lerp(new THREE.Color(0x53d3ff), .3),
           transparent: true,
@@ -1339,20 +1381,18 @@ export default function DevWebSurf3D({
           side: THREE.DoubleSide,
         })
         architecturalMaterials.push(bookGlowMaterial)
-        const glow = new THREE.Mesh(glowGeometry, bookGlowMaterial)
+        const glow = new THREE.Mesh(
+          articleGlowGeometry,
+          bookGlowMaterial,
+        )
         glow.position.z = -.095
         group.add(glow)
 
-        const edgeGeometry = new THREE.EdgesGeometry(body.geometry, 28)
-        architecturalGeometries.push(edgeGeometry)
-        const edgeMaterial = new THREE.LineBasicMaterial({
-          color: node.accent,
-          transparent: true,
-          opacity: .45,
-          blending: THREE.AdditiveBlending,
-        })
-        architecturalMaterials.push(edgeMaterial)
-        const edges = new THREE.LineSegments(edgeGeometry, edgeMaterial)
+        const edges = new THREE.LineSegments(
+          articleEdgeGeometry,
+          sharedArticleEdgeMaterial,
+        )
+        edges.renderOrder = 3
         group.add(edges)
       }
 
