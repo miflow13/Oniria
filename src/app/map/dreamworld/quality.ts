@@ -13,6 +13,11 @@ export type DreamQualitySettings = {
   cellResolution: 256 | 384 | 512 | 768
   depthOfField: boolean
   maxBlur: number
+  ssao: boolean
+  ssaoKernelRadius: number
+  environmentIntensity: number
+  atmosphereLayers: number
+  portalBlendResolution: 0.6 | 0.75 | 1
 }
 
 export function getQualitySettings(quality: DreamQuality): DreamQualitySettings {
@@ -31,6 +36,11 @@ export function getQualitySettings(quality: DreamQuality): DreamQualitySettings 
         cellResolution: 256,
         depthOfField: false,
         maxBlur: 0.0,
+        ssao: false,
+        ssaoKernelRadius: 0,
+        environmentIntensity: 0.55,
+        atmosphereLayers: 2,
+        portalBlendResolution: 0.6,
       }
     case 'medium':
       return {
@@ -46,6 +56,11 @@ export function getQualitySettings(quality: DreamQuality): DreamQualitySettings 
         cellResolution: 384,
         depthOfField: true,
         maxBlur: 0.005,
+        ssao: true,
+        ssaoKernelRadius: 7,
+        environmentIntensity: 0.72,
+        atmosphereLayers: 3,
+        portalBlendResolution: 0.75,
       }
     case 'cinematic':
       return {
@@ -61,6 +76,11 @@ export function getQualitySettings(quality: DreamQuality): DreamQualitySettings 
         cellResolution: 768,
         depthOfField: true,
         maxBlur: 0.015,
+        ssao: true,
+        ssaoKernelRadius: 14,
+        environmentIntensity: 1.05,
+        atmosphereLayers: 6,
+        portalBlendResolution: 1,
       }
     case 'high':
     default:
@@ -77,6 +97,11 @@ export function getQualitySettings(quality: DreamQuality): DreamQualitySettings 
         cellResolution: 512,
         depthOfField: true,
         maxBlur: 0.009,
+        ssao: true,
+        ssaoKernelRadius: 10,
+        environmentIntensity: 0.88,
+        atmosphereLayers: 4,
+        portalBlendResolution: 1,
       }
   }
 }
