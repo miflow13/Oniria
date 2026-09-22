@@ -56,11 +56,22 @@ export type DevBootstrap = {
   profile: DevUser | null
   profileArticles: DevArticleSummary[]
   feed: DevArticleSummary[]
+  latest: DevArticleSummary[]
   tags: DevTag[]
 }
 
+export type LibrarySection =
+  | 'atrium'
+  | 'featured'
+  | 'latest'
+  | 'topics'
+  | 'creators'
+  | 'search'
+  | 'archive'
+
 export type SurfNodeKind =
   | 'home'
+  | 'section'
   | 'profile'
   | 'article'
   | 'tag'
@@ -75,6 +86,7 @@ export type SurfNode = {
   username?: string
   articleId?: number
   tag?: string
+  section?: LibrarySection
   position: [number, number, number]
   importance: number
   accent: string
@@ -86,5 +98,5 @@ export type SurfEdge = {
   source: string
   target: string
   weight: number
-  kind: 'feed' | 'author' | 'tag' | 'search'
+  kind: 'feed' | 'author' | 'tag' | 'search' | 'corridor'
 }
