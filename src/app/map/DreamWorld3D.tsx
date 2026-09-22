@@ -1174,6 +1174,7 @@ export default function DreamWorld3D({
     let activeDive: DreamDive | null = null
     let diveComposer: EffectComposer | null = null
     let divePost: ShaderPass | null = null
+    let diveBokeh: BokehPass | null = null
     let diveAudio: SpatialDreamAudio | null = null
     let diveAudioStarted = false
     let diveMusic: DreamMusic | null = null
@@ -1306,6 +1307,7 @@ export default function DreamWorld3D({
       diveComposer?.dispose()
       diveComposer = null
       divePost = null
+      diveBokeh = null
       activeDive?.dispose()
       activeDive = null
       pendingPortal = null
@@ -1363,6 +1365,9 @@ export default function DreamWorld3D({
         listener,
         profile,
         hashString(`music:${dream._id}:${depth}`),
+        {
+          relationshipStrength: relations[0]?.score ?? 0,
+        },
       )
       activeDive.scene.add(diveMusic.audio)
 
@@ -1376,6 +1381,16 @@ export default function DreamWorld3D({
       diveComposer = new EffectComposer(renderer)
       const diveRenderPass = new RenderPass(activeDive.scene, activeDive.camera)
       diveComposer.addPass(diveRenderPass)
+
+      diveBokeh = new BokehPass(activeDive.scene, activeDive.camera, {
+        focus: 7,
+        aperture: 0.00005,
+        maxblur: settings.maxBlur * 1.1,
+        width: 1,
+        height: 1,
+      })
+      diveBokeh.enabled = false
+      diveComposer.addPass(diveBokeh)
 
       const diveBloom = new UnrealBloomPass(
         new THREE.Vector2(1, 1),
@@ -1710,6 +1725,25 @@ export default function DreamWorld3D({
           diveMode === 'portal'
             ? Math.min(1, (elapsed - diveTransitionStartedAt) / .72)
             : 0
+
+        if (diveBokeh) {
+          diveBokeh.enabled =
+            settings.depthOfField &&
+            (diveMode === 'portal' || diveMode === 'exiting')
+
+          if (diveBokeh.enabled) {
+            const focusTarget =
+              diveMode === 'portal'
+                ? 6.2 - portalProgress * 2.4
+                : 4.8 + exitProgress * 2.8
+            diveBokeh.uniforms.focus.value +=
+              (focusTarget - diveBokeh.uniforms.focus.value) * .09
+            diveBokeh.uniforms.aperture.value +=
+              ((diveMode === 'portal' ? .000085 : .000055) -
+                diveBokeh.uniforms.aperture.value) *
+              .08
+          }
+        }
 
         if (divePost) {
           divePost.uniforms.uTime.value = elapsed
