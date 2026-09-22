@@ -1030,6 +1030,7 @@ export default function DreamMap({
       y: (330 - position.y) * targetZoom,
     }
 
+    setClosingJournal(false)
     setSelectedId(node._id)
     setOpenDreamId(targetDream._id)
     setFocusedDreamId(targetDream._id)
@@ -1056,15 +1057,26 @@ export default function DreamMap({
   }
 
   function closeDreamNote() {
-    setEnteringNodeId(null)
-    setEnteringDreamTitle(null)
-    setOpenDreamId(null)
-    setSelectedProjection(null)
-    setSelectedId(null)
-    setHoveredId(null)
-    setFocusedDreamId(null)
-    animateCameraTo(1, {x: 0, y: 0}, 680)
-    window.history.replaceState(null, '', '/map')
+    if (closingJournal) return
+
+    setClosingJournal(true)
+
+    if (closeTimerRef.current !== null) {
+      window.clearTimeout(closeTimerRef.current)
+    }
+
+    closeTimerRef.current = window.setTimeout(() => {
+      setEnteringNodeId(null)
+      setEnteringDreamTitle(null)
+      setOpenDreamId(null)
+      setSelectedProjection(null)
+      setSelectedId(null)
+      setHoveredId(null)
+      setFocusedDreamId(null)
+      setClosingJournal(false)
+      animateCameraTo(1, {x: 0, y: 0}, 680)
+      window.history.replaceState(null, '', '/map')
+    }, 520)
   }
 
   function focusDream(dreamId: string | null) {
