@@ -1239,9 +1239,11 @@ export default function DevWebSurf() {
 
       {routeTarget && (
         <aside className={styles.routeCard}>
-          <span>Floor route illuminated</span>
+          <span>Route ready · follow cyan light</span>
           <strong>{routeTarget.title}</strong>
-          <p>{routeTarget.subtitle}</p>
+          <p>
+            Follow the floor strips through the lit doorway.
+          </p>
           <div>
             <button
               type="button"
@@ -1252,7 +1254,7 @@ export default function DevWebSurf() {
                 }
               }}
             >
-              Walk there
+              Walk route
             </button>
             <button type="button" onClick={() => jumpTo(routeTarget.id)}>
               Jump there
