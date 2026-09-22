@@ -107,14 +107,42 @@
   opacity: .5;
 }
 
-.status {
+.navigationState {
+  min-width: 190px;
   justify-self: end;
+  display: grid;
+  justify-items: end;
+  gap: 1px;
+  text-align: right;
+}
+
+.navigationLabel {
+  color: #5f7088;
+  font-size: .49rem;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.navigationState strong {
+  max-width: 260px;
   overflow: hidden;
-  color: #667990;
-  font-size: .58rem;
-  letter-spacing: .03em;
+  color: #e8effa;
+  font-size: .7rem;
+  font-weight: 640;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.navigationState small {
+  color: #718298;
+  font-size: .52rem;
+  letter-spacing: .025em;
+}
+
+.navigationState .routeActive {
+  color: #bceef1;
+  text-shadow: 0 0 12px rgba(111, 220, 226, .28);
 }
 
 .loading,
@@ -367,7 +395,7 @@
     grid-template-columns: auto 1fr;
   }
 
-  .status {
+  .navigationState {
     display: none;
   }
 
