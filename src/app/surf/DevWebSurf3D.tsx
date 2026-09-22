@@ -1293,7 +1293,7 @@ export default function DevWebSurf3D({
       material.roughness = .72
       material.metalness = .08
       material.transparent = true
-      material.opacity = .2
+      material.opacity = .1
       material.depthWrite = false
       return material
     })
@@ -1359,7 +1359,7 @@ export default function DevWebSurf3D({
       roughness: .78,
       metalness: .08,
       transparent: true,
-      opacity: .11,
+      opacity: .04,
       depthWrite: false,
     })
     const expansionJointMaterial = new THREE.MeshBasicMaterial({
@@ -1425,7 +1425,7 @@ export default function DevWebSurf3D({
         const edgeMaterial = new THREE.LineBasicMaterial({
           color: FLOOR_ACCENTS[floorIndex],
           transparent: true,
-          opacity: .075,
+          opacity: .035,
         })
         architecturalMaterials.push(edgeMaterial)
         const edges = new THREE.LineSegments(edgeGeometry, edgeMaterial)
@@ -1441,6 +1441,12 @@ export default function DevWebSurf3D({
       | 'bridge'
       | 'threshold'
       | 'landing'
+
+    const upperDeckMaterials: Array<{
+      material: THREE.MeshStandardMaterial
+      floorIndex: number
+      variant: FloorDeckVariant
+    }> = []
 
     function addFloorInsetSurface(
       x: number,
@@ -1496,6 +1502,9 @@ export default function DevWebSurf3D({
         depthWrite: !isUpperDeck,
       })
       architecturalMaterials.push(material)
+      if (isUpperDeck) {
+        upperDeckMaterials.push({material, floorIndex, variant})
+      }
 
       const mesh = new THREE.Mesh(geometry, material)
       mesh.position.set(x, floorBase + height / 2 + .006, z)
@@ -1537,6 +1546,9 @@ export default function DevWebSurf3D({
       axis: 'x' | 'z',
       count = 5,
     ) {
+      // Upper floors already have route borders, rails, ribs, and shelf rows.
+      // Extra seam grids became visual noise once the structure opened to sky.
+      if (floorBase > 0) return
       const seamThickness = .018
       for (let index = 1; index <= count; index += 1) {
         const t = index / (count + 1)
@@ -2445,7 +2457,7 @@ export default function DevWebSurf3D({
     const systemFrontZ = 14.35
     const systemBackZ = -78.08
 
-    for (let z = 10; z >= -74; z -= 7) {
+    for (let z = 10; z >= -74; z -= 14) {
       addSystemWire(
         -systemSideX,
         systemWireBottom,
@@ -2464,7 +2476,7 @@ export default function DevWebSurf3D({
       )
     }
 
-    for (let x = -18; x <= 18; x += 4.5) {
+    for (let x = -18; x <= 18; x += 9) {
       addSystemWire(
         x,
         systemWireBottom,
@@ -2511,7 +2523,7 @@ export default function DevWebSurf3D({
     const systemWireMaterial = new THREE.LineBasicMaterial({
       color: 0x53d3ff,
       transparent: true,
-      opacity: .105,
+      opacity: .038,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     })
@@ -2546,7 +2558,7 @@ export default function DevWebSurf3D({
     const busLineMaterial = new THREE.LineBasicMaterial({
       color: 0x6574ff,
       transparent: true,
-      opacity: .065,
+      opacity: .022,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     })
@@ -2691,7 +2703,7 @@ export default function DevWebSurf3D({
       const balconyRailMaterial = new THREE.MeshBasicMaterial({
         color: floorAccent,
         transparent: true,
-        opacity: .055,
+        opacity: .032,
         depthWrite: false,
       })
       architecturalMaterials.push(balconyRailMaterial)
@@ -4510,6 +4522,35 @@ export default function DevWebSurf3D({
           distance === 0 ? .028 : distance === 1 ? .008 : 0
       })
 
+      upperFloorMaterials.forEach((material, floorIndex) => {
+        const distance = Math.abs(floorIndex - floor)
+        material.opacity =
+          distance === 0
+            ? .14
+            : distance === 1
+              ? .055
+              : distance === 2
+                ? .025
+                : .012
+      })
+      upperDeckMaterials.forEach(({material, floorIndex, variant}) => {
+        const distance = Math.abs(floorIndex - floor)
+        const navigationBoost =
+          variant === 'landing' || variant === 'threshold'
+            ? .045
+            : variant === 'bridge'
+              ? .025
+              : 0
+        material.opacity =
+          (distance === 0
+            ? .16
+            : distance === 1
+              ? .06
+              : distance === 2
+                ? .026
+                : .012) + navigationBoost
+      })
+
       // Keep non-current floors visually alive even when their real article
       // layer is hidden. Sparse current floors retain only a faint book-fill
       // layer so missing network data never exposes empty shelf geometry.
@@ -4526,16 +4567,16 @@ export default function DevWebSurf3D({
 
         const distantShelfOpacity =
           floorDistance <= 1
-            ? .42
+            ? .16
             : floorDistance === 2
-              ? .25
-              : .14
+              ? .07
+              : .025
         const distantBookOpacity =
           floorDistance <= 1
-            ? .62
+            ? .22
             : floorDistance === 2
-              ? .4
-              : .18
+              ? .09
+              : .035
 
         placeholder.shelfMaterial.opacity =
           isCurrentFloor
@@ -4550,7 +4591,7 @@ export default function DevWebSurf3D({
               : 0
             : distantBookOpacity
         placeholder.bookMaterial.emissiveIntensity =
-          isCurrentFloor ? .018 : floorDistance <= 1 ? .052 : .022
+          isCurrentFloor ? .018 : floorDistance <= 1 ? .018 : .006
       })
 
       shelfCoverAtlasesByFloor.forEach((entries, floorIndex) => {
@@ -4565,16 +4606,16 @@ export default function DevWebSurf3D({
               ? .16
               : 0
             : floorDistance <= 1
-              ? .58
+              ? .18
               : floorDistance === 2
-                ? .34
-                : .16
+                ? .07
+                : .025
 
         entries.forEach(({mesh, material}) => {
           mesh.visible = opacity > .01
           material.opacity = opacity
           material.color.setScalar(
-            floorDistance <= 1 ? .92 : floorDistance === 2 ? .72 : .5,
+            floorDistance <= 1 ? .72 : floorDistance === 2 ? .48 : .3,
           )
         })
       })
