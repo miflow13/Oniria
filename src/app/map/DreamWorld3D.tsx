@@ -1316,10 +1316,10 @@ export default function DreamWorld3D({
       // colliders, raycast targets, or per-object animation.
       librarySilhouetteGeometry = new THREE.BoxGeometry(1, 1, 1)
       librarySilhouetteMaterial = new THREE.MeshBasicMaterial({
-        color: 0x4b6d99,
+        color: 0x203957,
         transparent: true,
-        opacity: .4,
-        depthWrite: false,
+        opacity: .82,
+        depthWrite: true,
         blending: THREE.NormalBlending,
         toneMapped: false,
         fog: false,
@@ -1355,8 +1355,6 @@ export default function DreamWorld3D({
       const skylineNeonMatrices: THREE.Matrix4[] = []
       const skylineNeonColors: THREE.Color[] = []
       const silhouetteDummy = new THREE.Object3D()
-      const xAxis = new THREE.Vector3(1, 0, 0)
-
       const pushSilhouetteBox = (
         position: THREE.Vector3,
         scale: THREE.Vector3,
@@ -1369,33 +1367,6 @@ export default function DreamWorld3D({
         silhouetteDummy.updateMatrix()
         silhouetteMatrices.push(silhouetteDummy.matrix.clone())
       }
-
-      const pushSilhouetteBridge = (
-        start: THREE.Vector3,
-        end: THREE.Vector3,
-        thickness: number,
-        depth: number,
-      ) => {
-        const direction = end.clone().sub(start)
-        const length = direction.length()
-        if (length < .001) return
-        const midpoint = start.clone().add(end).multiplyScalar(.5)
-
-        silhouetteDummy.position.copy(midpoint)
-        silhouetteDummy.scale.set(length, thickness, depth)
-        silhouetteDummy.quaternion.setFromUnitVectors(
-          xAxis,
-          direction.normalize(),
-        )
-        silhouetteDummy.updateMatrix()
-        silhouetteMatrices.push(silhouetteDummy.matrix.clone())
-      }
-
-      const towerAnchors: Array<{
-        left: THREE.Vector3
-        right: THREE.Vector3
-        height: number
-      }> = []
 
       activeDistricts.slice(1).forEach((district, index) => {
         const path = new THREE.Vector3(...archivePathPoint(district.bay))
@@ -1430,9 +1401,55 @@ export default function DreamWorld3D({
             (sideIndex === 0 ? .08 : -.08) +
             (seededUnit(index + 930, 5 + sideIndex) - .5) * .18
 
+          const baseHeight = height * .34
+          const shaftHeight = height * .42
+          const crownHeight = height * .2
+
+          const baseCenter = center.clone()
+          baseCenter.y -= height * .31
           pushSilhouetteBox(
-            center,
-            new THREE.Vector3(width, height, depth),
+            baseCenter,
+            new THREE.Vector3(
+              width * 1.16,
+              baseHeight,
+              depth * 1.18,
+            ),
+            yaw,
+          )
+
+          const shaftCenter = center.clone()
+          shaftCenter.y += height * .015
+          pushSilhouetteBox(
+            shaftCenter,
+            new THREE.Vector3(
+              width,
+              shaftHeight,
+              depth,
+            ),
+            yaw,
+          )
+
+          const crownCenter = center.clone()
+          crownCenter.y += height * .325
+          pushSilhouetteBox(
+            crownCenter,
+            new THREE.Vector3(
+              width * .72,
+              crownHeight,
+              depth * .76,
+            ),
+            yaw,
+          )
+
+          const roofCenter = center.clone()
+          roofCenter.y += height * .455
+          pushSilhouetteBox(
+            roofCenter,
+            new THREE.Vector3(
+              width * .48,
+              Math.max(.45, height * .035),
+              depth * .5,
+            ),
             yaw,
           )
 
@@ -1631,19 +1648,21 @@ export default function DreamWorld3D({
             skylineWindowColors.push(new THREE.Color(0xffd7a0))
           }
 
-          ;[-.28, -.04, .2, .42].forEach((heightRatio, ribIndex) => {
-            const ribCenter = center.clone()
-            ribCenter.y += height * heightRatio
-            pushSilhouetteBox(
-              ribCenter,
-              new THREE.Vector3(
-                width * (1.12 + ribIndex * .035),
-                .42,
-                depth * 1.22,
-              ),
-              yaw,
-            )
-          })
+          ;[-.29, -.12, .08, .27].forEach(
+            (heightRatio, bandIndex) => {
+              const bandCenter = center.clone()
+              bandCenter.y += height * heightRatio
+              pushSilhouetteBox(
+                bandCenter,
+                new THREE.Vector3(
+                  width * (1.035 - bandIndex * .025),
+                  .16,
+                  depth * 1.035,
+                ),
+                yaw,
+              )
+            },
+          )
 
           const indexBlade = center.clone()
           indexBlade.y += height * .37
@@ -1656,45 +1675,10 @@ export default function DreamWorld3D({
           )
         })
 
-        towerAnchors.push({left, right, height})
 
-        if (index % 2 === 0) {
-          const bridgeHeight =
-            Math.min(left.y, right.y) + height * .35
-          const bridgeStart = left.clone()
-          const bridgeEnd = right.clone()
-          bridgeStart.y = bridgeHeight
-          bridgeEnd.y = bridgeHeight
-          pushSilhouetteBridge(
-            bridgeStart,
-            bridgeEnd,
-            .7,
-            1.8,
-          )
-        }
       })
 
-      towerAnchors.forEach((anchor, index) => {
-        const next = towerAnchors[index + 1]
-        if (!next) return
-
-        if (index % 2 === 0) {
-          const leftStart = anchor.left.clone()
-          const leftEnd = next.left.clone()
-          leftStart.y += anchor.height * .18
-          leftEnd.y += next.height * .16
-          pushSilhouetteBridge(leftStart, leftEnd, .5, 1.5)
-        } else {
-          const rightStart = anchor.right.clone()
-          const rightEnd = next.right.clone()
-          rightStart.y += anchor.height * .18
-          rightEnd.y += next.height * .16
-          pushSilhouetteBridge(rightStart, rightEnd, .5, 1.5)
-        }
-      })
-
-      // Long, low-opacity archive walls behind the tower field make the
-      // library feel like it continues far beyond the playable causeway.
+      // Secondary background towers create city depth without giant wall slabs.
       ;[18, 42, 66].forEach((bay, index) => {
         const path = new THREE.Vector3(...archivePathPoint(bay))
         const frame = archivePathFrame(bay)
@@ -1705,14 +1689,42 @@ export default function DreamWorld3D({
         )
         const yaw = Math.atan2(frame.tangentX, frame.tangentZ)
 
-        ;[-1, 1].forEach((sideSign) => {
-          const wall = path
+        ;[-1, 1].forEach((sideSign, sideIndex) => {
+          const height =
+            18 + seededUnit(index + 1700, sideIndex + 1) * 16
+          const width =
+            5.5 + seededUnit(index + 1700, sideIndex + 4) * 4.5
+          const depth =
+            5 + seededUnit(index + 1700, sideIndex + 7) * 4
+          const center = path
             .clone()
-            .addScaledVector(normal, sideSign * (72 + index * 9))
-          wall.y += 4 + index * 2
+            .addScaledVector(
+              normal,
+              sideSign * (66 + index * 8),
+            )
+          center.y += height * .5 - 8
+
+          const lower = center.clone()
+          lower.y -= height * .22
           pushSilhouetteBox(
-            wall,
-            new THREE.Vector3(3.4, 24 + index * 6, 48),
+            lower,
+            new THREE.Vector3(
+              width * 1.08,
+              height * .5,
+              depth * 1.08,
+            ),
+            yaw,
+          )
+
+          const upper = center.clone()
+          upper.y += height * .24
+          pushSilhouetteBox(
+            upper,
+            new THREE.Vector3(
+              width * .72,
+              height * .42,
+              depth * .74,
+            ),
             yaw,
           )
         })
