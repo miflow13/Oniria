@@ -116,6 +116,35 @@
   text-align: right;
 }
 
+.soundToggle {
+  margin: 0 0 2px;
+  padding: 2px 7px;
+  cursor: pointer;
+  color: #73869c;
+  background: rgba(7, 13, 25, .56);
+  border: 1px solid rgba(151, 185, 216, .12);
+  border-radius: 999px;
+  font: 700 .48rem/1.4 ui-monospace, monospace;
+  letter-spacing: .08em;
+  transition:
+    color 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.soundToggle:hover {
+  color: #bceef1;
+  border-color: rgba(126, 223, 232, .26);
+}
+
+.soundToggle[data-active='true'] {
+  color: #c9f5f6;
+  background: rgba(74, 177, 190, .11);
+  border-color: rgba(112, 215, 224, .28);
+  box-shadow: 0 0 14px rgba(104, 213, 221, .08);
+}
+
 .navigationLabel {
   color: #5f7088;
   font-size: .49rem;
