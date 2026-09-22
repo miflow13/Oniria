@@ -2922,24 +2922,18 @@ export default function DevWebSurf3D({
       visualsByFloor.set(visual.floorIndex, floorEntries)
     })
 
-    type CoverThumbnailLod = {
+    type ShelfCoverAtlasLod = {
       mesh: THREE.Mesh
       material: THREE.MeshBasicMaterial
-      node: SurfNode
       floorIndex: number
     }
 
-    const coverThumbnailGeometry = new THREE.PlaneGeometry(.52, .4)
-    architecturalGeometries.push(coverThumbnailGeometry)
-    const thumbnailLodsByFloor = new Map<
+    const shelfCoverAtlasGeometry = new THREE.PlaneGeometry(3.45, .78)
+    architecturalGeometries.push(shelfCoverAtlasGeometry)
+    const shelfCoverAtlasesByFloor = new Map<
       number,
-      CoverThumbnailLod[]
+      ShelfCoverAtlasLod[]
     >()
-    const thumbnailPrefetchQueue: Array<{
-      material: THREE.MeshBasicMaterial
-      url: string
-      floorIndex: number
-    }> = []
 
     function articleCoverUrl(node: SurfNode) {
       const cover =
@@ -2951,45 +2945,138 @@ export default function DevWebSurf3D({
         : null
     }
 
-    for (let floor = 0; floor < LIBRARY_FLOOR_COUNT; floor += 1) {
+    function createShelfCoverAtlas(
+      urls: string[],
+      floorIndex: number,
+      delayMs: number,
+    ) {
+      const canvas = document.createElement('canvas')
+      canvas.width = 512
+      canvas.height = 128
+      const context = canvas.getContext('2d')
+      const accent =
+        '#' + new THREE.Color(FLOOR_ACCENTS[floorIndex]).getHexString()
+
+      if (context) {
+        context.fillStyle = '#101318'
+        context.fillRect(0, 0, canvas.width, canvas.height)
+
+        const gutter = 10
+        const slotWidth =
+          (canvas.width - gutter * (urls.length + 1)) /
+          Math.max(1, urls.length)
+        urls.forEach((_, index) => {
+          const x = gutter + index * (slotWidth + gutter)
+          context.fillStyle =
+            index % 2 === 0 ? '#1a1f27' : '#20252d'
+          context.fillRect(x, 8, slotWidth, 104)
+          context.strokeStyle = 'rgba(255,255,255,.08)'
+          context.lineWidth = 2
+          context.strokeRect(x, 8, slotWidth, 104)
+        })
+
+        context.fillStyle = accent
+        context.globalAlpha = .62
+        context.fillRect(0, 119, canvas.width, 3)
+        context.globalAlpha = 1
+      }
+
+      const atlas = new THREE.CanvasTexture(canvas)
+      atlas.colorSpace = THREE.SRGBColorSpace
+      atlas.minFilter = THREE.LinearFilter
+      atlas.magFilter = THREE.LinearFilter
+      atlas.generateMipmaps = false
+      disposableTextures.push(atlas)
+
+      const timer = window.setTimeout(() => {
+        thumbnailPrefetchTimers.delete(timer)
+        urls.forEach((url, index) => {
+          requestThumbnailTexture(url, (texture) => {
+            if (destroyed || !context) return
+
+            const gutter = 10
+            const slotWidth =
+              (canvas.width - gutter * (urls.length + 1)) /
+              Math.max(1, urls.length)
+            const x = gutter + index * (slotWidth + gutter)
+
+            try {
+              context.drawImage(
+                texture.image as CanvasImageSource,
+                x,
+                8,
+                slotWidth,
+                104,
+              )
+              context.fillStyle = 'rgba(8,10,14,.08)'
+              context.fillRect(x, 8, slotWidth, 104)
+              context.strokeStyle = 'rgba(255,255,255,.1)'
+              context.lineWidth = 2
+              context.strokeRect(x, 8, slotWidth, 104)
+              atlas.needsUpdate = true
+            } catch {
+              // Keep the deterministic placeholder slot if the browser cannot
+              // copy a decoded remote image into this shelf-level atlas.
+            }
+          })
+        })
+      }, delayMs)
+      thumbnailPrefetchTimers.add(timer)
+
+      return atlas
+    }
+
+    for (let floor = 1; floor < LIBRARY_FLOOR_COUNT; floor += 1) {
       const candidates = nodes.filter(
         (node) =>
           node.kind === 'article' &&
           (node.floorIndex ?? 0) === floor &&
           articleCoverUrl(node),
       )
-
       if (!candidates.length) continue
 
-      const sampleCount = Math.min(
-        floor === 0 ? THUMBNAILS_PER_FLOOR + 4 : THUMBNAILS_PER_FLOOR,
-        candidates.length,
-      )
-      const floorThumbnails: CoverThumbnailLod[] = []
-      const sampledNodeIds = new Set<string>()
+      const floorEntries: ShelfCoverAtlasLod[] = []
+      const floorBase = floor * LIBRARY_FLOOR_HEIGHT
 
-      for (let index = 0; index < sampleCount; index += 1) {
-        const sourceIndex =
-          sampleCount === 1
-            ? 0
-            : Math.round(
-                index *
-                  ((candidates.length - 1) / (sampleCount - 1)),
-              )
-        const node = candidates[sourceIndex]
-        if (!node || sampledNodeIds.has(node.id)) continue
-        sampledNodeIds.add(node.id)
+      for (
+        let panelIndex = 0;
+        panelIndex < SHELF_ATLAS_PANELS_PER_FLOOR;
+        panelIndex += 1
+      ) {
+        const rowIndex = Math.round(
+          panelIndex *
+            ((placeholderRows.length - 1) /
+              Math.max(1, SHELF_ATLAS_PANELS_PER_FLOOR - 1)),
+        )
+        const columnIndex =
+          (panelIndex * 3 + floor) % placeholderColumns.length
+        const rotationY = rowIndex % 2 === 0 ? 0 : Math.PI
+        const level = panelIndex % 3
+        const urls: string[] = []
 
-        const url = articleCoverUrl(node)
-        if (!url) continue
+        for (
+          let coverIndex = 0;
+          coverIndex < COVERS_PER_SHELF_ATLAS;
+          coverIndex += 1
+        ) {
+          const sampleIndex =
+            (panelIndex * COVERS_PER_SHELF_ATLAS + coverIndex) %
+            candidates.length
+          const url = articleCoverUrl(candidates[sampleIndex])
+          if (url) urls.push(url)
+        }
+        if (!urls.length) continue
 
+        const atlas = createShelfCoverAtlas(
+          urls,
+          floor,
+          (floor - 1) * 260 + panelIndex * 70,
+        )
         const material = new THREE.MeshBasicMaterial({
-          color: new THREE.Color(node.accent).lerp(
-            new THREE.Color(0x181b22),
-            .72,
-          ),
+          map: atlas,
+          color: 0xffffff,
           transparent: true,
-          opacity: floor === currentFloorRef.current ? .9 : .72,
+          opacity: .48,
           toneMapped: false,
           depthWrite: true,
           side: THREE.DoubleSide,
@@ -3000,52 +3087,30 @@ export default function DevWebSurf3D({
         architecturalMaterials.push(material)
 
         const mesh = new THREE.Mesh(
-          coverThumbnailGeometry,
+          shelfCoverAtlasGeometry,
           material,
         )
-        const rotationY = node.rotationY ?? 0
-        const front = .108
+        const x = placeholderColumns[columnIndex]
+        const z = placeholderRows[rowIndex]
+        const front = .095
         mesh.position.set(
-          node.position[0] + Math.sin(rotationY) * front,
-          node.position[1] + .12,
-          node.position[2] + Math.cos(rotationY) * front,
+          x + Math.sin(rotationY) * front,
+          floorBase + .64 + level * 1.08,
+          z + Math.cos(rotationY) * front,
         )
         mesh.rotation.y = rotationY
         mesh.renderOrder = 2
         scene.add(mesh)
 
-        floorThumbnails.push({
+        floorEntries.push({
           mesh,
           material,
-          node,
-          floorIndex: floor,
-        })
-        thumbnailPrefetchQueue.push({
-          material,
-          url,
           floorIndex: floor,
         })
       }
 
-      thumbnailLodsByFloor.set(floor, floorThumbnails)
+      shelfCoverAtlasesByFloor.set(floor, floorEntries)
     }
-
-    thumbnailPrefetchQueue
-      .sort(
-        (a, b) =>
-          Math.abs(a.floorIndex - currentFloorRef.current) -
-          Math.abs(b.floorIndex - currentFloorRef.current),
-      )
-      .forEach((entry, index) => {
-        const batch = Math.floor(index / 4)
-        const timer = window.setTimeout(() => {
-          thumbnailPrefetchTimers.delete(timer)
-          if (!destroyed) {
-            attachThumbnailMaterial(entry.material, entry.url)
-          }
-        }, batch * 120)
-        thumbnailPrefetchTimers.add(timer)
-      })
 
     // Article LOD: every real article has a tiny instanced stand-in. Distant
     // and off-floor books stay visible as physical spines; the full article
