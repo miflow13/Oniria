@@ -2109,12 +2109,55 @@ export default function DreamWorld3D({
     let relationTravel: {from: string; to: string; startedAt: number} | null = null
     const startedAt = performance.now()
     let lastFrameAt = startedAt
+    let adaptivePixelRatio = Math.min(
+      window.devicePixelRatio,
+      settings.pixelRatio,
+    )
+    let frameTimeAccumulator = 0
+    let frameTimeSamples = 0
+    let lastAdaptiveCheck = 0
 
     function animate(now: number) {
       animationFrame = requestAnimationFrame(animate)
       const elapsed = (now - startedAt) / 1000
       const delta = Math.min(.05, Math.max(.001, (now - lastFrameAt) / 1000))
       lastFrameAt = now
+
+      if (
+        qualityRef.current === 'high' ||
+        qualityRef.current === 'cinematic'
+      ) {
+        frameTimeAccumulator += delta
+        frameTimeSamples += 1
+
+        if (elapsed - lastAdaptiveCheck > 1.6 && frameTimeSamples > 30) {
+          const averageMs =
+            (frameTimeAccumulator / frameTimeSamples) * 1000
+          const maxDpr = Math.min(
+            window.devicePixelRatio,
+            settings.pixelRatio,
+          )
+          let nextDpr = adaptivePixelRatio
+
+          if (averageMs > 24) {
+            nextDpr = Math.max(1, adaptivePixelRatio - .12)
+          } else if (averageMs < 17.2) {
+            nextDpr = Math.min(maxDpr, adaptivePixelRatio + .06)
+          }
+
+          if (Math.abs(nextDpr - adaptivePixelRatio) > .02) {
+            adaptivePixelRatio = nextDpr
+            renderer.setPixelRatio(adaptivePixelRatio)
+            composer.setPixelRatio(adaptivePixelRatio)
+            diveComposer?.setPixelRatio(adaptivePixelRatio)
+            resize()
+          }
+
+          frameTimeAccumulator = 0
+          frameTimeSamples = 0
+          lastAdaptiveCheck = elapsed
+        }
+      }
 
       const flightActive =
         flightModeRef.current &&
