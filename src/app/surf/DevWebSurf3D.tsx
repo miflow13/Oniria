@@ -425,6 +425,8 @@ export default function DevWebSurf3D({
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.shadowMap.enabled = true
     renderer.shadowMap.type = THREE.PCFSoftShadowMap
+    renderer.shadowMap.autoUpdate = false
+    renderer.shadowMap.needsUpdate = true
     renderer.domElement.className = styles.canvas
     renderer.domElement.tabIndex = 0
     container.appendChild(renderer.domElement)
@@ -1677,9 +1679,9 @@ export default function DevWebSurf3D({
         )
         const geometry = new THREE.TubeGeometry(
           curve,
-          48,
+          32,
           edge.kind === 'corridor' ? .052 : .027,
-          8,
+          6,
           false,
         )
         const material = new THREE.MeshBasicMaterial({
@@ -1694,9 +1696,9 @@ export default function DevWebSurf3D({
 
         const glowGeometry = new THREE.TubeGeometry(
           curve,
-          48,
+          32,
           edge.kind === 'corridor' ? .105 : .057,
-          8,
+          6,
           false,
         )
         const glowMaterial = new THREE.MeshBasicMaterial({
@@ -1709,7 +1711,7 @@ export default function DevWebSurf3D({
         const glowRoute = new THREE.Mesh(glowGeometry, glowMaterial)
         scene.add(glowRoute)
 
-        const packetGeometry = new THREE.SphereGeometry(.035, 10, 10)
+        const packetGeometry = new THREE.SphereGeometry(.035, 7, 7)
         const packetMaterial = new THREE.MeshBasicMaterial({
           color: baseColor,
           transparent: true,
