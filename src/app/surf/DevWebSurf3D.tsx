@@ -34,6 +34,7 @@ type Props = {
 }
 
 type Visual = {
+  id: string
   group: THREE.Group
   body: THREE.Mesh
   material: THREE.MeshPhysicalMaterial
@@ -41,12 +42,17 @@ type Visual = {
   labelMaterial: THREE.SpriteMaterial
   bookGlowMaterial?: THREE.MeshBasicMaterial
   bookTitleMaterial?: THREE.MeshBasicMaterial
+  bookTitleTexture?: THREE.Texture
+  bookTitle?: string
+  bookSubtitle?: string
+  bookAccent?: string
   coverMaterial?: THREE.MeshBasicMaterial
   coverUrl?: string
   archMaterial?: THREE.MeshBasicMaterial
   basePosition: THREE.Vector3
   baseRotationY: number
   shelfKey?: string
+  floorIndex: number
   baseScale: number
   phase: number
 }
@@ -447,10 +453,13 @@ export default function DevWebSurf3D({
         lastUsed: number
       }
     >()
-    const MAX_RESIDENT_COVERS = 14
-    const COVER_LOAD_DISTANCE = 11
-    const COVER_KEEP_DISTANCE = 17
+    const MAX_RESIDENT_COVERS = 20
+    const MAX_ACTIVE_BOOK_DETAILS = 14
+    const COVER_LOAD_DISTANCE = 14
+    const activeCoverUrls = new Set<string>()
+    const detailedBookIds = new Set<string>()
     let lastCoverTrim = 0
+    let lastDetailSelection = 0
     let destroyed = false
 
     function attachCachedCover(
@@ -509,7 +518,10 @@ export default function DevWebSurf3D({
           entry!.lastUsed = performance.now() / 1000
           remoteTextures.add(texture)
 
-          if (visual.coverMaterial) {
+          if (
+            detailedBookIds.has(visual.id) &&
+            visual.coverMaterial
+          ) {
             visual.coverMaterial.map = texture
             visual.coverMaterial.color.set(0xffffff)
             visual.coverMaterial.opacity = .98
@@ -538,15 +550,56 @@ export default function DevWebSurf3D({
       visual.coverMaterial.needsUpdate = true
     }
 
+    function ensureBookTitle(visual: Visual) {
+      if (
+        !visual.bookTitleMaterial ||
+        visual.bookTitleTexture ||
+        !visual.bookTitle
+      ) {
+        return
+      }
+
+      const texture = createBookTitleTexture(
+        visual.bookTitle,
+        visual.bookSubtitle ?? '',
+        visual.bookAccent ?? '#3b49df',
+      )
+      visual.bookTitleTexture = texture
+      visual.bookTitleMaterial.map = texture
+      visual.bookTitleMaterial.color.set(0xffffff)
+      visual.bookTitleMaterial.needsUpdate = true
+    }
+
+    function downgradeBookTitle(visual: Visual) {
+      if (!visual.bookTitleTexture || !visual.bookTitleMaterial) return
+      visual.bookTitleMaterial.map = null
+      visual.bookTitleMaterial.color.set(0x171b28)
+      visual.bookTitleMaterial.needsUpdate = true
+      visual.bookTitleTexture.dispose()
+      visual.bookTitleTexture = undefined
+    }
+
     function trimCoverCache(now: number) {
       if (now - lastCoverTrim < .75) return
       lastCoverTrim = now
 
       const resident = [...coverCache.entries()]
-        .filter(([, entry]) => entry.texture)
+        .filter(
+          ([url, entry]) =>
+            entry.texture && !activeCoverUrls.has(url),
+        )
         .sort((a, b) => b[1].lastUsed - a[1].lastUsed)
 
-      resident.slice(MAX_RESIDENT_COVERS).forEach(([url, entry]) => {
+      const overflow = Math.max(
+        0,
+        [...coverCache.values()].filter((entry) => entry.texture).length -
+          MAX_RESIDENT_COVERS,
+      )
+
+      const evictionCandidates =
+        overflow > 0 ? resident.slice(-overflow) : []
+
+      evictionCandidates.forEach(([url, entry]) => {
         const texture = entry.texture
         if (!texture) return
 
