@@ -342,6 +342,111 @@ function createLibraryRouteLabelTexture(
   return texture
 }
 
+function createLibraryWelcomeTexture() {
+  const canvas = document.createElement('canvas')
+  canvas.width = 1400
+  canvas.height = 760
+  const context = canvas.getContext('2d')
+  if (!context) return new THREE.CanvasTexture(canvas)
+
+  context.clearRect(0, 0, canvas.width, canvas.height)
+
+  const background = context.createLinearGradient(
+    0,
+    0,
+    canvas.width,
+    canvas.height,
+  )
+  background.addColorStop(0, 'rgba(4, 9, 20, .97)')
+  background.addColorStop(.55, 'rgba(8, 18, 34, .95)')
+  background.addColorStop(1, 'rgba(24, 18, 52, .94)')
+  roundedRect(context, 28, 28, 1344, 704, 42)
+  context.fillStyle = background
+  context.fill()
+  context.strokeStyle = 'rgba(108, 221, 235, .5)'
+  context.lineWidth = 4
+  context.stroke()
+
+  context.textAlign = 'left'
+  context.textBaseline = 'top'
+
+  context.fillStyle = '#f3fbff'
+  context.font = '800 74px system-ui, sans-serif'
+  context.fillText('DEV LIBRARY', 82, 70)
+
+  context.fillStyle = 'rgba(157, 225, 236, .92)'
+  context.font = '700 28px ui-monospace, monospace'
+  context.fillText(
+    'an explorable archive of DEV Community writing',
+    86,
+    162,
+  )
+
+  const columnWidth = 386
+  const columns = [
+    {
+      x: 84,
+      title: 'WHAT THIS IS',
+      lines: [
+        'A spatial browser for DEV articles.',
+        'Walk the archive, browse shelves,',
+        'inspect books, and open real posts.',
+      ],
+    },
+    {
+      x: 507,
+      title: 'HOW IT IS BUILT',
+      lines: [
+        'Next.js + React + TypeScript + Three.js.',
+        'DEV API data is streamed into seeded',
+        'districts, shelves, paths, and book covers.',
+      ],
+    },
+    {
+      x: 930,
+      title: 'CONTROLS',
+      lines: [
+        'WASD  move      Mouse  look',
+        'E     inspect   R      route',
+        'Click book to read  ·  Esc releases mouse',
+      ],
+    },
+  ] as const
+
+  columns.forEach((column) => {
+    context.fillStyle = 'rgba(133, 211, 232, .92)'
+    context.font = '800 29px system-ui, sans-serif'
+    context.fillText(column.title, column.x, 278)
+
+    context.strokeStyle = 'rgba(121, 191, 224, .26)'
+    context.lineWidth = 2
+    context.beginPath()
+    context.moveTo(column.x, 326)
+    context.lineTo(column.x + columnWidth, 326)
+    context.stroke()
+
+    context.fillStyle = 'rgba(226, 238, 249, .9)'
+    context.font = '500 25px system-ui, sans-serif'
+    column.lines.forEach((line, index) => {
+      context.fillText(line, column.x, 356 + index * 46)
+    })
+  })
+
+  context.fillStyle = 'rgba(182, 170, 239, .9)'
+  context.font = '700 24px ui-monospace, monospace'
+  context.fillText(
+    'Follow the holographic causeway. District signs float overhead.',
+    84,
+    640,
+  )
+
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.colorSpace = THREE.SRGBColorSpace
+  texture.minFilter = THREE.LinearFilter
+  texture.magFilter = THREE.LinearFilter
+  return texture
+}
+
 function createNebulaTexture(color: string) {
   const canvas = document.createElement('canvas')
   canvas.width = 512
@@ -1700,8 +1805,12 @@ export default function DreamWorld3D({
 
         const pathY = point.y + ARCHIVE_WALKWAY_Y_OFFSET
         const districtInfluence = archiveDistrictInfluence(bay)
+        const welcomeInfluence =
+          1 - THREE.MathUtils.smoothstep(bay, .45, 2.25)
         const localHalfWidth =
-          ARCHIVE_WALKWAY_HALF_WIDTH + districtInfluence * 2.4
+          ARCHIVE_WALKWAY_HALF_WIDTH +
+          districtInfluence * 2.4 +
+          welcomeInfluence * 3.15
         const left = point
           .clone()
           .addScaledVector(side, localHalfWidth)
@@ -1832,39 +1941,86 @@ export default function DreamWorld3D({
       libraryWalkwayRails.userData.libraryDecorative = true
       world.add(libraryWalkway, libraryWalkwayRails)
 
-      const districtLabelGeometry = new THREE.PlaneGeometry(4.8, 1.2)
-      libraryRouteObjects.push(districtLabelGeometry as unknown as THREE.Object3D)
-
-      ARCHIVE_DISTRICTS.forEach((district) => {
+      ARCHIVE_DISTRICTS.forEach((district, index) => {
         const center = new THREE.Vector3(...archivePathPoint(district.bay))
-        center.y += ARCHIVE_WALKWAY_Y_OFFSET + .045
-        const frame = archivePathFrame(district.bay)
-        const yaw = Math.atan2(frame.tangentX, frame.tangentZ)
+        center.y += ARCHIVE_WALKWAY_Y_OFFSET + 4.25
 
         const texture = createLibraryRouteLabelTexture(
           district.label,
           district.code,
         )
-        const material = new THREE.MeshBasicMaterial({
+        const material = new THREE.SpriteMaterial({
           map: texture,
           transparent: true,
-          opacity: .78,
-          side: THREE.DoubleSide,
+          opacity: .84,
           depthWrite: false,
           blending: THREE.NormalBlending,
           toneMapped: true,
         })
-        const marking = new THREE.Mesh(districtLabelGeometry, material)
-        marking.position.copy(center)
-        marking.rotation.x = -Math.PI / 2
-        marking.rotation.z = -yaw
-        marking.renderOrder = 3
-        marking.userData.libraryDecorative = true
-        world.add(marking)
+        const marker = new THREE.Sprite(material)
+        marker.position.copy(center)
+        marker.scale.set(6.2, 1.55, 1)
+        marker.renderOrder = 4
+        marker.userData.libraryDecorative = true
+        marker.userData.routeMarkerBaseY = center.y
+        marker.userData.routeMarkerPhase = index * 1.43
+        world.add(marker)
         libraryRouteTextures.push(texture)
         libraryRouteMaterials.push(material)
-        libraryRouteObjects.push(marking)
+        libraryRouteObjects.push(marker)
       })
+
+      const welcomePoint = new THREE.Vector3(...archivePathPoint(.35))
+      const welcomeTexture = createLibraryWelcomeTexture()
+      const welcomeMaterial = new THREE.SpriteMaterial({
+        map: welcomeTexture,
+        transparent: true,
+        opacity: .96,
+        depthWrite: false,
+        blending: THREE.NormalBlending,
+        toneMapped: true,
+      })
+      const welcomeBoard = new THREE.Sprite(welcomeMaterial)
+      welcomeBoard.position.set(
+        welcomePoint.x,
+        welcomePoint.y + ARCHIVE_WALKWAY_Y_OFFSET + 4.3,
+        welcomePoint.z + 1.0,
+      )
+      welcomeBoard.scale.set(10.6, 5.75, 1)
+      welcomeBoard.renderOrder = 5
+      welcomeBoard.userData.libraryDecorative = true
+      welcomeBoard.userData.libraryWelcome = true
+      welcomeBoard.userData.routeMarkerBaseY = welcomeBoard.position.y
+      welcomeBoard.userData.routeMarkerPhase = -1.2
+      world.add(welcomeBoard)
+      libraryRouteTextures.push(welcomeTexture)
+      libraryRouteMaterials.push(welcomeMaterial)
+      libraryRouteObjects.push(welcomeBoard)
+
+      const welcomeRingGeometry = new THREE.RingGeometry(2.8, 3.02, 64)
+      const welcomeRingMaterial = new THREE.MeshBasicMaterial({
+        color: 0x7edfea,
+        transparent: true,
+        opacity: .16,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        toneMapped: true,
+      })
+      const welcomeRing = new THREE.Mesh(
+        welcomeRingGeometry,
+        welcomeRingMaterial,
+      )
+      welcomeRing.position.set(
+        welcomePoint.x,
+        welcomePoint.y + ARCHIVE_WALKWAY_Y_OFFSET + .04,
+        welcomePoint.z,
+      )
+      welcomeRing.rotation.x = -Math.PI / 2
+      welcomeRing.renderOrder = 3
+      welcomeRing.userData.libraryDecorative = true
+      world.add(welcomeRing)
+      libraryRouteMaterials.push(welcomeRingMaterial)
+      libraryRouteObjects.push(welcomeRing)
 
       const arrowVertices = new Float32Array([
         -.2, 0, .16,
@@ -4178,6 +4334,14 @@ export default function DreamWorld3D({
         libraryWalkwayRailMaterial.opacity =
           .22 + Math.max(0, Math.sin(elapsed * .36 + .8)) * .04
       }
+
+      libraryRouteObjects.forEach((object) => {
+        if (!object.userData.routeMarkerBaseY) return
+        const phase = object.userData.routeMarkerPhase as number
+        const baseY = object.userData.routeMarkerBaseY as number
+        object.position.y =
+          baseY + Math.sin(elapsed * .42 + phase) * .08
+      })
 
       if (libraryRouteDots && libraryRouteDotGeometry) {
         const routePositions =
