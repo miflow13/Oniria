@@ -1,6 +1,6 @@
 'use client'
 
-import {useEffect, useRef} from 'react'
+import {useEffect, useRef, type RefObject} from 'react'
 import * as THREE from 'three'
 import type {LibrarySection, SurfEdge, SurfNode, SurfNodeKind} from './types'
 import styles from './surf.module.css'
@@ -39,7 +39,7 @@ type Props = {
   currentFloor: number
   floorRequest: FloorRequest
   onFloorChange: (floor: number) => void
-  uiOverlayOpen: boolean
+  uiPanelRefs: Array<RefObject<HTMLElement | null>>
   debugEnabled: boolean
   onDebugMetrics: (metrics: SurfDebugMetrics) => void
 }
@@ -525,7 +525,7 @@ export default function DevWebSurf3D({
   currentFloor,
   floorRequest,
   onFloorChange,
-  uiOverlayOpen,
+  uiPanelRefs,
   debugEnabled,
   onDebugMetrics,
 }: Props) {
@@ -542,7 +542,7 @@ export default function DevWebSurf3D({
   const currentFloorRef = useRef(currentFloor)
   const floorRequestRef = useRef(floorRequest)
   const floorChangeRef = useRef(onFloorChange)
-  const uiOverlayRef = useRef(uiOverlayOpen)
+  const uiPanelRefsRef = useRef(uiPanelRefs)
   const debugEnabledRef = useRef(debugEnabled)
   const debugMetricsRef = useRef(onDebugMetrics)
 
@@ -558,7 +558,7 @@ export default function DevWebSurf3D({
   currentFloorRef.current = currentFloor
   floorRequestRef.current = floorRequest
   floorChangeRef.current = onFloorChange
-  uiOverlayRef.current = uiOverlayOpen
+  uiPanelRefsRef.current = uiPanelRefs
   debugEnabledRef.current = debugEnabled
   debugMetricsRef.current = onDebugMetrics
 
@@ -1439,10 +1439,117 @@ export default function DevWebSurf3D({
       section: LibrarySection
       material: THREE.MeshBasicMaterial
     }> = []
-    const uiSensitiveSignMaterials: Array<{
-      material: THREE.Material
-      baseOpacity: number
-    }> = []
+    const architecturalInteractive: THREE.Object3D[] = []
+
+    type OverlapAwareLabel = {
+      object: THREE.Object3D
+      materials: Array<{
+        material: THREE.Material
+        baseOpacity: number
+      }>
+      visibility: number
+    }
+    const overlapAwareLabels: OverlapAwareLabel[] = []
+    const overlapBox = new THREE.Box3()
+    const overlapCorner = new THREE.Vector3()
+
+    function registerOverlapAwareLabel(
+      object: THREE.Object3D,
+      materials: Array<{
+        material: THREE.Material
+        baseOpacity: number
+      }>,
+    ) {
+      overlapAwareLabels.push({
+        object,
+        materials,
+        visibility: 1,
+      })
+    }
+
+    function screenRectForObject(object: THREE.Object3D) {
+      object.updateWorldMatrix(true, true)
+      overlapBox.setFromObject(object)
+      if (overlapBox.isEmpty()) return null
+
+      const min = overlapBox.min
+      const max = overlapBox.max
+      let minX = Infinity
+      let minY = Infinity
+      let maxX = -Infinity
+      let maxY = -Infinity
+      let visibleCorners = 0
+
+      for (let xi = 0; xi < 2; xi += 1) {
+        for (let yi = 0; yi < 2; yi += 1) {
+          for (let zi = 0; zi < 2; zi += 1) {
+            overlapCorner
+              .set(
+                xi ? max.x : min.x,
+                yi ? max.y : min.y,
+                zi ? max.z : min.z,
+              )
+              .project(camera)
+            if (
+              overlapCorner.z < -1 ||
+              overlapCorner.z > 1
+            ) {
+              continue
+            }
+            visibleCorners += 1
+            const x =
+              ((overlapCorner.x + 1) / 2) *
+              renderer.domElement.clientWidth
+            const y =
+              ((1 - overlapCorner.y) / 2) *
+              renderer.domElement.clientHeight
+            minX = Math.min(minX, x)
+            minY = Math.min(minY, y)
+            maxX = Math.max(maxX, x)
+            maxY = Math.max(maxY, y)
+          }
+        }
+      }
+
+      if (!visibleCorners) return null
+      const canvasRect = renderer.domElement.getBoundingClientRect()
+      return {
+        left: canvasRect.left + minX,
+        top: canvasRect.top + minY,
+        right: canvasRect.left + maxX,
+        bottom: canvasRect.top + maxY,
+      }
+    }
+
+    function updateUIOverlap(delta: number) {
+      const panelRects = uiPanelRefsRef.current
+        .map((panelRef) => panelRef.current?.getBoundingClientRect())
+        .filter((rect): rect is DOMRect => Boolean(rect))
+
+      overlapAwareLabels.forEach((entry) => {
+        const labelRect = screenRectForObject(entry.object)
+        const overlapping =
+          labelRect !== null &&
+          panelRects.some((panelRect) => {
+            const padding = 8
+            return (
+              labelRect.right > panelRect.left - padding &&
+              labelRect.left < panelRect.right + padding &&
+              labelRect.bottom > panelRect.top - padding &&
+              labelRect.top < panelRect.bottom + padding
+            )
+          })
+        const target = overlapping ? 0 : 1
+        entry.visibility +=
+          (target - entry.visibility) *
+          (1 - Math.exp(-delta * 14))
+
+        entry.materials.forEach(({material, baseOpacity}) => {
+          material.transparent = true
+          material.opacity = baseOpacity * entry.visibility
+        })
+      })
+    }
 
     function addShelf(
       x: number,
@@ -1617,11 +1724,6 @@ export default function DevWebSurf3D({
         depthWrite: false,
       })
       architecturalMaterials.push(faceMaterial)
-      uiSensitiveSignMaterials.push(
-        {material: faceMaterial, baseOpacity: 1},
-        {material: edgeMaterial, baseOpacity: .22},
-        {material: underGlowMaterial, baseOpacity: .45},
-      )
       const face = new THREE.Mesh(faceGeometry, faceMaterial)
       face.position.z = .061
       face.renderOrder = 7
@@ -1643,6 +1745,16 @@ export default function DevWebSurf3D({
       )
       underGlow.position.set(0, -.78, .04)
       group.add(underGlow)
+
+      const nodeId =
+        section === 'atrium' ? 'dev-home' : 'section:' + section
+      face.userData.nodeId = nodeId
+      architecturalInteractive.push(face)
+      registerOverlapAwareLabel(group, [
+        {material: faceMaterial, baseOpacity: 1},
+        {material: edgeMaterial, baseOpacity: .22},
+        {material: underGlowMaterial, baseOpacity: .45},
+      ])
 
       scene.add(group)
       return group
@@ -1733,10 +1845,6 @@ export default function DevWebSurf3D({
         toneMapped: false,
       })
       architecturalMaterials.push(doorwayMaterial)
-      uiSensitiveSignMaterials.push({
-        material: doorwayMaterial,
-        baseOpacity: 1,
-      })
       const doorwayLabel = new THREE.Sprite(doorwayMaterial)
       doorwayLabel.position.set(0, 1.82, .08)
       doorwayLabel.scale.set(3.8, .9, 1)
@@ -2922,7 +3030,9 @@ export default function DevWebSurf3D({
 
     const nodeById = new Map(nodes.map((node) => [node.id, node]))
     const visuals = new Map<string, Visual>()
-    const interactive: THREE.Object3D[] = []
+    const interactive: THREE.Object3D[] = [
+      ...architecturalInteractive,
+    ]
     const disposableTextures: THREE.Texture[] = []
 
     const nodeGeometryCache = new Map<SurfNodeKind, THREE.BufferGeometry>()
@@ -4502,9 +4612,8 @@ export default function DevWebSurf3D({
             .1
         }
 
-        const overlayFade = uiOverlayRef.current ? .12 : 1
         const labelTarget =
-          (selected || hovered || routed
+          selected || hovered || routed
             ? 1
             : id.startsWith('section:')
               ? .22
@@ -4516,7 +4625,7 @@ export default function DevWebSurf3D({
                     : unrelatedShelf
                       ? .025
                       : .1
-                  : .7) * overlayFade
+                  : .7
         visual.labelMaterial.opacity +=
           (labelTarget - visual.labelMaterial.opacity) *
           (1 - Math.exp(-delta * 9))
@@ -4593,14 +4702,6 @@ export default function DevWebSurf3D({
           tempScale.set(targetScale, targetScale, targetScale),
           1 - Math.exp(-delta * 3.5),
         )
-      })
-
-      const uiSignFactor = uiOverlayRef.current ? .08 : 1
-      uiSensitiveSignMaterials.forEach(({material, baseOpacity}) => {
-        material.transparent = true
-        material.opacity +=
-          (baseOpacity * uiSignFactor - material.opacity) *
-          (1 - Math.exp(-delta * 8))
       })
 
       wayfindingPaths.forEach(({section, material}) => {
@@ -4996,6 +5097,8 @@ export default function DevWebSurf3D({
           (1 - Math.exp(-delta * 5.5))
         camera.updateProjectionMatrix()
       }
+
+      updateUIOverlap(delta)
 
       camera.getWorldDirection(tempDirection)
       playerKeyLight.position
