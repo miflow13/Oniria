@@ -1461,6 +1461,7 @@ export default function DreamWorld3D({
         color,
         settings,
         hashString(`${node._id}:${dream._id}`),
+        cinematicEnvironment.texture,
       )
       activeCellId = node._id
       activeCellDreamId = dream._id
