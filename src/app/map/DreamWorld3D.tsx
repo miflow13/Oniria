@@ -2920,9 +2920,23 @@ export default function DreamWorld3D({
 
       activeDistricts.forEach((district, index) => {
         const center = new THREE.Vector3(...archivePathPoint(district.bay))
-        // Keep the district header just above the tallest landmark so it
-        // reads as signage instead of cutting through the centerpiece.
-        center.y += ARCHIVE_WALKWAY_Y_OFFSET + 6.2
+        const expectedLandmarkHeight =
+          district.landmarkType === 'archive-tower'
+            ? 4.8
+            : district.landmarkType === 'syntax-tree'
+              ? 4.2
+              : district.landmarkType === 'neural-lattice'
+                ? 3.7
+                : district.landmarkType === 'index'
+                  ? 3.2
+                  : 2.7
+
+        // Compose signs for a walking-height camera, not an overhead map.
+        // The tallest archive towers get extra breathing room so their
+        // silhouette never tangles with the district label in screenshots.
+        center.y +=
+          ARCHIVE_WALKWAY_Y_OFFSET +
+          Math.max(6.55, expectedLandmarkHeight + 1.72)
 
         const texture = createLibraryRouteLabelTexture(
           district.label,
@@ -2963,23 +2977,19 @@ export default function DreamWorld3D({
         const landmarkPosition = pathCenter.clone()
 
         let landmarkGeometry: THREE.BufferGeometry
-        let landmarkHeight = 3.4
+        const landmarkHeight = expectedLandmarkHeight
         switch (district.landmarkType) {
           case 'neural-lattice':
             landmarkGeometry = new THREE.IcosahedronGeometry(1.85, 1)
-            landmarkHeight = 3.7
             break
           case 'terminal-wall':
-            landmarkGeometry = new THREE.BoxGeometry(3.5, 2.7, .28)
-            landmarkHeight = 2.7
+            landmarkGeometry = new THREE.BoxGeometry(3.35, 2.55, .2)
             break
           case 'syntax-tree':
             landmarkGeometry = new THREE.ConeGeometry(1.65, 4.2, 6)
-            landmarkHeight = 4.2
             break
           case 'dev-monument':
             landmarkGeometry = new THREE.BoxGeometry(2.7, 2.7, 2.7)
-            landmarkHeight = 2.7
             break
           case 'archive-tower':
             landmarkGeometry = new THREE.CylinderGeometry(
@@ -2988,12 +2998,10 @@ export default function DreamWorld3D({
               4.8,
               8,
             )
-            landmarkHeight = 4.8
             break
           case 'index':
           default:
             landmarkGeometry = new THREE.TorusGeometry(1.6, .24, 10, 48)
-            landmarkHeight = 3.2
             break
         }
 
@@ -3005,7 +3013,10 @@ export default function DreamWorld3D({
         const landmarkCoreMaterial = new THREE.MeshBasicMaterial({
           color: district.accent,
           transparent: true,
-          opacity: .26,
+          opacity:
+            district.landmarkType === 'terminal-wall'
+              ? .14
+              : .24,
           depthWrite: false,
           blending: THREE.NormalBlending,
           toneMapped: false,
@@ -3037,6 +3048,8 @@ export default function DreamWorld3D({
           index * 1.37
         landmarkGroup.userData.libraryLandmarkHeight =
           landmarkHeight
+        landmarkGroup.userData.libraryLandmarkBay =
+          district.bay
 
         const landmarkCore = new THREE.Mesh(
           landmarkGeometry,
@@ -3056,6 +3069,29 @@ export default function DreamWorld3D({
         landmarkWire.userData.libraryLandmarkWire = true
         landmarkCore.userData.libraryLandmarkCore = true
         landmarkGroup.add(landmarkWire)
+
+        const heroHaloGeometry = new THREE.RingGeometry(
+          Math.max(2.05, landmarkHeight * .5),
+          Math.max(2.62, landmarkHeight * .62),
+          56,
+        )
+        const heroHaloMaterial = new THREE.MeshBasicMaterial({
+          color: district.accent,
+          transparent: true,
+          opacity: .105,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          toneMapped: false,
+        })
+        const heroHalo = new THREE.Mesh(
+          heroHaloGeometry,
+          heroHaloMaterial,
+        )
+        heroHalo.position.set(0, .08, .72)
+        heroHalo.userData.libraryLandmarkHalo = true
+        heroHalo.userData.libraryDecorative = true
+        landmarkGroup.add(heroHalo)
 
         // A moving scan ring, orbit motes, and one lightweight motif group
         // give every Sanity-authored district a readable identity without
@@ -3322,6 +3358,7 @@ export default function DreamWorld3D({
           pedestalGeometry,
           scanRingGeometry,
           orbitGeometry,
+          heroHaloGeometry,
         )
         libraryDistrictLandmarkMaterials.push(
           landmarkCoreMaterial,
@@ -3329,6 +3366,7 @@ export default function DreamWorld3D({
           pedestalMaterial,
           scanRingMaterial,
           orbitMaterial,
+          heroHaloMaterial,
           motifMaterial,
         )
 
@@ -5836,6 +5874,25 @@ export default function DreamWorld3D({
               .libraryLandmarkBaseRotationY as number
           const landmarkHeight =
             object.userData.libraryLandmarkHeight as number
+          const landmarkBay =
+            object.userData.libraryLandmarkBay as number
+          const landmarkDistance =
+            Math.abs(landmarkBay - currentArchiveBay)
+          const heroWake =
+            1 -
+            THREE.MathUtils.smoothstep(
+              landmarkDistance,
+              .45,
+              5.2,
+            )
+          const heroScale =
+            1 +
+            heroWake * .055 +
+            Math.max(
+              0,
+              Math.sin(elapsed * .48 + phase),
+            ) *
+              .008
 
           object.position.y =
             baseY +
@@ -5843,9 +5900,32 @@ export default function DreamWorld3D({
           object.rotation.y =
             baseRotationY +
             Math.sin(elapsed * .18 + phase) * .07
+          object.scale.lerp(
+            new THREE.Vector3(
+              heroScale,
+              heroScale,
+              heroScale,
+            ),
+            .075,
+          )
 
           object.children.forEach((child) => {
-            if (child.userData.libraryLandmarkScan) {
+            if (child.userData.libraryLandmarkHalo) {
+              const halo = child as THREE.Mesh
+              const material =
+                halo.material as THREE.MeshBasicMaterial
+              const haloScale =
+                1 +
+                heroWake * .12 +
+                Math.sin(elapsed * .34 + phase) * .018
+              halo.scale.setScalar(haloScale)
+              material.opacity +=
+                ((.08 + heroWake * .17) -
+                  material.opacity) *
+                .08
+              halo.rotation.z =
+                Math.sin(elapsed * .12 + phase) * .035
+            } else if (child.userData.libraryLandmarkScan) {
               const cycle =
                 (elapsed * .18 + phase * .13) % 1
               child.position.y =
@@ -5857,11 +5937,12 @@ export default function DreamWorld3D({
                 (child as THREE.Mesh)
                   .material as THREE.MeshBasicMaterial
               material.opacity =
-                .28 +
+                .22 +
+                heroWake * .16 +
                 Math.max(
                   0,
                   Math.sin(elapsed * 1.4 + phase),
-                ) * .34
+                ) * .28
             } else if (
               child.userData.libraryLandmarkOrbit
             ) {
@@ -5873,11 +5954,12 @@ export default function DreamWorld3D({
                 (child as THREE.Points)
                   .material as THREE.PointsMaterial
               material.opacity =
-                .48 +
+                .4 +
+                heroWake * .22 +
                 Math.max(
                   0,
                   Math.sin(elapsed * .7 + phase),
-                ) * .25
+                ) * .2
             } else if (
               child.userData.libraryDistrictMotif
             ) {
@@ -5885,6 +5967,9 @@ export default function DreamWorld3D({
                 Math.sin(elapsed * .16 + phase) * .09
               child.position.y =
                 Math.sin(elapsed * .32 + phase) * .055
+              child.scale.setScalar(
+                1 + heroWake * .06,
+              )
             } else if (
               child.userData.libraryLandmarkPedestal
             ) {
@@ -5892,11 +5977,12 @@ export default function DreamWorld3D({
                 (child as THREE.Mesh)
                   .material as THREE.MeshBasicMaterial
               material.opacity =
-                .3 +
+                .27 +
+                heroWake * .16 +
                 Math.max(
                   0,
                   Math.sin(elapsed * .68 + phase),
-                ) * .2
+                ) * .16
             } else if (
               child.userData.libraryLandmarkCore
             ) {
