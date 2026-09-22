@@ -63,7 +63,7 @@ type Visual = {
 const LIBRARY_FLOOR_COUNT = 6
 const LIBRARY_FLOOR_HEIGHT = 5.2
 const CAMERA_HEIGHT = 1.62
-const REAL_BOOK_DISTANCE = 17
+const REAL_BOOK_DISTANCE = 19.5
 const FLOOR_IDENTITIES = [
   'ATRIUM / FEATURED / NEW',
   'WEBDEV / REACT / TYPESCRIPT',
@@ -235,6 +235,49 @@ function createBookTitleTexture(
   const texture = new THREE.CanvasTexture(canvas)
   texture.colorSpace = THREE.SRGBColorSpace
   texture.minFilter = THREE.LinearFilter
+  return texture
+}
+
+function createArchitecturalSurfaceTexture() {
+  const canvas = document.createElement('canvas')
+  canvas.width = 256
+  canvas.height = 256
+  const context = canvas.getContext('2d')
+
+  if (context) {
+    context.fillStyle = '#85878d'
+    context.fillRect(0, 0, canvas.width, canvas.height)
+
+    // Deterministic low-contrast aggregate. It reads like sealed concrete /
+    // graphite at human distance without turning the floor into a pattern.
+    for (let index = 0; index < 1500; index += 1) {
+      const seed = Math.sin(index * 12.9898) * 43758.5453
+      const x = Math.abs(seed * 97) % canvas.width
+      const y = Math.abs(seed * 193) % canvas.height
+      const shade = 112 + (index % 23)
+      context.fillStyle =
+        'rgba(' + shade + ',' + shade + ',' + (shade + 3) + ',.16)'
+      const size = index % 9 === 0 ? 2 : 1
+      context.fillRect(x, y, size, size)
+    }
+
+    context.strokeStyle = 'rgba(220,224,232,.025)'
+    context.lineWidth = 1
+    for (let line = 24; line < 256; line += 52) {
+      context.beginPath()
+      context.moveTo(0, line + (line % 3))
+      context.lineTo(256, line - 7)
+      context.stroke()
+    }
+  }
+
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.wrapS = THREE.RepeatWrapping
+  texture.wrapT = THREE.RepeatWrapping
+  texture.repeat.set(3, 3)
+  texture.colorSpace = THREE.SRGBColorSpace
+  texture.minFilter = THREE.LinearMipmapLinearFilter
+  texture.magFilter = THREE.LinearFilter
   return texture
 }
 
@@ -473,9 +516,9 @@ export default function DevWebSurf3D({
 
     const scene = new THREE.Scene()
     scene.background = new THREE.Color(0x090a0f)
-    scene.fog = new THREE.FogExp2(0x0c0e16, .0095)
+    scene.fog = new THREE.FogExp2(0x111319, .0082)
 
-    const camera = new THREE.PerspectiveCamera(62, 1, .07, 140)
+    const camera = new THREE.PerspectiveCamera(60, 1, .07, 160)
     camera.position.set(
       0,
       currentFloorRef.current * LIBRARY_FLOOR_HEIGHT + CAMERA_HEIGHT,
@@ -557,7 +600,7 @@ export default function DevWebSurf3D({
     >()
     const MAX_RESIDENT_COVERS = 32
     const MAX_ACTIVE_BOOK_DETAILS = 14
-    const COVER_LOAD_DISTANCE = 14
+    const COVER_LOAD_DISTANCE = 10.5
     const COVER_EVICT_AGE = 4.5
     const activeCoverUrls = new Set<string>()
     const detailedBookIds = new Set<string>()
@@ -750,35 +793,42 @@ export default function DevWebSurf3D({
       })
     }
 
-    const floorMaterial = new THREE.MeshStandardMaterial({
-      color: 0x14161d,
-      roughness: .72,
-      metalness: .18,
+    const architecturalSurfaceTexture =
+      createArchitecturalSurfaceTexture()
+    const architecturalSurfaceRoughness =
+      architecturalSurfaceTexture.clone()
+    architecturalSurfaceRoughness.colorSpace =
+      THREE.NoColorSpace
+
+    // One material family for floors + walls. The floor now reads as the
+    // horizontal face of the same megastructure instead of a separate skin.
+    const concrete = new THREE.MeshStandardMaterial({
+      color: 0x24262c,
+      map: architecturalSurfaceTexture,
+      roughnessMap: architecturalSurfaceRoughness,
+      roughness: .92,
+      metalness: .045,
     })
-    architecturalMaterials.push(floorMaterial)
+    const floorMaterial = concrete
+    architecturalMaterials.push(concrete)
 
     const brass = new THREE.MeshStandardMaterial({
-      color: 0x3b49df,
-      roughness: .48,
-      metalness: .55,
-      emissive: 0x11173f,
-      emissiveIntensity: .14,
+      color: 0x303a70,
+      roughness: .56,
+      metalness: .46,
+      emissive: 0x111735,
+      emissiveIntensity: .1,
     })
     architecturalMaterials.push(brass)
 
     const shelfMaterial = new THREE.MeshStandardMaterial({
-      color: 0x1d2028,
-      roughness: .62,
-      metalness: .28,
+      color: 0x262931,
+      map: architecturalSurfaceTexture,
+      roughnessMap: architecturalSurfaceRoughness,
+      roughness: .78,
+      metalness: .16,
     })
     architecturalMaterials.push(shelfMaterial)
-
-    const concrete = new THREE.MeshStandardMaterial({
-      color: 0x15171d,
-      roughness: .88,
-      metalness: .08,
-    })
-    architecturalMaterials.push(concrete)
 
     function addFloor(
       x: number,
@@ -1080,14 +1130,14 @@ export default function DevWebSurf3D({
 
     // Netspace underlay: the library still reads as DEV, but the floor
     // behaves like a data plane rather than a conventional building.
-    const netGrid = new THREE.GridHelper(82, 82, 0x3b49df, 0x1d223b)
+    const netGrid = new THREE.GridHelper(82, 82, 0x394052, 0x242934)
     netGrid.position.set(0, .005, -16)
     const netGridMaterials = Array.isArray(netGrid.material)
       ? netGrid.material
       : [netGrid.material]
     netGridMaterials.forEach((material) => {
       material.transparent = true
-      material.opacity = .17
+      material.opacity = .035
       material.blending = THREE.AdditiveBlending
       architecturalMaterials.push(material)
     })
