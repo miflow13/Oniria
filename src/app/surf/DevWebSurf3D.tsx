@@ -2089,6 +2089,72 @@ export default function DevWebSurf3D({
     // just another repeated shelf row.
     addLandmarkArch(0, -34.4, 6.4, 3.65, 0, FLOOR_ACCENTS[5])
 
+    // Small project-signature easter egg: an unobtrusive green archive buddy
+    // tucked beside the restricted stacks for explorers who wander off-route.
+    const archiveBuddy = new THREE.Group()
+    archiveBuddy.position.set(-4.55, .28, -36.15)
+
+    const buddyBodyGeometry = new THREE.SphereGeometry(.34, 16, 12)
+    const buddyEyeGeometry = new THREE.SphereGeometry(.035, 8, 6)
+    architecturalGeometries.push(buddyBodyGeometry, buddyEyeGeometry)
+
+    const buddyBodyMaterial = new THREE.MeshStandardMaterial({
+      color: 0x68d98a,
+      emissive: 0x1f5f35,
+      emissiveIntensity: .12,
+      roughness: .72,
+      metalness: .02,
+    })
+    const buddyEyeMaterial = new THREE.MeshStandardMaterial({
+      color: 0x090d0a,
+      roughness: .5,
+      metalness: .05,
+    })
+    architecturalMaterials.push(
+      buddyBodyMaterial,
+      buddyEyeMaterial,
+    )
+
+    const buddyBody = new THREE.Mesh(
+      buddyBodyGeometry,
+      buddyBodyMaterial,
+    )
+    buddyBody.scale.set(1.18, .82, 1)
+    buddyBody.castShadow = true
+    archiveBuddy.add(buddyBody)
+
+    ;[-.115, .115].forEach((x) => {
+      const eye = new THREE.Mesh(
+        buddyEyeGeometry,
+        buddyEyeMaterial,
+      )
+      eye.position.set(x, .045, .285)
+      archiveBuddy.add(eye)
+    })
+
+    const buddyPlaqueTexture = createTextTexture(
+      'MOCHI WAS HERE',
+      'quietly cataloging the weird stuff',
+      '#68d98a',
+      430,
+      120,
+    )
+    labelsToDispose.push(buddyPlaqueTexture)
+    const buddyPlaqueMaterial = new THREE.SpriteMaterial({
+      map: buddyPlaqueTexture,
+      transparent: true,
+      depthWrite: false,
+      toneMapped: false,
+      opacity: .72,
+    })
+    architecturalMaterials.push(buddyPlaqueMaterial)
+    const buddyPlaque = new THREE.Sprite(buddyPlaqueMaterial)
+    buddyPlaque.position.set(0, .9, 0)
+    buddyPlaque.scale.set(2.1, .58, 1)
+    archiveBuddy.add(buddyPlaque)
+
+    scene.add(archiveBuddy)
+
     const restrictedCanvas = document.createElement('canvas')
     restrictedCanvas.width = 640
     restrictedCanvas.height = 300
