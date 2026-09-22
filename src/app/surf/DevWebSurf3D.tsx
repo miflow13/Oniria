@@ -667,7 +667,7 @@ export default function DevWebSurf3D({
     scene.background = new THREE.Color(0x000000)
     scene.fog = new THREE.FogExp2(0x000000, .0065)
 
-    const camera = new THREE.PerspectiveCamera(60, 1, .07, 160)
+    const camera = new THREE.PerspectiveCamera(60, 1, .07, 210)
     camera.position.set(
       0,
       currentFloorRef.current * LIBRARY_FLOOR_HEIGHT + CAMERA_HEIGHT,
