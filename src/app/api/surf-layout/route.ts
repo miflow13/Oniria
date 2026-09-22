@@ -7,28 +7,59 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value)
 }
 
+function isShelfTransform(value: unknown) {
+  if (!value || typeof value !== 'object') return false
+  const transform = value as {
+    x?: unknown
+    z?: unknown
+    rotationY?: unknown
+  }
+  return (
+    isFiniteNumber(transform.x) &&
+    isFiniteNumber(transform.z) &&
+    isFiniteNumber(transform.rotationY)
+  )
+}
+
+function isSceneTransform(value: unknown) {
+  if (!value || typeof value !== 'object') return false
+  const transform = value as {
+    x?: unknown
+    y?: unknown
+    z?: unknown
+    rotationX?: unknown
+    rotationY?: unknown
+    rotationZ?: unknown
+  }
+  return (
+    isFiniteNumber(transform.x) &&
+    isFiniteNumber(transform.y) &&
+    isFiniteNumber(transform.z) &&
+    isFiniteNumber(transform.rotationX) &&
+    isFiniteNumber(transform.rotationY) &&
+    isFiniteNumber(transform.rotationZ)
+  )
+}
+
 function isValidLayout(value: unknown): value is SurfLayoutConfig {
   if (!value || typeof value !== 'object') return false
   const candidate = value as {
     version?: unknown
     shelves?: unknown
+    objects?: unknown
   }
-  if (candidate.version !== 1) return false
-  if (!candidate.shelves || typeof candidate.shelves !== 'object') return false
+  if (candidate.version !== 2) return false
+  if (!candidate.shelves || typeof candidate.shelves !== 'object') {
+    return false
+  }
+  if (!candidate.objects || typeof candidate.objects !== 'object') {
+    return false
+  }
 
-  return Object.values(candidate.shelves).every((entry) => {
-    if (!entry || typeof entry !== 'object') return false
-    const transform = entry as {
-      x?: unknown
-      z?: unknown
-      rotationY?: unknown
-    }
-    return (
-      isFiniteNumber(transform.x) &&
-      isFiniteNumber(transform.z) &&
-      isFiniteNumber(transform.rotationY)
-    )
-  })
+  return (
+    Object.values(candidate.shelves).every(isShelfTransform) &&
+    Object.values(candidate.objects).every(isSceneTransform)
+  )
 }
 
 export async function POST(request: Request) {
