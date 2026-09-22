@@ -1392,6 +1392,33 @@ export default function DreamMap({
                 {observatoryMode ? 'Observatory' : 'Observe'}
               </button>
 
+              <button
+                type="button"
+                className={
+                  flightMode
+                    ? styles.flightButtonActive
+                    : styles.flightButton
+                }
+                onClick={() => {
+                  const next = !flightMode
+                  setFlightMode(next)
+                  if (next) {
+                    setObservatoryMode(false)
+                    setSelectedId(null)
+                    setHoveredId(null)
+                    setOpenDreamId(null)
+                    setFocusedDreamId(null)
+                    setPan({x: 0, y: 0})
+                    window.history.replaceState(null, '', '/map')
+                  }
+                }}
+                aria-pressed={flightMode}
+                title="Travel through the constellation in first person"
+              >
+                <span aria-hidden="true">⌁</span>
+                {flightMode ? 'Flying' : 'First person'}
+              </button>
+
               <label className={styles.qualityControl}>
                 <span>Dream quality</span>
                 <select
@@ -1434,6 +1461,22 @@ export default function DreamMap({
                 </button>
               </div>
             </div>
+
+            {flightMode && !diveActive && (
+              <div className={styles.flightHud} aria-live="polite">
+                <div className={styles.flightReticle} aria-hidden="true">
+                  <i />
+                  <i />
+                </div>
+                <div className={styles.flightInstructions}>
+                  <span>First-person travel</span>
+                  <strong>WASD · mouse · Shift to boost</strong>
+                  <small>
+                    Click to capture pointer · E or center-click to inspect a memory · Esc to leave
+                  </small>
+                </div>
+              </div>
+            )}
 
             {enteringNodeId && (
               <div className={styles.enterDreamOverlay} aria-live="polite">
@@ -1494,6 +1537,7 @@ export default function DreamMap({
                 diveBackRequest={diveBackRequest}
                 diveTimelineProgress={diveTimelineProgress}
                 observatoryMode={observatoryMode}
+                flightMode={flightMode}
                 onZoomChange={changeZoom}
                 onPanChange={setPan}
                 onNodeHover={(node) => {
@@ -1502,6 +1546,7 @@ export default function DreamMap({
                 }}
                 onNodeSelect={(node) => {
                   setObservatoryMode(false)
+                  if (flightMode) setFlightMode(false)
                   enterNode(node)
                 }}
                 onBackgroundClick={() => {
@@ -1517,6 +1562,7 @@ export default function DreamMap({
                   )
                   if (active) {
                     setObservatoryMode(false)
+                    setFlightMode(false)
                     setEnteringNodeId(null)
                     setClosingJournal(false)
                     setDiveTimelineProgress(1)
@@ -1532,6 +1578,7 @@ export default function DreamMap({
                     )
                   }
                 }}
+                onFlightModeChange={setFlightMode}
                 onDiveDreamChange={(dreamId, title, depth) => {
                   setDiveTitle(title)
                   setDiveDepth(depth)
