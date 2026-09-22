@@ -109,6 +109,11 @@ type ProjectionPoint = {
 }
 
 export type LibraryMovementMode = 'walk' | 'fly'
+export type LibraryReadingBook = {
+  nodeId: string
+  index: number
+}
+
 
 type Props = {
   nodes: DreamWorldNode[]
@@ -131,6 +136,7 @@ type Props = {
   observatoryMode: boolean
   flightMode: boolean
   libraryMovementMode?: LibraryMovementMode
+  libraryReadingBook?: LibraryReadingBook | null
   inputBlocked?: boolean
   onZoomChange: (zoom: number) => void
   onPanChange: (pan: Pan) => void
@@ -613,6 +619,7 @@ export default function DreamWorld3D({
   observatoryMode,
   flightMode,
   libraryMovementMode = 'walk',
+  libraryReadingBook = null,
   inputBlocked = false,
   onZoomChange,
   onPanChange,
@@ -656,6 +663,8 @@ export default function DreamWorld3D({
   const flightModeRef = useRef(flightMode)
   const libraryMovementModeRef =
     useRef<LibraryMovementMode>(libraryMovementMode)
+  const libraryReadingBookRef =
+    useRef<LibraryReadingBook | null>(libraryReadingBook)
   const inputBlockedRef = useRef(inputBlocked)
   const libraryFlightStateRef = useRef<{
     position: [number, number, number]
@@ -695,6 +704,7 @@ export default function DreamWorld3D({
   observatoryModeRef.current = observatoryMode
   flightModeRef.current = flightMode
   libraryMovementModeRef.current = libraryMovementMode
+  libraryReadingBookRef.current = libraryReadingBook
   inputBlockedRef.current = inputBlocked
   onDiveStateChangeRef.current = onDiveStateChange
   onDiveDreamChangeRef.current = onDiveDreamChange
@@ -1608,6 +1618,8 @@ export default function DreamWorld3D({
       index: number
       group: THREE.Group
       coverHinge: THREE.Group
+      coverMaterial: THREE.MeshStandardMaterial
+      bookmark: THREE.Mesh
       basePosition: THREE.Vector3
     }
     const libraryBookVisuals: LibraryBookVisual[] = []
@@ -1618,6 +1630,7 @@ export default function DreamWorld3D({
           visual: LibraryBookVisual
           startedAt: number
           fired: boolean
+          returningAt: number | null
         }
       | null = null
 
@@ -1629,6 +1642,16 @@ export default function DreamWorld3D({
     const shelfCoverGeometry = new THREE.PlaneGeometry(.84, .5)
     const shelfAccentGeometry = new THREE.BoxGeometry(3.34, .035, .68)
     const shelfPickGeometry = new THREE.BoxGeometry(3.8, 2.9, .95)
+    const shelfBookmarkGeometry = new THREE.PlaneGeometry(.12, .34)
+    const shelfBookmarkMaterial = new THREE.MeshBasicMaterial({
+      color: 0xd782e8,
+      transparent: true,
+      opacity: .82,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      toneMapped: true,
+    })
     const shelfFrameMaterial = new THREE.MeshStandardMaterial({
       color: 0x080b11,
       emissive: 0x000000,
@@ -1699,6 +1722,11 @@ export default function DreamWorld3D({
       ? new THREE.PointLight(0x8fe9f3, 0, 13, 2)
       : null
     if (libraryShelfLight) scene.add(libraryShelfLight)
+
+    const libraryReadingLight = libraryMode
+      ? new THREE.PointLight(0xe49af2, 0, 8, 2)
+      : null
+    if (libraryReadingLight) scene.add(libraryReadingLight)
 
     const libraryShelfSparkleGeometry = libraryMode
       ? new THREE.BufferGeometry()
@@ -1984,12 +2012,24 @@ export default function DreamWorld3D({
             coverHinge.add(cover)
             bookInteractives.push(cover)
 
+            const bookmark = new THREE.Mesh(
+              shelfBookmarkGeometry,
+              shelfBookmarkMaterial,
+            )
+            bookmark.position.set(.28, .34, -.072)
+            bookmark.rotation.y = Math.PI
+            bookmark.visible = false
+            bookmark.renderOrder = 6
+            bookGroup.add(bookmark)
+
             shelf.add(bookGroup)
             libraryBookVisuals.push({
               nodeId: node._id,
               index,
               group: bookGroup,
               coverHinge,
+              coverMaterial,
+              bookmark,
               basePosition,
             })
           },
@@ -3490,6 +3530,7 @@ export default function DreamWorld3D({
         visual,
         startedAt: performance.now() / 1000,
         fired: false,
+        returningAt: null,
       }
     }
 
