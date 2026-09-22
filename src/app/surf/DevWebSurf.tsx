@@ -730,6 +730,14 @@ function buildLibraryGraph(
 
 export default function DevWebSurf() {
   const searchInputRef = useRef<HTMLInputElement | null>(null)
+  const chromeRef = useRef<HTMLElement | null>(null)
+  const directoryRef = useRef<HTMLElement | null>(null)
+  const floorRailRef = useRef<HTMLElement | null>(null)
+  const routeCardRef = useRef<HTMLElement | null>(null)
+  const uiPanelRefs = useMemo(
+    () => [chromeRef, directoryRef, floorRailRef, routeCardRef],
+    [],
+  )
 
   const [bootstrap, setBootstrap] = useState<DevBootstrap | null>(null)
   const [catalogArticles, setCatalogArticles] = useState<
@@ -1325,12 +1333,12 @@ export default function DevWebSurf() {
         currentFloor={currentFloor}
         floorRequest={floorRequest}
         onFloorChange={setCurrentFloor}
-        uiOverlayOpen={directoryOpen}
+        uiPanelRefs={uiPanelRefs}
         debugEnabled={debugOpen}
         onDebugMetrics={setDebugMetrics}
       />
 
-      <header className={styles.chrome}>
+      <header ref={chromeRef} className={styles.chrome}>
         <button
           type="button"
           className={styles.brand}
@@ -1399,7 +1407,11 @@ export default function DevWebSurf() {
         </nav>
       )}
 
-      <nav className={styles.floorRail} aria-label="Library floors">
+      <nav
+        ref={floorRailRef}
+        className={styles.floorRail}
+        aria-label="Library floors"
+      >
         <span>Floor</span>
         {Array.from({length: LIBRARY_FLOOR_COUNT}, (_, floor) => (
           <button
@@ -1457,7 +1469,7 @@ export default function DevWebSurf() {
       </button>
 
       {directoryOpen && (
-        <aside className={styles.directory}>
+        <aside ref={directoryRef} className={styles.directory}>
           <div className={styles.directoryHeading}>
             <span>DEV Library Directory</span>
             <button
@@ -1526,7 +1538,7 @@ export default function DevWebSurf() {
       )}
 
       {routeTarget && (
-        <aside className={styles.routeCard}>
+        <aside ref={routeCardRef} className={styles.routeCard}>
           <span>Route ready · follow cyan light</span>
           <strong>{routeTarget.title}</strong>
           <p>
