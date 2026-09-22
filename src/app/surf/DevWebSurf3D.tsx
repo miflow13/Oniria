@@ -2409,7 +2409,18 @@ export default function DevWebSurf3D({
           const t = .035 + (index / (floorStrips.length - 1)) * .93
           const point = activeGuideCurve!.getPoint(t)
           const tangent = activeGuideCurve!.getTangent(t)
-          mesh.position.set(point.x, point.y + .025, point.z)
+          const stripFloor = THREE.MathUtils.clamp(
+            Math.round(
+              (point.y - CAMERA_HEIGHT) / LIBRARY_FLOOR_HEIGHT,
+            ),
+            0,
+            LIBRARY_FLOOR_COUNT - 1,
+          )
+          mesh.position.set(
+            point.x,
+            stripFloor * LIBRARY_FLOOR_HEIGHT + .035,
+            point.z,
+          )
           mesh.rotation.y =
             Math.atan2(tangent.x, tangent.z) + Math.PI / 2
           mesh.visible = true
@@ -2427,7 +2438,18 @@ export default function DevWebSurf3D({
           const t = .16 + index * .135
           const point = activeGuideCurve!.getPoint(t)
           const tangent = activeGuideCurve!.getTangent(t)
-          mesh.position.set(point.x, point.y + .03, point.z)
+          const markerFloor = THREE.MathUtils.clamp(
+            Math.round(
+              (point.y - CAMERA_HEIGHT) / LIBRARY_FLOOR_HEIGHT,
+            ),
+            0,
+            LIBRARY_FLOOR_COUNT - 1,
+          )
+          mesh.position.set(
+            point.x,
+            markerFloor * LIBRARY_FLOOR_HEIGHT + .04,
+            point.z,
+          )
           mesh.rotation.y =
             Math.atan2(tangent.x, tangent.z)
           mesh.visible = true
