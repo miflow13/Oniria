@@ -550,11 +550,32 @@ function createNebulaTexture(color: string) {
   const context = canvas.getContext('2d')
   if (!context) return new THREE.CanvasTexture(canvas)
 
-  const gradient = context.createRadialGradient(256, 256, 0, 256, 256, 256)
-  gradient.addColorStop(0, color)
-  gradient.addColorStop(.25, color.replace('0.36', '0.17'))
-  gradient.addColorStop(.58, color.replace('0.36', '0.055'))
-  gradient.addColorStop(1, 'rgba(0,0,0,0)')
+  const rgbaMatch = color.match(
+    /rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*,\s*([\d.]+))?\s*\)/,
+  )
+  const red = rgbaMatch?.[1] ?? '120'
+  const green = rgbaMatch?.[2] ?? '120'
+  const blue = rgbaMatch?.[3] ?? '180'
+  const alpha = Number(rgbaMatch?.[4] ?? .36)
+  const rgba = (multiplier: number) =>
+    `rgba(${red}, ${green}, ${blue}, ${Math.max(
+      0,
+      Math.min(1, alpha * multiplier),
+    )})`
+
+  const gradient = context.createRadialGradient(
+    256,
+    256,
+    0,
+    256,
+    256,
+    256,
+  )
+  gradient.addColorStop(0, rgba(1))
+  gradient.addColorStop(.22, rgba(.58))
+  gradient.addColorStop(.5, rgba(.24))
+  gradient.addColorStop(.76, rgba(.07))
+  gradient.addColorStop(1, 'rgba(0, 0, 0, 0)')
   context.fillStyle = gradient
   context.fillRect(0, 0, 512, 512)
 
@@ -1406,9 +1427,10 @@ export default function DreamWorld3D({
 
     if (libraryMode) {
       const fogTextureColors = [
-        'rgba(136, 177, 204, 0.34)',
-        'rgba(103, 154, 177, 0.34)',
-        'rgba(118, 121, 184, 0.30)',
+        'rgba(224, 92, 188, 0.34)',
+        'rgba(170, 91, 214, 0.32)',
+        'rgba(235, 119, 179, 0.28)',
+        'rgba(124, 104, 205, 0.27)',
       ]
 
       const fogTextures = fogTextureColors.map((color) => {
@@ -1421,7 +1443,14 @@ export default function DreamWorld3D({
         const material = new THREE.SpriteMaterial({
           map: texture,
           transparent: true,
-          opacity: index === 2 ? .024 : .03,
+          opacity:
+            index === 0
+              ? .038
+              : index === 1
+                ? .034
+                : index === 2
+                  ? .03
+                  : .026,
           depthWrite: false,
           blending: THREE.NormalBlending,
           toneMapped: true,
@@ -1432,25 +1461,29 @@ export default function DreamWorld3D({
 
       const fogBankCount =
         qualityRef.current === 'cinematic'
-          ? 18
+          ? 36
           : qualityRef.current === 'high'
-            ? 14
-            : 10
+            ? 28
+            : qualityRef.current === 'medium'
+              ? 20
+              : 14
 
       for (let index = 0; index < fogBankCount; index += 1) {
         const t =
           fogBankCount === 1 ? 0 : index / (fogBankCount - 1)
         const bay = THREE.MathUtils.lerp(
-          1,
-          ARCHIVE_PATH_RENDER_BAYS - 1,
+          .25,
+          ARCHIVE_PATH_RENDER_BAYS - .4,
           t,
         )
         const point = archivePathPoint(bay)
         const frame = archivePathFrame(bay)
-        const phase = index * 1.71
+        const phase = index * 1.37
+        const sidePattern = index % 3
+        const sideSign = sidePattern === 0 ? -1 : sidePattern === 1 ? 1 : 0
         const sideOffset =
-          (index % 2 === 0 ? -1 : 1) *
-          (2.4 + seededUnit(index + 701, 4) * 3.8)
+          sideSign *
+          (1.8 + seededUnit(index + 701, 4) * 4.4)
 
         const sprite = new THREE.Sprite(
           fogMaterials[index % fogMaterials.length],
@@ -1458,21 +1491,28 @@ export default function DreamWorld3D({
         sprite.position.set(
           point[0] + frame.normalX * sideOffset,
           point[1] +
-            (seededUnit(index + 701, 5) - .5) * 5.5,
+            (seededUnit(index + 701, 5) - .5) * 4.2 +
+            .6,
           point[2] + frame.normalZ * sideOffset,
         )
 
         const width =
-          16 + seededUnit(index + 701, 6) * 12
+          30 + seededUnit(index + 701, 6) * 18
         const height =
-          8 + seededUnit(index + 701, 7) * 7
+          12 + seededUnit(index + 701, 7) * 9
         sprite.scale.set(width, height, 1)
         sprite.userData.baseX = sprite.position.x
         sprite.userData.baseY = sprite.position.y
         sprite.userData.baseZ = sprite.position.z
         sprite.userData.archiveFogPhase = phase
         sprite.userData.archiveFogBaseOpacity =
-          index % 3 === 2 ? .022 : .03
+          index % 4 === 0
+            ? .038
+            : index % 4 === 1
+              ? .033
+              : index % 4 === 2
+                ? .029
+                : .025
         sprite.renderOrder = -1
         world.add(sprite)
         libraryArchiveFog.push(sprite)
