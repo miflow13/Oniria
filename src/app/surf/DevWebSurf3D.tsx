@@ -1155,25 +1155,33 @@ export default function DevWebSurf3D({
     addDoorwayBeacon('search', -8.35, -21.1, Math.PI / 2)
     addDoorwayBeacon('archive', 0, -34.4, 0)
 
-    // Multi-level building shell. Upper floors are real slabs with a
-    // central lift void so vertical travel never clips through geometry.
+    // Multi-level building shell. The playable library opens into a six-storey
+    // atrium while the archive continues far past the walkable boundary.
     const buildingHeight = LIBRARY_FLOOR_COUNT * LIBRARY_FLOOR_HEIGHT
-    addWall(-19, -15, .38, 60, buildingHeight, concrete, 0)
-    addWall(19, -15, .38, 60, buildingHeight, concrete, 0)
-    addWall(0, -44.7, 38, .38, buildingHeight, concrete, 0)
+    const archiveCenterZ = -31.5
+    const archiveDepth = 94
+    addWall(-19, archiveCenterZ, .38, archiveDepth, buildingHeight, concrete, 0)
+    addWall(19, archiveCenterZ, .38, archiveDepth, buildingHeight, concrete, 0)
+    addWall(0, -78.3, 38, .38, buildingHeight, concrete, 0)
     addWall(-10.4, 14.7, 17.2, .38, buildingHeight, concrete, 0)
     addWall(10.4, 14.7, 17.2, .38, buildingHeight, concrete, 0)
 
     function addUpperFloor(floor: number) {
       const base = floor * LIBRARY_FLOOR_HEIGHT
-      addFloor(-10.35, -15, 17.3, 60, floorMaterial, base)
-      addFloor(10.35, -15, 17.3, 60, floorMaterial, base)
-      addFloor(0, -20, 3.4, 50, floorMaterial, base)
-      addFloor(0, 12, 3.4, 6, floorMaterial, base)
+
+      // Wide side balconies leave a continuous central void. From any level
+      // the player can read the floors above and below as one megastructure.
+      addFloor(-11.85, archiveCenterZ, 14.3, archiveDepth, floorMaterial, base)
+      addFloor(11.85, archiveCenterZ, 14.3, archiveDepth, floorMaterial, base)
+
+      const bridgeZ = [7, -10, -27, -45, -63]
+      bridgeZ.forEach((z) => {
+        addFloor(0, z, 9.4, 2.7, floorMaterial, base)
+      })
 
       const floorGrid = new THREE.GridHelper(
-        36,
-        36,
+        38,
+        38,
         floor % 2 === 0 ? 0x53d3ff : 0x5965e8,
         0x1b2340,
       )
@@ -1183,60 +1191,59 @@ export default function DevWebSurf3D({
         : [floorGrid.material]
       floorGridMaterials.forEach((material) => {
         material.transparent = true
-        material.opacity = .085
+        material.opacity = .072
         material.blending = THREE.AdditiveBlending
         architecturalMaterials.push(material)
       })
       scene.add(floorGrid)
 
-      const aisleLightGeometry = new THREE.BoxGeometry(.04, .025, 48)
-      architecturalGeometries.push(aisleLightGeometry)
-      const aisleLightMaterial = new THREE.MeshBasicMaterial({
+      // Balcony edges turn the atrium opening into a readable vertical nave.
+      const balconyRailGeometry = new THREE.BoxGeometry(.055, .06, 88)
+      architecturalGeometries.push(balconyRailGeometry)
+      const balconyRailMaterial = new THREE.MeshBasicMaterial({
         color: floor % 2 === 0 ? 0x53d3ff : 0x7c83ff,
         transparent: true,
-        opacity: .16,
+        opacity: .24,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
       })
-      architecturalMaterials.push(aisleLightMaterial)
-      ;[-1.7, 1.7].forEach((x) => {
-        const aisleLight = new THREE.Mesh(
-          aisleLightGeometry,
-          aisleLightMaterial,
+      architecturalMaterials.push(balconyRailMaterial)
+      ;[-4.72, 4.72].forEach((x) => {
+        const rail = new THREE.Mesh(
+          balconyRailGeometry,
+          balconyRailMaterial,
         )
-        aisleLight.position.set(x, base + 4.55, -16)
-        scene.add(aisleLight)
+        rail.position.set(x, base + 1.05, -31.5)
+        scene.add(rail)
       })
 
-      const railGeometry = new THREE.BoxGeometry(3.7, .055, .055)
-      const sideRailGeometry = new THREE.BoxGeometry(.055, .055, 4.4)
-      architecturalGeometries.push(railGeometry, sideRailGeometry)
-      const railMaterial = new THREE.MeshBasicMaterial({
-        color: 0x53d3ff,
+      // Each cross-bridge gets a luminous threshold so the circulation path
+      // is visible from several storeys away.
+      const bridgeLightGeometry = new THREE.BoxGeometry(8.8, .024, .05)
+      architecturalGeometries.push(bridgeLightGeometry)
+      const bridgeLightMaterial = new THREE.MeshBasicMaterial({
+        color: floor % 2 === 0 ? 0x53d3ff : 0xae7bff,
         transparent: true,
-        opacity: .2,
+        opacity: .26,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
       })
-      architecturalMaterials.push(railMaterial)
-
-      ;[5, 9].forEach((z) => {
-        const rail = new THREE.Mesh(railGeometry, railMaterial)
-        rail.position.set(0, base + 1.05, z)
-        scene.add(rail)
-      })
-      ;[-1.7, 1.7].forEach((x) => {
-        const rail = new THREE.Mesh(sideRailGeometry, railMaterial)
-        rail.position.set(x, base + 1.05, 7)
-        scene.add(rail)
+      architecturalMaterials.push(bridgeLightMaterial)
+      bridgeZ.forEach((z) => {
+        const strip = new THREE.Mesh(
+          bridgeLightGeometry,
+          bridgeLightMaterial,
+        )
+        strip.position.set(0, base + .03, z)
+        scene.add(strip)
       })
 
       const levelTexture = createTextTexture(
         'LEVEL ' + String(floor + 1).padStart(2, '0'),
-        'DEEP DEV COLLECTION',
+        FLOOR_IDENTITIES[floor] ?? 'DEEP DEV COLLECTION',
         floor % 2 === 0 ? '#53d3ff' : '#7c83ff',
-        640,
-        160,
+        760,
+        180,
       )
       labelsToDispose.push(levelTexture)
       const levelMaterial = new THREE.SpriteMaterial({
@@ -1247,15 +1254,30 @@ export default function DevWebSurf3D({
       })
       architecturalMaterials.push(levelMaterial)
       const levelSprite = new THREE.Sprite(levelMaterial)
-      levelSprite.position.set(0, base + 2.7, 4.6)
-      levelSprite.scale.set(5.4, 1.35, 1)
+      levelSprite.position.set(0, base + 2.75, 4.45)
+      levelSprite.scale.set(7.2, 1.7, 1)
       scene.add(levelSprite)
+
+      // A visible emergency stairwell makes the vertical circulation legible
+      // even though the central lift remains the fast traversal mechanic.
+      const stepGeometry = new THREE.BoxGeometry(2.2, .16, .64)
+      architecturalGeometries.push(stepGeometry)
+      for (let step = 0; step < 14; step += 1) {
+        const stair = new THREE.Mesh(stepGeometry, floorMaterial)
+        stair.position.set(
+          16.25,
+          base + .08 + step * (LIBRARY_FLOOR_HEIGHT / 14),
+          10.8 - step * .58,
+        )
+        stair.receiveShadow = true
+        scene.add(stair)
+      }
     }
 
     for (let floor = 1; floor < LIBRARY_FLOOR_COUNT; floor += 1) {
       addUpperFloor(floor)
     }
-    addFloor(0, -15, 38, 60, concrete, buildingHeight)
+    addFloor(0, archiveCenterZ, 38, archiveDepth, concrete, buildingHeight)
 
     // Central lift shaft ties every floor together visually and is also the
     // route used by cross-floor travel.
@@ -1265,7 +1287,7 @@ export default function DevWebSurf3D({
     const liftMaterial = new THREE.MeshBasicMaterial({
       color: 0x53d3ff,
       transparent: true,
-      opacity: .22,
+      opacity: .25,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     })
@@ -1282,6 +1304,42 @@ export default function DevWebSurf3D({
       ring.position.set(0, floor * LIBRARY_FLOOR_HEIGHT + .04, 7)
       scene.add(ring)
     }
+
+    const liftCabin = new THREE.Group()
+    liftCabin.position.set(0, currentFloorRef.current * LIBRARY_FLOOR_HEIGHT, 7)
+    const liftDeckGeometry = new THREE.BoxGeometry(3.05, .12, 3.55)
+    const liftCanopyGeometry = new THREE.BoxGeometry(3.05, .06, 3.55)
+    const liftBackGeometry = new THREE.BoxGeometry(3.05, 2.5, .055)
+    architecturalGeometries.push(
+      liftDeckGeometry,
+      liftCanopyGeometry,
+      liftBackGeometry,
+    )
+    const liftDeckMaterial = new THREE.MeshStandardMaterial({
+      color: 0x171d2a,
+      emissive: 0x15275a,
+      emissiveIntensity: .28,
+      roughness: .42,
+      metalness: .55,
+    })
+    const liftGlassMaterial = new THREE.MeshBasicMaterial({
+      color: 0x8ae8ff,
+      transparent: true,
+      opacity: .075,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+    architecturalMaterials.push(liftDeckMaterial, liftGlassMaterial)
+    const liftDeck = new THREE.Mesh(liftDeckGeometry, liftDeckMaterial)
+    liftDeck.position.y = .03
+    liftCabin.add(liftDeck)
+    const liftCanopy = new THREE.Mesh(liftCanopyGeometry, liftGlassMaterial)
+    liftCanopy.position.y = 2.55
+    liftCabin.add(liftCanopy)
+    const liftBack = new THREE.Mesh(liftBackGeometry, liftGlassMaterial)
+    liftBack.position.set(0, 1.28, 1.7)
+    liftCabin.add(liftBack)
+    scene.add(liftCabin)
 
     // Main library architecture.
     addFloor(0, -15, 34, 58)
