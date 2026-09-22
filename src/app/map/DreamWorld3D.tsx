@@ -750,6 +750,13 @@ export default function DreamWorld3D({
     if (savedLibraryFlightState) {
       camera.position.fromArray(savedLibraryFlightState.position)
       camera.quaternion.fromArray(savedLibraryFlightState.quaternion)
+    } else if (libraryMode) {
+      const arrival = archivePathPoint(0)
+      camera.position.set(
+        arrival[0],
+        arrival[1] + ARCHIVE_WALKWAY_Y_OFFSET + 1.64,
+        arrival[2],
+      )
     } else {
       camera.position.set(0, 0, 10.8)
     }
