@@ -21,39 +21,26 @@ import type {
   LibraryShelfKind,
 } from './libraryTypes'
 import styles from './library.module.css'
+import {
+  archiveShelfPlacement,
+  type ArchiveShelfPlacement,
+} from './libraryLayout'
 
 const DEFAULT_USERNAME = 'mikachu'
 const QUALITY: DreamQuality = 'cinematic'
 const CATALOG_PAGE_SIZE = 100
 const CATALOG_BOOKS_PER_SHELF = 9
 
-const ARCHIVE_BAY_SPACING = 7.2
-const ARCHIVE_LANE_OFFSET = 7.4
-
-function archivePathCenter(bay: number): [number, number, number] {
-  return [
-    Math.sin(bay * .34) * 2.15,
-    Math.sin(bay * .19) * .55,
-    -8 - bay * ARCHIVE_BAY_SPACING,
-  ]
-}
-
-function shelfBayWorld(
-  bay: number,
-  side: -1 | 1,
-): [number, number, number] {
-  const [centerX, centerY, centerZ] = archivePathCenter(bay)
-  return [
-    centerX + side * ARCHIVE_LANE_OFFSET,
-    centerY,
-    centerZ,
-  ]
-}
-
-function catalogShelfWorld(index: number): [number, number, number] {
+function catalogShelfPlacement(
+  index: number,
+): ArchiveShelfPlacement {
   const bay = 3 + Math.floor(index / 2)
   const side: -1 | 1 = index % 2 === 0 ? -1 : 1
-  return shelfBayWorld(bay, side)
+  return archiveShelfPlacement(
+    'shelf:catalog:' + index,
+    bay,
+    side,
+  )
 }
 
 const SHELF_ACCENTS: Record<LibraryShelfKind, string> = {
@@ -82,7 +69,7 @@ function makeShelf(
   title: string,
   subtitle: string,
   kind: LibraryShelfKind,
-  world: [number, number, number],
+  placement: ArchiveShelfPlacement,
   articles: DevArticleSummary[],
 ): LibraryShelf {
   return {
@@ -91,7 +78,8 @@ function makeShelf(
     subtitle,
     kind,
     accent: SHELF_ACCENTS[kind],
-    world,
+    world: placement.world,
+    yaw: placement.yaw,
     articles,
   }
 }
@@ -342,7 +330,7 @@ export default function DevLibraryMap() {
         'Featured',
         'popular this week',
         'featured',
-        shelfBayWorld(0, -1),
+        archiveShelfPlacement('shelf:featured', 0, -1),
         featured,
       ),
       makeShelf(
@@ -350,7 +338,7 @@ export default function DevLibraryMap() {
         'New',
         'freshly published',
         'latest',
-        shelfBayWorld(0, 1),
+        archiveShelfPlacement('shelf:new', 0, 1),
         latest,
       ),
       makeShelf(
@@ -360,7 +348,7 @@ export default function DevLibraryMap() {
           : 'My DEV',
         'creator shelf',
         'mine',
-        shelfBayWorld(1, -1),
+        archiveShelfPlacement('shelf:mine', 1, -1),
         mine,
       ),
       makeShelf(
@@ -368,7 +356,7 @@ export default function DevLibraryMap() {
         'Topics',
         'choose a DEV tag',
         'topics',
-        shelfBayWorld(1, 1),
+        archiveShelfPlacement('shelf:topics', 1, 1),
         dynamicTitle?.startsWith('#') ? dynamicArticles : [],
       ),
       makeShelf(
@@ -376,7 +364,7 @@ export default function DevLibraryMap() {
         'Creators',
         'browse author shelves',
         'creators',
-        shelfBayWorld(2, -1),
+        archiveShelfPlacement('shelf:creators', 2, -1),
         dynamicTitle?.startsWith('@')
           ? dynamicArticles
           : creatorPreview,
@@ -390,7 +378,7 @@ export default function DevLibraryMap() {
           'Search',
           query || 'search results',
           'search',
-          shelfBayWorld(2, 1),
+          archiveShelfPlacement('shelf:search', 2, 1),
           searchResults.slice(0, CATALOG_BOOKS_PER_SHELF),
         ),
       )
@@ -417,7 +405,7 @@ export default function DevLibraryMap() {
             '–' +
             String(offset + shelfArticles.length),
           'catalog',
-          catalogShelfWorld(shelfIndex),
+          catalogShelfPlacement(shelfIndex),
           shelfArticles,
         ),
       )
@@ -455,6 +443,7 @@ export default function DevLibraryMap() {
               : shelf.articles.length,
         accent: shelf.accent,
         world: shelf.world,
+        libraryYaw: shelf.yaw,
         libraryBooks: shelf.articles.slice(0, 9).map((article) => {
           const image = article.cover_image ?? article.social_image ?? undefined
           return {
