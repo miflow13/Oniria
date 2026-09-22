@@ -153,6 +153,38 @@ export async function GET(request: NextRequest) {
       })
     }
 
+    if (mode === 'stacks') {
+      const pages = [1, 2, 3, 4, 5, 6]
+      const batches = await Promise.all(
+        pages.map((page) =>
+          devFetch(
+            `/articles?per_page=100&page=${page}`,
+          ).catch(() => []),
+        ),
+      )
+
+      const seen = new Set<number>()
+      const articles = normalizeArticles(
+        batches.flat(),
+      ).filter((article) => {
+        const id =
+          article &&
+          typeof article === 'object' &&
+          'id' in article &&
+          typeof article.id === 'number'
+            ? article.id
+            : null
+        if (id === null || seen.has(id)) return false
+        seen.add(id)
+        return true
+      })
+
+      return NextResponse.json({
+        articles,
+        pages: pages.length,
+      })
+    }
+
     if (mode === 'article') {
       const id = safeValue(searchParams.get('id'))
       if (!/^\d+$/.test(id)) {
