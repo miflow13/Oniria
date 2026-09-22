@@ -1712,9 +1712,11 @@ export default function DevWebSurf3D({
     let pitch = 0
     let hoverId: string | null = null
     let currentSection: LibrarySection = 'atrium'
+    let currentFloorLevel = 0
     let lastTime = performance.now()
     let frame = 0
     let lastTravelNonce = travelRequestRef.current?.nonce ?? -1
+    let lastFloorNonce = floorRequestRef.current?.nonce ?? -1
 
     let travel:
       | {
@@ -1724,6 +1726,15 @@ export default function DevWebSurf3D({
           startedAt: number
           duration: number
           inspectOnArrival: boolean
+        }
+      | null = null
+
+    let floorTravel:
+      | {
+          curve: THREE.Curve<THREE.Vector3>
+          targetFloor: number
+          startedAt: number
+          duration: number
         }
       | null = null
 
@@ -1756,13 +1767,17 @@ export default function DevWebSurf3D({
         .set(0, 0, 1)
         .applyAxisAngle(up, node.rotationY ?? 0)
       destination.addScaledVector(tempDirection, standOff)
-      destination.y = 1.62
+      const targetFloor = node.floor ?? 0
+      destination.y = floorEyeY(targetFloor)
 
       const curve = makeArchitecturalGuide(
         source,
         destination,
         currentSection,
         node.section ?? currentSection,
+        currentFloorLevel,
+        targetFloor,
+        true,
       )
 
       travel = {
@@ -1779,6 +1794,53 @@ export default function DevWebSurf3D({
       }
     }
 
+    function startFloorTravel(targetFloor: number) {
+      const floor = THREE.MathUtils.clamp(
+        Math.round(targetFloor),
+        0,
+        STACK_FLOOR_COUNT,
+      )
+      if (floor === currentFloorLevel || floorTravel) return
+
+      travel = null
+      velocity.set(0, 0, 0)
+
+      const source = camera.position.clone()
+      const targetY = floorEyeY(floor)
+      const points = [
+        source,
+        new THREE.Vector3(0, floorEyeY(currentFloorLevel), source.z),
+        new THREE.Vector3(
+          ELEVATOR_X,
+          floorEyeY(currentFloorLevel),
+          ELEVATOR_Z,
+        ),
+        new THREE.Vector3(
+          ELEVATOR_X,
+          targetY,
+          ELEVATOR_Z,
+        ),
+        new THREE.Vector3(0, targetY, 8.5),
+      ]
+      const curve = new THREE.CatmullRomCurve3(
+        points,
+        false,
+        'centripetal',
+        .16,
+      )
+
+      floorTravel = {
+        curve,
+        targetFloor: floor,
+        startedAt: performance.now() / 1000,
+        duration: THREE.MathUtils.clamp(
+          curve.getLength() / 4.8,
+          1.4,
+          4.1,
+        ),
+      }
+    }
+
     function collides(
       next: THREE.Vector3,
       radius = .31,
@@ -1787,6 +1849,8 @@ export default function DevWebSurf3D({
         (rect) =>
           next.x + radius > rect.minX &&
           next.x - radius < rect.maxX &&
+          next.y > rect.minY &&
+          next.y - 1.45 < rect.maxY &&
           next.z + radius > rect.minZ &&
           next.z - radius < rect.maxZ,
       )
@@ -1819,7 +1883,13 @@ export default function DevWebSurf3D({
     }
 
     function onMouseMove(event: MouseEvent) {
-      if (document.pointerLockElement !== renderer.domElement || travel) return
+      if (
+        document.pointerLockElement !== renderer.domElement ||
+        travel ||
+        floorTravel
+      ) {
+        return
+      }
       yaw -= event.movementX * .00132
       pitch -= event.movementY * .00116
       pitch = THREE.MathUtils.clamp(pitch, -.52, .52)
@@ -1903,6 +1973,15 @@ export default function DevWebSurf3D({
         Math.max(.001, (nowMs - lastTime) / 1000),
       )
       lastTime = nowMs
+
+      const floorRequestValue = floorRequestRef.current
+      if (
+        floorRequestValue &&
+        floorRequestValue.nonce !== lastFloorNonce
+      ) {
+        lastFloorNonce = floorRequestValue.nonce
+        startFloorTravel(floorRequestValue.floor)
+      }
 
       const request = travelRequestRef.current
       if (request && request.nonce !== lastTravelNonce) {
@@ -2016,6 +2095,12 @@ export default function DevWebSurf3D({
             downgradeCover(visual)
           }
 
+          if (priority || distance <= TITLE_LOAD_DISTANCE) {
+            attachBookTitle(visual)
+          } else if (distance > TITLE_KEEP_DISTANCE) {
+            downgradeBookTitle(visual)
+          }
+
           visual.material.opacity +=
             (((unrelatedShelf ? .48 : 1)) -
               visual.material.opacity) *
@@ -2062,8 +2147,10 @@ export default function DevWebSurf3D({
         }
 
         const labelTarget =
-          selected || hovered || routed
-            ? 1
+          node?.kind === 'article' && (node.floor ?? 0) > 0
+            ? 0
+            : selected || hovered || routed
+              ? 1
             : id.startsWith('section:')
               ? .98
               : id.startsWith('profile:') || id.startsWith('tag:')
@@ -2231,6 +2318,9 @@ export default function DevWebSurf3D({
           destination,
           currentSection,
           targetNode?.section ?? currentSection,
+          currentFloorLevel,
+          targetNode?.floor ?? 0,
+          false,
         )
         guideGeometry.setFromPoints(activeGuideCurve.getPoints(52))
         guideLine.computeLineDistances()
@@ -2254,10 +2344,11 @@ export default function DevWebSurf3D({
           const t = .035 + (index / (floorStrips.length - 1)) * .93
           const point = activeGuideCurve!.getPoint(t)
           const tangent = activeGuideCurve!.getTangent(t)
-          mesh.position.set(point.x, .035, point.z)
+          const vertical = Math.abs(tangent.y) > .35
+          mesh.position.set(point.x, point.y + .035, point.z)
           mesh.rotation.y =
             Math.atan2(tangent.x, tangent.z) + Math.PI / 2
-          mesh.visible = true
+          mesh.visible = !vertical
           const wave =
             .28 +
             Math.max(
@@ -2265,18 +2356,21 @@ export default function DevWebSurf3D({
               Math.sin(now * 4.2 - index * .42),
             ) *
               .62
-          material.opacity = wave
+          material.opacity = vertical ? 0 : wave
         })
 
         junctionMarkers.forEach(({mesh, material}, index) => {
           const t = .16 + index * .135
           const point = activeGuideCurve!.getPoint(t)
           const tangent = activeGuideCurve!.getTangent(t)
-          mesh.position.set(point.x, .042, point.z)
+          const vertical = Math.abs(tangent.y) > .35
+          mesh.position.set(point.x, point.y + .042, point.z)
           mesh.rotation.y =
             Math.atan2(tangent.x, tangent.z)
-          mesh.visible = true
-          material.opacity =
+          mesh.visible = !vertical
+          material.opacity = vertical
+            ? 0
+            :
             .46 +
             Math.max(0, Math.sin(now * 3.1 - index)) * .42
         })
@@ -2297,19 +2391,23 @@ export default function DevWebSurf3D({
         })
       }
 
-      let nearestSection: LibrarySection = 'atrium'
+      let nearestSection: LibrarySection =
+        currentFloorLevel > 0 ? 'archive' : 'atrium'
       let nearestDistance = Number.POSITIVE_INFINITY
-      ;(Object.keys(SECTION_CENTERS) as LibrarySection[]).forEach(
-        (section) => {
-          const distance = SECTION_CENTERS[section].distanceToSquared(
-            camera.position,
-          )
-          if (distance < nearestDistance) {
-            nearestDistance = distance
-            nearestSection = section
-          }
-        },
-      )
+      if (currentFloorLevel === 0) {
+        ;(Object.keys(SECTION_CENTERS) as LibrarySection[]).forEach(
+          (section) => {
+            const center = SECTION_CENTERS[section]
+            const distance =
+              (center.x - camera.position.x) ** 2 +
+              (center.z - camera.position.z) ** 2
+            if (distance < nearestDistance) {
+              nearestDistance = distance
+              nearestSection = section
+            }
+          },
+        )
+      }
 
       if (nearestSection !== currentSection) {
         currentSection = nearestSection
@@ -2352,7 +2450,43 @@ export default function DevWebSurf3D({
       netMagenta.intensity =
         2.7 + Math.max(0, Math.sin(now * .38 + 1.1)) * 1.05
 
-      if (travel) {
+      if (floorTravel) {
+        const progress = THREE.MathUtils.clamp(
+          (now - floorTravel.startedAt) /
+            floorTravel.duration,
+          0,
+          1,
+        )
+        const eased =
+          progress * progress * (3 - 2 * progress)
+        const point = floorTravel.curve.getPoint(eased)
+        const look = floorTravel.curve.getPoint(
+          Math.min(1, eased + .018),
+        )
+
+        position.copy(point)
+        camera.position.copy(point)
+        camera.lookAt(look)
+        camera.fov +=
+          (62 - camera.fov) *
+          (1 - Math.exp(-delta * 7))
+        camera.updateProjectionMatrix()
+
+        if (progress >= 1) {
+          currentFloorLevel = floorTravel.targetFloor
+          position.y = floorEyeY(currentFloorLevel)
+          camera.position.copy(position)
+          floorTravel = null
+          velocity.set(0, 0, 0)
+          currentSection =
+            currentFloorLevel > 0 ? 'archive' : 'atrium'
+          floorRef.current(currentFloorLevel)
+          zoneRef.current(currentSection)
+          euler.setFromQuaternion(camera.quaternion, 'YXZ')
+          yaw = euler.y
+          pitch = euler.x
+        }
+      } else if (travel) {
         const progress = THREE.MathUtils.clamp(
           (now - travel.startedAt) / travel.duration,
           0,
@@ -2392,7 +2526,12 @@ export default function DevWebSurf3D({
           velocity.set(0, 0, 0)
           const arrived = travel.node
           const inspectOnArrival = travel.inspectOnArrival
+          const arrivedFloor = arrived.floor ?? 0
           travel = null
+          if (arrivedFloor !== currentFloorLevel) {
+            currentFloorLevel = arrivedFloor
+            floorRef.current(currentFloorLevel)
+          }
           travelRef.current(arrived, inspectOnArrival)
         }
       } else {
@@ -2424,7 +2563,7 @@ export default function DevWebSurf3D({
           .copy(velocity)
           .multiplyScalar(delta)
         moveWithSliding(deltaMove)
-        position.y = 1.62
+        position.y = floorEyeY(currentFloorLevel)
 
         camera.position.copy(position)
         camera.rotation.order = 'YXZ'
@@ -2470,6 +2609,7 @@ export default function DevWebSurf3D({
         ;(visual.body.geometry as THREE.BufferGeometry).dispose()
         visual.material.dispose()
         visual.labelMaterial.dispose()
+        visual.bookTitleTexture?.dispose()
       })
       disposableTextures.forEach((texture) => texture.dispose())
 
