@@ -594,6 +594,131 @@ export default function DreamWorld3D({
     const stars = new THREE.Points(starGeometry, starMaterial)
     farWorld.add(stars)
 
+    let libraryFarParticleGeometry: THREE.BufferGeometry | null = null
+    let libraryFarParticleMaterial: THREE.ShaderMaterial | null = null
+    let libraryFarParticles: THREE.Points | null = null
+
+    if (libraryMode) {
+      const cinematicParticles = qualityRef.current === 'cinematic'
+      const highParticles = qualityRef.current === 'high'
+      const tinyParticleCount = cinematicParticles
+        ? 820
+        : highParticles
+          ? 640
+          : 340
+      const moteCount = cinematicParticles
+        ? 72
+        : highParticles
+          ? 56
+          : 42
+      const particleCount = tinyParticleCount + moteCount
+
+      const positions = new Float32Array(particleCount * 3)
+      const colors = new Float32Array(particleCount * 3)
+      const sizes = new Float32Array(particleCount)
+      const phases = new Float32Array(particleCount)
+      const palette = [
+        new THREE.Color(0xdcecff),
+        new THREE.Color(0xa9e4ea),
+        new THREE.Color(0xc9b7ee),
+      ]
+
+      for (let index = 0; index < particleCount; index += 1) {
+        const offset = index * 3
+        const seed = index + 1703
+        const isMote = index >= tinyParticleCount
+        const depth = Math.pow(seededUnit(seed, 3), .58)
+
+        positions[offset] = (seededUnit(seed, 1) - .5) * 180
+        positions[offset + 1] = (seededUnit(seed, 2) - .5) * 88
+        positions[offset + 2] = -42 - depth * 215
+
+        const color =
+          palette[Math.floor(seededUnit(seed, 4) * palette.length)] ??
+          palette[0]
+        colors[offset] = color.r
+        colors[offset + 1] = color.g
+        colors[offset + 2] = color.b
+
+        sizes[index] = isMote
+          ? 3.2 + seededUnit(seed, 5) * 2.8
+          : .9 + seededUnit(seed, 5) * 1.25
+        phases[index] = seededUnit(seed, 6) * Math.PI * 2
+      }
+
+      libraryFarParticleGeometry = new THREE.BufferGeometry()
+      libraryFarParticleGeometry.setAttribute(
+        'position',
+        new THREE.BufferAttribute(positions, 3),
+      )
+      libraryFarParticleGeometry.setAttribute(
+        'color',
+        new THREE.BufferAttribute(colors, 3),
+      )
+      libraryFarParticleGeometry.setAttribute(
+        'aSize',
+        new THREE.BufferAttribute(sizes, 1),
+      )
+      libraryFarParticleGeometry.setAttribute(
+        'aPhase',
+        new THREE.BufferAttribute(phases, 1),
+      )
+      libraryFarParticleGeometry.computeBoundingSphere()
+
+      libraryFarParticleMaterial = new THREE.ShaderMaterial({
+        uniforms: {
+          uTime: {value: 0},
+          uOpacity: {value: cinematicParticles ? .34 : .27},
+        },
+        vertexShader: `
+          attribute float aSize;
+          attribute float aPhase;
+          varying vec3 vColor;
+          varying float vAlpha;
+          uniform float uTime;
+
+          void main() {
+            vec3 drifted = position;
+            drifted.x += sin(uTime * 0.035 + aPhase) * 0.7;
+            drifted.y += cos(uTime * 0.028 + aPhase * 1.37) * 0.45;
+
+            vec4 mvPosition = modelViewMatrix * vec4(drifted, 1.0);
+            gl_Position = projectionMatrix * mvPosition;
+            gl_PointSize = aSize * clamp(150.0 / max(22.0, -mvPosition.z), 0.55, 2.0);
+            vColor = color;
+            vAlpha = smoothstep(-280.0, -35.0, drifted.z);
+          }
+        `,
+        fragmentShader: `
+          varying vec3 vColor;
+          varying float vAlpha;
+          uniform float uOpacity;
+
+          void main() {
+            vec2 centered = gl_PointCoord - vec2(0.5);
+            float radius = length(centered);
+            float softDisc = smoothstep(0.5, 0.08, radius);
+            float core = smoothstep(0.22, 0.0, radius) * 0.18;
+            float alpha = (softDisc + core) * uOpacity * (0.38 + vAlpha * 0.62);
+            if (alpha < 0.004) discard;
+            gl_FragColor = vec4(vColor, alpha);
+          }
+        `,
+        transparent: true,
+        depthWrite: false,
+        vertexColors: true,
+        blending: THREE.NormalBlending,
+        toneMapped: true,
+      })
+
+      libraryFarParticles = new THREE.Points(
+        libraryFarParticleGeometry,
+        libraryFarParticleMaterial,
+      )
+      libraryFarParticles.renderOrder = -3
+      farWorld.add(libraryFarParticles)
+    }
+
     const nebulaTextures = [
       createNebulaTexture('rgba(108, 76, 181, 0.36)'),
       createNebulaTexture('rgba(59, 174, 181, 0.36)'),
@@ -2982,6 +3107,13 @@ export default function DreamWorld3D({
       farWorld.rotation.y = Math.sin(elapsed * .025) * .035
       stars.rotation.z = elapsed * .002
 
+      if (libraryFarParticles && libraryFarParticleMaterial) {
+        libraryFarParticleMaterial.uniforms.uTime.value = elapsed
+        libraryFarParticles.rotation.z = Math.sin(elapsed * .018) * .008
+        libraryFarParticles.position.x = Math.sin(elapsed * .021) * .24
+        libraryFarParticles.position.y = Math.cos(elapsed * .017) * .16
+      }
+
       nebulae.forEach((sprite, index) => {
         sprite.material.opacity = .22 + Math.sin(elapsed * .13 + index) * .06
         sprite.position.x += Math.sin(elapsed * .06 + index) * .0008
@@ -3992,6 +4124,9 @@ export default function DreamWorld3D({
         material.map?.dispose()
         material.dispose()
       })
+
+      libraryFarParticleGeometry?.dispose()
+      libraryFarParticleMaterial?.dispose()
 
       starGeometry.dispose()
       starMaterial.dispose()
