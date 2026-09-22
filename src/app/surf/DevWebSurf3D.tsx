@@ -569,7 +569,7 @@ export default function DevWebSurf3D({
 
     const scene = new THREE.Scene()
     scene.background = new THREE.Color(0x111319)
-    scene.fog = new THREE.FogExp2(0x15171b, .0092)
+    scene.fog = new THREE.FogExp2(0x17191d, .0115)
 
     const camera = new THREE.PerspectiveCamera(60, 1, .07, 160)
     camera.position.set(
@@ -611,9 +611,9 @@ export default function DevWebSurf3D({
     // fog and practical-light falloff handle the middle/far distance.
     const playerKeyLight = new THREE.PointLight(
       0xf1eee7,
-      1.85,
-      13,
-      1.5,
+      2.15,
+      15,
+      1.42,
     )
     playerKeyLight.castShadow = false
     scene.add(playerKeyLight)
@@ -1869,18 +1869,19 @@ export default function DevWebSurf3D({
 
     // Netspace underlay: the library still reads as DEV, but the floor
     // behaves like a data plane rather than a conventional building.
-    const netGrid = new THREE.GridHelper(82, 82, 0x394052, 0x242934)
+    const netGrid = new THREE.GridHelper(82, 82, 0x3c4149, 0x252930)
     netGrid.position.set(0, .005, -16)
     const netGridMaterials = Array.isArray(netGrid.material)
       ? netGrid.material
       : [netGrid.material]
     netGridMaterials.forEach((material) => {
       material.transparent = true
-      material.opacity = .012
-      material.blending = THREE.AdditiveBlending
+      material.opacity = .022
+      material.blending = THREE.NormalBlending
+      material.depthWrite = false
       architecturalMaterials.push(material)
     })
-    netGrid.visible = false
+    netGrid.visible = true
     scene.add(netGrid)
 
     const rainCount = 160
