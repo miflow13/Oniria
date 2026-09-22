@@ -33,6 +33,14 @@ const FLOOR_DIRECTORY = [
   'LINUX / DEVOPS / OPEN SOURCE',
   'DEEP ARCHIVE / LONG-TAIL DEV',
 ] as const
+const FLOOR_ACCENT_HEX = [
+  '#c7f3ff',
+  '#6574ff',
+  '#38c7bd',
+  '#b57cff',
+  '#68d98a',
+  '#8d9aad',
+] as const
 const MEGA_SHELF_CAPACITY =
   (LIBRARY_FLOOR_COUNT - 1) * 4 * 6 * 9
 
@@ -1352,7 +1360,27 @@ export default function DevWebSurf() {
                 ? styles.floorRailActive
                 : ''
             }
+            style={{
+              borderColor: FLOOR_ACCENT_HEX[floor],
+              color:
+                currentFloor === floor
+                  ? '#ffffff'
+                  : FLOOR_ACCENT_HEX[floor],
+              background:
+                currentFloor === floor
+                  ? FLOOR_ACCENT_HEX[floor] + '24'
+                  : undefined,
+              boxShadow:
+                currentFloor === floor
+                  ? '0 0 0 1px ' +
+                    FLOOR_ACCENT_HEX[floor] +
+                    ', 0 0 18px ' +
+                    FLOOR_ACCENT_HEX[floor] +
+                    '55'
+                  : undefined,
+            }}
             onClick={() => requestFloor(floor)}
+            title={FLOOR_DIRECTORY[floor]}
           >
             {String(floor + 1).padStart(2, '0')}
           </button>
