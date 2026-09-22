@@ -516,7 +516,7 @@ export default function DevWebSurf3D({
         if (visual.coverMaterial.map !== entry.texture) {
           visual.coverMaterial.map = entry.texture
           visual.coverMaterial.color.set(0xffffff)
-          visual.coverMaterial.opacity = .98
+          visual.coverMaterial.opacity = 1
           visual.coverMaterial.needsUpdate = true
         }
         return
@@ -552,7 +552,7 @@ export default function DevWebSurf3D({
           if (visual.coverMaterial) {
             visual.coverMaterial.map = texture
             visual.coverMaterial.color.set(0xffffff)
-            visual.coverMaterial.opacity = .98
+            visual.coverMaterial.opacity = 1
             visual.coverMaterial.needsUpdate = true
           }
         },
@@ -574,7 +574,7 @@ export default function DevWebSurf3D({
       if (!visual.coverMaterial || !visual.coverMaterial.map) return
       visual.coverMaterial.map = null
       visual.coverMaterial.color.set(0x171b28)
-      visual.coverMaterial.opacity = .72
+      visual.coverMaterial.opacity = 1
       visual.coverMaterial.needsUpdate = true
     }
 
@@ -1434,10 +1434,10 @@ export default function DevWebSurf3D({
 
         const coverMaterial = new THREE.MeshBasicMaterial({
           color: 0x161a27,
-          transparent: true,
-          opacity: .98,
+          transparent: false,
+          opacity: 1,
           toneMapped: false,
-          depthWrite: false,
+          depthWrite: true,
           polygonOffset: true,
           polygonOffsetFactor: -2,
           polygonOffsetUnits: -2,
@@ -1464,10 +1464,10 @@ export default function DevWebSurf3D({
         }
         bookTitleMaterial = new THREE.MeshBasicMaterial({
           color: 0x1b2030,
-          transparent: true,
-          opacity: .97,
+          transparent: false,
+          opacity: 1,
           toneMapped: false,
-          depthWrite: false,
+          depthWrite: true,
           polygonOffset: true,
           polygonOffsetFactor: -3,
           polygonOffsetUnits: -3,
@@ -2142,6 +2142,30 @@ export default function DevWebSurf3D({
         const hovered = hoverId === id
         const routed = routeTargetRef.current === id
         const node = nodeById.get(id)
+
+        if (
+          node?.kind === 'article' &&
+          (node.floor ?? 0) > 0
+        ) {
+          const floor = node.floor ?? 0
+          const targetFloor = floorTravel?.targetFloor
+          const shouldRender =
+            selected ||
+            routed ||
+            floor === currentFloorLevel ||
+            targetFloor === floor ||
+            (currentFloorLevel === 0 && floor === 1)
+
+          visual.group.visible = shouldRender
+          if (!shouldRender) {
+            downgradeCover(visual)
+            downgradeBookTitle(visual)
+            return
+          }
+        } else {
+          visual.group.visible = true
+        }
+
         const sameShelf =
           Boolean(activeShelfKey) &&
           visual.shelfKey === activeShelfKey
