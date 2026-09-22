@@ -2073,3 +2073,69 @@
     animation: none;
   }
 }
+
+
+.readingRoom {
+  animation: readingRoomMaterialize 320ms cubic-bezier(.16,1,.3,1);
+}
+
+.articleHeroMedia {
+  animation: coverSignalLock 520ms ease-out both;
+}
+
+@keyframes readingRoomMaterialize {
+  from {
+    opacity: 0;
+    transform: translateX(50%) translateY(12px) scale(.985);
+    filter: blur(7px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(50%) translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes coverSignalLock {
+  0% {
+    opacity: .25;
+    filter: saturate(.55) contrast(1.2) brightness(.7);
+    clip-path: inset(0 0 88% 0);
+  }
+  46% {
+    opacity: .88;
+    filter: saturate(1.25) contrast(1.05) brightness(1.08);
+    clip-path: inset(0 0 0 0);
+  }
+  100% {
+    opacity: 1;
+    filter: none;
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@media (max-width: 900px) {
+  .readingRoom {
+    animation-name: readingRoomMaterializeMobile;
+  }
+}
+
+@keyframes readingRoomMaterializeMobile {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(.985);
+    filter: blur(7px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: blur(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .readingRoom,
+  .articleHeroMedia {
+    animation: none;
+  }
+}
