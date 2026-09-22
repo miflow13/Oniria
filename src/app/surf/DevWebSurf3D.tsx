@@ -29,6 +29,8 @@ type Visual = {
   material: THREE.MeshPhysicalMaterial
   label: THREE.Sprite
   labelMaterial: THREE.SpriteMaterial
+  bookGlowMaterial?: THREE.MeshBasicMaterial
+  bookTitleMaterial?: THREE.MeshBasicMaterial
   baseScale: number
   phase: number
 }
@@ -47,7 +49,7 @@ const KIND_GEOMETRY: Record<SurfNodeKind, () => THREE.BufferGeometry> = {
   home: () => new THREE.CylinderGeometry(.8, 1.05, .72, 8),
   section: () => new THREE.BoxGeometry(1.6, 2.5, .18),
   profile: () => new THREE.BoxGeometry(1.42, 1.8, .16),
-  article: () => new THREE.BoxGeometry(.42, 1.06, .22),
+  article: () => new THREE.BoxGeometry(.78, 1.12, .18),
   tag: () => new THREE.BoxGeometry(1.35, 2.15, .14),
   search: () => new THREE.BoxGeometry(1.45, 1.15, .26),
 }
@@ -90,6 +92,79 @@ function createTextTexture(
     const cleanSubtitle =
       subtitle.length > 62 ? subtitle.slice(0, 61) + '…' : subtitle
     context.fillText(cleanSubtitle, width / 2, 155)
+  }
+
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.colorSpace = THREE.SRGBColorSpace
+  texture.minFilter = THREE.LinearFilter
+  return texture
+}
+
+function createBookTitleTexture(
+  title: string,
+  subtitle: string,
+  accent: string,
+) {
+  const canvas = document.createElement('canvas')
+  canvas.width = 1024
+  canvas.height = 460
+  const context = canvas.getContext('2d')
+
+  if (context) {
+    context.clearRect(0, 0, canvas.width, canvas.height)
+    context.fillStyle = 'rgba(8,9,14,.94)'
+    context.fillRect(0, 0, canvas.width, canvas.height)
+
+    const glow = context.createLinearGradient(0, 0, canvas.width, 0)
+    glow.addColorStop(0, accent)
+    glow.addColorStop(.5, '#53d3ff')
+    glow.addColorStop(1, '#ae7bff')
+    context.fillStyle = glow
+    context.fillRect(0, 0, canvas.width, 16)
+
+    context.fillStyle = 'rgba(255,255,255,.045)'
+    for (let x = 40; x < canvas.width; x += 72) {
+      context.fillRect(x, 36, 1, canvas.height - 72)
+    }
+
+    const words = title.trim().split(/\s+/)
+    const lines: string[] = []
+    let line = ''
+
+    context.font = '800 58px system-ui, sans-serif'
+    for (const word of words) {
+      const next = line ? line + ' ' + word : word
+      if (context.measureText(next).width > 860 && line) {
+        lines.push(line)
+        line = word
+        if (lines.length === 2) break
+      } else {
+        line = next
+      }
+    }
+    if (line && lines.length < 3) lines.push(line)
+
+    context.textAlign = 'left'
+    context.textBaseline = 'top'
+    context.fillStyle = '#f5f7ff'
+    context.shadowColor = accent
+    context.shadowBlur = 18
+    lines.slice(0, 3).forEach((item, index) => {
+      const rendered =
+        index === 2 && words.join(' ').length > lines.join(' ').length
+          ? item.replace(/[.…]*$/, '') + '…'
+          : item
+      context.fillText(rendered, 64, 66 + index * 72)
+    })
+
+    context.shadowBlur = 0
+    context.fillStyle = '#98a2ff'
+    context.font = '600 28px system-ui, sans-serif'
+    context.fillText(subtitle, 64, 344)
+
+    context.fillStyle = '#6d7280'
+    context.font = '500 20px system-ui, sans-serif'
+    context.fillText('DEV // ARTICLE', 64, 392)
   }
 
   const texture = new THREE.CanvasTexture(canvas)
@@ -206,6 +281,18 @@ export default function DevWebSurf3D({
     warm.position.set(0, 5, -5)
     scene.add(warm)
 
+    const netCyan = new THREE.PointLight(0x53d3ff, 7.5, 32, 2)
+    netCyan.position.set(-2, 2.6, -31)
+    scene.add(netCyan)
+
+    const netMagenta = new THREE.PointLight(0xff4fd8, 4.2, 24, 2)
+    netMagenta.position.set(15, 3.2, -15)
+    scene.add(netMagenta)
+
+    const netViolet = new THREE.PointLight(0xae7bff, 4.8, 28, 2)
+    netViolet.position.set(-15, 4, -24)
+    scene.add(netViolet)
+
     const architecturalGeometries: THREE.BufferGeometry[] = []
     const architecturalMaterials: THREE.Material[] = []
     const labelsToDispose: THREE.Texture[] = []
@@ -215,6 +302,10 @@ export default function DevWebSurf3D({
       minZ: number
       maxZ: number
     }> = []
+    const remoteTextures = new Set<THREE.Texture>()
+    const textureLoader = new THREE.TextureLoader()
+    textureLoader.setCrossOrigin('anonymous')
+    let destroyed = false
 
     const floorMaterial = new THREE.MeshStandardMaterial({
       color: 0x171717,
@@ -353,6 +444,68 @@ export default function DevWebSurf3D({
       return sprite
     }
 
+    // Netspace underlay: the library still reads as DEV, but the floor
+    // behaves like a data plane rather than a conventional building.
+    const netGrid = new THREE.GridHelper(82, 82, 0x3b49df, 0x1d223b)
+    netGrid.position.set(0, .005, -16)
+    const netGridMaterials = Array.isArray(netGrid.material)
+      ? netGrid.material
+      : [netGrid.material]
+    netGridMaterials.forEach((material) => {
+      material.transparent = true
+      material.opacity = .17
+      material.blending = THREE.AdditiveBlending
+      architecturalMaterials.push(material)
+    })
+    scene.add(netGrid)
+
+    const rainCount = 420
+    const rainPositions = new Float32Array(rainCount * 3)
+    for (let index = 0; index < rainCount; index += 1) {
+      const offset = index * 3
+      rainPositions[offset] = (Math.random() - .5) * 38
+      rainPositions[offset + 1] = Math.random() * 10
+      rainPositions[offset + 2] = 12 - Math.random() * 58
+    }
+    const rainGeometry = new THREE.BufferGeometry()
+    rainGeometry.setAttribute(
+      'position',
+      new THREE.BufferAttribute(rainPositions, 3),
+    )
+    const rainMaterial = new THREE.PointsMaterial({
+      color: 0x53d3ff,
+      size: .025,
+      transparent: true,
+      opacity: .3,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+    const dataRain = new THREE.Points(rainGeometry, rainMaterial)
+    scene.add(dataRain)
+
+    const scanGateGeometry = new THREE.PlaneGeometry(18, 5.4)
+    const scanGates: Array<{
+      mesh: THREE.Mesh
+      material: THREE.MeshBasicMaterial
+      phase: number
+    }> = []
+    ;[-3.5, -16.5, -30.5, -42].forEach((z, index) => {
+      const material = new THREE.MeshBasicMaterial({
+        color: index % 2 ? 0xae7bff : 0x53d3ff,
+        transparent: true,
+        opacity: .018,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      })
+      const gate = new THREE.Mesh(scanGateGeometry, material)
+      gate.position.set(0, 2.45, z)
+      scene.add(gate)
+      scanGates.push({mesh: gate, material, phase: index * 1.7})
+      architecturalMaterials.push(material)
+    })
+    architecturalGeometries.push(scanGateGeometry)
+
     // Main library architecture.
     addFloor(0, -15, 34, 58)
     addFloor(-13, -13, 16, 28)
@@ -469,12 +622,122 @@ export default function DevWebSurf3D({
       interactive.push(body)
       group.add(body)
 
+      let bookGlowMaterial: THREE.MeshBasicMaterial | undefined
+      let bookTitleMaterial: THREE.MeshBasicMaterial | undefined
+
       if (node.kind === 'article') {
-        const spineGeometry = new THREE.BoxGeometry(.47, .16, .245)
+        material.color.set(0x11131a)
+        material.emissive.copy(color.clone().multiplyScalar(.26))
+        material.emissiveIntensity = .48
+        material.roughness = .34
+        material.metalness = .2
+        material.clearcoat = .62
+
+        const spineGeometry = new THREE.BoxGeometry(.085, 1.08, .205)
         architecturalGeometries.push(spineGeometry)
-        const spine = new THREE.Mesh(spineGeometry, brass)
-        spine.position.y = -.42
+        const spineMaterial = new THREE.MeshStandardMaterial({
+          color: 0x3b49df,
+          emissive: color.clone().lerp(new THREE.Color(0x53d3ff), .45),
+          emissiveIntensity: .72,
+          roughness: .3,
+          metalness: .48,
+        })
+        architecturalMaterials.push(spineMaterial)
+        const spine = new THREE.Mesh(spineGeometry, spineMaterial)
+        spine.position.set(-.39, 0, 0)
         group.add(spine)
+
+        const coverGeometry = new THREE.PlaneGeometry(.66, .63)
+        architecturalGeometries.push(coverGeometry)
+        const coverMaterial = new THREE.MeshBasicMaterial({
+          color: 0x161a27,
+          transparent: true,
+          opacity: .98,
+          toneMapped: false,
+        })
+        architecturalMaterials.push(coverMaterial)
+        const cover = new THREE.Mesh(coverGeometry, coverMaterial)
+        cover.position.set(.015, .19, .096)
+        group.add(cover)
+
+        const remoteCover =
+          node.payload?.cover_image ?? node.payload?.social_image ?? null
+        if (remoteCover) {
+          const proxied =
+            '/api/devto?mode=image&url=' +
+            encodeURIComponent(remoteCover)
+          textureLoader.load(
+            proxied,
+            (texture) => {
+              if (destroyed) {
+                texture.dispose()
+                return
+              }
+              texture.colorSpace = THREE.SRGBColorSpace
+              texture.minFilter = THREE.LinearFilter
+              texture.magFilter = THREE.LinearFilter
+              texture.anisotropy = Math.min(
+                8,
+                renderer.capabilities.getMaxAnisotropy(),
+              )
+              remoteTextures.add(texture)
+              coverMaterial.map = texture
+              coverMaterial.color.set(0xffffff)
+              coverMaterial.needsUpdate = true
+            },
+            undefined,
+            () => {
+              coverMaterial.color.set(0x171b28)
+            },
+          )
+        }
+
+        const titleTexture = createBookTitleTexture(
+          node.title,
+          '@' + (node.username ?? node.payload?.user.username ?? 'dev'),
+          node.accent,
+        )
+        disposableTextures.push(titleTexture)
+        bookTitleMaterial = new THREE.MeshBasicMaterial({
+          map: titleTexture,
+          transparent: true,
+          opacity: .97,
+          toneMapped: false,
+          depthWrite: false,
+        })
+        architecturalMaterials.push(bookTitleMaterial)
+        const titleGeometry = new THREE.PlaneGeometry(.67, .31)
+        architecturalGeometries.push(titleGeometry)
+        const titlePanel = new THREE.Mesh(titleGeometry, bookTitleMaterial)
+        titlePanel.position.set(.015, -.31, .1)
+        group.add(titlePanel)
+
+        const glowGeometry = new THREE.PlaneGeometry(.86, 1.22)
+        architecturalGeometries.push(glowGeometry)
+        bookGlowMaterial = new THREE.MeshBasicMaterial({
+          color: color.clone().lerp(new THREE.Color(0x53d3ff), .3),
+          transparent: true,
+          opacity: .055,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+        })
+        architecturalMaterials.push(bookGlowMaterial)
+        const glow = new THREE.Mesh(glowGeometry, bookGlowMaterial)
+        glow.position.z = -.105
+        group.add(glow)
+
+        const edgeGeometry = new THREE.EdgesGeometry(body.geometry, 28)
+        architecturalGeometries.push(edgeGeometry)
+        const edgeMaterial = new THREE.LineBasicMaterial({
+          color: node.accent,
+          transparent: true,
+          opacity: .45,
+          blending: THREE.AdditiveBlending,
+        })
+        architecturalMaterials.push(edgeMaterial)
+        const edges = new THREE.LineSegments(edgeGeometry, edgeMaterial)
+        group.add(edges)
       }
 
       if (node.kind === 'profile') {
@@ -559,7 +822,7 @@ export default function DevWebSurf3D({
               ? 1.04
               : node.kind === 'tag'
                 ? .86
-                : .78 + Math.min(.22, node.importance * .08)
+                : .88 + Math.min(.2, node.importance * .075)
 
       group.scale.setScalar(baseScale)
 
@@ -569,6 +832,8 @@ export default function DevWebSurf3D({
         material,
         label,
         labelMaterial,
+        bookGlowMaterial,
+        bookTitleMaterial,
         baseScale,
         phase: index * .67,
       })
@@ -595,51 +860,76 @@ export default function DevWebSurf3D({
           target.group.position,
           edge.kind === 'corridor' ? 0 : .16,
         )
+        const baseColor = new THREE.Color(
+          edge.kind === 'author'
+            ? 0xae7bff
+            : edge.kind === 'tag'
+              ? 0x53d3ff
+              : edge.kind === 'search'
+                ? 0xff4fd8
+                : edge.kind === 'corridor'
+                  ? 0x5965e8
+                  : 0x3b49df,
+        )
         const geometry = new THREE.TubeGeometry(
           curve,
-          32,
-          edge.kind === 'corridor' ? .035 : .018,
-          5,
+          48,
+          edge.kind === 'corridor' ? .052 : .027,
+          8,
           false,
         )
         const material = new THREE.MeshBasicMaterial({
-          color:
-            edge.kind === 'author'
-              ? 0x7c83ff
-              : edge.kind === 'tag'
-                ? 0x3b49df
-                : edge.kind === 'search'
-                  ? 0x3b49df
-                  : edge.kind === 'corridor'
-                    ? 0x555555
-                    : 0x5965e8,
+          color: baseColor,
           transparent: true,
-          opacity: edge.kind === 'corridor' ? .26 : .16,
+          opacity: edge.kind === 'corridor' ? .34 : .24,
           blending: THREE.AdditiveBlending,
           depthWrite: false,
         })
         const route = new THREE.Mesh(geometry, material)
         scene.add(route)
 
-        const packetGeometry = new THREE.SphereGeometry(.025, 8, 8)
-        const packetMaterial = new THREE.MeshBasicMaterial({
-          color: material.color,
+        const glowGeometry = new THREE.TubeGeometry(
+          curve,
+          48,
+          edge.kind === 'corridor' ? .105 : .057,
+          8,
+          false,
+        )
+        const glowMaterial = new THREE.MeshBasicMaterial({
+          color: baseColor,
           transparent: true,
-          opacity: .68,
+          opacity: edge.kind === 'corridor' ? .045 : .028,
           blending: THREE.AdditiveBlending,
           depthWrite: false,
         })
-        const packet = new THREE.Mesh(packetGeometry, packetMaterial)
-        scene.add(packet)
+        const glowRoute = new THREE.Mesh(glowGeometry, glowMaterial)
+        scene.add(glowRoute)
+
+        const packetGeometry = new THREE.SphereGeometry(.035, 10, 10)
+        const packetMaterial = new THREE.MeshBasicMaterial({
+          color: baseColor,
+          transparent: true,
+          opacity: .82,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        })
+        const packets = Array.from({length: 3}, () => {
+          const packet = new THREE.Mesh(packetGeometry, packetMaterial)
+          scene.add(packet)
+          return packet
+        })
 
         return {
           edge,
           curve,
           geometry,
           material,
-          packet,
+          glowGeometry,
+          glowMaterial,
+          packets,
           packetGeometry,
           packetMaterial,
+          baseColor,
           phase: index * .13,
         }
       })
@@ -647,16 +937,45 @@ export default function DevWebSurf3D({
 
     // Route guidance is a museum/library breadcrumb painted on the floor.
     const guideGeometry = new THREE.BufferGeometry()
-    const guideMaterial = new THREE.LineDashedMaterial({
-      color: 0x3b49df,
+    const guideBaseMaterial = new THREE.LineBasicMaterial({
+      color: 0x53d3ff,
       transparent: true,
-      opacity: .92,
-      dashSize: .42,
-      gapSize: .14,
+      opacity: .28,
+      blending: THREE.AdditiveBlending,
+    })
+    const guideBaseLine = new THREE.Line(guideGeometry, guideBaseMaterial)
+    guideBaseLine.visible = false
+    scene.add(guideBaseLine)
+
+    const guideMaterial = new THREE.LineDashedMaterial({
+      color: 0x8ae8ff,
+      transparent: true,
+      opacity: .98,
+      dashSize: .48,
+      gapSize: .1,
     })
     const guideLine = new THREE.Line(guideGeometry, guideMaterial)
     guideLine.visible = false
     scene.add(guideLine)
+
+    const guidePacketGeometry = new THREE.SphereGeometry(.055, 10, 10)
+    const guidePacketMaterial = new THREE.MeshBasicMaterial({
+      color: 0xc2f5ff,
+      transparent: true,
+      opacity: .95,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+    const guidePackets = Array.from({length: 4}, () => {
+      const packet = new THREE.Mesh(
+        guidePacketGeometry,
+        guidePacketMaterial,
+      )
+      packet.visible = false
+      scene.add(packet)
+      return packet
+    })
+    let activeGuideCurve: THREE.QuadraticBezierCurve3 | null = null
 
     const raycaster = new THREE.Raycaster()
     const center = new THREE.Vector2(0, 0)
@@ -851,6 +1170,26 @@ export default function DevWebSurf3D({
           ((selected ? 1.25 : hovered ? .9 : routed ? .82 : .46) -
             visual.material.emissiveIntensity) *
           .08
+
+        if (visual.bookGlowMaterial) {
+          visual.bookGlowMaterial.opacity +=
+            ((selected
+              ? .26
+              : hovered
+                ? .2
+                : routed
+                  ? .17
+                  : .055) -
+              visual.bookGlowMaterial.opacity) *
+            .1
+        }
+        if (visual.bookTitleMaterial) {
+          visual.bookTitleMaterial.opacity +=
+            ((selected || hovered || routed ? 1 : .92) -
+              visual.bookTitleMaterial.opacity) *
+            .1
+        }
+
         visual.labelMaterial.opacity +=
           ((selected || hovered || routed
             ? 1
@@ -864,13 +1203,51 @@ export default function DevWebSurf3D({
       })
 
       routeVisuals.forEach((routeVisual) => {
-        const t =
-          (now * (.07 + routeVisual.edge.weight * .005) +
-            routeVisual.phase) %
-          1
-        routeVisual.packet.position.copy(routeVisual.curve.getPoint(t))
+        const touchesSelected =
+          routeVisual.edge.source === selectedRef.current ||
+          routeVisual.edge.target === selectedRef.current
+        const touchesHover =
+          routeVisual.edge.source === hoverId ||
+          routeVisual.edge.target === hoverId
+        const touchesRoute =
+          routeVisual.edge.source === routeTargetRef.current ||
+          routeVisual.edge.target === routeTargetRef.current
+        const active = touchesRoute || touchesSelected || touchesHover
+
+        const targetColor = active
+          ? new THREE.Color(0x8ae8ff)
+          : routeVisual.baseColor
+        routeVisual.material.color.lerp(targetColor, .1)
+        routeVisual.glowMaterial.color.lerp(targetColor, .1)
+        routeVisual.packetMaterial.color.lerp(targetColor, .12)
+
+        routeVisual.material.opacity +=
+          ((active
+            ? .82
+            : routeVisual.edge.kind === 'corridor'
+              ? .34
+              : .24) -
+            routeVisual.material.opacity) *
+          .1
+        routeVisual.glowMaterial.opacity +=
+          ((active ? .22 : routeVisual.edge.kind === 'corridor' ? .05 : .03) -
+            routeVisual.glowMaterial.opacity) *
+          .1
         routeVisual.packetMaterial.opacity =
-          .2 + Math.sin(t * Math.PI) * .36
+          active ? .98 : .72
+
+        routeVisual.packets.forEach((packet, packetIndex) => {
+          const t =
+            (now * (.1 + routeVisual.edge.weight * .008) +
+              routeVisual.phase +
+              packetIndex / routeVisual.packets.length) %
+            1
+          packet.position.copy(routeVisual.curve.getPoint(t))
+          const pulse = active ? 1.45 : 1
+          packet.scale.setScalar(
+            pulse * (.78 + Math.sin(t * Math.PI) * .5),
+          )
+        })
       })
 
       const routeTargetId = routeTargetRef.current
@@ -882,16 +1259,35 @@ export default function DevWebSurf3D({
         const destination = routeTarget.group.getWorldPosition(
           new THREE.Vector3(),
         )
-        const curve = makeCurve(
+        activeGuideCurve = makeCurve(
           camera.position,
           destination,
           .03,
         )
-        guideGeometry.setFromPoints(curve.getPoints(36))
+        guideGeometry.setFromPoints(activeGuideCurve.getPoints(52))
         guideLine.computeLineDistances()
+        guideBaseLine.visible = true
         guideLine.visible = true
+        guideMaterial.opacity =
+          .82 + Math.max(0, Math.sin(now * 3.4)) * .16
+
+        guidePackets.forEach((packet, index) => {
+          const t =
+            (now * .28 + index / guidePackets.length) % 1
+          packet.position.copy(activeGuideCurve!.getPoint(t))
+          packet.position.y += .055
+          packet.visible = true
+          packet.scale.setScalar(
+            .75 + Math.sin(t * Math.PI) * .65,
+          )
+        })
       } else {
+        activeGuideCurve = null
+        guideBaseLine.visible = false
         guideLine.visible = false
+        guidePackets.forEach((packet) => {
+          packet.visible = false
+        })
       }
 
       let nearestSection: LibrarySection = 'atrium'
@@ -916,6 +1312,32 @@ export default function DevWebSurf3D({
       deskGlow.rotation.z += delta * .12
       deskGlowMaterial.opacity =
         .28 + Math.max(0, Math.sin(now * .7)) * .13
+
+      const rainAttribute = rainGeometry.getAttribute(
+        'position',
+      ) as THREE.BufferAttribute
+      for (let index = 0; index < rainCount; index += 1) {
+        const offset = index * 3 + 1
+        let y = rainAttribute.array[offset] as number
+        y -= delta * (1.2 + (index % 7) * .16)
+        if (y < .15) y = 8 + (index % 5) * .45
+        rainAttribute.array[offset] = y
+      }
+      rainAttribute.needsUpdate = true
+      dataRain.rotation.y = Math.sin(now * .05) * .018
+      rainMaterial.opacity =
+        .23 + Math.max(0, Math.sin(now * .72)) * .12
+
+      scanGates.forEach(({mesh, material, phase}) => {
+        material.opacity =
+          .012 + Math.max(0, Math.sin(now * 1.25 + phase)) * .028
+        mesh.position.x = Math.sin(now * .18 + phase) * .14
+      })
+
+      netCyan.intensity =
+        6.8 + Math.max(0, Math.sin(now * .63)) * 2.2
+      netMagenta.intensity =
+        3.2 + Math.max(0, Math.sin(now * .47 + 1.1)) * 1.8
 
       if (travel) {
         const progress = THREE.MathUtils.clamp(
@@ -1041,15 +1463,24 @@ export default function DevWebSurf3D({
       routeVisuals.forEach((routeVisual) => {
         routeVisual.geometry.dispose()
         routeVisual.material.dispose()
+        routeVisual.glowGeometry.dispose()
+        routeVisual.glowMaterial.dispose()
         routeVisual.packetGeometry.dispose()
         routeVisual.packetMaterial.dispose()
       })
 
       guideGeometry.dispose()
+      guideBaseMaterial.dispose()
       guideMaterial.dispose()
+      guidePacketGeometry.dispose()
+      guidePacketMaterial.dispose()
       architecturalGeometries.forEach((geometry) => geometry.dispose())
       architecturalMaterials.forEach((material) => material.dispose())
       labelsToDispose.forEach((texture) => texture.dispose())
+      remoteTextures.forEach((texture) => texture.dispose())
+      rainGeometry.dispose()
+      rainMaterial.dispose()
+      destroyed = true
       renderer.dispose()
       container.removeChild(renderer.domElement)
     }

@@ -1684,3 +1684,458 @@
     font-size: .82rem;
   }
 }
+
+
+/* ==========================================================================
+   Netspace books + high-legibility traces
+   ========================================================================== */
+
+.page {
+  --net-cyan: #53d3ff;
+  --net-violet: #ae7bff;
+  --net-magenta: #ff4fd8;
+  isolation: isolate;
+}
+
+.page::before,
+.page::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 29;
+  pointer-events: none;
+}
+
+.page::before {
+  opacity: .11;
+  background:
+    repeating-linear-gradient(
+      180deg,
+      rgba(255,255,255,.035) 0,
+      rgba(255,255,255,.035) 1px,
+      transparent 1px,
+      transparent 4px
+    );
+  mix-blend-mode: screen;
+}
+
+.page::after {
+  background:
+    radial-gradient(
+      circle at 50% 50%,
+      transparent 46%,
+      rgba(0,0,0,.16) 72%,
+      rgba(0,0,0,.5) 100%
+    ),
+    linear-gradient(
+      90deg,
+      rgba(83,211,255,.015),
+      transparent 25%,
+      transparent 75%,
+      rgba(255,79,216,.012)
+    );
+}
+
+.chrome,
+.wingRail,
+.directory,
+.routeCard,
+.pageLens,
+.readingRoom,
+.controls,
+.hoverCard {
+  box-shadow:
+    0 20px 64px rgba(0,0,0,.4),
+    0 0 0 1px rgba(83,211,255,.025),
+    inset 0 1px rgba(255,255,255,.035);
+}
+
+.wingRail {
+  border-color: rgba(83,211,255,.1);
+}
+
+.wingRailActive {
+  background:
+    linear-gradient(135deg, #3b49df, #5367ff) !important;
+  box-shadow:
+    0 4px 18px rgba(59,73,223,.3),
+    0 0 22px rgba(83,211,255,.08);
+}
+
+.routeCard {
+  border-color: rgba(83,211,255,.5);
+  background:
+    linear-gradient(145deg, rgba(25,31,54,.94), rgba(23,23,23,.96));
+}
+
+.routeCard::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 2px;
+  background:
+    linear-gradient(
+      180deg,
+      var(--net-cyan),
+      var(--dev-blue),
+      var(--net-violet)
+    );
+  box-shadow: 0 0 16px rgba(83,211,255,.55);
+}
+
+.routeCard > span {
+  color: var(--net-cyan);
+}
+
+.reticle {
+  filter:
+    drop-shadow(0 0 7px rgba(83,211,255,.34))
+    drop-shadow(0 0 16px rgba(59,73,223,.2));
+}
+
+.reticle i {
+  background: rgba(225,250,255,.92);
+}
+
+.hoverCard {
+  border-color: rgba(83,211,255,.4);
+  background:
+    linear-gradient(
+      145deg,
+      rgba(13,17,29,.95),
+      rgba(23,23,23,.96)
+    );
+}
+
+.hoverCard span {
+  color: var(--net-cyan);
+}
+
+.directoryGrid button:hover,
+.collectionList button:hover,
+.relatedShelf button:hover {
+  box-shadow:
+    0 0 0 1px rgba(59,73,223,.28),
+    0 0 24px rgba(83,211,255,.06);
+}
+
+.articleHero {
+  display: grid;
+  grid-template-columns: minmax(190px, 265px) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+  margin: 5px 0 18px;
+}
+
+.articleHeroMedia {
+  position: relative;
+  min-height: 180px;
+  overflow: hidden;
+  background:
+    linear-gradient(145deg, #171b2a, #101114);
+  border: 1px solid #363b4a;
+  border-radius: 12px;
+  box-shadow:
+    0 20px 52px rgba(0,0,0,.3),
+    0 0 34px rgba(83,211,255,.06);
+}
+
+.articleHeroMedia::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(83,211,255,.04),
+      transparent 32%,
+      transparent 72%,
+      rgba(59,73,223,.16)
+    );
+}
+
+.articleHeroMedia > i {
+  position: absolute;
+  z-index: 3;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background:
+    linear-gradient(
+      90deg,
+      var(--dev-blue),
+      var(--net-cyan),
+      var(--net-violet)
+    );
+  box-shadow: 0 0 18px rgba(83,211,255,.4);
+}
+
+.articleHeroImage {
+  width: 100%;
+  height: 100%;
+  min-height: 180px;
+  display: block;
+  object-fit: cover;
+}
+
+.articleHeroCopy {
+  min-width: 0;
+  padding-top: 4px;
+}
+
+.articleHeroCopy h1 {
+  margin-top: 7px;
+}
+
+.articleHeroCopy .articleDescription {
+  margin-top: 11px;
+}
+
+.readingRoom {
+  width: min(940px, calc(100vw - 64px));
+  background:
+    radial-gradient(
+      circle at 14% 0%,
+      rgba(83,211,255,.06),
+      transparent 28%
+    ),
+    radial-gradient(
+      circle at 95% 15%,
+      rgba(174,123,255,.045),
+      transparent 24%
+    ),
+    linear-gradient(180deg, rgba(59,73,223,.04), transparent 180px),
+    #171717;
+}
+
+.readingRoom::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  box-shadow:
+    inset 0 0 0 1px rgba(83,211,255,.025),
+    inset 0 0 70px rgba(59,73,223,.025);
+}
+
+.articleBody {
+  position: relative;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(59,73,223,.04),
+      transparent 24px
+    ),
+    #202020;
+  border-color: #34384a;
+  border-left-color: var(--dev-blue);
+  box-shadow:
+    inset 0 1px rgba(255,255,255,.02),
+    0 18px 46px rgba(0,0,0,.16);
+}
+
+.articleBody::selection {
+  color: white;
+  background: #3b49df;
+}
+
+.tags button {
+  position: relative;
+  overflow: hidden;
+}
+
+.tags button::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 0;
+  height: 1px;
+  background: var(--net-cyan);
+  opacity: 0;
+  transform: scaleX(.3);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+
+.tags button:hover::after {
+  opacity: .8;
+  transform: scaleX(1);
+}
+
+.relatedShelf > div {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.relatedShelf button {
+  min-height: 86px;
+  grid-template-columns: 82px minmax(0, 1fr);
+  align-items: stretch;
+  gap: 10px;
+  padding: 7px;
+  overflow: hidden;
+}
+
+.relatedShelf button > span {
+  min-width: 0;
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  padding-right: 4px;
+}
+
+.relatedCover {
+  width: 82px;
+  height: 70px;
+  align-self: center;
+  object-fit: cover;
+  background: #111;
+  border: 1px solid #30384f;
+  border-radius: 6px;
+  box-shadow: 0 0 20px rgba(83,211,255,.045);
+}
+
+.relatedShelf b {
+  display: -webkit-box;
+  overflow: hidden;
+  line-height: 1.3;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.relatedShelf small {
+  color: #a8a8a8;
+}
+
+.pageActions button:first-child {
+  background:
+    linear-gradient(135deg, #3b49df, #5265ff);
+  box-shadow:
+    0 8px 24px rgba(59,73,223,.18),
+    0 0 22px rgba(83,211,255,.045);
+}
+
+@keyframes netRoutePulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 1px rgba(83,211,255,.04),
+      0 0 12px rgba(83,211,255,.03);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(83,211,255,.1),
+      0 0 22px rgba(83,211,255,.08);
+  }
+}
+
+.routeCard,
+.wingRailActive {
+  animation: netRoutePulse 2.8s ease-in-out infinite;
+}
+
+@media (max-width: 820px) {
+  .articleHero {
+    grid-template-columns: 1fr;
+  }
+
+  .articleHeroMedia {
+    max-height: 260px;
+  }
+
+  .articleHeroImage {
+    max-height: 260px;
+  }
+}
+
+@media (max-width: 620px) {
+  .relatedShelf > div {
+    grid-template-columns: 1fr;
+  }
+
+  .relatedShelf button {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+
+  .relatedCover {
+    width: 72px;
+    height: 62px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .routeCard,
+  .wingRailActive {
+    animation: none;
+  }
+}
+
+
+.readingRoom {
+  animation: readingRoomMaterialize 320ms cubic-bezier(.16,1,.3,1);
+}
+
+.articleHeroMedia {
+  animation: coverSignalLock 520ms ease-out both;
+}
+
+@keyframes readingRoomMaterialize {
+  from {
+    opacity: 0;
+    transform: translateX(50%) translateY(12px) scale(.985);
+    filter: blur(7px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(50%) translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes coverSignalLock {
+  0% {
+    opacity: .25;
+    filter: saturate(.55) contrast(1.2) brightness(.7);
+    clip-path: inset(0 0 88% 0);
+  }
+  46% {
+    opacity: .88;
+    filter: saturate(1.25) contrast(1.05) brightness(1.08);
+    clip-path: inset(0 0 0 0);
+  }
+  100% {
+    opacity: 1;
+    filter: none;
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@media (max-width: 900px) {
+  .readingRoom {
+    animation-name: readingRoomMaterializeMobile;
+  }
+}
+
+@keyframes readingRoomMaterializeMobile {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(.985);
+    filter: blur(7px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: blur(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .readingRoom,
+  .articleHeroMedia {
+    animation: none;
+  }
+}

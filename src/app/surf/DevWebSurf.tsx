@@ -108,6 +108,31 @@ function articleTags(
   return []
 }
 
+function articleImage(
+  article: DevArticleSummary | DevArticle,
+): string | null {
+  const payload = article as unknown as {
+    cover_image?: unknown
+    social_image?: unknown
+  }
+
+  if (
+    typeof payload.cover_image === 'string' &&
+    payload.cover_image.trim()
+  ) {
+    return payload.cover_image
+  }
+
+  if (
+    typeof payload.social_image === 'string' &&
+    payload.social_image.trim()
+  ) {
+    return payload.social_image
+  }
+
+  return null
+}
+
 function cleanMarkdown(markdown: string | undefined) {
   if (!markdown) return ''
   return markdown
@@ -885,6 +910,10 @@ export default function DevWebSurf() {
         .slice(0, 4)
     : []
 
+  const activeArticleImage = article
+    ? articleImage(article)
+    : null
+
   const continueTarget =
     visited.length > 1
       ? visited[visited.length - 1]?.id
@@ -1254,16 +1283,31 @@ export default function DevWebSurf() {
 
           {activeNode.kind === 'article' && article && (
             <>
-              <div className={styles.pageType}>Reading Room</div>
-              <h1>{article.title}</h1>
-              <div className={styles.articleMeta}>
-                <span>@{article.user.username}</span>
-                <span>{article.readable_publish_date}</span>
-                <span>{article.reading_time_minutes ?? 0} min read</span>
-              </div>
-              <p className={styles.articleDescription}>
-                {article.description}
-              </p>
+              <section className={styles.articleHero}>
+                {activeArticleImage && (
+                  <div className={styles.articleHeroMedia}>
+                    <img
+                      src={activeArticleImage}
+                      alt=""
+                      className={styles.articleHeroImage}
+                    />
+                    <i aria-hidden="true" />
+                  </div>
+                )}
+
+                <div className={styles.articleHeroCopy}>
+                  <div className={styles.pageType}>Reading Room</div>
+                  <h1>{article.title}</h1>
+                  <div className={styles.articleMeta}>
+                    <span>@{article.user.username}</span>
+                    <span>{article.readable_publish_date}</span>
+                    <span>{article.reading_time_minutes ?? 0} min read</span>
+                  </div>
+                  <p className={styles.articleDescription}>
+                    {article.description}
+                  </p>
+                </div>
+              </section>
 
               <div className={styles.tags}>
                 {articleTags(article).map((tag) => (
@@ -1326,18 +1370,30 @@ export default function DevWebSurf() {
                 <section className={styles.relatedShelf}>
                   <span>Nearby shelf · related by topic</span>
                   <div>
-                    {relatedArticles.map((item) => (
-                      <button
-                        type="button"
-                        key={item.id}
-                        onClick={() =>
-                          jumpTo('article:' + item.id)
-                        }
-                      >
-                        <b>{item.title}</b>
-                        <small>@{item.user.username}</small>
-                      </button>
-                    ))}
+                    {relatedArticles.map((item) => {
+                      const image = articleImage(item)
+                      return (
+                        <button
+                          type="button"
+                          key={item.id}
+                          onClick={() =>
+                            jumpTo('article:' + item.id)
+                          }
+                        >
+                          {image && (
+                            <img
+                              src={image}
+                              alt=""
+                              className={styles.relatedCover}
+                            />
+                          )}
+                          <span>
+                            <b>{item.title}</b>
+                            <small>@{item.user.username}</small>
+                          </span>
+                        </button>
+                      )
+                    })}
                   </div>
                 </section>
               )}
