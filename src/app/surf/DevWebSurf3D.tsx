@@ -72,6 +72,22 @@ const FLOOR_IDENTITIES = [
   'LINUX / DEVOPS / OPEN SOURCE',
   'DEEP ARCHIVE / LONG-TAIL DEV',
 ] as const
+const FLOOR_ACCENTS = [
+  0xc7f3ff,
+  0x6574ff,
+  0x38c7bd,
+  0xb57cff,
+  0x68d98a,
+  0x8d9aad,
+] as const
+const FLOOR_AISLES = [
+  ['FEATURED', 'NEW', 'POPULAR'],
+  ['WEBDEV', 'REACT', 'TYPESCRIPT'],
+  ['BACKEND', 'PYTHON', 'DATABASES'],
+  ['AI', 'DATA', 'AUTOMATION'],
+  ['LINUX', 'DEVOPS', 'OPEN SOURCE'],
+  ['ARCHIVE', 'LONG-TAIL', 'DISCOVERY'],
+] as const
 const UPPER_BRIDGE_Z = [7, -10, -27, -45, -63] as const
 
 const SECTION_CENTERS: Record<LibrarySection, THREE.Vector3> = {
@@ -805,14 +821,18 @@ export default function DevWebSurf3D({
     // One material family for floors + walls. The floor now reads as the
     // horizontal face of the same megastructure instead of a separate skin.
     const concrete = new THREE.MeshStandardMaterial({
-      color: 0x34373e,
+      color: 0x2a2d33,
       map: architecturalSurfaceTexture,
       roughnessMap: architecturalSurfaceRoughness,
       roughness: .92,
       metalness: .045,
     })
-    const floorMaterial = concrete
-    architecturalMaterials.push(concrete)
+    // Floors remain the exact same material family as the walls, but get a
+    // modest value lift so walkable space can be parsed without a neon grid.
+    const floorMaterial = concrete.clone()
+    floorMaterial.color.setHex(0x3d4149)
+    floorMaterial.roughness = .9
+    architecturalMaterials.push(concrete, floorMaterial)
 
     const brass = new THREE.MeshStandardMaterial({
       color: 0x303a70,
@@ -824,7 +844,7 @@ export default function DevWebSurf3D({
     architecturalMaterials.push(brass)
 
     const shelfMaterial = new THREE.MeshStandardMaterial({
-      color: 0x30343c,
+      color: 0x353943,
       map: architecturalSurfaceTexture,
       roughnessMap: architecturalSurfaceRoughness,
       roughness: .78,
@@ -846,6 +866,28 @@ export default function DevWebSurf3D({
       mesh.position.set(x, floorBase - .11, z)
       mesh.receiveShadow = true
       scene.add(mesh)
+
+      // A hairline perimeter catches light and tells the eye "this is floor"
+      // without turning the architecture back into a glowing game grid.
+      if (material === floorMaterial && floorBase > 0) {
+        const edgeGeometry = new THREE.EdgesGeometry(geometry)
+        architecturalGeometries.push(edgeGeometry)
+        const floorIndex = THREE.MathUtils.clamp(
+          Math.round(floorBase / LIBRARY_FLOOR_HEIGHT),
+          0,
+          LIBRARY_FLOOR_COUNT - 1,
+        )
+        const edgeMaterial = new THREE.LineBasicMaterial({
+          color: FLOOR_ACCENTS[floorIndex],
+          transparent: true,
+          opacity: .16,
+          blending: THREE.AdditiveBlending,
+        })
+        architecturalMaterials.push(edgeMaterial)
+        const edges = new THREE.LineSegments(edgeGeometry, edgeMaterial)
+        edges.position.copy(mesh.position)
+        scene.add(edges)
+      }
       return mesh
     }
 
