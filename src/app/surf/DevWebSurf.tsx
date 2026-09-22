@@ -252,8 +252,9 @@ function shelfPlacement(
 }
 
 function megaShelfPlacement(index: number): ShelfPlacement {
-  const floorIndex = index % LIBRARY_FLOOR_COUNT
-  const floorBookIndex = Math.floor(index / LIBRARY_FLOOR_COUNT)
+  const catalogFloorCount = LIBRARY_FLOOR_COUNT - 1
+  const floorIndex = 1 + (index % catalogFloorCount)
+  const floorBookIndex = Math.floor(index / catalogFloorCount)
   const booksPerShelf = 9
   const shelfIndex = Math.floor(floorBookIndex / booksPerShelf)
   const localIndex = floorBookIndex % booksPerShelf
