@@ -79,8 +79,8 @@ const SECTION_DOORWAYS: Record<LibrarySection, THREE.Vector3> = {
 
 const STACK_FLOOR_HEIGHT = 4.6
 const STACK_FLOOR_COUNT = 3
-const ELEVATOR_X = 0
-const ELEVATOR_Z = 11.2
+const ELEVATOR_X = 6.6
+const ELEVATOR_Z = 10.8
 
 function floorSurfaceY(floor: number) {
   return floor * STACK_FLOOR_HEIGHT + .09
@@ -268,8 +268,12 @@ function makeArchitecturalGuide(
   if (currentFloor !== targetFloor) {
     points.push(
       new THREE.Vector3(0, currentY, start.z),
+      new THREE.Vector3(0, currentY, 3.8),
+      new THREE.Vector3(3.6, currentY, 3.8),
       new THREE.Vector3(ELEVATOR_X, currentY, ELEVATOR_Z),
       new THREE.Vector3(ELEVATOR_X, targetY, ELEVATOR_Z),
+      new THREE.Vector3(3.6, targetY, 3.8),
+      new THREE.Vector3(0, targetY, 3.8),
     )
 
     if (targetFloor > 0) {
@@ -1807,12 +1811,15 @@ export default function DevWebSurf3D({
 
       const source = camera.position.clone()
       const targetY = floorEyeY(floor)
+      const currentY = floorEyeY(currentFloorLevel)
       const points = [
         source,
-        new THREE.Vector3(0, floorEyeY(currentFloorLevel), source.z),
+        new THREE.Vector3(0, currentY, source.z),
+        new THREE.Vector3(0, currentY, 3.8),
+        new THREE.Vector3(3.6, currentY, 3.8),
         new THREE.Vector3(
           ELEVATOR_X,
-          floorEyeY(currentFloorLevel),
+          currentY,
           ELEVATOR_Z,
         ),
         new THREE.Vector3(
@@ -1820,6 +1827,8 @@ export default function DevWebSurf3D({
           targetY,
           ELEVATOR_Z,
         ),
+        new THREE.Vector3(3.6, targetY, 3.8),
+        new THREE.Vector3(0, targetY, 3.8),
         new THREE.Vector3(0, targetY, 8.5),
       ]
       const curve = new THREE.CatmullRomCurve3(
