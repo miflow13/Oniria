@@ -1256,6 +1256,9 @@ export default function DreamWorld3D({
     let librarySkylineWindowGeometry: THREE.BoxGeometry | null = null
     let librarySkylineWindowMaterial: THREE.MeshBasicMaterial | null = null
     let librarySkylineWindows: THREE.InstancedMesh | null = null
+    let librarySkylineNeonGeometry: THREE.BoxGeometry | null = null
+    let librarySkylineNeonMaterial: THREE.MeshBasicMaterial | null = null
+    let librarySkylineNeon: THREE.InstancedMesh | null = null
 
     if (libraryMode && libraryHazeGeometry) {
       const hazeSpecs = [
@@ -1313,12 +1316,13 @@ export default function DreamWorld3D({
       // colliders, raycast targets, or per-object animation.
       librarySilhouetteGeometry = new THREE.BoxGeometry(1, 1, 1)
       librarySilhouetteMaterial = new THREE.MeshBasicMaterial({
-        color: 0x385279,
+        color: 0x4b6d99,
         transparent: true,
-        opacity: .3,
+        opacity: .4,
         depthWrite: false,
         blending: THREE.NormalBlending,
         toneMapped: false,
+        fog: false,
       })
 
       librarySkylineWindowGeometry = new THREE.BoxGeometry(1, 1, 1)
@@ -1333,9 +1337,23 @@ export default function DreamWorld3D({
         fog: false,
       })
 
+      librarySkylineNeonGeometry = new THREE.BoxGeometry(1, 1, 1)
+      librarySkylineNeonMaterial = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        vertexColors: true,
+        transparent: true,
+        opacity: .92,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        toneMapped: false,
+        fog: false,
+      })
+
       const silhouetteMatrices: THREE.Matrix4[] = []
       const skylineWindowMatrices: THREE.Matrix4[] = []
       const skylineWindowColors: THREE.Color[] = []
+      const skylineNeonMatrices: THREE.Matrix4[] = []
+      const skylineNeonColors: THREE.Color[] = []
       const silhouetteDummy = new THREE.Object3D()
       const xAxis = new THREE.Vector3(1, 0, 0)
 
@@ -1428,6 +1446,58 @@ export default function DreamWorld3D({
           const districtColor = new THREE.Color(district.accent)
           const warmWindow = new THREE.Color(0xffd9a3)
           const coolWindow = new THREE.Color(0xaeeeff)
+          const neonCyan = new THREE.Color(0x63f5ff)
+          const neonMagenta = new THREE.Color(0xff5ae8)
+          const neonViolet = new THREE.Color(0xa87cff)
+
+          // Neon exists only on the distant skyscraper facades. It is kept in
+          // a separate instanced mesh so shelves/walkways never inherit it.
+          ;[-.43, .43].forEach((edgeOffset, edgeIndex) => {
+            const edgePosition = center
+              .clone()
+              .addScaledVector(
+                new THREE.Vector3(
+                  frame.tangentX,
+                  0,
+                  frame.tangentZ,
+                ),
+                width * edgeOffset,
+              )
+              .addScaledVector(inward, facadeOffset + .055)
+            edgePosition.y += height * .035
+
+            silhouetteDummy.position.copy(edgePosition)
+            silhouetteDummy.rotation.set(0, tangentYaw, 0)
+            silhouetteDummy.scale.set(
+              .075,
+              height * (.72 + edgeIndex * .05),
+              .075,
+            )
+            silhouetteDummy.updateMatrix()
+            skylineNeonMatrices.push(silhouetteDummy.matrix.clone())
+
+            const baseNeon =
+              (index + sideIndex + edgeIndex) % 3 === 0
+                ? neonMagenta.clone()
+                : (index + edgeIndex) % 2 === 0
+                  ? neonCyan.clone()
+                  : neonViolet.clone()
+            baseNeon.lerp(districtColor, .2)
+            skylineNeonColors.push(baseNeon)
+          })
+
+          const neonCrown = center
+            .clone()
+            .addScaledVector(inward, facadeOffset + .06)
+          neonCrown.y += height * .465
+          silhouetteDummy.position.copy(neonCrown)
+          silhouetteDummy.rotation.set(0, tangentYaw, 0)
+          silhouetteDummy.scale.set(width * .9, .075, .075)
+          silhouetteDummy.updateMatrix()
+          skylineNeonMatrices.push(silhouetteDummy.matrix.clone())
+          skylineNeonColors.push(
+            neonCyan.clone().lerp(districtColor, .32),
+          )
 
           for (let row = 0; row < rows; row += 1) {
             for (let column = 0; column < columns; column += 1) {
@@ -1678,6 +1748,25 @@ export default function DreamWorld3D({
       }
       librarySkylineWindows.renderOrder = -2
       farWorld.add(librarySkylineWindows)
+
+      librarySkylineNeon = new THREE.InstancedMesh(
+        librarySkylineNeonGeometry,
+        librarySkylineNeonMaterial,
+        skylineNeonMatrices.length,
+      )
+      skylineNeonMatrices.forEach((matrix, index) => {
+        librarySkylineNeon?.setMatrixAt(index, matrix)
+        const color = skylineNeonColors[index]
+        if (color) {
+          librarySkylineNeon?.setColorAt(index, color)
+        }
+      })
+      librarySkylineNeon.instanceMatrix.needsUpdate = true
+      if (librarySkylineNeon.instanceColor) {
+        librarySkylineNeon.instanceColor.needsUpdate = true
+      }
+      librarySkylineNeon.renderOrder = -1
+      farWorld.add(librarySkylineNeon)
     }
 
     const nebulaTextures = [
@@ -4891,6 +4980,10 @@ export default function DreamWorld3D({
           librarySkylineWindows.rotation.y = skylineYaw
           librarySkylineWindows.position.y = skylineLift
         }
+        if (librarySkylineNeon) {
+          librarySkylineNeon.rotation.y = skylineYaw
+          librarySkylineNeon.position.y = skylineLift
+        }
       }
 
       nebulae.forEach((sprite, index) => {
@@ -4940,6 +5033,10 @@ export default function DreamWorld3D({
       if (librarySkylineWindowMaterial) {
         librarySkylineWindowMaterial.opacity =
           .94 + Math.sin(elapsed * .19) * .035
+      }
+      if (librarySkylineNeonMaterial) {
+        librarySkylineNeonMaterial.opacity =
+          .88 + Math.sin(elapsed * .31) * .06
       }
 
 
@@ -6557,6 +6654,8 @@ export default function DreamWorld3D({
       librarySilhouetteMaterial?.dispose()
       librarySkylineWindowGeometry?.dispose()
       librarySkylineWindowMaterial?.dispose()
+      librarySkylineNeonGeometry?.dispose()
+      librarySkylineNeonMaterial?.dispose()
 
       starGeometry.dispose()
       starMaterial.dispose()
