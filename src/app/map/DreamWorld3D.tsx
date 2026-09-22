@@ -1217,10 +1217,53 @@ export default function DreamWorld3D({
     let animationFrame = 0
     let lastSelectedId: string | null = null
     const startedAt = performance.now()
+    let lastFrameAt = startedAt
 
     function animate(now: number) {
       animationFrame = requestAnimationFrame(animate)
       const elapsed = (now - startedAt) / 1000
+      const delta = Math.min(.05, Math.max(.001, (now - lastFrameAt) / 1000))
+      lastFrameAt = now
+
+      if (diveExitRequestRef.current !== lastDiveExitRequest) {
+        lastDiveExitRequest = diveExitRequestRef.current
+        requestDiveExit()
+      }
+
+      if (activeDive && (diveMode === 'inside' || diveMode === 'exiting')) {
+        activeDive.setLookTarget(pointerTarget.x, pointerTarget.y)
+        activeDive.update(elapsed, delta)
+
+        const exitProgress =
+          diveMode === 'exiting'
+            ? Math.min(1, (elapsed - diveTransitionStartedAt) / .78)
+            : 0
+
+        if (divePost) {
+          divePost.uniforms.uTime.value = elapsed
+          divePost.uniforms.uTravel.value =
+            diveMode === 'exiting' ? exitProgress : .06
+        }
+
+        if (diveMode === 'exiting' && exitProgress >= 1) {
+          const returningVisual = selectedRef.current
+            ? nodeVisuals.get(selectedRef.current)
+            : null
+          if (returningVisual) {
+            camera.position.copy(returningVisual.group.position)
+            camera.position.z += .16
+            lookTarget.copy(returningVisual.group.position)
+          }
+
+          disposeDive()
+          onDiveStateChangeRef.current(false)
+          pointerTarget.set(0, 0)
+          pointerParallax.set(0, 0)
+        } else {
+          diveComposer?.render()
+          return
+        }
+      }
 
       farWorld.rotation.y = Math.sin(elapsed * .025) * .035
       stars.rotation.z = elapsed * .002
@@ -1251,6 +1294,21 @@ export default function DreamWorld3D({
       })
 
       pointerParallax.lerp(pointerTarget, 0.035)
+
+      clusterAudios.forEach((cluster) => {
+        const isFocused = selectedRef.current === cluster.nodeId
+        cluster.audio.setFocus(isFocused ? .55 : .05)
+
+        if (soundEnabledRef.current && !cluster.started) {
+          cluster.started = true
+          void cluster.audio.ensurePlaying().catch(() => {
+            cluster.started = false
+          })
+        } else if (!soundEnabledRef.current && cluster.started) {
+          if (cluster.audio.audio.isPlaying) cluster.audio.audio.pause()
+          cluster.started = false
+        }
+      })
 
       const currentSelectedId = selectedRef.current
       if (currentSelectedId !== lastSelectedId) {
@@ -1541,9 +1599,11 @@ export default function DreamWorld3D({
         0.035
 
       dreamPost.uniforms.uTime.value = elapsed
-      dreamPost.uniforms.uTravel.value +=
-        ((selectedVisual ? .18 : 0) - dreamPost.uniforms.uTravel.value) *
-        .03
+      if (diveMode !== 'entering') {
+        dreamPost.uniforms.uTravel.value +=
+          ((selectedVisual ? .12 : 0) - dreamPost.uniforms.uTravel.value) *
+          .03
+      }
       renderer.toneMappingExposure +=
         ((selectedVisual ? 0.9 : 0.94) - renderer.toneMappingExposure) *
         .025
@@ -1564,13 +1624,39 @@ export default function DreamWorld3D({
 
       if (selectedVisual) {
         const position = selectedVisual.group.position
-        const side = position.x > 0 ? -1 : 1
-        cameraTarget.set(
-          position.x + side * 2.8,
-          position.y + .2,
-          position.z + 5.7 / Math.max(.9, zoomRef.current),
-        )
-        lookTarget.lerp(position, .085)
+
+        if (diveMode === 'entering' && activeDive) {
+          const travelProgress = Math.min(
+            1,
+            Math.max(0, (elapsed - diveTransitionStartedAt) / 1.18),
+          )
+          const eased =
+            travelProgress < .5
+              ? 4 * travelProgress * travelProgress * travelProgress
+              : 1 - Math.pow(-2 * travelProgress + 2, 3) / 2
+
+          cameraTarget.set(
+            position.x + (camera.position.x - position.x) * (1 - eased) * .25,
+            position.y + (camera.position.y - position.y) * (1 - eased) * .2,
+            position.z + 4.6 * (1 - eased) + .1,
+          )
+          lookTarget.lerp(position, .18)
+          dreamPost.uniforms.uTravel.value = eased
+
+          if (travelProgress >= 1) {
+            diveMode = 'inside'
+            activeDive.setLookTarget(pointerTarget.x, pointerTarget.y)
+            renderer.domElement.style.cursor = 'crosshair'
+          }
+        } else {
+          const side = position.x > 0 ? -1 : 1
+          cameraTarget.set(
+            position.x + side * 2.8,
+            position.y + .2,
+            position.z + 5.7 / Math.max(.9, zoomRef.current),
+          )
+          lookTarget.lerp(position, .085)
+        }
       } else {
         cameraTarget.set(
           panRef.current.x / 125 + pointerParallax.x * 0.34,
