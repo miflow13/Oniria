@@ -275,6 +275,7 @@ export default function DreamMap({
   const cameraFrameRef = useRef<number | null>(null)
   const enterTimerRef = useRef<number | null>(null)
   const closeTimerRef = useRef<number | null>(null)
+  const resumeFlightAfterDiveRef = useRef(false)
 
   const stopAmbient = useCallback(() => {
     const ambient = ambientRef.current
@@ -1602,19 +1603,28 @@ export default function DreamMap({
                       : null,
                   )
                   if (active) {
+                    resumeFlightAfterDiveRef.current = flightMode
                     setObservatoryMode(false)
                     setFlightMode(false)
                     setEnteringNodeId(null)
                     setClosingJournal(false)
                     setDiveTimelineProgress(1)
                   } else {
+                    const shouldResumeFlight =
+                      resumeFlightAfterDiveRef.current
+                    resumeFlightAfterDiveRef.current = false
                     setDiveDepth(0)
                     setDiveTimelineProgress(1)
+                    if (shouldResumeFlight) {
+                      setFlightMode(true)
+                    }
                     window.history.replaceState(
                       null,
                       '',
                       openDream
-                        ? `/map?dream=${encodeURIComponent(openDream._id)}`
+                        ? `/map?dream=${encodeURIComponent(openDream._id)}${
+                            shouldResumeFlight ? '&view=flight' : ''
+                          }`
                         : '/map',
                     )
                   }
