@@ -1383,6 +1383,7 @@ export default function DevWebSurf() {
         floorRequest={floorRequest}
         onFloorChange={setCurrentFloor}
         uiPanelRefs={uiPanelRefs}
+        catalogLoading={catalogLoading}
         debugEnabled={debugOpen}
         onDebugMetrics={setDebugMetrics}
       />
