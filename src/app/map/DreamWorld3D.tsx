@@ -2996,6 +2996,15 @@ export default function DreamWorld3D({
           (district.landmarkType === 'dev-monument'
             ? Math.PI / 4
             : 0)
+        landmarkGroup.userData.libraryLandmark = true
+        landmarkGroup.userData.libraryLandmarkBaseY =
+          landmarkPosition.y
+        landmarkGroup.userData.libraryLandmarkBaseRotationY =
+          landmarkGroup.rotation.y
+        landmarkGroup.userData.libraryLandmarkPhase =
+          index * 1.37
+        landmarkGroup.userData.libraryLandmarkHeight =
+          landmarkHeight
 
         const landmarkCore = new THREE.Mesh(
           landmarkGeometry,
@@ -3012,7 +3021,243 @@ export default function DreamWorld3D({
         landmarkWire.scale.setScalar(1.035)
         landmarkWire.renderOrder = 5
         landmarkWire.userData.libraryDecorative = true
+        landmarkWire.userData.libraryLandmarkWire = true
+        landmarkCore.userData.libraryLandmarkCore = true
         landmarkGroup.add(landmarkWire)
+
+        // A moving scan ring, orbit motes, and one lightweight motif group
+        // give every Sanity-authored district a readable identity without
+        // adding colliders, raycast targets, or a shader-heavy effect stack.
+        const scanRingGeometry = new THREE.TorusGeometry(
+          Math.max(1.25, landmarkHeight * .31),
+          .018,
+          6,
+          48,
+        )
+        const scanRingMaterial = new THREE.MeshBasicMaterial({
+          color: district.accent,
+          transparent: true,
+          opacity: .48,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          toneMapped: false,
+        })
+        const scanRing = new THREE.Mesh(
+          scanRingGeometry,
+          scanRingMaterial,
+        )
+        scanRing.rotation.x = Math.PI / 2
+        scanRing.userData.libraryLandmarkScan = true
+        scanRing.userData.libraryDecorative = true
+        landmarkGroup.add(scanRing)
+
+        const orbitParticleCount = 14
+        const orbitPositions = new Float32Array(
+          orbitParticleCount * 3,
+        )
+        for (
+          let orbitIndex = 0;
+          orbitIndex < orbitParticleCount;
+          orbitIndex += 1
+        ) {
+          const angle =
+            (orbitIndex / orbitParticleCount) * Math.PI * 2
+          const radius =
+            1.65 +
+            seededUnit(index + 4400, orbitIndex + 1) * .62
+          const offset = orbitIndex * 3
+          orbitPositions[offset] = Math.cos(angle) * radius
+          orbitPositions[offset + 1] =
+            (seededUnit(index + 4400, orbitIndex + 20) - .5) *
+            Math.min(2.8, landmarkHeight * .72)
+          orbitPositions[offset + 2] = Math.sin(angle) * radius
+        }
+        const orbitGeometry = new THREE.BufferGeometry()
+        orbitGeometry.setAttribute(
+          'position',
+          new THREE.BufferAttribute(orbitPositions, 3),
+        )
+        const orbitMaterial = new THREE.PointsMaterial({
+          color: district.accent,
+          size: .065,
+          transparent: true,
+          opacity: .64,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          sizeAttenuation: true,
+          toneMapped: false,
+        })
+        const orbitParticles = new THREE.Points(
+          orbitGeometry,
+          orbitMaterial,
+        )
+        orbitParticles.userData.libraryLandmarkOrbit = true
+        orbitParticles.userData.libraryDecorative = true
+        landmarkGroup.add(orbitParticles)
+
+        const motifMaterial = new THREE.MeshBasicMaterial({
+          color: district.accent,
+          transparent: true,
+          opacity: .34,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          toneMapped: false,
+          wireframe:
+            district.id === 'web-dev' ||
+            district.id === 'front-page',
+        })
+        const motifGroup = new THREE.Group()
+        motifGroup.userData.libraryDistrictMotif = true
+        motifGroup.userData.libraryDecorative = true
+
+        if (district.id === 'web-dev') {
+          ;[-1, 0, 1].forEach((slot) => {
+            const geometry = new THREE.BoxGeometry(
+              .72 + Math.abs(slot) * .12,
+              .5,
+              .045,
+            )
+            const panel = new THREE.Mesh(
+              geometry,
+              motifMaterial,
+            )
+            panel.position.set(
+              slot * .86,
+              .32 + Math.abs(slot) * .28,
+              -1.58,
+            )
+            motifGroup.add(panel)
+            libraryDistrictLandmarkGeometries.push(geometry)
+          })
+        } else if (district.id === 'ai') {
+          ;[0, 1, 2].forEach((slot) => {
+            const geometry = new THREE.TorusGeometry(
+              1.16 + slot * .24,
+              .012,
+              5,
+              40,
+            )
+            const neuralRing = new THREE.Mesh(
+              geometry,
+              motifMaterial,
+            )
+            neuralRing.rotation.set(
+              Math.PI * (.18 + slot * .17),
+              Math.PI * (.12 + slot * .21),
+              slot * .5,
+            )
+            motifGroup.add(neuralRing)
+            libraryDistrictLandmarkGeometries.push(geometry)
+          })
+        } else if (district.id === 'linux') {
+          ;[-.72, -.24, .24, .72].forEach(
+            (row, rowIndex) => {
+              const geometry = new THREE.BoxGeometry(
+                2.25 - rowIndex * .22,
+                .045,
+                .045,
+              )
+              const line = new THREE.Mesh(
+                geometry,
+                motifMaterial,
+              )
+              line.position.set(-.32 + rowIndex * .1, row, -.3)
+              motifGroup.add(line)
+              libraryDistrictLandmarkGeometries.push(geometry)
+            },
+          )
+          const cursorGeometry = new THREE.BoxGeometry(
+            .22,
+            .12,
+            .05,
+          )
+          const cursor = new THREE.Mesh(
+            cursorGeometry,
+            motifMaterial,
+          )
+          cursor.position.set(.92, -.72, -.31)
+          motifGroup.add(cursor)
+          libraryDistrictLandmarkGeometries.push(
+            cursorGeometry,
+          )
+        } else if (district.id === 'javascript') {
+          const branchPositions = new Float32Array([
+            0, -1.3, 0,
+            0, -.2, 0,
+            0, -.2, 0,
+            -.9, .72, 0,
+            0, -.2, 0,
+            .9, .72, 0,
+            -.9, .72, 0,
+            -1.25, 1.18, 0,
+            .9, .72, 0,
+            1.25, 1.18, 0,
+          ])
+          const branchGeometry = new THREE.BufferGeometry()
+          branchGeometry.setAttribute(
+            'position',
+            new THREE.BufferAttribute(branchPositions, 3),
+          )
+          const branchMaterial = new THREE.LineBasicMaterial({
+            color: district.accent,
+            transparent: true,
+            opacity: .72,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending,
+            toneMapped: false,
+          })
+          const branches = new THREE.LineSegments(
+            branchGeometry,
+            branchMaterial,
+          )
+          branches.position.z = -1.2
+          motifGroup.add(branches)
+          libraryDistrictLandmarkGeometries.push(
+            branchGeometry,
+          )
+          libraryDistrictLandmarkMaterials.push(
+            branchMaterial,
+          )
+        } else if (district.id === 'front-page') {
+          ;[0, 1, 2].forEach((row) => {
+            const geometry = new THREE.BoxGeometry(
+              2.3 - row * .42,
+              .08,
+              .05,
+            )
+            const headline = new THREE.Mesh(
+              geometry,
+              motifMaterial,
+            )
+            headline.position.set(
+              row === 1 ? -.18 : 0,
+              .68 - row * .34,
+              -1.62,
+            )
+            motifGroup.add(headline)
+            libraryDistrictLandmarkGeometries.push(geometry)
+          })
+        } else {
+          ;[0, 1].forEach((ringIndex) => {
+            const geometry = new THREE.TorusGeometry(
+              1.3 + ringIndex * .42,
+              .016,
+              5,
+              40,
+            )
+            const archiveRing = new THREE.Mesh(
+              geometry,
+              motifMaterial,
+            )
+            archiveRing.rotation.x = Math.PI / 2
+            archiveRing.position.y =
+              -.55 + ringIndex * 1.05
+            motifGroup.add(archiveRing)
+            libraryDistrictLandmarkGeometries.push(geometry)
+          })
+        }
+
+        landmarkGroup.add(motifGroup)
 
         const pedestalGeometry = new THREE.CylinderGeometry(
           1.75,
@@ -3035,6 +3280,7 @@ export default function DreamWorld3D({
         pedestal.position.y = -.5 * landmarkHeight - .12
         pedestal.renderOrder = 3
         pedestal.userData.libraryDecorative = true
+        pedestal.userData.libraryLandmarkPedestal = true
         landmarkGroup.add(pedestal)
 
         world.add(landmarkGroup)
@@ -3042,11 +3288,16 @@ export default function DreamWorld3D({
         libraryDistrictLandmarkGeometries.push(
           landmarkGeometry,
           pedestalGeometry,
+          scanRingGeometry,
+          orbitGeometry,
         )
         libraryDistrictLandmarkMaterials.push(
           landmarkCoreMaterial,
           landmarkWireMaterial,
           pedestalMaterial,
+          scanRingMaterial,
+          orbitMaterial,
+          motifMaterial,
         )
 
         const atmosphereColor =
@@ -5515,6 +5766,94 @@ export default function DreamWorld3D({
       }
 
       libraryRouteObjects.forEach((object) => {
+        if (object.userData.libraryLandmark) {
+          const phase =
+            object.userData.libraryLandmarkPhase as number
+          const baseY =
+            object.userData.libraryLandmarkBaseY as number
+          const baseRotationY =
+            object.userData
+              .libraryLandmarkBaseRotationY as number
+          const landmarkHeight =
+            object.userData.libraryLandmarkHeight as number
+
+          object.position.y =
+            baseY +
+            Math.sin(elapsed * .48 + phase) * .085
+          object.rotation.y =
+            baseRotationY +
+            Math.sin(elapsed * .18 + phase) * .07
+
+          object.children.forEach((child) => {
+            if (child.userData.libraryLandmarkScan) {
+              const cycle =
+                (elapsed * .18 + phase * .13) % 1
+              child.position.y =
+                -landmarkHeight * .34 +
+                cycle * landmarkHeight * .68
+              child.rotation.z =
+                elapsed * .14 + phase
+              const material =
+                (child as THREE.Mesh)
+                  .material as THREE.MeshBasicMaterial
+              material.opacity =
+                .28 +
+                Math.max(
+                  0,
+                  Math.sin(elapsed * 1.4 + phase),
+                ) * .34
+            } else if (
+              child.userData.libraryLandmarkOrbit
+            ) {
+              child.rotation.y =
+                elapsed * .22 + phase
+              child.rotation.x =
+                Math.sin(elapsed * .12 + phase) * .12
+              const material =
+                (child as THREE.Points)
+                  .material as THREE.PointsMaterial
+              material.opacity =
+                .48 +
+                Math.max(
+                  0,
+                  Math.sin(elapsed * .7 + phase),
+                ) * .25
+            } else if (
+              child.userData.libraryDistrictMotif
+            ) {
+              child.rotation.y =
+                Math.sin(elapsed * .16 + phase) * .09
+              child.position.y =
+                Math.sin(elapsed * .32 + phase) * .055
+            } else if (
+              child.userData.libraryLandmarkPedestal
+            ) {
+              const material =
+                (child as THREE.Mesh)
+                  .material as THREE.MeshBasicMaterial
+              material.opacity =
+                .3 +
+                Math.max(
+                  0,
+                  Math.sin(elapsed * .68 + phase),
+                ) * .2
+            } else if (
+              child.userData.libraryLandmarkCore
+            ) {
+              const material =
+                (child as THREE.Mesh)
+                  .material as THREE.MeshBasicMaterial
+              material.opacity =
+                .2 +
+                Math.max(
+                  0,
+                  Math.sin(elapsed * .52 + phase),
+                ) * .14
+            }
+          })
+          return
+        }
+
         if (!object.userData.routeMarkerBaseY) return
         const phase = object.userData.routeMarkerPhase as number
         const baseY = object.userData.routeMarkerBaseY as number
