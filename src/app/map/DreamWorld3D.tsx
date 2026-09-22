@@ -1251,6 +1251,19 @@ export default function DreamWorld3D({
     let dragging = false
     let lastProjection = {x: -999, y: -999, visible: false}
 
+    const flightKeys = new Set<string>()
+    const flightPosition = new THREE.Vector3()
+    const flightVelocity = new THREE.Vector3()
+    const flightForward = new THREE.Vector3()
+    const flightRight = new THREE.Vector3()
+    const flightMove = new THREE.Vector3()
+    const flightUp = new THREE.Vector3(0, 1, 0)
+    let flightYaw = 0
+    let flightPitch = 0
+    let flightInitialized = false
+    let previousFlightMode = false
+    let flightNearestId: string | null = null
+
     let activeCellId: string | null = null
     let activeCellDreamId: string | null = null
     let activeCell: DreamCell | null = null
@@ -1672,7 +1685,43 @@ export default function DreamWorld3D({
       return nodeRef.current.find((node) => node._id === id) ?? null
     }
 
+    function pickCenterNode() {
+      pointer.set(0, 0)
+      raycaster.setFromCamera(pointer, camera)
+      const intersections = raycaster.intersectObjects(interactive, false)
+      if (!intersections.length) return null
+      const id = intersections[0].object.userData.nodeId as string | undefined
+      return nodeRef.current.find((node) => node._id === id) ?? null
+    }
+
+    function nearestFlightNode(maxDistance = 4.2) {
+      let nearest:
+        | {node: DreamWorldNode; distance: number}
+        | null = null
+      const worldPoint = new THREE.Vector3()
+
+      nodeRef.current.forEach((node) => {
+        const visual = nodeVisuals.get(node._id)
+        if (!visual) return
+        visual.group.getWorldPosition(worldPoint)
+        const distance = worldPoint.distanceTo(camera.position)
+        if (
+          distance <= maxDistance &&
+          (!nearest || distance < nearest.distance)
+        ) {
+          nearest = {node, distance}
+        }
+      })
+
+      return nearest?.node ?? null
+    }
+
     function handlePointerMove(event: PointerEvent) {
+      if (flightModeRef.current && diveMode === 'none') {
+        renderer.domElement.style.cursor = 'none'
+        return
+      }
+
       normalizedPointer(event)
 
       if (diveMode !== 'none') {
@@ -1716,6 +1765,20 @@ export default function DreamWorld3D({
     }
 
     function handlePointerDown(event: PointerEvent) {
+      if (flightModeRef.current && diveMode === 'none') {
+        if (document.pointerLockElement !== renderer.domElement) {
+          void renderer.domElement.requestPointerLock()
+        } else {
+          const node = pickCenterNode()
+          if (node) onNodeSelectRef.current(node)
+        }
+        return
+      }
+
+      if (flightModeRef.current && diveMode === 'none') {
+        return
+      }
+
       if (diveMode !== 'none') {
         normalizedPointer(event)
         activeDive?.setLookTarget(pointer.x, pointer.y)
@@ -1796,7 +1859,7 @@ export default function DreamWorld3D({
 
     function handleWheel(event: WheelEvent) {
       event.preventDefault()
-      if (diveMode !== 'none') return
+      if (flightModeRef.current || diveMode !== 'none') return
 
       const next = Math.min(
         2.8,
@@ -1806,7 +1869,7 @@ export default function DreamWorld3D({
     }
 
     function handleDoubleClick(event: MouseEvent) {
-      if (diveMode !== 'none') return
+      if (flightModeRef.current || diveMode !== 'none') return
       const pointerEvent = event as unknown as PointerEvent
       const node = pickNode(pointerEvent)
       if (node && selectedRef.current === node._id) {
@@ -1821,6 +1884,49 @@ export default function DreamWorld3D({
     renderer.domElement.addEventListener('pointerleave', handlePointerLeave)
     renderer.domElement.addEventListener('wheel', handleWheel, {passive: false})
     renderer.domElement.addEventListener('dblclick', handleDoubleClick)
+
+    function handleFlightMouse(event: MouseEvent) {
+      if (
+        !flightModeRef.current ||
+        diveMode !== 'none' ||
+        document.pointerLockElement !== renderer.domElement
+      ) {
+        return
+      }
+
+      flightYaw -= event.movementX * .00175
+      flightPitch -= event.movementY * .00155
+      flightPitch = THREE.MathUtils.clamp(
+        flightPitch,
+        -Math.PI * .46,
+        Math.PI * .46,
+      )
+    }
+
+    function handleFlightKeyDown(event: KeyboardEvent) {
+      if (!flightModeRef.current || diveMode !== 'none') return
+
+      flightKeys.add(event.code)
+
+      if (event.code === 'KeyE') {
+        event.preventDefault()
+        const node = pickCenterNode() ?? nearestFlightNode(3.2)
+        if (node) onNodeSelectRef.current(node)
+      }
+
+      if (event.code === 'Escape') {
+        document.exitPointerLock?.()
+        onFlightModeChangeRef.current(false)
+      }
+    }
+
+    function handleFlightKeyUp(event: KeyboardEvent) {
+      flightKeys.delete(event.code)
+    }
+
+    document.addEventListener('mousemove', handleFlightMouse)
+    window.addEventListener('keydown', handleFlightKeyDown)
+    window.addEventListener('keyup', handleFlightKeyUp)
 
     const cameraTarget = new THREE.Vector3()
     const lookTarget = new THREE.Vector3(0, 0, 0)
@@ -1839,6 +1945,30 @@ export default function DreamWorld3D({
       const elapsed = (now - startedAt) / 1000
       const delta = Math.min(.05, Math.max(.001, (now - lastFrameAt) / 1000))
       lastFrameAt = now
+
+      const flightActive =
+        flightModeRef.current &&
+        diveMode === 'none' &&
+        !observatoryModeRef.current
+
+      if (flightActive && !previousFlightMode) {
+        flightPosition.copy(camera.position)
+        camera.rotation.order = 'YXZ'
+        flightYaw = camera.rotation.y
+        flightPitch = camera.rotation.x
+        flightVelocity.set(0, 0, 0)
+        flightInitialized = true
+        previousFlightMode = true
+        onProjectionChangeRef.current(null)
+      } else if (!flightActive && previousFlightMode) {
+        if (document.pointerLockElement === renderer.domElement) {
+          document.exitPointerLock?.()
+        }
+        flightKeys.clear()
+        flightVelocity.set(0, 0, 0)
+        previousFlightMode = false
+        flightInitialized = false
+      }
 
       if (diveExitRequestRef.current !== lastDiveExitRequest) {
         lastDiveExitRequest = diveExitRequestRef.current
@@ -2523,7 +2653,80 @@ export default function DreamWorld3D({
       cyanLight.intensity +=
         ((selectedVisual ? 15 : 11) - cyanLight.intensity) * 0.025
 
-      if (selectedVisual) {
+      if (flightActive && flightInitialized) {
+        flightForward.set(
+          -Math.sin(flightYaw) * Math.cos(flightPitch),
+          Math.sin(flightPitch),
+          -Math.cos(flightYaw) * Math.cos(flightPitch),
+        ).normalize()
+        flightRight.crossVectors(flightForward, flightUp).normalize()
+        flightMove.set(0, 0, 0)
+
+        if (flightKeys.has('KeyW')) flightMove.add(flightForward)
+        if (flightKeys.has('KeyS')) flightMove.sub(flightForward)
+        if (flightKeys.has('KeyD')) flightMove.add(flightRight)
+        if (flightKeys.has('KeyA')) flightMove.sub(flightRight)
+        if (flightKeys.has('Space')) flightMove.add(flightUp)
+        if (
+          flightKeys.has('ControlLeft') ||
+          flightKeys.has('ControlRight') ||
+          flightKeys.has('KeyQ')
+        ) {
+          flightMove.sub(flightUp)
+        }
+
+        if (flightMove.lengthSq() > 0) flightMove.normalize()
+
+        const boosted =
+          flightKeys.has('ShiftLeft') ||
+          flightKeys.has('ShiftRight')
+        const flightSpeed = boosted ? 7.2 : 3.15
+        const desiredVelocity = flightMove.multiplyScalar(flightSpeed)
+        const damping = 1 - Math.exp(-delta * 7.5)
+        flightVelocity.lerp(desiredVelocity, damping)
+        flightPosition.addScaledVector(flightVelocity, delta)
+
+        const distanceFromOrigin = flightPosition.length()
+        if (distanceFromOrigin > 34) {
+          flightPosition.multiplyScalar(34 / distanceFromOrigin)
+          flightVelocity.multiplyScalar(.35)
+        }
+        flightPosition.y = THREE.MathUtils.clamp(
+          flightPosition.y,
+          -12,
+          14,
+        )
+
+        camera.position.copy(flightPosition)
+        camera.rotation.order = 'YXZ'
+        camera.rotation.y = flightYaw
+        camera.rotation.x = flightPitch
+        camera.rotation.z = THREE.MathUtils.lerp(
+          camera.rotation.z,
+          -flightVelocity.dot(flightRight) * .008,
+          .08,
+        )
+
+        const speedRatio = Math.min(1, flightVelocity.length() / 7.2)
+        camera.fov +=
+          ((43 + speedRatio * 9) - camera.fov) * .065
+        camera.updateProjectionMatrix()
+
+        const nearest = nearestFlightNode(3.5)
+        const nearestId = nearest?._id ?? null
+        if (nearestId !== flightNearestId) {
+          flightNearestId = nearestId
+          hoveredId = nearestId
+          onNodeHoverRef.current(nearest)
+        }
+
+        depthOfField.enabled = false
+        dreamPost.uniforms.uTravel.value +=
+          ((speedRatio * .72) - dreamPost.uniforms.uTravel.value) * .08
+        dreamPost.uniforms.uFlareStrength.value +=
+          ((speedRatio * .09) - dreamPost.uniforms.uFlareStrength.value) *
+          .06
+      } else if (selectedVisual) {
         const position = selectedVisual.group.position
 
         if (diveMode === 'entering' && activeDive) {
@@ -2581,10 +2784,14 @@ export default function DreamWorld3D({
         )
       }
 
-      camera.position.lerp(cameraTarget, selectedVisual ? .075 : .055)
-      camera.lookAt(lookTarget)
+      if (!flightActive) {
+        camera.position.lerp(cameraTarget, selectedVisual ? .075 : .055)
+        camera.lookAt(lookTarget)
+        camera.fov += (43 - camera.fov) * .06
+        camera.updateProjectionMatrix()
+      }
 
-      if (selectedVisual) {
+      if (selectedVisual && !flightActive) {
         const projected = selectedVisual.group.position.clone().project(camera)
         const selectedProfile = selectedNode
           ? getProfileForNode(selectedNode)
@@ -2623,7 +2830,7 @@ export default function DreamWorld3D({
           lastProjection = nextProjection
           onProjectionChangeRef.current(nextProjection)
         }
-      } else {
+      } else if (!flightActive) {
         dreamPost.uniforms.uFlareStrength.value +=
           (0 - dreamPost.uniforms.uFlareStrength.value) * .05
 
@@ -2649,6 +2856,12 @@ export default function DreamWorld3D({
       renderer.domElement.removeEventListener('pointerleave', handlePointerLeave)
       renderer.domElement.removeEventListener('wheel', handleWheel)
       renderer.domElement.removeEventListener('dblclick', handleDoubleClick)
+      document.removeEventListener('mousemove', handleFlightMouse)
+      window.removeEventListener('keydown', handleFlightKeyDown)
+      window.removeEventListener('keyup', handleFlightKeyUp)
+      if (document.pointerLockElement === renderer.domElement) {
+        document.exitPointerLock?.()
+      }
 
       if (holdTimer !== null) window.clearTimeout(holdTimer)
       clusterAudios.forEach((cluster) => {
