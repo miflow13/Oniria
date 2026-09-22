@@ -2870,6 +2870,31 @@ export default function DevWebSurf3D({
       floorIdentityLight.position.y =
         floor * LIBRARY_FLOOR_HEIGHT + 3.2
       floorIdentityLight.intensity = floor === 0 ? 2.8 : 3.8
+
+      // Keep non-current floors visually alive even when their real article
+      // layer is hidden. Sparse current floors retain only a faint book-fill
+      // layer so missing network data never exposes empty shelf geometry.
+      archivePlaceholderLods.forEach((placeholder, floorIndex) => {
+        const isCurrentFloor = floorIndex === floor
+        const sparseCurrentFloor =
+          isCurrentFloor && placeholder.articleCount < 36
+
+        placeholder.shelves.visible = !isCurrentFloor
+        placeholder.books.visible =
+          !isCurrentFloor || sparseCurrentFloor
+
+        placeholder.shelfMaterial.opacity =
+          isCurrentFloor ? 0 : .72
+        placeholder.bookMaterial.opacity =
+          isCurrentFloor
+            ? sparseCurrentFloor
+              ? .24
+              : 0
+            : .62
+        placeholder.bookMaterial.emissiveIntensity =
+          isCurrentFloor ? .04 : .08
+      })
+
       visualsByFloor.forEach((entries, floorIndex) => {
         const visible = floorIndex === floor
         entries.forEach(([, visual]) => {
