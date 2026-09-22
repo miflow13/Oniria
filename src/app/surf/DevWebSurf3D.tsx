@@ -516,7 +516,7 @@ export default function DevWebSurf3D({
     const container = host
 
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color(0x090a0f)
+    scene.background = new THREE.Color(0x111319)
     scene.fog = new THREE.FogExp2(0x111319, .0082)
 
     const camera = new THREE.PerspectiveCamera(60, 1, .07, 160)
@@ -805,7 +805,7 @@ export default function DevWebSurf3D({
     // One material family for floors + walls. The floor now reads as the
     // horizontal face of the same megastructure instead of a separate skin.
     const concrete = new THREE.MeshStandardMaterial({
-      color: 0x24262c,
+      color: 0x34373e,
       map: architecturalSurfaceTexture,
       roughnessMap: architecturalSurfaceRoughness,
       roughness: .92,
@@ -824,7 +824,7 @@ export default function DevWebSurf3D({
     architecturalMaterials.push(brass)
 
     const shelfMaterial = new THREE.MeshStandardMaterial({
-      color: 0x262931,
+      color: 0x30343c,
       map: architecturalSurfaceTexture,
       roughnessMap: architecturalSurfaceRoughness,
       roughness: .78,
@@ -1537,7 +1537,7 @@ export default function DevWebSurf3D({
     const distantBackGeometry = new THREE.BoxGeometry(1, 1, .12)
     const distantBoardGeometry = new THREE.BoxGeometry(1, .09, .64)
     const distantShelfMaterial = new THREE.MeshStandardMaterial({
-      color: 0x23262d,
+      color: 0x2c3037,
       map: architecturalSurfaceTexture,
       roughnessMap: architecturalSurfaceRoughness,
       emissive: 0x10152a,
