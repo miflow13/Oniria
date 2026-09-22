@@ -3,9 +3,13 @@ import {NextRequest, NextResponse} from 'next/server'
 const DEV_BASE = 'https://dev.to/api'
 const FOREM_ACCEPT = 'application/vnd.forem.api-v1+json'
 const ALLOWED_IMAGE_HOSTS = new Set([
+  'media.dev.to',
   'media2.dev.to',
   'dev-to-uploads.s3.amazonaws.com',
   'res.cloudinary.com',
+  'images.unsplash.com',
+  'user-images.githubusercontent.com',
+  'private-user-images.githubusercontent.com',
 ])
 
 async function devFetch(path: string) {
@@ -44,7 +48,7 @@ function lowQualityImageTarget(target: URL) {
       if (sourceStart >= 0) {
         thumbnail.pathname =
           thumbnail.pathname.slice(0, optionsStart) +
-          'width=112,height=84,fit=cover,gravity=auto,quality=45,format=auto' +
+          'width=320,height=220,fit=cover,gravity=auto,quality=64,format=auto' +
           thumbnail.pathname.slice(sourceStart)
       }
     }
@@ -53,7 +57,7 @@ function lowQualityImageTarget(target: URL) {
   if (thumbnail.hostname === 'dev-to-uploads.s3.amazonaws.com') {
     return new URL(
       'https://media2.dev.to/cdn-cgi/image/' +
-        'width=112,height=84,fit=cover,gravity=auto,quality=45,format=auto/' +
+        'width=320,height=220,fit=cover,gravity=auto,quality=64,format=auto/' +
         target.href,
     )
   }
@@ -65,7 +69,7 @@ function lowQualityImageTarget(target: URL) {
       const insertAt = markerIndex + marker.length
       thumbnail.pathname =
         thumbnail.pathname.slice(0, insertAt) +
-        'w_112,h_84,c_fill,q_auto:low,f_auto/' +
+        'w_320,h_220,c_fill,q_auto:eco,f_auto/' +
         thumbnail.pathname.slice(insertAt)
     }
   }
@@ -120,17 +124,26 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({error: 'Missing image URL'}, {status: 400})
       }
 
-      let target: URL
-      try {
-        target = new URL(rawUrl)
-      } catch {
-        return NextResponse.json({error: 'Invalid image URL'}, {status: 400})
+      const rawFallback = searchParams.get('fallback')
+      const parseAllowedImage = (value: string | null) => {
+        if (!value) return null
+        try {
+          const candidate = new URL(value)
+          if (
+            candidate.protocol !== 'https:' ||
+            !ALLOWED_IMAGE_HOSTS.has(candidate.hostname)
+          ) {
+            return null
+          }
+          return candidate
+        } catch {
+          return null
+        }
       }
 
-      if (
-        target.protocol !== 'https:' ||
-        !ALLOWED_IMAGE_HOSTS.has(target.hostname)
-      ) {
+      const target = parseAllowedImage(rawUrl)
+      const fallbackTarget = parseAllowedImage(rawFallback)
+      if (!target) {
         return NextResponse.json(
           {error: 'Image host is not allowed'},
           {status: 400},
@@ -141,19 +154,54 @@ export async function GET(request: NextRequest) {
         searchParams.get('variant'),
         'full',
       )
-      const fetchTarget =
-        variant === 'thumb'
-          ? lowQualityImageTarget(target)
-          : target
+      const fetchImage = async (candidate: URL) =>
+        fetch(
+          variant === 'thumb'
+            ? lowQualityImageTarget(candidate)
+            : candidate,
+          {
+            headers: {
+              accept:
+                'image/avif,image/webp,image/png,image/jpeg,image/*',
+              'user-agent':
+                'Oniria-DEV-Library/0.1 (+https://github.com/miflow13/Oniria)',
+            },
+            next: {revalidate: 3600},
+          },
+        )
 
-      const imageResponse = await fetch(fetchTarget, {
-        headers: {
-          accept: 'image/avif,image/webp,image/png,image/jpeg,image/*',
-          'user-agent':
-            'Oniria-DEV-Library/0.1 (+https://github.com/miflow13/Oniria)',
-        },
-        next: {revalidate: 3600},
-      })
+      let imageResponse = await fetchImage(target)
+
+      // Some DEV/CDN URLs reject transformation syntax even though the
+      // original image is healthy. Retry the original before giving up.
+      if (!imageResponse.ok && variant === 'thumb') {
+        imageResponse = await fetch(target, {
+          headers: {
+            accept:
+              'image/avif,image/webp,image/png,image/jpeg,image/*',
+            'user-agent':
+              'Oniria-DEV-Library/0.1 (+https://github.com/miflow13/Oniria)',
+          },
+          next: {revalidate: 3600},
+        })
+      }
+
+      // Cover images are occasionally stale while social images are still
+      // valid, so the shelf can provide a second DEV image as a final retry.
+      if (!imageResponse.ok && fallbackTarget) {
+        imageResponse = await fetchImage(fallbackTarget)
+        if (!imageResponse.ok && variant === 'thumb') {
+          imageResponse = await fetch(fallbackTarget, {
+            headers: {
+              accept:
+                'image/avif,image/webp,image/png,image/jpeg,image/*',
+              'user-agent':
+                'Oniria-DEV-Library/0.1 (+https://github.com/miflow13/Oniria)',
+            },
+            next: {revalidate: 3600},
+          })
+        }
+      }
 
       if (!imageResponse.ok) {
         return NextResponse.json(
@@ -179,6 +227,7 @@ export async function GET(request: NextRequest) {
             variant === 'thumb'
               ? 'public, max-age=86400, stale-while-revalidate=604800'
               : 'public, max-age=3600, stale-while-revalidate=86400',
+          'access-control-allow-origin': '*',
         },
       })
     }
