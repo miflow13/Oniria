@@ -132,6 +132,12 @@ type NodeVisual = {
   z: number
 }
 
+type BokehUniformMap = {
+  focus: {value: number}
+  aperture: {value: number}
+  maxblur: {value: number}
+}
+
 type EdgeVisual = {
   line: THREE.Line
   pulse: THREE.Mesh
@@ -394,6 +400,7 @@ export default function DreamWorld3D({
   useEffect(() => {
     const host = hostRef.current
     if (!host) return
+    const container: HTMLDivElement = host
 
     const settings = getQualitySettings(qualityRef.current)
 
@@ -421,7 +428,7 @@ export default function DreamWorld3D({
     renderer.shadowMap.enabled = settings.miniWorldDetail > 0
     renderer.shadowMap.type = THREE.PCFSoftShadowMap
     renderer.domElement.className = styles.webglCanvas
-    host.appendChild(renderer.domElement)
+    container.appendChild(renderer.domElement)
 
     const cinematicEnvironment = createCinematicEnvironment(renderer)
     scene.environment = cinematicEnvironment.texture
@@ -442,8 +449,6 @@ export default function DreamWorld3D({
       focus: 10,
       aperture: 0.000035,
       maxblur: settings.maxBlur,
-      width: 1,
-      height: 1,
     })
     depthOfField.enabled = false
     composer.addPass(depthOfField)
@@ -1153,14 +1158,7 @@ export default function DreamWorld3D({
         return {sprite, material, texture, phase: index * 1.7}
       })
       .filter(
-        (
-          value,
-        ): value is {
-          sprite: THREE.Sprite
-          material: THREE.SpriteMaterial
-          texture: THREE.Texture
-          phase: number
-        } => Boolean(value),
+        (value): value is NonNullable<typeof value> => value !== null,
       )
 
     const lucidDreamIds = new Set(
@@ -1243,15 +1241,7 @@ export default function DreamWorld3D({
         }
       })
       .filter(
-        (
-          value,
-        ): value is {
-          nodeId: string
-          group: THREE.Group
-          geometry: THREE.BufferGeometry
-          material: THREE.MeshBasicMaterial
-          phase: number
-        } => Boolean(value),
+        (value): value is NonNullable<typeof value> => value !== null,
       )
 
     const clusterAudios = [...nodeRef.current]
@@ -1284,14 +1274,7 @@ export default function DreamWorld3D({
         }
       })
       .filter(
-        (
-          value,
-        ): value is {
-          nodeId: string
-          visual: NodeVisual
-          audio: SpatialDreamAudio
-          started: boolean
-        } => Boolean(value),
+        (value): value is NonNullable<typeof value> => value !== null,
       )
 
     const edgeVisuals: EdgeVisual[] = []
@@ -1693,8 +1676,6 @@ export default function DreamWorld3D({
         focus: 7,
         aperture: 0.00005,
         maxblur: settings.maxBlur * 1.1,
-        width: 1,
-        height: 1,
       })
       diveBokeh.enabled = false
       diveComposer.addPass(diveBokeh)
@@ -1715,7 +1696,7 @@ export default function DreamWorld3D({
       diveComposer.addPass(divePost)
       diveComposer.addPass(new OutputPass())
 
-      const rect = host.getBoundingClientRect()
+      const rect = container.getBoundingClientRect()
       activeDive.resize(rect.width / Math.max(1, rect.height))
       diveComposer.setSize(rect.width, rect.height)
       activeDive.setTimeline(diveTimelineProgressRef.current)
@@ -1781,7 +1762,7 @@ export default function DreamWorld3D({
       )
       portalPreviewDive.setTimeline(diveTimelineProgressRef.current)
 
-      const rect = host.getBoundingClientRect()
+      const rect = container.getBoundingClientRect()
       portalPreviewDive.resize(rect.width / Math.max(1, rect.height))
       portalSceneTransition = createPortalSceneTransition(
         Math.max(1, Math.floor(rect.width * settings.portalBlendResolution)),
@@ -1827,7 +1808,7 @@ export default function DreamWorld3D({
     }
 
     function resize() {
-      const rect = host.getBoundingClientRect()
+      const rect = container.getBoundingClientRect()
       if (!rect.width || !rect.height) return
       renderer.setSize(rect.width, rect.height, false)
       composer.setSize(rect.width, rect.height)
@@ -1850,7 +1831,7 @@ export default function DreamWorld3D({
     }
 
     const resizeObserver = new ResizeObserver(resize)
-    resizeObserver.observe(host)
+    resizeObserver.observe(container)
     resize()
 
     function normalizedPointer(event: PointerEvent) {
@@ -1884,9 +1865,9 @@ export default function DreamWorld3D({
         | null = null
       const worldPoint = new THREE.Vector3()
 
-      nodeRef.current.forEach((node) => {
+      for (const node of nodeRef.current) {
         const visual = nodeVisuals.get(node._id)
-        if (!visual) return
+        if (!visual) continue
         visual.group.getWorldPosition(worldPoint)
         const distance = worldPoint.distanceTo(camera.position)
         if (
@@ -1895,9 +1876,9 @@ export default function DreamWorld3D({
         ) {
           nearest = {node, distance}
         }
-      })
+      }
 
-      return nearest?.node ?? null
+      return nearest ? nearest.node : null
     }
 
     function handlePointerMove(event: PointerEvent) {
@@ -2395,11 +2376,11 @@ export default function DreamWorld3D({
               diveMode === 'portal'
                 ? 6.2 - portalProgress * 2.4
                 : 4.8 + exitProgress * 2.8
-            diveBokeh.uniforms.focus.value +=
-              (focusTarget - diveBokeh.uniforms.focus.value) * .09
-            diveBokeh.uniforms.aperture.value +=
+            (diveBokeh.uniforms as BokehUniformMap).focus.value +=
+              (focusTarget - (diveBokeh.uniforms as BokehUniformMap).focus.value) * .09
+            (diveBokeh.uniforms as BokehUniformMap).aperture.value +=
               ((diveMode === 'portal' ? .000085 : .000055) -
-                diveBokeh.uniforms.aperture.value) *
+                (diveBokeh.uniforms as BokehUniformMap).aperture.value) *
               .08
           }
         }
@@ -2958,12 +2939,12 @@ export default function DreamWorld3D({
         const focusDistance = camera.position.distanceTo(
           selectedVisual.group.position,
         )
-        depthOfField.uniforms.focus.value +=
-          (focusDistance - depthOfField.uniforms.focus.value) * 0.08
-        depthOfField.uniforms.aperture.value +=
-          (0.000065 - depthOfField.uniforms.aperture.value) * 0.05
-        depthOfField.uniforms.maxblur.value +=
-          (settings.maxBlur - depthOfField.uniforms.maxblur.value) * 0.05
+        (depthOfField.uniforms as BokehUniformMap).focus.value +=
+          (focusDistance - (depthOfField.uniforms as BokehUniformMap).focus.value) * 0.08
+        (depthOfField.uniforms as BokehUniformMap).aperture.value +=
+          (0.000065 - (depthOfField.uniforms as BokehUniformMap).aperture.value) * 0.05
+        (depthOfField.uniforms as BokehUniformMap).maxblur.value +=
+          (settings.maxBlur - (depthOfField.uniforms as BokehUniformMap).maxblur.value) * 0.05
       }
 
       bloom.strength +=
@@ -3391,7 +3372,7 @@ export default function DreamWorld3D({
       cinematicEnvironment.dispose()
       composer.dispose()
       renderer.dispose()
-      host.removeChild(renderer.domElement)
+      container.removeChild(renderer.domElement)
     }
   }, [graphKey])
 
