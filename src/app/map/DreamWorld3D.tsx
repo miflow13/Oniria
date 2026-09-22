@@ -417,13 +417,25 @@ export default function DreamWorld3D({
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.toneMapping = THREE.ACESFilmicToneMapping
     renderer.toneMappingExposure = 0.94
-    renderer.shadowMap.enabled = false
+    renderer.shadowMap.enabled = settings.miniWorldDetail > 0
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap
     renderer.domElement.className = styles.webglCanvas
     host.appendChild(renderer.domElement)
+
+    const cinematicEnvironment = createCinematicEnvironment(renderer)
+    scene.environment = cinematicEnvironment.texture
+    scene.environmentIntensity = settings.environmentIntensity
 
     const composer = new EffectComposer(renderer)
     const renderPass = new RenderPass(scene, camera)
     composer.addPass(renderPass)
+
+    const ssao = new SSAOPass(scene, camera, 1, 1)
+    ssao.enabled = settings.ssao
+    ssao.kernelRadius = settings.ssaoKernelRadius
+    ssao.minDistance = 0.002
+    ssao.maxDistance = 0.12
+    composer.addPass(ssao)
 
     const depthOfField = new BokehPass(scene, camera, {
       focus: 10,
@@ -455,6 +467,13 @@ export default function DreamWorld3D({
 
     const keyLight = new THREE.DirectionalLight(0xd4e5ff, 2.1)
     keyLight.position.set(-5, 6, 8)
+    keyLight.castShadow = renderer.shadowMap.enabled
+    keyLight.shadow.mapSize.set(
+      qualityRef.current === 'cinematic' ? 2048 : 1024,
+      qualityRef.current === 'cinematic' ? 2048 : 1024,
+    )
+    keyLight.shadow.bias = -0.00015
+    keyLight.shadow.normalBias = 0.025
     scene.add(keyLight)
 
     const violetLight = new THREE.PointLight(0xb791ff, 12, 20, 2)
