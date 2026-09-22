@@ -7,7 +7,8 @@ async function devFetch(path: string) {
   const response = await fetch(`${DEV_BASE}${path}`, {
     headers: {
       accept: FOREM_ACCEPT,
-      'user-agent': 'Oniria-WebSurf/0.1 (+https://github.com/miflow13/Oniria)',
+      'user-agent':
+        'Oniria-DEV-Library/0.1 (+https://github.com/miflow13/Oniria)',
     },
     next: {revalidate: 60},
   })
@@ -34,19 +35,21 @@ export async function GET(request: NextRequest) {
     if (mode === 'bootstrap') {
       const username = safeValue(searchParams.get('username'), 'mikachu')
 
-      const [profile, profileArticles, feed, tags] = await Promise.all([
+      const [profile, profileArticles, feed, latest, tags] = await Promise.all([
         devFetch(`/users/${encodeURIComponent(username)}`).catch(() => null),
         devFetch(
           `/articles?username=${encodeURIComponent(username)}&per_page=30`,
         ).catch(() => []),
-        devFetch('/articles?per_page=36&top=7').catch(() => []),
-        devFetch('/tags?per_page=24').catch(() => []),
+        devFetch('/articles?per_page=30&top=7').catch(() => []),
+        devFetch('/articles?per_page=30').catch(() => []),
+        devFetch('/tags?per_page=30').catch(() => []),
       ])
 
       return NextResponse.json({
         profile,
         profileArticles,
         feed,
+        latest,
         tags,
       })
     }
