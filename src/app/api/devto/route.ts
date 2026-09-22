@@ -155,7 +155,7 @@ export async function GET(request: NextRequest) {
 
     if (mode === 'catalog') {
       const pageCount = Math.min(
-        6,
+        10,
         Math.max(1, Number(searchParams.get('pages') ?? 6) || 6),
       )
       const perPage = Math.min(
