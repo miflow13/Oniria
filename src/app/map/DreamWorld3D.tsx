@@ -2197,6 +2197,7 @@ export default function DreamWorld3D({
     const cameraTarget = new THREE.Vector3()
     const lookTarget = new THREE.Vector3(0, 0, 0)
     const tempVector = new THREE.Vector3()
+    const proximityPoint = new THREE.Vector3()
     const control = new THREE.Vector3()
     const curvePoint = new THREE.Vector3()
 
@@ -2736,11 +2737,28 @@ export default function DreamWorld3D({
                     : .015
                   : .006
 
-        const scaleBoost = selected ? 1.32 : hoveredId === node._id ? 1.14 : 1
+        const proximityDistance = flightActive
+          ? visual.group
+              .getWorldPosition(proximityPoint)
+              .distanceTo(camera.position)
+          : Number.POSITIVE_INFINITY
+        const proximityWake = flightActive
+          ? THREE.MathUtils.clamp(
+              (4.8 - proximityDistance) / 3.4,
+              0,
+              1,
+            )
+          : 0
+
+        const scaleBoost = selected
+          ? 1.32
+          : hoveredId === node._id
+            ? 1.14
+            : 1 + proximityWake * .12
         const desiredScale = visual.baseScale * scaleBoost
         visual.group.scale.lerp(
           new THREE.Vector3(desiredScale, desiredScale, desiredScale),
-          selected ? .13 : .08,
+          selected ? .13 : proximityWake > 0 ? .1 : .08,
         )
 
         visual.group.rotation.y += selected ? .007 : .0022
@@ -2758,8 +2776,12 @@ export default function DreamWorld3D({
         shellMaterial.uniforms.uTime.value = elapsed
         shellMaterial.uniforms.uPulse.value =
           0.5 + 0.5 * Math.sin(elapsed * 1.15 + visual.phase)
+        const proximityFocus = Math.max(
+          hoveredId === node._id ? .55 : 0,
+          proximityWake * .62,
+        )
         shellMaterial.uniforms.uFocus.value +=
-          ((selected ? 1 : hoveredId === node._id ? 0.55 : 0) -
+          ((selected ? 1 : proximityFocus) -
             shellMaterial.uniforms.uFocus.value) *
           0.08
         shellMaterial.uniforms.uOpacity.value +=
@@ -2768,7 +2790,7 @@ export default function DreamWorld3D({
           0.08
         visual.miniWorld.update(
           elapsed,
-          selected ? 1 : hoveredId === node._id ? 0.55 : 0,
+          selected ? 1 : Math.max(proximityFocus, proximityWake * .7),
         )
         if (!selected) {
           visual.miniWorld.group.visible = true
@@ -2779,9 +2801,11 @@ export default function DreamWorld3D({
             ? .24
             : hoveredId === node._id
               ? .19
-              : visible
-                ? .12
-                : .035) -
+              : proximityWake > 0
+                ? .12 + proximityWake * .07
+                : visible
+                  ? .12
+                  : .035) -
             reflectionMaterial.opacity) *
           .07
         reflectionMaterial.envMapIntensity +=
@@ -2792,11 +2816,23 @@ export default function DreamWorld3D({
           .05
 
         glowMaterial.opacity +=
-          ((selected ? .2 : hoveredId === node._id ? .14 : visible ? .06 : .01) -
+          ((selected
+            ? .2
+            : hoveredId === node._id
+              ? .14
+              : proximityWake > 0
+                ? .06 + proximityWake * .075
+                : visible
+                  ? .06
+                  : .01) -
             glowMaterial.opacity) *
           .08
         coreMaterial.emissiveIntensity +=
-          ((selected ? 3.45 : hoveredId === node._id ? 2.65 : 1.45) -
+          ((selected
+            ? 3.45
+            : hoveredId === node._id
+              ? 2.65
+              : 1.45 + proximityWake * .92) -
             coreMaterial.emissiveIntensity) *
           .07
         orbitMaterial.opacity +=
@@ -2806,13 +2842,15 @@ export default function DreamWorld3D({
         const labelTarget =
           selected || hoveredId === node._id
             ? .9
-            : observatoryModeRef.current
-              ? node.frequency >= 4
-                ? .24
-                : .015
-              : node.frequency >= 3
-                ? .42
-                : .07
+            : proximityWake > .12
+              ? .08 + proximityWake * .68
+              : observatoryModeRef.current
+                ? node.frequency >= 4
+                  ? .24
+                  : .015
+                : node.frequency >= 3
+                  ? .42
+                  : .07
         labelMaterial.opacity +=
           (((visible ? labelTarget : .04) * introVisibility) -
             labelMaterial.opacity) *
