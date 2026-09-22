@@ -152,10 +152,21 @@ function worldPosition(
   const seed = hashString(node._id)
   const z = -1.6 + seededUnit(seed, 19) * 3.2
 
+  const baseX = (point.x - 500) / 54
+  const baseY = (350 - point.y) / 54
+  const rarityDrift =
+    node.frequency <= 1
+      ? 1.22
+      : node.frequency === 2
+        ? 1.08
+        : node.frequency >= 4
+          ? 0.92
+          : 1
+
   return new THREE.Vector3(
-    (point.x - 500) / 54,
-    (350 - point.y) / 54,
-    z,
+    baseX * rarityDrift,
+    baseY * rarityDrift,
+    z - (node.frequency <= 1 ? 0.9 : node.frequency >= 4 ? -0.25 : 0),
   )
 }
 
