@@ -1994,11 +1994,93 @@ export default function DevWebSurf3D({
             : undefined
       const routedSection = routeTargetNode?.section
 
+      if (now - lastDetailSelection > .28) {
+        lastDetailSelection = now
+        const detailCandidates: Array<{
+          id: string
+          visual: Visual
+          priority: number
+          distanceSq: number
+        }> = []
+
+        visuals.forEach((visual, id) => {
+          const node = nodeById.get(id)
+          if (
+            node?.kind !== 'article' ||
+            visual.floorIndex !== currentFloorIndex
+          ) {
+            return
+          }
+
+          const distanceSq =
+            camera.position.distanceToSquared(visual.basePosition)
+          const priority =
+            id === selectedRef.current
+              ? 3
+              : id === hoverId
+                ? 2
+                : id === routeTargetRef.current
+                  ? 1
+                  : 0
+
+          if (
+            priority > 0 ||
+            distanceSq <= COVER_LOAD_DISTANCE * COVER_LOAD_DISTANCE
+          ) {
+            detailCandidates.push({
+              id,
+              visual,
+              priority,
+              distanceSq,
+            })
+          }
+        })
+
+        detailCandidates.sort(
+          (a, b) =>
+            b.priority - a.priority ||
+            a.distanceSq - b.distanceSq,
+        )
+
+        const nextDetailed = new Set(
+          detailCandidates
+            .slice(0, MAX_ACTIVE_BOOK_DETAILS)
+            .map((candidate) => candidate.id),
+        )
+
+        detailedBookIds.clear()
+        activeCoverUrls.clear()
+
+        visuals.forEach((visual, id) => {
+          const node = nodeById.get(id)
+          if (node?.kind !== 'article') return
+
+          if (nextDetailed.has(id)) {
+            detailedBookIds.add(id)
+            if (visual.coverUrl) {
+              activeCoverUrls.add(visual.coverUrl)
+            }
+            ensureBookTitle(visual)
+            attachCachedCover(visual, now)
+          } else {
+            downgradeCover(visual)
+            downgradeBookTitle(visual)
+          }
+        })
+
+        trimCoverCache(now)
+      }
+
       visuals.forEach((visual, id) => {
         const selected = selectedRef.current === id
         const hovered = hoverId === id
         const routed = routeTargetRef.current === id
         const node = nodeById.get(id)
+        const floorVisible =
+          (node?.floorIndex ?? 0) === currentFloorIndex
+        visual.group.visible = floorVisible
+        if (!floorVisible) return
+
         const sameShelf =
           Boolean(activeShelfKey) &&
           visual.shelfKey === activeShelfKey
@@ -2061,17 +2143,6 @@ export default function DevWebSurf3D({
             targetYaw,
             1 - Math.exp(-delta * 9),
           )
-
-          visual.group.getWorldPosition(tempWorldPosition)
-          const distance = camera.position.distanceTo(
-            tempWorldPosition,
-          )
-          const priority = selected || hovered || routed
-          if (priority || distance <= COVER_LOAD_DISTANCE) {
-            attachCachedCover(visual, now)
-          } else if (distance > COVER_KEEP_DISTANCE) {
-            downgradeCover(visual)
-          }
 
           visual.material.opacity +=
             (((unrelatedShelf ? .48 : 1)) -
