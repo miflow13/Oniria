@@ -176,6 +176,9 @@ export default function DevLibraryMap() {
   const [worldConfig, setWorldConfig] =
     useState<LibraryWorldConfig>(DEFAULT_LIBRARY_WORLD_CONFIG)
   const [worldSyncing, setWorldSyncing] = useState(false)
+  const [districtSamples, setDistrictSamples] = useState<
+    Record<string, DevArticleSummary[]>
+  >({})
   const [readingBook, setReadingBook] =
     useState<LibraryReadingBook | null>(null)
   const [navigation, setNavigation] = useState<{
@@ -308,6 +311,64 @@ export default function DevLibraryMap() {
       cancelled = true
     }
   }, [loadMoreCatalog, refreshWorldConfig])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const taggedDistricts = worldConfig.districts.filter(
+      (district) =>
+        district.enabled &&
+        district.id !== 'front-page' &&
+        district.devTags.length > 0,
+    )
+
+    if (taggedDistricts.length === 0) {
+      setDistrictSamples({})
+      return () => {
+        cancelled = true
+      }
+    }
+
+    async function populateDistricts() {
+      const entries = await Promise.all(
+        taggedDistricts.map(async (district) => {
+          const primaryTag = district.devTags[0]
+          if (!primaryTag) {
+            return [district.id, []] as const
+          }
+
+          try {
+            const response = await fetch(
+              '/api/devto?mode=tag&tag=' +
+                encodeURIComponent(primaryTag),
+            )
+            if (!response.ok) {
+              return [district.id, []] as const
+            }
+
+            const payload = (await response.json()) as {
+              articles?: DevArticleSummary[]
+            }
+            return [
+              district.id,
+              payload.articles ?? [],
+            ] as const
+          } catch {
+            return [district.id, []] as const
+          }
+        }),
+      )
+
+      if (cancelled) return
+      setDistrictSamples(Object.fromEntries(entries))
+    }
+
+    void populateDistricts()
+
+    return () => {
+      cancelled = true
+    }
+  }, [worldConfig.districts])
 
   const resumeFirstPersonControls = useCallback(() => {
     const canvas = document.querySelector<HTMLCanvasElement>(
@@ -511,12 +572,46 @@ export default function DevLibraryMap() {
       articlesByDistrict.set(district.id, [])
     })
 
+    // FRONT PAGE is the public entrance, not a strict taxonomy bucket.
+    // Always give it enough live DEV content to feel occupied immediately.
+    const frontPageDistrict = districts.find(
+      (district) => district.id === 'front-page',
+    )
+    if (frontPageDistrict) {
+      articlesByDistrict.set(
+        frontPageDistrict.id,
+        uniqueArticles(
+          bootstrap.feed,
+          bootstrap.latest,
+        ).slice(0, CATALOG_BOOKS_PER_SHELF * 2),
+      )
+    }
+
+    // Seed every semantic district from its Sanity-authored primary DEV tag.
+    // The generic catalogue stream below can then deepen those districts.
+    districts.forEach((district) => {
+      if (district.id === 'front-page') return
+      const samples = districtSamples[district.id] ?? []
+      if (samples.length === 0) return
+      articlesByDistrict.set(
+        district.id,
+        uniqueArticles(
+          articlesByDistrict.get(district.id) ?? [],
+          samples,
+        ),
+      )
+    })
+
     remaining.forEach((article) => {
       const district =
         districtForTags(article.tag_list ?? [], districts) ??
         fallbackDistrict
       const bucket = articlesByDistrict.get(district.id)
-      if (bucket) bucket.push(article)
+      if (!bucket) return
+
+      if (!bucket.some((item) => item.id === article.id)) {
+        bucket.push(article)
+      }
     })
 
     let catalogShelfIndex = 0
@@ -539,9 +634,11 @@ export default function DevLibraryMap() {
         const side: -1 | 1 =
           localIndex % 2 === 0 ? -1 : 1
         const bay =
-          district.bay +
-          1.35 +
-          Math.floor(localIndex / 2) * .82
+          district.id === 'front-page'
+            ? .78 + Math.floor(localIndex / 2) * .72
+            : district.bay +
+              1.35 +
+              Math.floor(localIndex / 2) * .82
         const shelfId = 'shelf:catalog:' + catalogShelfIndex
         const shelf = makeShelf(
           shelfId,
@@ -561,9 +658,18 @@ export default function DevLibraryMap() {
             bay,
             side,
             {
-              laneBias: .12,
-              alongJitterScale: .26,
-              yawJitterScale: .45,
+              laneBias:
+                district.id === 'front-page'
+                  ? -2.05
+                  : .12,
+              alongJitterScale:
+                district.id === 'front-page'
+                  ? .08
+                  : .26,
+              yawJitterScale:
+                district.id === 'front-page'
+                  ? .18
+                  : .45,
             },
             districts,
           ),
@@ -607,6 +713,7 @@ export default function DevLibraryMap() {
     query,
     searchResults,
     worldConfig,
+    districtSamples,
   ])
 
   const nodes = useMemo<DreamWorldNode[]>(
