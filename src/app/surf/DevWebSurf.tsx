@@ -22,7 +22,7 @@ import type {
 import styles from './surf.module.css'
 
 const DEFAULT_USERNAME = 'mikachu'
-const STACK_FLOOR_COUNT = 4
+const STACK_FLOOR_COUNT = 6
 const STACK_FLOOR_HEIGHT = 4.6
 const STACK_BOOKS_PER_SHELF = 9
 const STACK_SHELVES_PER_FLOOR = 20
@@ -615,8 +615,12 @@ function buildLibraryGraph(
             : placement.floor === 2
               ? '#53d3ff'
               : placement.floor === 3
-                ? '#ae7bff'
-                : '#ff4fd8',
+                ? '#7f8cff'
+                : placement.floor === 4
+                  ? '#ae7bff'
+                  : placement.floor === 5
+                    ? '#d06dff'
+                    : '#ff4fd8',
       })
     })
   }
@@ -775,7 +779,7 @@ export default function DevWebSurf() {
     let cancelled = false
     setStackLoading(true)
 
-    fetch('/api/devto?mode=stacks')
+    fetch('/api/devto?mode=stacks&pages=12')
       .then(async (response) => {
         const data = (await response.json()) as {
           articles?: DevArticleSummary[]
@@ -1341,8 +1345,8 @@ export default function DevWebSurf() {
       >
         <span>
           {stackLoading
-            ? 'cataloging stacks…'
-            : stackArticles.length + ' live articles'}
+            ? 'cataloging deep stacks…'
+            : stackArticles.length + ' live articles loaded'}
         </span>
         {Array.from(
           {length: STACK_FLOOR_COUNT + 1},
