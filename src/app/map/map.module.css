@@ -3645,3 +3645,379 @@
     animation: none !important;
   }
 }
+
+
+/* ==========================================================================
+   Dream Universe intro + Dream Dive
+   ========================================================================== */
+
+.introSequence {
+  position: absolute;
+  z-index: 80;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: #edf6ff;
+  pointer-events: auto;
+  transition:
+    background 900ms ease,
+    backdrop-filter 900ms ease,
+    opacity 900ms ease;
+}
+
+.introStage0 {
+  background: rgba(0, 1, 5, .995);
+  backdrop-filter: blur(18px);
+}
+
+.introStage1 {
+  background:
+    radial-gradient(circle at 50% 49%, rgba(85, 135, 166, .045), transparent 12%),
+    rgba(0, 1, 6, .965);
+  backdrop-filter: blur(12px);
+}
+
+.introStage2 {
+  background:
+    radial-gradient(circle at 50% 48%, rgba(109, 181, 183, .07), transparent 18%),
+    rgba(0, 2, 8, .83);
+  backdrop-filter: blur(7px);
+}
+
+.introStage3 {
+  background:
+    radial-gradient(circle at 50% 48%, rgba(128, 105, 190, .055), transparent 24%),
+    rgba(0, 2, 8, .48);
+  backdrop-filter: blur(2px);
+}
+
+.introCopy {
+  position: relative;
+  z-index: 3;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  text-align: center;
+  animation: introCopyWake 1.4s ease-out both;
+}
+
+.introCopy > span {
+  color: #6f849e;
+  font-size: .61rem;
+  letter-spacing: .24em;
+  text-transform: uppercase;
+}
+
+.introCopy > strong {
+  color: #f3f7ff;
+  font-size: clamp(1.7rem, 4vw, 3.7rem);
+  font-weight: 300;
+  letter-spacing: -.055em;
+  text-shadow:
+    0 0 38px rgba(145, 212, 218, .12),
+    0 0 90px rgba(147, 111, 203, .08);
+}
+
+.introCopy > small {
+  color: #788aa2;
+  font-size: .72rem;
+  letter-spacing: .035em;
+}
+
+.introSkip {
+  position: absolute;
+  z-index: 4;
+  right: 24px;
+  bottom: 22px;
+  cursor: pointer;
+  color: #7c8da7;
+  background: rgba(8, 13, 28, .38);
+  border: 1px solid rgba(177, 200, 228, .08);
+  border-radius: 999px;
+  padding: 8px 13px;
+  backdrop-filter: blur(12px);
+  font-size: .66rem;
+  transition:
+    color 180ms ease,
+    background 180ms ease,
+    border-color 180ms ease;
+}
+
+.introSkip:hover {
+  color: #d9edf3;
+  background: rgba(76, 140, 151, .08);
+  border-color: rgba(125, 214, 211, .18);
+}
+
+.introStars {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.introStars i {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: #d9fbff;
+  box-shadow:
+    0 0 8px rgba(174, 239, 239, .72),
+    0 0 24px rgba(126, 189, 215, .28);
+  opacity: 0;
+  animation: introStarWake 3.4s ease-out infinite;
+}
+
+.introStars i:nth-child(1) { left: 48%; top: 46%; animation-delay: .2s; }
+.introStars i:nth-child(2) { left: 31%; top: 33%; animation-delay: .8s; }
+.introStars i:nth-child(3) { left: 68%; top: 61%; animation-delay: 1.35s; }
+.introStars i:nth-child(4) { left: 22%; top: 69%; animation-delay: 1.9s; }
+.introStars i:nth-child(5) { left: 78%; top: 27%; animation-delay: 2.35s; }
+
+.pageIntroMode .topbar,
+.pageIntroMode .sidebar,
+.pageIntroMode .mapHeader,
+.pageIntroMode .mapControls,
+.pageIntroMode .timeline,
+.pageIntroMode .mapHint,
+.pageIntroMode .focusBanner {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.diveHud {
+  position: absolute;
+  z-index: 90;
+  top: 20px;
+  right: 20px;
+  left: 20px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  pointer-events: none;
+  animation: diveHudIn 900ms ease-out 420ms both;
+}
+
+.diveIdentity {
+  display: grid;
+  gap: 3px;
+  padding: 12px 15px;
+  color: #dcebf3;
+  background:
+    linear-gradient(145deg, rgba(7, 11, 25, .58), rgba(16, 24, 43, .28));
+  border: 1px solid rgba(180, 209, 229, .08);
+  border-radius: 16px;
+  box-shadow: 0 12px 38px rgba(0,0,0,.18);
+  backdrop-filter: blur(16px);
+}
+
+.diveIdentity span {
+  color: #7e9ca9;
+  font-size: .56rem;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+}
+
+.diveIdentity strong {
+  max-width: 420px;
+  overflow: hidden;
+  color: #edf9fa;
+  font-size: .9rem;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diveIdentity small {
+  color: #667b91;
+  font-size: .61rem;
+}
+
+.diveReturn {
+  pointer-events: auto;
+  cursor: pointer;
+  color: #d8edf0;
+  background:
+    linear-gradient(145deg, rgba(14, 24, 41, .68), rgba(12, 18, 34, .48));
+  border: 1px solid rgba(128, 218, 213, .13);
+  border-radius: 999px;
+  padding: 10px 14px;
+  box-shadow:
+    0 12px 38px rgba(0,0,0,.2),
+    0 0 24px rgba(95, 186, 183, .035);
+  backdrop-filter: blur(16px);
+  font-size: .68rem;
+  transition:
+    transform 180ms ease,
+    background 180ms ease,
+    border-color 180ms ease;
+}
+
+.diveReturn:hover {
+  transform: translateY(-1px);
+  background: rgba(79, 161, 161, .12);
+  border-color: rgba(128, 218, 213, .25);
+}
+
+.pageDiveMode .topbar,
+.pageDiveMode .sidebar,
+.pageDiveMode .mapHeader,
+.pageDiveMode .mapControls,
+.pageDiveMode .timeline,
+.pageDiveMode .mapHint,
+.pageDiveMode .focusBanner,
+.pageDiveMode .noteCluster {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transform: scale(.985);
+  transition:
+    opacity 520ms ease,
+    transform 650ms cubic-bezier(.18,.78,.2,1);
+}
+
+.pageDiveMode .voidDepth,
+.pageDiveMode .nebula,
+.pageDiveMode .aurora,
+.pageDiveMode .particleField,
+.pageDiveMode .dreamFog {
+  opacity: 0 !important;
+  transition: opacity 600ms ease;
+}
+
+.noteClusterClosing {
+  pointer-events: none;
+}
+
+.noteClusterClosing .noteStage {
+  animation: journalDissolve 520ms cubic-bezier(.55,.04,.74,.34) forwards !important;
+}
+
+.noteClusterClosing .noteBlob {
+  animation: journalBlobDissolve 520ms cubic-bezier(.55,.04,.74,.34) forwards !important;
+}
+
+.noteClusterClosing .noteAnchorBeam {
+  animation: journalBeamCollapse 420ms ease-in forwards !important;
+}
+
+.noteClusterClosing .noteAnchorPulse {
+  animation: journalAnchorCollapse 420ms ease-in forwards !important;
+}
+
+@keyframes introCopyWake {
+  from {
+    opacity: 0;
+    filter: blur(10px);
+    transform: translateY(7px) scale(.98);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: none;
+  }
+}
+
+@keyframes introStarWake {
+  0%, 100% {
+    opacity: 0;
+    transform: scale(.25);
+  }
+  18% {
+    opacity: .92;
+    transform: scale(1);
+  }
+  52% {
+    opacity: .26;
+    transform: scale(.72);
+  }
+}
+
+@keyframes diveHudIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: blur(0);
+  }
+}
+
+@keyframes journalDissolve {
+  0% {
+    opacity: 1;
+    filter: blur(0);
+    transform: scale(1);
+  }
+  48% {
+    opacity: .62;
+    filter: blur(4px);
+    transform: scale(.92);
+  }
+  100% {
+    opacity: 0;
+    filter: blur(18px);
+    transform: scale(.12);
+  }
+}
+
+@keyframes journalBlobDissolve {
+  0% {
+    opacity: 1;
+  }
+  45% {
+    opacity: .48;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes journalBeamCollapse {
+  to {
+    opacity: 0;
+    transform: scaleX(0);
+  }
+}
+
+@keyframes journalAnchorCollapse {
+  to {
+    opacity: 0;
+    transform: scale(2.4);
+  }
+}
+
+@media (max-width: 700px) {
+  .diveHud {
+    top: 12px;
+    right: 12px;
+    left: 12px;
+    align-items: flex-end;
+    flex-direction: column-reverse;
+  }
+
+  .diveIdentity {
+    max-width: 100%;
+  }
+
+  .diveIdentity small {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .introSequence,
+  .introCopy,
+  .introStars i,
+  .diveHud,
+  .noteClusterClosing .noteStage,
+  .noteClusterClosing .noteBlob,
+  .noteClusterClosing .noteAnchorBeam,
+  .noteClusterClosing .noteAnchorPulse {
+    animation: none !important;
+  }
+}
