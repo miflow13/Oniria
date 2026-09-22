@@ -989,6 +989,43 @@ export default function DevWebSurf3D({
       addFloor(0, -20, 3.4, 50, floorMaterial, base)
       addFloor(0, 12, 3.4, 6, floorMaterial, base)
 
+      const floorGrid = new THREE.GridHelper(
+        36,
+        36,
+        floor % 2 === 0 ? 0x53d3ff : 0x5965e8,
+        0x1b2340,
+      )
+      floorGrid.position.set(0, base + .012, -15)
+      const floorGridMaterials = Array.isArray(floorGrid.material)
+        ? floorGrid.material
+        : [floorGrid.material]
+      floorGridMaterials.forEach((material) => {
+        material.transparent = true
+        material.opacity = .085
+        material.blending = THREE.AdditiveBlending
+        architecturalMaterials.push(material)
+      })
+      scene.add(floorGrid)
+
+      const aisleLightGeometry = new THREE.BoxGeometry(.04, .025, 48)
+      architecturalGeometries.push(aisleLightGeometry)
+      const aisleLightMaterial = new THREE.MeshBasicMaterial({
+        color: floor % 2 === 0 ? 0x53d3ff : 0x7c83ff,
+        transparent: true,
+        opacity: .16,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })
+      architecturalMaterials.push(aisleLightMaterial)
+      ;[-1.7, 1.7].forEach((x) => {
+        const aisleLight = new THREE.Mesh(
+          aisleLightGeometry,
+          aisleLightMaterial,
+        )
+        aisleLight.position.set(x, base + 4.55, -16)
+        scene.add(aisleLight)
+      })
+
       const railGeometry = new THREE.BoxGeometry(3.7, .055, .055)
       const sideRailGeometry = new THREE.BoxGeometry(.055, .055, 4.4)
       architecturalGeometries.push(railGeometry, sideRailGeometry)
