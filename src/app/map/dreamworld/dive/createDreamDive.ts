@@ -568,6 +568,7 @@ export function createDreamDive(
     seed,
     depth,
     maxDepth,
+    environmentMap: options.environmentMap ?? null,
   })
   scene.add(impossibleSpace.group)
 
