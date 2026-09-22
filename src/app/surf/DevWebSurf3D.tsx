@@ -11,34 +11,48 @@ type TravelRequest = {
   inspectOnArrival: boolean
 } | null
 
+type FloorRequest = {
+  floor: number
+  nonce: number
+} | null
+
 type Props = {
   nodes: SurfNode[]
   edges: SurfEdge[]
   selectedId: string | null
   routeTargetId: string | null
   travelRequest: TravelRequest
+  floorRequest: FloorRequest
   onInspect: (node: SurfNode) => void
   onPutBack: () => void
   onTravel: (node: SurfNode, inspectOnArrival: boolean) => void
   onHover: (node: SurfNode | null) => void
   onPointerLockChange: (locked: boolean) => void
   onZoneChange: (section: LibrarySection) => void
+  onFloorChange: (floor: number) => void
 }
 
 type Visual = {
   group: THREE.Group
   body: THREE.Mesh
-  material: THREE.MeshPhysicalMaterial
+  material: THREE.MeshStandardMaterial
   label: THREE.Sprite
   labelMaterial: THREE.SpriteMaterial
   bookGlowMaterial?: THREE.MeshBasicMaterial
   bookTitleMaterial?: THREE.MeshBasicMaterial
+  bookTitleTexture?: THREE.Texture
+  bookTitleMeta?: {
+    title: string
+    subtitle: string
+    accent: string
+  }
   coverMaterial?: THREE.MeshBasicMaterial
   coverUrl?: string
   archMaterial?: THREE.MeshBasicMaterial
   basePosition: THREE.Vector3
   baseRotationY: number
   shelfKey?: string
+  floor: number
   baseScale: number
   phase: number
 }
@@ -61,6 +75,19 @@ const SECTION_DOORWAYS: Record<LibrarySection, THREE.Vector3> = {
   creators: new THREE.Vector3(8.35, .09, -21.1),
   search: new THREE.Vector3(-8.35, .09, -21.1),
   archive: new THREE.Vector3(0, .09, -34.4),
+}
+
+const STACK_FLOOR_HEIGHT = 4.6
+const STACK_FLOOR_COUNT = 3
+const ELEVATOR_X = 0
+const ELEVATOR_Z = 11.2
+
+function floorSurfaceY(floor: number) {
+  return floor * STACK_FLOOR_HEIGHT + .09
+}
+
+function floorEyeY(floor: number) {
+  return floor * STACK_FLOOR_HEIGHT + 1.62
 }
 
 const SECTION_ACCENTS: Record<LibrarySection, number> = {
@@ -141,8 +168,8 @@ function createBookTitleTexture(
   accent: string,
 ) {
   const canvas = document.createElement('canvas')
-  canvas.width = 768
-  canvas.height = 345
+  canvas.width = 384
+  canvas.height = 172
   const context = canvas.getContext('2d')
 
   if (context) {
@@ -155,21 +182,21 @@ function createBookTitleTexture(
     glow.addColorStop(.5, '#53d3ff')
     glow.addColorStop(1, '#ae7bff')
     context.fillStyle = glow
-    context.fillRect(0, 0, canvas.width, 12)
+    context.fillRect(0, 0, canvas.width, 6)
 
     context.fillStyle = 'rgba(255,255,255,.045)'
-    for (let x = 30; x < canvas.width; x += 54) {
-      context.fillRect(x, 27, 1, canvas.height - 54)
+    for (let x = 15; x < canvas.width; x += 27) {
+      context.fillRect(x, 14, 1, canvas.height - 28)
     }
 
     const words = title.trim().split(/\s+/)
     const lines: string[] = []
     let line = ''
 
-    context.font = '800 43px system-ui, sans-serif'
+    context.font = '800 22px system-ui, sans-serif'
     for (const word of words) {
       const next = line ? line + ' ' + word : word
-      if (context.measureText(next).width > 645 && line) {
+      if (context.measureText(next).width > 322 && line) {
         lines.push(line)
         line = word
         if (lines.length === 2) break
@@ -189,17 +216,17 @@ function createBookTitleTexture(
         index === 2 && words.join(' ').length > lines.join(' ').length
           ? item.replace(/[.…]*$/, '') + '…'
           : item
-      context.fillText(rendered, 48, 50 + index * 54)
+      context.fillText(rendered, 24, 25 + index * 27)
     })
 
     context.shadowBlur = 0
     context.fillStyle = '#98a2ff'
-    context.font = '600 21px system-ui, sans-serif'
-    context.fillText(subtitle, 48, 258)
+    context.font = '600 11px system-ui, sans-serif'
+    context.fillText(subtitle, 24, 129)
 
     context.fillStyle = '#6d7280'
-    context.font = '500 15px system-ui, sans-serif'
-    context.fillText('DEV // ARTICLE', 48, 294)
+    context.font = '500 8px system-ui, sans-serif'
+    context.fillText('DEV // ARTICLE', 24, 148)
   }
 
   const texture = new THREE.CanvasTexture(canvas)
@@ -223,29 +250,73 @@ function makeArchitecturalGuide(
   destination: THREE.Vector3,
   currentSection: LibrarySection,
   targetSection: LibrarySection,
+  currentFloor = 0,
+  targetFloor = 0,
+  cameraHeight = false,
 ) {
+  const currentY = cameraHeight
+    ? floorEyeY(currentFloor)
+    : floorSurfaceY(currentFloor)
+  const targetY = cameraHeight
+    ? floorEyeY(targetFloor)
+    : floorSurfaceY(targetFloor)
+
   const points: THREE.Vector3[] = [
-    new THREE.Vector3(start.x, .09, start.z),
+    new THREE.Vector3(start.x, currentY, start.z),
   ]
 
-  if (currentSection !== targetSection) {
+  if (currentFloor !== targetFloor) {
+    points.push(
+      new THREE.Vector3(0, currentY, start.z),
+      new THREE.Vector3(ELEVATOR_X, currentY, ELEVATOR_Z),
+      new THREE.Vector3(ELEVATOR_X, targetY, ELEVATOR_Z),
+    )
+
+    if (targetFloor > 0) {
+      points.push(
+        new THREE.Vector3(0, targetY, 8.5),
+        new THREE.Vector3(0, targetY, destination.z),
+      )
+    } else if (targetSection !== 'atrium') {
+      const entry = SECTION_DOORWAYS[targetSection]
+      points.push(
+        new THREE.Vector3(0, targetY, entry.z),
+        new THREE.Vector3(entry.x, targetY, entry.z),
+      )
+    }
+  } else if (currentFloor > 0) {
+    points.push(
+      new THREE.Vector3(0, currentY, start.z),
+      new THREE.Vector3(0, currentY, destination.z),
+    )
+  } else if (currentSection !== targetSection) {
     if (currentSection !== 'atrium') {
       const exit = SECTION_DOORWAYS[currentSection]
-      points.push(exit.clone())
-      points.push(new THREE.Vector3(0, .09, exit.z))
+      points.push(
+        new THREE.Vector3(exit.x, currentY, exit.z),
+        new THREE.Vector3(0, currentY, exit.z),
+      )
     }
 
     const entry = SECTION_DOORWAYS[targetSection]
     if (targetSection !== 'atrium') {
-      points.push(new THREE.Vector3(0, .09, entry.z))
-      points.push(entry.clone())
+      points.push(
+        new THREE.Vector3(0, targetY, entry.z),
+        new THREE.Vector3(entry.x, targetY, entry.z),
+      )
     } else {
-      points.push(entry.clone())
+      points.push(
+        new THREE.Vector3(entry.x, targetY, entry.z),
+      )
     }
   }
 
   points.push(
-    new THREE.Vector3(destination.x, .09, destination.z),
+    new THREE.Vector3(
+      destination.x,
+      targetY,
+      destination.z,
+    ),
   )
 
   const deduped = points.filter(
@@ -255,14 +326,17 @@ function makeArchitecturalGuide(
   )
 
   if (deduped.length <= 2) {
-    return makeCurve(start, destination, .03)
+    return new THREE.LineCurve3(
+      deduped[0],
+      deduped[deduped.length - 1],
+    )
   }
 
   return new THREE.CatmullRomCurve3(
     deduped,
     false,
     'centripetal',
-    .35,
+    .2,
   )
 }
 
@@ -291,33 +365,39 @@ export default function DevWebSurf3D({
   selectedId,
   routeTargetId,
   travelRequest,
+  floorRequest,
   onInspect,
   onPutBack,
   onTravel,
   onHover,
   onPointerLockChange,
   onZoneChange,
+  onFloorChange,
 }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const selectedRef = useRef(selectedId)
   const routeTargetRef = useRef(routeTargetId)
   const travelRequestRef = useRef(travelRequest)
+  const floorRequestRef = useRef(floorRequest)
   const inspectRef = useRef(onInspect)
   const putBackRef = useRef(onPutBack)
   const travelRef = useRef(onTravel)
   const hoverRef = useRef(onHover)
   const lockRef = useRef(onPointerLockChange)
   const zoneRef = useRef(onZoneChange)
+  const floorRef = useRef(onFloorChange)
 
   selectedRef.current = selectedId
   routeTargetRef.current = routeTargetId
   travelRequestRef.current = travelRequest
+  floorRequestRef.current = floorRequest
   inspectRef.current = onInspect
   putBackRef.current = onPutBack
   travelRef.current = onTravel
   hoverRef.current = onHover
   lockRef.current = onPointerLockChange
   zoneRef.current = onZoneChange
+  floorRef.current = onFloorChange
 
   useEffect(() => {
     const host = hostRef.current
