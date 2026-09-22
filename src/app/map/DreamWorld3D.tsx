@@ -2376,11 +2376,14 @@ export default function DreamWorld3D({
               diveMode === 'portal'
                 ? 6.2 - portalProgress * 2.4
                 : 4.8 + exitProgress * 2.8
-            (diveBokeh.uniforms as BokehUniformMap).focus.value +=
-              (focusTarget - (diveBokeh.uniforms as BokehUniformMap).focus.value) * .09
-            (diveBokeh.uniforms as BokehUniformMap).aperture.value +=
+            const diveBokehUniforms =
+              diveBokeh.uniforms as BokehUniformMap
+
+            diveBokehUniforms.focus.value +=
+              (focusTarget - diveBokehUniforms.focus.value) * .09
+            diveBokehUniforms.aperture.value +=
               ((diveMode === 'portal' ? .000085 : .000055) -
-                (diveBokeh.uniforms as BokehUniformMap).aperture.value) *
+                diveBokehUniforms.aperture.value) *
               .08
           }
         }
@@ -2939,12 +2942,15 @@ export default function DreamWorld3D({
         const focusDistance = camera.position.distanceTo(
           selectedVisual.group.position,
         )
-        (depthOfField.uniforms as BokehUniformMap).focus.value +=
-          (focusDistance - (depthOfField.uniforms as BokehUniformMap).focus.value) * 0.08
-        (depthOfField.uniforms as BokehUniformMap).aperture.value +=
-          (0.000065 - (depthOfField.uniforms as BokehUniformMap).aperture.value) * 0.05
-        (depthOfField.uniforms as BokehUniformMap).maxblur.value +=
-          (settings.maxBlur - (depthOfField.uniforms as BokehUniformMap).maxblur.value) * 0.05
+        const depthOfFieldUniforms =
+          depthOfField.uniforms as BokehUniformMap
+
+        depthOfFieldUniforms.focus.value +=
+          (focusDistance - depthOfFieldUniforms.focus.value) * 0.08
+        depthOfFieldUniforms.aperture.value +=
+          (0.000065 - depthOfFieldUniforms.aperture.value) * 0.05
+        depthOfFieldUniforms.maxblur.value +=
+          (settings.maxBlur - depthOfFieldUniforms.maxblur.value) * 0.05
       }
 
       bloom.strength +=
