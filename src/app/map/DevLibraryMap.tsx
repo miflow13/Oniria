@@ -472,6 +472,14 @@ export default function DevLibraryMap() {
             ? current
             : payload,
         )
+        if (
+          !silent &&
+          payload.sanitySyncIssue === 'missing-preview-token'
+        ) {
+          setError(
+            'Sanity is connected, but this server has no draft-preview token. Publish the Studio changes or add SANITY_API_READ_TOKEN to the running environment.',
+          )
+        }
         if (applyDefaultMovement) {
           setMovementMode(payload.defaultMovement)
         }
@@ -1259,10 +1267,14 @@ export default function DevLibraryMap() {
               ? '◌ SYNCING'
               : worldConfig.source === 'sanity'
                 ? worldConfig.syncMode === 'drafts'
-                  ? '◉ SANITY DRAFT LIVE'
+                  ? '◉ SANITY DRAFT LIVE' +
+                    (worldConfig.sanityRevision
+                      ? ' · ' +
+                        worldConfig.sanityRevision.slice(-7)
+                      : '')
                   : worldConfig.sanitySyncIssue ===
                       'missing-preview-token'
-                    ? '⚠ SANITY PUBLISHED'
+                    ? '⚠ DRAFT TOKEN MISSING'
                     : '◉ SANITY PUBLISHED'
                 : '○ LOCAL MODEL'}
           </button>
