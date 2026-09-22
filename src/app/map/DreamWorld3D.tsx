@@ -752,16 +752,11 @@ export default function DreamWorld3D({
   )
 
   const libraryWorldKey = useMemo(
-    () =>
-      JSON.stringify({
-        welcomeTitle: libraryWorldConfig.welcomeTitle,
-        welcomeSubtitle: libraryWorldConfig.welcomeSubtitle,
-        welcomeBody: libraryWorldConfig.welcomeBody,
-        archiveStatus: libraryWorldConfig.archiveStatus,
-        atmosphere: libraryWorldConfig.atmosphere,
-        hazeIntensity: libraryWorldConfig.hazeIntensity,
-        districts: libraryWorldConfig.districts,
-      }),
+    // Include the complete Sanity payload (including sanityRevision) so any
+    // authored world change invalidates the scene. Previously only a subset
+    // of fields participated in the key, allowing valid Sanity edits to land
+    // in React state without rebuilding the Three.js world.
+    () => JSON.stringify(libraryWorldConfig),
     [libraryWorldConfig],
   )
 
