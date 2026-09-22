@@ -502,10 +502,8 @@ function buildLibraryGraph(
     })
   })
 
-  bootstrap.tags.slice(0, 10).forEach((tag, index) => {
+  bootstrap.tags.slice(0, 6).forEach((tag, index) => {
     const id = 'tag:' + tag.name
-    const column = index % 2
-    const row = Math.floor(index / 2)
     addNode({
       id,
       kind: 'tag',
@@ -514,11 +512,7 @@ function buildLibraryGraph(
       href: 'https://dev.to/t/' + tag.name,
       tag: tag.name,
       section: 'topics',
-      position: [
-        column === 0 ? 11.1 : 14.6,
-        1.15,
-        -9.3 - row * 2.7,
-      ],
+      position: [15.8, 1.15, -7.2 - index * 2.65],
       floorIndex: 0,
       importance: 1.1,
       accent: safeTagColor(tag),
@@ -542,7 +536,7 @@ function buildLibraryGraph(
 
   const creatorNames = [...authors.entries()]
     .sort((a, b) => b[1].length - a[1].length)
-    .slice(0, 6)
+    .slice(0, 4)
 
   creatorNames.forEach(([username, articles], index) => {
     const id = 'profile:' + username
@@ -554,11 +548,7 @@ function buildLibraryGraph(
       href: 'https://dev.to/' + username,
       username,
       section: 'creators',
-      position: [
-        index % 2 === 0 ? 11.2 : 14.7,
-        1.2,
-        -22.5 - Math.floor(index / 2) * 3,
-      ],
+      position: [15.8, 1.2, -24 - index * 3.1],
       floorIndex: 0,
       importance: 1 + articles.length * .12,
       accent: SECTION_COPY.creators.accent,
@@ -582,7 +572,7 @@ function buildLibraryGraph(
       href: 'https://dev.to/' + bootstrap.profile.username,
       username: bootstrap.profile.username,
       section: 'creators',
-      position: [13, 1.25, -20.8],
+      position: [15.8, 1.25, -21.2],
       floorIndex: 0,
       importance: 2,
       accent: '#7c83ff',
@@ -715,10 +705,10 @@ function buildLibraryGraph(
         section,
         position:
           section === 'topics'
-            ? [13, 1.2, -20.4]
+            ? [15.8, 1.2, -7.2]
             : section === 'creators'
-              ? [13, 1.2, -28.5]
-              : [-13, 1.1, -22.4],
+              ? [15.8, 1.2, -21.2]
+              : [-15.8, 1.1, -20.4],
         importance: 1.8,
         accent: SECTION_COPY[section].accent,
       })
@@ -1149,7 +1139,7 @@ export default function DevWebSurf() {
       href: 'https://dev.to/t/' + tag,
       tag,
       section: 'topics',
-      position: [13, 1.2, -20.4],
+      position: [15.8, 1.2, -7.2],
       importance: 1.3,
         accent: SECTION_COPY.topics.accent,
       })
@@ -1327,7 +1317,7 @@ export default function DevWebSurf() {
           href: 'https://dev.to/' + data.profile.username,
           username: data.profile.username,
           section: 'creators',
-          position: [13, 1.2, -28.5],
+          position: [15.8, 1.2, -21.2],
           importance: 1.8,
           accent: SECTION_COPY.creators.accent,
         })
@@ -1351,7 +1341,7 @@ export default function DevWebSurf() {
           title: 'search: ' + value,
           subtitle: 'temporary search aisle',
           section: 'search',
-          position: [-13, 1.1, -22.4],
+          position: [-15.8, 1.1, -20.4],
           importance: 1.8,
           accent: SECTION_COPY.search.accent,
         })
@@ -2267,7 +2257,7 @@ export default function DevWebSurf() {
                       href: 'https://dev.to/' + username,
                       username,
                       section: 'creators',
-                      position: [13, 1.2, -28.5],
+                      position: [15.8, 1.2, -21.2],
                       importance: 1.6,
                       accent: SECTION_COPY.creators.accent,
                     })
