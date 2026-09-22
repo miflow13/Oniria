@@ -900,6 +900,8 @@ export default function DreamWorld3D({
     let activeDive: DreamDive | null = null
     let diveComposer: EffectComposer | null = null
     let divePost: ShaderPass | null = null
+    let diveAudio: SpatialDreamAudio | null = null
+    let diveAudioStarted = false
     let diveMode: 'none' | 'entering' | 'inside' | 'exiting' = 'none'
     let diveTransitionStartedAt = 0
     let lastDiveExitRequest = diveExitRequestRef.current
@@ -976,6 +978,16 @@ export default function DreamWorld3D({
     }
 
     function disposeDive() {
+      if (activeDive) {
+        activeDive.camera.remove(listener)
+      }
+      diveAudio?.dispose()
+      diveAudio = null
+      diveAudioStarted = false
+      if (listener.parent !== camera) {
+        listener.removeFromParent()
+        camera.add(listener)
+      }
       diveComposer?.dispose()
       diveComposer = null
       divePost = null
@@ -995,6 +1007,30 @@ export default function DreamWorld3D({
         settings,
         hashString(`dive:${profile.dreamId}:${node._id}`),
       )
+
+      listener.removeFromParent()
+      activeDive.camera.add(listener)
+
+      diveAudio = createSpatialDreamAudio(
+        listener,
+        node.category,
+        hashString(`dive-audio:${profile.dreamId}:${node._id}`),
+        {
+          mood: profile.mood,
+          lucid: profile.lucid,
+          recurrence: profile.recurrence,
+          mode: 'dive',
+        },
+      )
+      diveAudio.audio.position.set(0, 1.2, -4.2)
+      activeDive.scene.add(diveAudio.audio)
+
+      if (spatialAudio?.audio.isPlaying) spatialAudio.audio.pause()
+      spatialAudioStarted = false
+      clusterAudios.forEach((cluster) => {
+        if (cluster.audio.audio.isPlaying) cluster.audio.audio.pause()
+        cluster.started = false
+      })
 
       diveComposer = new EffectComposer(renderer)
       const diveRenderPass = new RenderPass(activeDive.scene, activeDive.camera)
@@ -1233,6 +1269,19 @@ export default function DreamWorld3D({
       if (activeDive && (diveMode === 'inside' || diveMode === 'exiting')) {
         activeDive.setLookTarget(pointerTarget.x, pointerTarget.y)
         activeDive.update(elapsed, delta)
+
+        if (diveAudio) {
+          diveAudio.setFocus(diveMode === 'exiting' ? .45 : 1)
+          if (soundEnabledRef.current && !diveAudioStarted) {
+            diveAudioStarted = true
+            void diveAudio.ensurePlaying().catch(() => {
+              diveAudioStarted = false
+            })
+          } else if (!soundEnabledRef.current && diveAudioStarted) {
+            if (diveAudio.audio.isPlaying) diveAudio.audio.pause()
+            diveAudioStarted = false
+          }
+        }
 
         const exitProgress =
           diveMode === 'exiting'
@@ -1724,6 +1773,7 @@ export default function DreamWorld3D({
         cluster.visual.group.remove(cluster.audio.audio)
         cluster.audio.dispose()
       })
+      if (diveMode !== 'none') onDiveStateChangeRef.current(false)
       disposeDive()
       releaseDreamCell()
       camera.remove(listener)
