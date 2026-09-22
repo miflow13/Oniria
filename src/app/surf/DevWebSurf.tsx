@@ -663,6 +663,7 @@ export default function DevWebSurf() {
     (node: SurfNode) => {
       setSelectedId(node.id)
       setActiveNode(node)
+      setRouteTargetId(null)
       setError(null)
       setVisited((current) => {
         const next = [
@@ -712,8 +713,8 @@ export default function DevWebSurf() {
     setRouteTargetId(id)
     setActiveNode(null)
     setSelectedId(null)
+    setArticle(null)
     setDirectoryOpen(false)
-    if (document.pointerLockElement) return
   }
 
   function jumpTo(id: string) {
@@ -721,6 +722,9 @@ export default function DevWebSurf() {
     setTravelNonce(next)
     setRouteTargetId(id)
     setTravelRequest({id, nonce: next})
+    setActiveNode(null)
+    setSelectedId(null)
+    setArticle(null)
     setDirectoryOpen(false)
   }
 
