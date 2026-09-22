@@ -908,12 +908,14 @@ export default function DreamWorld3D({
             ([x, y, z]) => new THREE.Vector3(x, y, z),
           ),
         )
-        group.add(new THREE.Line(lineGeometry, new THREE.LineBasicMaterial({
+        const lineMaterial = new THREE.LineBasicMaterial({
           color: accent,
           transparent: true,
           opacity: .22,
-        })))
+        })
+        group.add(new THREE.Line(lineGeometry, lineMaterial))
         geometries.push(lineGeometry)
+        materials.push(lineMaterial)
         for (const [x, y, z] of animalPoints) {
           const geometry = new THREE.SphereGeometry(.025, 10, 10)
           const star = new THREE.Mesh(geometry, material)
