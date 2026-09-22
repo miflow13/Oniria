@@ -1667,16 +1667,6 @@ export default function DevWebSurf3D({
       decal.position.y = .039
       decal.renderOrder = 6
       group.add(decal)
-      if (layoutKey && floorBase === 0) {
-        const label = layoutKey
-          .replace(/^0:/, '')
-          .replace(/:/g, ' · ')
-        group.userData.layoutKey = layoutKey
-        group.userData.layoutLabel = label
-        editableShelves.push({key: layoutKey, label, group})
-        editableShelfRoots.push(group)
-      }
-
       scene.add(group)
       return group
     }
@@ -1962,6 +1952,16 @@ export default function DevWebSurf3D({
         minY: floorBase,
         maxY: floorBase + 3.7,
       })
+
+      if (layoutKey && floorBase === 0) {
+        const label = layoutKey
+          .replace(/^0:/, '')
+          .replace(/:/g, ' · ')
+        group.userData.layoutKey = layoutKey
+        group.userData.layoutLabel = label
+        editableShelves.push({key: layoutKey, label, group})
+        editableShelfRoots.push(group)
+      }
 
       scene.add(group)
       return group
@@ -5289,6 +5289,9 @@ export default function DevWebSurf3D({
       }
 
       transformControls.setMode(layoutEditorModeRef.current)
+      transformControls.showX = true
+      transformControls.showY = false
+      transformControls.showZ = true
       transformControls.setTranslationSnap(
         layoutEditorSnapRef.current ? .5 : null,
       )
