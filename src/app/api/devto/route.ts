@@ -163,13 +163,21 @@ export async function GET(request: NextRequest) {
         Math.max(20, Number(searchParams.get('per_page') ?? 100) || 100),
       )
 
-      const pages = await Promise.all(
-        Array.from({length: pageCount}, (_, index) =>
-          devFetch(
-            `/articles?per_page=${perPage}&page=${index + 1}`,
-          ).catch(() => []),
-        ),
-      )
+      const pages: unknown[][] = []
+      for (let index = 0; index < pageCount; index += 4) {
+        const wave = Array.from(
+          {length: Math.min(4, pageCount - index)},
+          (_, offset) => index + offset + 1,
+        )
+        const results = await Promise.all(
+          wave.map((page) =>
+            devFetch(
+              `/articles?per_page=${perPage}&page=${page}`,
+            ).catch(() => []),
+          ),
+        )
+        pages.push(...results)
+      }
 
       const seen = new Set<number>()
       const articles = pages
