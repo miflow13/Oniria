@@ -264,7 +264,7 @@ function shelfPlacement(
   const anchor = anchors[shelfIndex]
 
   const localOffset = (slot - 1) * 1.02
-  const y = .7 + level * 1.1
+  const y = .67 + level * 1.1
   const [x, z] = shelfSlotWorldPosition(
     anchor.x,
     anchor.z,
@@ -315,7 +315,7 @@ function megaShelfPlacement(index: number): ShelfPlacement {
   return {
     position: [
       x,
-      floorBase + .7 + level * 1.1,
+      floorBase + .67 + level * 1.1,
       z,
     ],
     rotationY,
