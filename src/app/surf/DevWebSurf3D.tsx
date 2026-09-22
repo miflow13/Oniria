@@ -608,6 +608,19 @@ export default function DevWebSurf3D({
     netViolet.position.set(-15, 4, -24)
     scene.add(netViolet)
 
+    const floorIdentityLight = new THREE.PointLight(
+      FLOOR_ACCENTS[currentFloorRef.current],
+      3.6,
+      42,
+      2,
+    )
+    floorIdentityLight.position.set(
+      0,
+      currentFloorRef.current * LIBRARY_FLOOR_HEIGHT + 3.2,
+      -18,
+    )
+    scene.add(floorIdentityLight)
+
     const architecturalGeometries: THREE.BufferGeometry[] = []
     const architecturalMaterials: THREE.Material[] = []
     const labelsToDispose: THREE.Texture[] = []
@@ -2410,6 +2423,20 @@ export default function DevWebSurf3D({
     function setVisibleFloor(floor: number) {
       detailedBookIds.clear()
       activeCoverUrls.clear()
+
+      const floorAccent = new THREE.Color(FLOOR_ACCENTS[floor])
+      const atmosphere = new THREE.Color(0x111319).lerp(
+        floorAccent,
+        floor === 0 ? .025 : .065,
+      )
+      scene.background = atmosphere.clone()
+      if (scene.fog instanceof THREE.FogExp2) {
+        scene.fog.color.copy(atmosphere)
+      }
+      floorIdentityLight.color.copy(floorAccent)
+      floorIdentityLight.position.y =
+        floor * LIBRARY_FLOOR_HEIGHT + 3.2
+      floorIdentityLight.intensity = floor === 0 ? 2.8 : 3.8
       visualsByFloor.forEach((entries, floorIndex) => {
         const visible = floorIndex === floor
         entries.forEach(([, visual]) => {
@@ -3278,7 +3305,7 @@ export default function DevWebSurf3D({
           selected || hovered || routed
             ? 1
             : id.startsWith('section:')
-              ? .98
+              ? .22
               : id.startsWith('profile:') || id.startsWith('tag:')
                 ? .82
                 : node?.kind === 'article'
@@ -3322,31 +3349,33 @@ export default function DevWebSurf3D({
       const activeShelfCenter = activeShelfVisual
         ? new THREE.Vector3(...activeShelfVisual.position)
         : null
-      shelfAccentBars.forEach(({mesh, material, center}) => {
-        const nearShelf =
-          activeShelfCenter !== null &&
-          Math.abs(center.y - activeShelfCenter.y) < .62 &&
-          Math.hypot(
-            center.x - activeShelfCenter.x,
-            center.z - activeShelfCenter.z,
-          ) < 4.4
-        const shelfFloor = THREE.MathUtils.clamp(
-          Math.round(center.y / LIBRARY_FLOOR_HEIGHT),
-          0,
-          LIBRARY_FLOOR_COUNT - 1,
-        )
-        material.opacity +=
-          ((nearShelf ? .76 : activeShelfCenter ? .006 : .018) -
-            material.opacity) *
-          .12
-        material.color.lerp(
-          new THREE.Color(
-            nearShelf ? FLOOR_ACCENTS[shelfFloor] : 0x343b55,
-          ),
-          .1,
-        )
-        mesh.scale.z = nearShelf ? 2.2 : 1
-      })
+      shelfAccentBars.forEach(
+        ({mesh, material, center, floorIndex}) => {
+          const nearShelf =
+            activeShelfCenter !== null &&
+            Math.abs(center.y - activeShelfCenter.y) < .62 &&
+            Math.hypot(
+              center.x - activeShelfCenter.x,
+              center.z - activeShelfCenter.z,
+            ) < 4.4
+          const isCurrentFloor = floorIndex === currentFloorIndex
+          material.opacity +=
+            ((nearShelf
+              ? .84
+              : isCurrentFloor
+                ? activeShelfCenter
+                  ? .035
+                  : .12
+                : .012) -
+              material.opacity) *
+            .12
+          material.color.lerp(
+            new THREE.Color(FLOOR_ACCENTS[floorIndex]),
+            nearShelf ? .18 : .08,
+          )
+          mesh.scale.z = nearShelf ? 2.25 : 1
+        },
+      )
 
       trimCoverCache(now)
 
