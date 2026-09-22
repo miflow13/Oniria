@@ -758,7 +758,23 @@ export default function DevLibraryMap() {
         libraryPathBay: shelf.pathBay,
         libraryDistrictId: shelf.districtId,
         libraryBooks: shelf.articles.slice(0, 9).map((article) => {
-          const image = article.cover_image ?? article.social_image ?? undefined
+          const image =
+            article.cover_image ??
+            article.social_image ??
+            undefined
+          const engagement =
+            (article.public_reactions_count ?? 0) +
+            (article.comments_count ?? 0) * 2
+          const publishedAt = article.published_at
+            ? new Date(article.published_at).getTime()
+            : 0
+          const ageDays = publishedAt
+            ? Math.max(
+                0,
+                (Date.now() - publishedAt) / 86_400_000,
+              )
+            : Infinity
+
           return {
             id: String(article.id),
             title: article.title,
@@ -766,6 +782,11 @@ export default function DevLibraryMap() {
               ? '/api/devto?mode=image&variant=thumb&url=' +
                 encodeURIComponent(image)
               : undefined,
+            activity: Math.min(
+              1,
+              Math.log2(engagement + 1) / 7,
+            ),
+            fresh: ageDays <= 7,
           }
         }),
       })),
