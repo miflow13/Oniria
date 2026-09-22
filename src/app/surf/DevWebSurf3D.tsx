@@ -971,7 +971,7 @@ export default function DevWebSurf3D({
     architecturalMaterials.push(brass)
 
     const shelfMaterial = new THREE.MeshStandardMaterial({
-      color: 0x353943,
+      color: 0x414247,
       map: architecturalSurfaceTexture,
       roughnessMap: architecturalSurfaceRoughness,
       roughness: .78,
@@ -994,6 +994,15 @@ export default function DevWebSurf3D({
       shelfMaterial,
       ...floorShelfTopMaterials,
     )
+
+    const shelfBackMaterial = new THREE.MeshStandardMaterial({
+      color: 0x303237,
+      map: architecturalSurfaceTexture,
+      roughnessMap: architecturalSurfaceRoughness,
+      roughness: .9,
+      metalness: .05,
+    })
+    architecturalMaterials.push(shelfBackMaterial)
 
     const slabUndersideMaterial = new THREE.MeshStandardMaterial({
       color: 0x15181d,
@@ -1325,7 +1334,7 @@ export default function DevWebSurf3D({
       left.castShadow = right.castShadow = floorBase === 0
       group.add(left, right)
 
-      const back = new THREE.Mesh(backGeometry, concrete)
+      const back = new THREE.Mesh(backGeometry, shelfBackMaterial)
       back.position.set(0, 1.74, -.3)
       back.receiveShadow = true
       group.add(back)
@@ -1575,6 +1584,7 @@ export default function DevWebSurf3D({
       material.blending = THREE.AdditiveBlending
       architecturalMaterials.push(material)
     })
+    netGrid.visible = false
     scene.add(netGrid)
 
     const rainCount = 160
@@ -1599,6 +1609,7 @@ export default function DevWebSurf3D({
       depthWrite: false,
     })
     const dataRain = new THREE.Points(rainGeometry, rainMaterial)
+    dataRain.visible = false
     scene.add(dataRain)
 
     const scanGateGeometry = new THREE.PlaneGeometry(18, 5.4)
@@ -1618,6 +1629,7 @@ export default function DevWebSurf3D({
       })
       const gate = new THREE.Mesh(scanGateGeometry, material)
       gate.position.set(0, 2.45, z)
+      gate.visible = false
       scene.add(gate)
       scanGates.push({mesh: gate, material, phase: index * 1.7})
       architecturalMaterials.push(material)
@@ -1874,6 +1886,7 @@ export default function DevWebSurf3D({
         horizonMaterial,
       )
       horizon.position.set(0, base + 2.05, -57.8)
+      horizon.visible = false
       scene.add(horizon)
 
       const levelTexture = createTextTexture(
@@ -2228,9 +2241,9 @@ export default function DevWebSurf3D({
       const floorBase = floor * LIBRARY_FLOOR_HEIGHT
       const accent = new THREE.Color(FLOOR_ACCENTS[floor])
       const shelfMaterial = new THREE.MeshStandardMaterial({
-        color: new THREE.Color(0x15181e).lerp(accent, .09),
+        color: new THREE.Color(0x292b2f).lerp(accent, .035),
         emissive: accent,
-        emissiveIntensity: .035,
+        emissiveIntensity: .01,
         roughness: .9,
         metalness: .04,
         transparent: true,
@@ -2240,8 +2253,8 @@ export default function DevWebSurf3D({
         color: 0xffffff,
         vertexColors: true,
         emissive: accent,
-        emissiveIntensity: .08,
-        roughness: .72,
+        emissiveIntensity: .025,
+        roughness: .78,
         metalness: .08,
         transparent: true,
         opacity: .68,
@@ -3187,7 +3200,7 @@ export default function DevWebSurf3D({
       const floorAccent = new THREE.Color(FLOOR_ACCENTS[floor])
       const atmosphere = new THREE.Color(0x111319).lerp(
         floorAccent,
-        floor === 0 ? .025 : .065,
+        floor === 0 ? .012 : .022,
       )
       scene.background = atmosphere.clone()
       if (scene.fog instanceof THREE.FogExp2) {
@@ -3202,6 +3215,22 @@ export default function DevWebSurf3D({
           floor * LIBRARY_FLOOR_HEIGHT + 4.15
         light.position.z = practicalLightStops[index]
         light.intensity = floor === 0 ? 1.25 : 1.5
+      })
+      practicalFixtureMaterials.forEach((material, floorIndex) => {
+        const distance = Math.abs(floorIndex - floor)
+        material.opacity =
+          distance === 0
+            ? .58
+            : distance === 1
+              ? .22
+              : distance === 2
+                ? .09
+                : .035
+      })
+      floorShelfTopMaterials.forEach((material, floorIndex) => {
+        const distance = Math.abs(floorIndex - floor)
+        material.emissiveIntensity =
+          distance === 0 ? .028 : distance === 1 ? .008 : 0
       })
 
       // Keep non-current floors visually alive even when their real article
@@ -4240,11 +4269,11 @@ export default function DevWebSurf3D({
                 : .54
               : isCurrent
                 ? index === 0
-                  ? .46
-                  : .28
+                  ? .26
+                  : .14
                 : index === 0
-                  ? .055
-                  : .028
+                  ? .018
+                  : .008
           material.opacity +=
             (target - material.opacity) *
             (1 - Math.exp(-delta * 6))
@@ -4284,16 +4313,16 @@ export default function DevWebSurf3D({
           ((active
             ? .78
             : routeVisual.edge.kind === 'corridor'
-              ? .045
-              : .015) -
+              ? .012
+              : .004) -
             routeVisual.material.opacity) *
           .1
         routeVisual.glowMaterial.opacity +=
-          ((active ? .17 : routeVisual.edge.kind === 'corridor' ? .008 : .003) -
+          ((active ? .12 : routeVisual.edge.kind === 'corridor' ? .002 : .001) -
             routeVisual.glowMaterial.opacity) *
           .1
         routeVisual.packetMaterial.opacity =
-          active ? .94 : .08
+          active ? .88 : 0
 
         routeVisual.packets.forEach((packet, packetIndex) => {
           const t =
