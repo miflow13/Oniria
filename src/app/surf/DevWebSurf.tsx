@@ -619,6 +619,19 @@ export default function DevWebSurf() {
     setRouteLoading(true)
     setArticle(null)
     setProfile(null)
+    setSelectedId('tag:' + tag)
+    setActiveNode({
+      id: 'tag:' + tag,
+      kind: 'tag',
+      title: '#' + tag,
+      subtitle: 'topic doorway',
+      href: 'https://dev.to/t/' + tag,
+      tag,
+      section: 'topics',
+      position: [13, 1.2, -20.4],
+      importance: 1.3,
+      accent: SECTION_COPY.topics.accent,
+    })
 
     try {
       const response = await fetch(
@@ -809,6 +822,27 @@ export default function DevWebSurf() {
     ? graph.nodes.find((node) => node.id === routeTargetId) ?? null
     : null
 
+  const relatedArticles = article
+    ? [
+        ...bootstrap.feed,
+        ...bootstrap.latest,
+        ...bootstrap.profileArticles,
+      ]
+        .filter(
+          (candidate, index, collection) =>
+            candidate.id !== article.id &&
+            candidate.tag_list.some((tag) =>
+              article.tag_list.includes(tag),
+            ) &&
+            collection.findIndex((item) => item.id === candidate.id) === index,
+        )
+        .sort(
+          (a, b) =>
+            articleImportance(b) - articleImportance(a),
+        )
+        .slice(0, 4)
+    : []
+
   const continueTarget =
     visited.length > 1
       ? visited[visited.length - 1]?.id
@@ -964,7 +998,15 @@ export default function DevWebSurf() {
           <strong>{routeTarget.title}</strong>
           <p>{routeTarget.subtitle}</p>
           <div>
-            <button type="button" onClick={() => setRouteTargetId(null)}>
+            <button
+              type="button"
+              onClick={() => {
+                const canvas = document.querySelector('canvas')
+                if (canvas instanceof HTMLCanvasElement) {
+                  void canvas.requestPointerLock()
+                }
+              }}
+            >
               Walk there
             </button>
             <button type="button" onClick={() => jumpTo(routeTarget.id)}>
@@ -1169,11 +1211,23 @@ export default function DevWebSurf() {
                 <button
                   type="button"
                   onClick={() => {
-                    setDynamicLabel('@' + article.user.username)
-                    void fetchProfile(article.user.username)
-                    setRouteTargetId(
-                      'profile:' + article.user.username,
-                    )
+                    const username = article.user.username
+                    setSelectedId('profile:' + username)
+                    setActiveNode({
+                      id: 'profile:' + username,
+                      kind: 'profile',
+                      title: '@' + username,
+                      subtitle: article.user.name,
+                      href: 'https://dev.to/' + username,
+                      username,
+                      section: 'creators',
+                      position: [13, 1.2, -28.5],
+                      importance: 1.6,
+                      accent: SECTION_COPY.creators.accent,
+                    })
+                    setDynamicLabel('@' + username)
+                    setRouteTargetId('profile:' + username)
+                    void fetchProfile(username)
                   }}
                 >
                   Enter @{article.user.username}&apos;s study
@@ -1182,6 +1236,44 @@ export default function DevWebSurf() {
                   Open canonical article ↗
                 </a>
               </div>
+
+              {relatedArticles.length > 0 && (
+                <section className={styles.relatedShelf}>
+                  <span>Nearby shelf · related by topic</span>
+                  <div>
+                    {relatedArticles.map((item) => (
+                      <button
+                        type="button"
+                        key={item.id}
+                        onClick={() => {
+                          const existing = graph.nodes.find(
+                            (candidate) =>
+                              candidate.id === 'article:' + item.id,
+                          )
+                          if (existing) {
+                            jumpTo(existing.id)
+                          } else {
+                            setDynamicArticles((current) => [
+                              item,
+                              ...current.filter(
+                                (candidate) => candidate.id !== item.id,
+                              ),
+                            ])
+                            setDynamicLabel('related reading')
+                            window.setTimeout(
+                              () => jumpTo('article:' + item.id),
+                              40,
+                            )
+                          }
+                        }}
+                      >
+                        <b>{item.title}</b>
+                        <small>@{item.user.username}</small>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              )}
             </>
           )}
 
