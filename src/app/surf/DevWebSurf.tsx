@@ -834,6 +834,9 @@ export default function DevWebSurf() {
             candidate.tag_list.some((tag) =>
               article.tag_list.includes(tag),
             ) &&
+            graph.nodes.some(
+              (node) => node.id === 'article:' + candidate.id,
+            ) &&
             collection.findIndex((item) => item.id === candidate.id) === index,
         )
         .sort(
@@ -1245,27 +1248,9 @@ export default function DevWebSurf() {
                       <button
                         type="button"
                         key={item.id}
-                        onClick={() => {
-                          const existing = graph.nodes.find(
-                            (candidate) =>
-                              candidate.id === 'article:' + item.id,
-                          )
-                          if (existing) {
-                            jumpTo(existing.id)
-                          } else {
-                            setDynamicArticles((current) => [
-                              item,
-                              ...current.filter(
-                                (candidate) => candidate.id !== item.id,
-                              ),
-                            ])
-                            setDynamicLabel('related reading')
-                            window.setTimeout(
-                              () => jumpTo('article:' + item.id),
-                              40,
-                            )
-                          }
-                        }}
+                        onClick={() =>
+                          jumpTo('article:' + item.id)
+                        }
                       >
                         <b>{item.title}</b>
                         <small>@{item.user.username}</small>
