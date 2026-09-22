@@ -3639,17 +3639,13 @@ export default function DreamWorld3D({
 
       if (
         openingBook?.fired &&
-        openingSeconds >= 1.05 &&
+        openingSeconds >= 1.08 &&
         openingBook.returningAt === null
       ) {
-        const readingBook = libraryReadingBookRef.current
-        const stillReading =
-          readingBook?.nodeId === openingBook.visual.nodeId &&
-          readingBook?.index === openingBook.visual.index
-
-        if (!stillReading) {
-          openingBook.returningAt = now / 1000
-        }
+        // The article reader owns the long-form reading state. The physical
+        // book only performs the handoff, then returns to its exact shelf slot
+        // instead of remaining pinned in front of the camera.
+        openingBook.returningAt = now / 1000
       }
 
       const returnSeconds =
