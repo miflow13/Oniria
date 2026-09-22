@@ -35,6 +35,15 @@ import {
   type DreamProfile,
 } from './dreamworld/dreamProfile'
 import {
+  dreamRecurrence,
+  getDreamRelations,
+  type DreamRelation,
+} from './dreamworld/dreamRelations'
+import {
+  createDreamMusic,
+  type DreamMusic,
+} from './dreamworld/audio/createDreamMusic'
+import {
   createDreamDive,
   type DreamDive,
 } from './dreamworld/dive/createDreamDive'
@@ -85,6 +94,8 @@ type Props = {
   soundEnabled: boolean
   introStage: number
   diveExitRequest: number
+  diveTimelineProgress: number
+  observatoryMode: boolean
   onZoomChange: (zoom: number) => void
   onPanChange: (pan: Pan) => void
   onNodeHover: (node: DreamWorldNode | null) => void
@@ -92,6 +103,7 @@ type Props = {
   onBackgroundClick: () => void
   onProjectionChange: (projection: ProjectionPoint | null) => void
   onDiveStateChange: (active: boolean, title?: string) => void
+  onDiveDreamChange: (dreamId: string, title: string, depth: number) => void
 }
 
 type NodeVisual = {
@@ -283,6 +295,8 @@ export default function DreamWorld3D({
   soundEnabled,
   introStage,
   diveExitRequest,
+  diveTimelineProgress,
+  observatoryMode,
   onZoomChange,
   onPanChange,
   onNodeHover,
@@ -290,6 +304,7 @@ export default function DreamWorld3D({
   onBackgroundClick,
   onProjectionChange,
   onDiveStateChange,
+  onDiveDreamChange,
 }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const nodeRef = useRef(nodes)
@@ -312,7 +327,10 @@ export default function DreamWorld3D({
   const soundEnabledRef = useRef(soundEnabled)
   const introStageRef = useRef(introStage)
   const diveExitRequestRef = useRef(diveExitRequest)
+  const diveTimelineProgressRef = useRef(diveTimelineProgress)
+  const observatoryModeRef = useRef(observatoryMode)
   const onDiveStateChangeRef = useRef(onDiveStateChange)
+  const onDiveDreamChangeRef = useRef(onDiveDreamChange)
 
   nodeRef.current = nodes
   positionsRef.current = positions
@@ -334,7 +352,10 @@ export default function DreamWorld3D({
   soundEnabledRef.current = soundEnabled
   introStageRef.current = introStage
   diveExitRequestRef.current = diveExitRequest
+  diveTimelineProgressRef.current = diveTimelineProgress
+  observatoryModeRef.current = observatoryMode
   onDiveStateChangeRef.current = onDiveStateChange
+  onDiveDreamChangeRef.current = onDiveDreamChange
 
   const graphKey = useMemo(
     () =>
