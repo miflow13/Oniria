@@ -5,7 +5,7 @@ import {
 } from '@/lib/libraryWorldConfig'
 import {hasSanityConfig} from '@/sanity/env'
 
-export const revalidate = 30
+export const dynamic = 'force-dynamic'
 
 export async function GET() {
   if (!hasSanityConfig) {
@@ -18,7 +18,9 @@ export async function GET() {
       import('@/sanity/lib/queries'),
     ])
 
-    const payload = await client.fetch(LIBRARY_WORLD_QUERY)
+    const payload = await client
+      .withConfig({useCdn: false})
+      .fetch(LIBRARY_WORLD_QUERY)
     return NextResponse.json(mergeLibraryWorldConfig(payload))
   } catch (error) {
     console.error('Could not load Sanity library world config', error)
