@@ -2134,13 +2134,28 @@ export default function DevWebSurf3D({
     }
 
     function onKeyDown(event: KeyboardEvent) {
+      const target = event.target
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement
+      ) {
+        return
+      }
+
       keys.add(event.code)
 
+      const pointerLocked =
+        document.pointerLockElement === renderer.domElement
+
       if (
-        event.code === 'Digit1' ||
-        event.code === 'Digit2' ||
-        event.code === 'Digit3' ||
-        event.code === 'Digit4'
+        pointerLocked &&
+        (
+          event.code === 'Digit1' ||
+          event.code === 'Digit2' ||
+          event.code === 'Digit3' ||
+          event.code === 'Digit4'
+        )
       ) {
         event.preventDefault()
         const targetFloor = Number(event.code.slice(-1)) - 1
@@ -2148,7 +2163,7 @@ export default function DevWebSurf3D({
         return
       }
 
-      if (event.code === 'PageUp') {
+      if (pointerLocked && event.code === 'PageUp') {
         event.preventDefault()
         startFloorTravel(
           Math.min(
@@ -2159,7 +2174,7 @@ export default function DevWebSurf3D({
         return
       }
 
-      if (event.code === 'PageDown') {
+      if (pointerLocked && event.code === 'PageDown') {
         event.preventDefault()
         startFloorTravel(Math.max(0, currentFloorIndex - 1))
         return
