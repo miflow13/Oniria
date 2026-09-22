@@ -1368,6 +1368,7 @@ export default function DreamMap({
                   setHoveredId(null)
                   setOpenDreamId(null)
                   setFocusedDreamId(null)
+                  window.history.replaceState(null, '', '/map')
                 }}
                 aria-pressed={observatoryMode}
                 title="Pull back to the Observatory"
