@@ -1179,27 +1179,8 @@ export default function DevWebSurf3D({
         addFloor(0, z, 9.4, 4.4, floorMaterial, base)
       })
 
-      const floorGrid = new THREE.GridHelper(
-        38,
-        38,
-        floor % 2 === 0 ? 0x53d3ff : 0x5965e8,
-        0x1b2340,
-      )
-      floorGrid.position.set(0, base + .012, -15)
-      const floorGridMaterials = Array.isArray(floorGrid.material)
-        ? floorGrid.material
-        : [floorGrid.material]
-      floorGridMaterials.forEach((material) => {
-        material.transparent = true
-        material.opacity = .072
-        material.blending = THREE.AdditiveBlending
-        architecturalMaterials.push(material)
-      })
-      scene.add(floorGrid)
-
-      // Balcony edges turn the atrium opening into a readable vertical nave.
-      const balconyRailGeometry = new THREE.BoxGeometry(.055, .06, 88)
-      architecturalGeometries.push(balconyRailGeometry)
+      // Balcony rails stop at bridge entrances instead of slicing across
+      // them, so the cross-floor circulation reads as physically plausible.
       const balconyRailMaterial = new THREE.MeshBasicMaterial({
         color: floor % 2 === 0 ? 0x53d3ff : 0x7c83ff,
         transparent: true,
@@ -1208,13 +1189,25 @@ export default function DevWebSurf3D({
         depthWrite: false,
       })
       architecturalMaterials.push(balconyRailMaterial)
-      ;[-4.72, 4.72].forEach((x) => {
-        const rail = new THREE.Mesh(
-          balconyRailGeometry,
-          balconyRailMaterial,
-        )
-        rail.position.set(x, base + 1.05, -31.5)
-        scene.add(rail)
+      const railSegments = [
+        {z: 11.85, length: 5.3},
+        {z: -1.5, length: 12.6},
+        {z: -18.5, length: 12.6},
+        {z: -36, length: 13.6},
+        {z: -54, length: 13.6},
+        {z: -71.6, length: 12.8},
+      ]
+      railSegments.forEach(({z, length}) => {
+        const geometry = new THREE.BoxGeometry(.055, .06, length)
+        architecturalGeometries.push(geometry)
+        ;[-4.72, 4.72].forEach((x) => {
+          const rail = new THREE.Mesh(
+            geometry,
+            balconyRailMaterial,
+          )
+          rail.position.set(x, base + 1.05, z)
+          scene.add(rail)
+        })
       })
 
       // Each cross-bridge gets a luminous threshold so the circulation path
