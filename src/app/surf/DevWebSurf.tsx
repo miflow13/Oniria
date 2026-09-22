@@ -24,25 +24,8 @@ import type {
 import styles from './surf.module.css'
 
 const DEFAULT_USERNAME = 'mikachu'
-const LIBRARY_FLOOR_COUNT = 6
 const LIBRARY_FLOOR_HEIGHT = 5.2
 const DEEP_CATALOG_PAGES = 10
-const FLOOR_DIRECTORY = [
-  'ATRIUM / FEATURED / NEW',
-  'WEBDEV / REACT / TYPESCRIPT',
-  'BACKEND / PYTHON / DATABASES',
-  'AI / DATA / AUTOMATION',
-  'LINUX / DEVOPS / OPEN SOURCE',
-  'DEEP ARCHIVE / LONG-TAIL DEV',
-] as const
-const FLOOR_ACCENT_HEX = [
-  '#c7f3ff',
-  '#6574ff',
-  '#38c7bd',
-  '#b57cff',
-  '#68d98a',
-  '#8d9aad',
-] as const
 const MEGA_SHELF_CAPACITY = 108
 
 const SECTION_COPY: Record<
@@ -722,10 +705,9 @@ export default function DevWebSurf() {
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const chromeRef = useRef<HTMLElement | null>(null)
   const directoryRef = useRef<HTMLElement | null>(null)
-  const floorRailRef = useRef<HTMLElement | null>(null)
   const routeCardRef = useRef<HTMLElement | null>(null)
   const uiPanelRefs = useMemo(
-    () => [chromeRef, directoryRef, floorRailRef, routeCardRef],
+    () => [chromeRef, directoryRef, routeCardRef],
     [],
   )
 
@@ -766,12 +748,6 @@ export default function DevWebSurf() {
   >([{id: 'dev-home', title: 'Atrium'}])
   const [directoryOpen, setDirectoryOpen] = useState(true)
   const [readingOrigin, setReadingOrigin] = useState<SurfNode | null>(null)
-  const [currentFloor, setCurrentFloor] = useState(0)
-  const [floorNonce, setFloorNonce] = useState(0)
-  const [floorRequest, setFloorRequest] = useState<{
-    floor: number
-    nonce: number
-  } | null>(null)
   const [debugOpen, setDebugOpen] = useState(false)
   const [debugMetrics, setDebugMetrics] =
     useState<SurfDebugMetrics | null>(null)
@@ -1129,22 +1105,6 @@ export default function DevWebSurf() {
     setDirectoryOpen(false)
   }
 
-  function requestFloor(
-    floor: number,
-    preserveRoute = false,
-  ) {
-    const clamped = Math.max(
-      0,
-      Math.min(LIBRARY_FLOOR_COUNT - 1, floor),
-    )
-    if (clamped === currentFloor) return
-    const next = floorNonce + 1
-    setFloorNonce(next)
-    setFloorRequest({floor: clamped, nonce: next})
-    setDirectoryOpen(false)
-    if (!preserveRoute) setRouteTargetId(null)
-  }
-
   function returnToReadingShelf() {
     if (!readingOrigin) return
     const origin = readingOrigin
@@ -1255,8 +1215,6 @@ export default function DevWebSurf() {
     ? graph.nodes.find((node) => node.id === routeTargetId) ?? null
     : null
 
-  const routeTargetFloor = routeTarget?.floorIndex ?? 0
-
   const relatedArticles = article
     ? [
         ...bootstrap.feed,
@@ -1362,7 +1320,6 @@ export default function DevWebSurf() {
         onPutBack={putBackArticle}
         onTravel={(node, inspectOnArrival) => {
           setRouteTargetId(null)
-          setCurrentFloor(node.floorIndex ?? currentFloor)
           if (inspectOnArrival) {
             inspectNode(node)
           } else {
@@ -1373,9 +1330,9 @@ export default function DevWebSurf() {
         onPointerLockChange={setLocked}
         onZoneChange={setCurrentSection}
         onWayfindingCueChange={setWayfindingCue}
-        currentFloor={currentFloor}
-        floorRequest={floorRequest}
-        onFloorChange={setCurrentFloor}
+        currentFloor={0}
+        floorRequest={null}
+        onFloorChange={() => {}}
         uiPanelRefs={uiPanelRefs}
         catalogLoading={catalogLoading}
         debugEnabled={debugOpen}
@@ -1422,91 +1379,49 @@ export default function DevWebSurf() {
         ))}
       </nav>
 
-      {currentFloor === 0 && (
-        <nav className={styles.wingRail} aria-label="Browse library wings">
-          {wingLinks.map((item) => (
-            <button
-              type="button"
-              key={item.section}
-              className={[
-                currentSection === item.section
-                  ? styles.wingRailActive
-                  : '',
-                guideStep === 2 && item.section === 'featured'
-                  ? styles.guidedPulse
-                  : '',
-              ]
-                .filter(Boolean)
-                .join(' ')}
-              onClick={() => {
-                if (item.section === 'search') {
-                  walkTo(item.target)
-                  window.setTimeout(
-                    () => searchInputRef.current?.focus(),
-                    140,
-                  )
-                } else {
-                  walkTo(item.target)
-                }
-              }}
-            >
-              {item.label}
-            </button>
-          ))}
-        </nav>
-      )}
-
-      <nav
-        ref={floorRailRef}
-        className={styles.floorRail}
-        aria-label="Library floors"
-      >
-        <span>Floor</span>
-        {Array.from({length: LIBRARY_FLOOR_COUNT}, (_, floor) => (
+      <nav className={styles.wingRail} aria-label="Browse library wings">
+        {wingLinks.map((item) => (
           <button
             type="button"
-            key={floor}
-            className={
-              currentFloor === floor
-                ? styles.floorRailActive
-                : ''
-            }
-            style={{
-              borderColor: FLOOR_ACCENT_HEX[floor],
-              color:
-                currentFloor === floor
-                  ? '#ffffff'
-                  : FLOOR_ACCENT_HEX[floor],
-              background:
-                currentFloor === floor
-                  ? FLOOR_ACCENT_HEX[floor] + '24'
-                  : undefined,
-              boxShadow:
-                currentFloor === floor
-                  ? '0 0 0 1px ' +
-                    FLOOR_ACCENT_HEX[floor] +
-                    ', 0 0 18px ' +
-                    FLOOR_ACCENT_HEX[floor] +
-                    '55'
-                  : undefined,
+            key={item.section}
+            className={[
+              currentSection === item.section
+                ? styles.wingRailActive
+                : '',
+              guideStep === 2 && item.section === 'featured'
+                ? styles.guidedPulse
+                : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
+            onClick={() => {
+              if (item.section === 'search') {
+                walkTo(item.target)
+                window.setTimeout(
+                  () => searchInputRef.current?.focus(),
+                  140,
+                )
+              } else {
+                walkTo(item.target)
+              }
             }}
-            onClick={() => requestFloor(floor)}
-            title={FLOOR_DIRECTORY[floor]}
           >
-            {String(floor + 1).padStart(2, '0')}
+            {item.label}
           </button>
         ))}
+      </nav>
+
+      <div className={styles.floorRail} aria-label="Main library level">
+        <span>Main Library</span>
         <small>
           {catalogLoading
             ? 'cataloging…'
             : Math.min(catalogArticles.length, MEGA_SHELF_CAPACITY) +
               '/' +
               MEGA_SHELF_CAPACITY +
-              ' shelf books · ' +
-              FLOOR_DIRECTORY[currentFloor] +
-              ' · keys 1–6'}
+              ' interactive deep-catalog books'}
         </small>
-      </nav>
+      </div>
 
       {wayfindingCue && (
         <aside className={styles.aheadHud} aria-live="polite">
@@ -1628,28 +1543,18 @@ export default function DevWebSurf() {
         <aside ref={routeCardRef} className={styles.routeCard}>
           <span>Route ready · follow cyan light</span>
           <strong>{routeTarget.title}</strong>
-          <p>
-            {routeTargetFloor !== currentFloor
-              ? 'Take the central lift, then follow the cyan floor strips.'
-              : 'Follow the floor strips through the lit doorway.'}
-          </p>
+          <p>Follow the floor strips through the lit doorway.</p>
           <div>
             <button
               type="button"
               onClick={() => {
-                if (routeTargetFloor !== currentFloor) {
-                  requestFloor(routeTargetFloor, true)
-                  return
-                }
                 const canvas = document.querySelector('canvas')
                 if (canvas instanceof HTMLCanvasElement) {
                   void canvas.requestPointerLock()
                 }
               }}
             >
-              {routeTargetFloor !== currentFloor
-                ? 'Take lift'
-                : 'Walk route'}
+              Walk route
             </button>
             <button type="button" onClick={() => jumpTo(routeTarget.id)}>
               Jump there
@@ -1664,9 +1569,9 @@ export default function DevWebSurf() {
       </div>
 
       <aside className={styles.locationHud} aria-label="Current library location">
-        <span>Level {String(currentFloor + 1).padStart(2, '0')}</span>
+        <span>Main Library</span>
         <strong>{SECTION_COPY[currentSection].title}</strong>
-        <small>{FLOOR_DIRECTORY[currentFloor]}</small>
+        <small>Ground level · archive depths below</small>
       </aside>
 
       <button
@@ -1722,8 +1627,8 @@ export default function DevWebSurf() {
               </dd>
             </div>
             <div>
-              <dt>floor</dt>
-              <dd>{String(currentFloor + 1).padStart(2, '0')}</dd>
+              <dt>level</dt>
+              <dd>ground</dd>
             </div>
           </dl>
           <small>
@@ -1763,8 +1668,6 @@ export default function DevWebSurf() {
             {activeNode?.kind === 'article' ? 'put back' : 'inspect'}
           </span>
           <span><kbd>F</kbd> travel</span>
-          <span><kbd>1–6</kbd> floors</span>
-          <span><kbd>Pg↑↓</kbd> lift</span>
           <span><kbd>Shift</kbd> hurry</span>
           <span><kbd>Esc</kbd> cursor</span>
         </section>
@@ -1838,7 +1741,7 @@ export default function DevWebSurf() {
                   deep-catalog shelf books
                 </span>
                 <span>
-                  <b>{LIBRARY_FLOOR_COUNT}</b> physical floors
+                  <b>1</b> playable level
                 </span>
               </div>
               <div className={styles.pageActions}>
