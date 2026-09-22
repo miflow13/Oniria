@@ -2881,6 +2881,131 @@ export default function DevWebSurf3D({
       visualsByFloor.set(visual.floorIndex, floorEntries)
     })
 
+    type CoverThumbnailLod = {
+      mesh: THREE.Mesh
+      material: THREE.MeshBasicMaterial
+      node: SurfNode
+      floorIndex: number
+    }
+
+    const coverThumbnailGeometry = new THREE.PlaneGeometry(.52, .4)
+    architecturalGeometries.push(coverThumbnailGeometry)
+    const thumbnailLodsByFloor = new Map<
+      number,
+      CoverThumbnailLod[]
+    >()
+    const thumbnailPrefetchQueue: Array<{
+      material: THREE.MeshBasicMaterial
+      url: string
+      floorIndex: number
+    }> = []
+
+    function articleCoverUrl(node: SurfNode) {
+      const cover =
+        node.payload?.cover_image ??
+        node.payload?.social_image ??
+        null
+      return typeof cover === 'string' && cover.trim()
+        ? cover
+        : null
+    }
+
+    for (let floor = 0; floor < LIBRARY_FLOOR_COUNT; floor += 1) {
+      const candidates = nodes.filter(
+        (node) =>
+          node.kind === 'article' &&
+          (node.floorIndex ?? 0) === floor &&
+          articleCoverUrl(node),
+      )
+
+      if (!candidates.length) continue
+
+      const sampleCount = Math.min(
+        floor === 0 ? THUMBNAILS_PER_FLOOR + 4 : THUMBNAILS_PER_FLOOR,
+        candidates.length,
+      )
+      const floorThumbnails: CoverThumbnailLod[] = []
+      const sampledNodeIds = new Set<string>()
+
+      for (let index = 0; index < sampleCount; index += 1) {
+        const sourceIndex =
+          sampleCount === 1
+            ? 0
+            : Math.round(
+                index *
+                  ((candidates.length - 1) / (sampleCount - 1)),
+              )
+        const node = candidates[sourceIndex]
+        if (!node || sampledNodeIds.has(node.id)) continue
+        sampledNodeIds.add(node.id)
+
+        const url = articleCoverUrl(node)
+        if (!url) continue
+
+        const material = new THREE.MeshBasicMaterial({
+          color: new THREE.Color(node.accent).lerp(
+            new THREE.Color(0x181b22),
+            .72,
+          ),
+          transparent: true,
+          opacity: floor === currentFloorRef.current ? .9 : .72,
+          toneMapped: false,
+          depthWrite: true,
+          side: THREE.DoubleSide,
+          polygonOffset: true,
+          polygonOffsetFactor: -1,
+          polygonOffsetUnits: -1,
+        })
+        architecturalMaterials.push(material)
+
+        const mesh = new THREE.Mesh(
+          coverThumbnailGeometry,
+          material,
+        )
+        const rotationY = node.rotationY ?? 0
+        const front = .108
+        mesh.position.set(
+          node.position[0] + Math.sin(rotationY) * front,
+          node.position[1] + .12,
+          node.position[2] + Math.cos(rotationY) * front,
+        )
+        mesh.rotation.y = rotationY
+        mesh.renderOrder = 2
+        scene.add(mesh)
+
+        floorThumbnails.push({
+          mesh,
+          material,
+          node,
+          floorIndex: floor,
+        })
+        thumbnailPrefetchQueue.push({
+          material,
+          url,
+          floorIndex: floor,
+        })
+      }
+
+      thumbnailLodsByFloor.set(floor, floorThumbnails)
+    }
+
+    thumbnailPrefetchQueue
+      .sort(
+        (a, b) =>
+          Math.abs(a.floorIndex - currentFloorRef.current) -
+          Math.abs(b.floorIndex - currentFloorRef.current),
+      )
+      .forEach((entry, index) => {
+        const batch = Math.floor(index / 4)
+        const timer = window.setTimeout(() => {
+          thumbnailPrefetchTimers.delete(timer)
+          if (!destroyed) {
+            attachThumbnailMaterial(entry.material, entry.url)
+          }
+        }, batch * 120)
+        thumbnailPrefetchTimers.add(timer)
+      })
+
     // Article LOD: every real article has a tiny instanced stand-in. Distant
     // and off-floor books stay visible as physical spines; the full article
     // object only materializes when it becomes useful to the player.
