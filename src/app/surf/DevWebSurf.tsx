@@ -169,6 +169,21 @@ type ShelfPlacement = Pick<
   | 'floorIndex'
 >
 
+const MAIN_SHELF_COLUMNS = [-13.5, -7, 7, 13.5] as const
+const MAIN_SHELF_ROWS = [
+  -8.5,
+  -13.2,
+  -17.9,
+  -22.6,
+  -27.3,
+  -32,
+  -36.7,
+  -41.4,
+] as const
+
+// Every physical bookcase now lives on one shared orthogonal aisle grid.
+// All shelves face the same direction so rows read cleanly from anywhere
+// on the platform and Layout Mode starts from a predictable baseline.
 const SHELF_ANCHORS: Partial<
   Record<
     LibrarySection,
@@ -182,34 +197,34 @@ const SHELF_ANCHORS: Partial<
   >
 > = {
   featured: [
-    {id: 'featured-left', x: -4.9, z: -10, rotationY: 0, front: .42},
-    {id: 'featured-right', x: 4.9, z: -10, rotationY: 0, front: .42},
-    {id: 'featured-deep-left', x: -4.9, z: -17, rotationY: 0, front: .42},
-    {id: 'featured-deep-right', x: 4.9, z: -17, rotationY: 0, front: .42},
+    {id: 'featured-left', x: -7, z: -8.5, rotationY: 0, front: .42},
+    {id: 'featured-right', x: 7, z: -8.5, rotationY: 0, front: .42},
+    {id: 'featured-deep-left', x: -7, z: -13.2, rotationY: 0, front: .42},
+    {id: 'featured-deep-right', x: 7, z: -13.2, rotationY: 0, front: .42},
   ],
   latest: [
-    {id: 'latest-outer', x: -14.8, z: -10, rotationY: Math.PI / 2, front: .42},
-    {id: 'latest-inner', x: -11.1, z: -10, rotationY: Math.PI / 2, front: .42},
-    {id: 'latest-deep-outer', x: -14.8, z: -18, rotationY: Math.PI / 2, front: .42},
-    {id: 'latest-deep-inner', x: -11.1, z: -18, rotationY: Math.PI / 2, front: .42},
+    {id: 'latest-outer', x: -13.5, z: -8.5, rotationY: 0, front: .42},
+    {id: 'latest-inner', x: -13.5, z: -13.2, rotationY: 0, front: .42},
+    {id: 'latest-deep-outer', x: -13.5, z: -17.9, rotationY: 0, front: .42},
+    {id: 'latest-deep-inner', x: -7, z: -17.9, rotationY: 0, front: .42},
   ],
   topics: [
-    {id: 'topics-inner', x: 11.1, z: -10, rotationY: -Math.PI / 2, front: .42},
-    {id: 'topics-outer', x: 14.8, z: -10, rotationY: -Math.PI / 2, front: .42},
-    {id: 'topics-deep-inner', x: 11.1, z: -18, rotationY: -Math.PI / 2, front: .42},
-    {id: 'topics-deep-outer', x: 14.8, z: -18, rotationY: -Math.PI / 2, front: .42},
+    {id: 'topics-inner', x: 13.5, z: -8.5, rotationY: 0, front: .42},
+    {id: 'topics-outer', x: 13.5, z: -13.2, rotationY: 0, front: .42},
+    {id: 'topics-deep-inner', x: 7, z: -17.9, rotationY: 0, front: .42},
+    {id: 'topics-deep-outer', x: 13.5, z: -17.9, rotationY: 0, front: .42},
   ],
   creators: [
-    {id: 'creators-inner', x: 11.1, z: -25.5, rotationY: -Math.PI / 2, front: .42},
-    {id: 'creators-outer', x: 14.8, z: -25.5, rotationY: -Math.PI / 2, front: .42},
+    {id: 'creators-inner', x: 7, z: -22.6, rotationY: 0, front: .42},
+    {id: 'creators-outer', x: 13.5, z: -22.6, rotationY: 0, front: .42},
   ],
   search: [
-    {id: 'search-outer', x: -14.8, z: -25.5, rotationY: Math.PI / 2, front: .42},
-    {id: 'search-inner', x: -11.1, z: -25.5, rotationY: Math.PI / 2, front: .42},
+    {id: 'search-outer', x: -13.5, z: -22.6, rotationY: 0, front: .42},
+    {id: 'search-inner', x: -7, z: -22.6, rotationY: 0, front: .42},
   ],
   archive: [
-    {id: 'archive-left', x: -4.6, z: -39.5, rotationY: 0, front: .42},
-    {id: 'archive-right', x: 4.6, z: -39.5, rotationY: 0, front: .42},
+    {id: 'archive-left', x: -7, z: -27.3, rotationY: 0, front: .42},
+    {id: 'archive-right', x: 7, z: -27.3, rotationY: 0, front: .42},
   ],
 }
 
@@ -317,17 +332,16 @@ function megaShelfPlacement(
   const level = Math.floor(localIndex / 3)
   const slot = localIndex % 3
 
-  // Keep catalog stacks on the side balconies so the central atrium
-  // remains a true void with clear bridge approaches.
-  const columns = [-13.2, -7.4, 7.4, 13.2]
-  const rows = [-9.5, -15.2, -20.9, -26.6, -32.3, -38]
-  const columnIndex = shelfIndex % columns.length
-  const rowIndex = Math.floor(shelfIndex / columns.length) % rows.length
-  const rotationY = rowIndex % 2 === 0 ? 0 : Math.PI
+  const catalogRows = MAIN_SHELF_ROWS.slice(5)
+  const columnIndex = shelfIndex % MAIN_SHELF_COLUMNS.length
+  const rowIndex =
+    Math.floor(shelfIndex / MAIN_SHELF_COLUMNS.length) %
+    catalogRows.length
+  const rotationY = 0
   const localOffset = (slot - 1) * .96
   const [x, z] = shelfSlotWorldPosition(
-    columns[columnIndex],
-    rows[rowIndex],
+    MAIN_SHELF_COLUMNS[columnIndex],
+    catalogRows[rowIndex],
     rotationY,
     localOffset,
     .42,
