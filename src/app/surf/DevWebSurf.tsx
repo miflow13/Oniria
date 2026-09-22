@@ -18,7 +18,7 @@ import {
   type LayoutEditorSelection,
   type ShelfLayoutTransform,
   type SurfLayoutConfig,
-} from './layout'
+} from './surfLayout'
 import type {
   DevArticle,
   DevArticleSummary,
