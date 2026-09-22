@@ -1999,6 +1999,76 @@ export default function DevWebSurf3D({
       visualsByFloor.set(visual.floorIndex, floorEntries)
     })
 
+    // Article LOD: every real article has a tiny instanced stand-in. Distant
+    // and off-floor books stay visible as physical spines; the full article
+    // object only materializes when it becomes useful to the player.
+    const articleProxyGeometry = new THREE.BoxGeometry(.68, .82, .15)
+    const articleProxyMaterial = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      vertexColors: true,
+      emissive: 0x121a35,
+      emissiveIntensity: .28,
+      roughness: .58,
+      metalness: .18,
+    })
+    architecturalGeometries.push(articleProxyGeometry)
+    architecturalMaterials.push(articleProxyMaterial)
+
+    const articleProxyLods = new Map<
+      number,
+      {mesh: THREE.InstancedMesh; nodes: SurfNode[]}
+    >()
+    const proxyMatrix = new THREE.Matrix4()
+    const proxyPosition = new THREE.Vector3()
+    const proxyQuaternion = new THREE.Quaternion()
+    const proxyScale = new THREE.Vector3()
+    const proxyUp = new THREE.Vector3(0, 1, 0)
+
+    for (let floor = 0; floor < LIBRARY_FLOOR_COUNT; floor += 1) {
+      const floorArticles = nodes.filter(
+        (node) =>
+          node.kind === 'article' &&
+          (node.floorIndex ?? 0) === floor,
+      )
+      if (!floorArticles.length) continue
+
+      const mesh = new THREE.InstancedMesh(
+        articleProxyGeometry,
+        articleProxyMaterial,
+        floorArticles.length,
+      )
+      mesh.castShadow = false
+      mesh.receiveShadow = false
+
+      floorArticles.forEach((node, index) => {
+        proxyPosition.set(...node.position)
+        proxyQuaternion.setFromAxisAngle(
+          proxyUp,
+          node.rotationY ?? 0,
+        )
+        proxyScale.setScalar(
+          .88 + Math.min(.18, node.importance * .06),
+        )
+        proxyMatrix.compose(
+          proxyPosition,
+          proxyQuaternion,
+          proxyScale,
+        )
+        mesh.setMatrixAt(index, proxyMatrix)
+        mesh.setColorAt(
+          index,
+          new THREE.Color(node.accent).lerp(
+            new THREE.Color(0x20283d),
+            .58,
+          ),
+        )
+      })
+      mesh.instanceMatrix.needsUpdate = true
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+      scene.add(mesh)
+      articleProxyLods.set(floor, {mesh, nodes: floorArticles})
+    }
+
     function setVisibleFloor(floor: number) {
       detailedBookIds.clear()
       activeCoverUrls.clear()
