@@ -112,3 +112,66 @@ export const LIBRARY_WORLD_QUERY = defineQuery(`
   }
 }
 `)
+
+
+export const LIBRARY_WORLD_RAW_QUERY = defineQuery(`
+{
+  "configDocs": *[_type == "libraryConfig"] {
+    _id,
+    _rev,
+    _updatedAt,
+    welcomeTitle,
+    welcomeSubtitle,
+    welcomeBody,
+    archiveStatus,
+    defaultMovement,
+    atmosphere,
+    hazeIntensity,
+    liveDevUpdates,
+    deepStacksEnabled,
+    "featuredDistrictRef": featuredDistrict._ref
+  },
+  "districtDocs": *[_type == "libraryDistrict"] {
+    _id,
+    _rev,
+    _updatedAt,
+    title,
+    "id": slug.current,
+    code,
+    description,
+    devTags,
+    "bay": routeBay,
+    accent,
+    atmosphere,
+    audioProfile,
+    landmarkType,
+    enabled
+  },
+  "curatedArticleDocs": *[_type == "curatedArticle"] {
+    _id,
+    _rev,
+    _updatedAt,
+    devArticleId,
+    label,
+    "districtRef": district._ref,
+    featured,
+    priority,
+    curatorNote,
+    enabled
+  },
+  "journeyDocs": *[_type == "archiveJourney"] {
+    _id,
+    _rev,
+    _updatedAt,
+    "id": slug.current,
+    title,
+    description,
+    enabled,
+    "stops": stops[] {
+      "districtRef": district._ref,
+      devArticleId,
+      caption
+    }
+  }
+}
+`)
