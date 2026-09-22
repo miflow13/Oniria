@@ -29,6 +29,7 @@ export function createProceduralDreamMusic(
   listener: THREE.AudioListener,
   profile: DreamProfile,
   seed: number,
+  options: {relationshipStrength?: number} = {},
 ): DreamMusic {
   const context = listener.context
   const sampleRate = context.sampleRate
@@ -53,12 +54,21 @@ export function createProceduralDreamMusic(
     (profile.categories.place > 0 ? -5 : 0) +
     (profile.categories.action > 0 ? 2 : 0)
 
+  const relationshipStrength = Math.max(
+    0,
+    Math.min(8, options.relationshipStrength ?? 0),
+  )
+  const relationInterval =
+    relationshipStrength >= 5 ? 7 : relationshipStrength >= 3 ? 5 : 3
+
   const symbols = profile.symbolNames.length ? profile.symbolNames : ['dream']
   const voices = symbols.slice(0, 6).map((symbol, index) => {
     const symbolSeed = hashString(symbol.toLowerCase()) + seed + index * 97
     const degree = scale[symbolSeed % scale.length]
     const octave = index >= 4 ? 12 : index >= 2 ? 7 : 0
-    return hzFromMidi(rootMidi + degree + octave)
+    const relationLift =
+      index === 1 || index === 4 ? relationInterval : 0
+    return hzFromMidi(rootMidi + degree + octave + relationLift)
   })
 
   const bass = hzFromMidi(rootMidi - 12)
