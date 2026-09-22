@@ -577,6 +577,9 @@ export default function DevWebSurf3D({
     const ambient = new THREE.HemisphereLight(0xe2e7ed, 0x18191c, 1.2)
     scene.add(ambient)
 
+    const baseFill = new THREE.AmbientLight(0xffffff, .28)
+    scene.add(baseFill)
+
     const key = new THREE.DirectionalLight(0xf5f2ec, 2.05)
     key.position.set(-9, 13, 9)
     key.castShadow = true
