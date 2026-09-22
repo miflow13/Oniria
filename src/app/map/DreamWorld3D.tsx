@@ -5,6 +5,7 @@ import * as THREE from 'three'
 import {EffectComposer} from 'three/examples/jsm/postprocessing/EffectComposer.js'
 import {RenderPass} from 'three/examples/jsm/postprocessing/RenderPass.js'
 import {UnrealBloomPass} from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
+import {BokehPass} from 'three/examples/jsm/postprocessing/BokehPass.js'
 import {OutputPass} from 'three/examples/jsm/postprocessing/OutputPass.js'
 import type {SymbolCategory} from '@/types/dream'
 import styles from './map.module.css'
@@ -20,6 +21,14 @@ import {
   createMiniWorld,
   type MiniWorld,
 } from './dreamworld/builders/createMiniWorld'
+import {
+  createDreamCell,
+  type DreamCell,
+} from './dreamworld/cells/createDreamCell'
+import {
+  createSpatialDreamAudio,
+  type SpatialDreamAudio,
+} from './dreamworld/audio/createSpatialDreamAudio'
 
 export type DreamWorldNode = {
   _id: string
@@ -61,6 +70,7 @@ type Props = {
   zoom: number
   pan: Pan
   quality: DreamQuality
+  soundEnabled: boolean
   onZoomChange: (zoom: number) => void
   onPanChange: (pan: Pan) => void
   onNodeHover: (node: DreamWorldNode | null) => void
@@ -240,6 +250,7 @@ export default function DreamWorld3D({
   zoom,
   pan,
   quality,
+  soundEnabled,
   onZoomChange,
   onPanChange,
   onNodeHover,
@@ -263,6 +274,7 @@ export default function DreamWorld3D({
   const onBackgroundClickRef = useRef(onBackgroundClick)
   const onProjectionChangeRef = useRef(onProjectionChange)
   const qualityRef = useRef(quality)
+  const soundEnabledRef = useRef(soundEnabled)
 
   nodeRef.current = nodes
   positionsRef.current = positions
@@ -279,6 +291,7 @@ export default function DreamWorld3D({
   onBackgroundClickRef.current = onBackgroundClick
   onProjectionChangeRef.current = onProjectionChange
   qualityRef.current = quality
+  soundEnabledRef.current = soundEnabled
 
   const graphKey = useMemo(
     () =>
@@ -301,6 +314,9 @@ export default function DreamWorld3D({
     const camera = new THREE.PerspectiveCamera(43, 1, 0.05, 80)
     camera.position.set(0, 0, 10.8)
 
+    const listener = new THREE.AudioListener()
+    camera.add(listener)
+
     const renderer = new THREE.WebGLRenderer({
       antialias: true,
       alpha: false,
@@ -318,6 +334,17 @@ export default function DreamWorld3D({
 
     const composer = new EffectComposer(renderer)
     composer.addPass(new RenderPass(scene, camera))
+
+    const depthOfField = new BokehPass(scene, camera, {
+      focus: 10,
+      aperture: 0.000035,
+      maxblur: settings.maxBlur,
+      width: 1,
+      height: 1,
+    })
+    depthOfField.enabled = false
+    composer.addPass(depthOfField)
+
     const bloom = new UnrealBloomPass(
       new THREE.Vector2(1, 1),
       settings.bloomStrength,
@@ -577,6 +604,60 @@ export default function DreamWorld3D({
     let dragging = false
     let lastProjection = {x: -999, y: -999, visible: false}
 
+    let activeCellId: string | null = null
+    let activeCell: DreamCell | null = null
+    let spatialAudio: SpatialDreamAudio | null = null
+    let spatialAudioStarted = false
+
+    function releaseDreamCell() {
+      if (activeCellId) {
+        const visual = nodeVisuals.get(activeCellId)
+        if (visual && activeCell) {
+          visual.group.remove(activeCell.portal)
+          visual.miniWorld.group.visible = true
+          visual.core.visible = true
+        }
+        if (visual && spatialAudio) {
+          visual.group.remove(spatialAudio.audio)
+        }
+      }
+
+      activeCell?.dispose()
+      spatialAudio?.dispose()
+      activeCell = null
+      spatialAudio = null
+      activeCellId = null
+      spatialAudioStarted = false
+    }
+
+    function ensureDreamCell(node: DreamWorldNode) {
+      if (activeCellId === node._id && activeCell) return
+
+      releaseDreamCell()
+
+      const visual = nodeVisuals.get(node._id)
+      if (!visual) return
+
+      const color = new THREE.Color(CATEGORY_COLORS[node.category])
+      activeCell = createDreamCell(
+        node.category,
+        color,
+        settings,
+        hashString(node._id),
+      )
+      activeCellId = node._id
+      visual.group.add(activeCell.portal)
+      visual.miniWorld.group.visible = false
+      visual.core.visible = false
+
+      spatialAudio = createSpatialDreamAudio(
+        listener,
+        node.category,
+        hashString(node._id),
+      )
+      visual.group.add(spatialAudio.audio)
+    }
+
     function resize() {
       const rect = host.getBoundingClientRect()
       if (!rect.width || !rect.height) return
@@ -764,6 +845,10 @@ export default function DreamWorld3D({
           elapsed,
           selected ? 1 : hoveredId === node._id ? 0.55 : 0,
         )
+        if (!selected) {
+          visual.miniWorld.group.visible = true
+          visual.core.visible = true
+        }
         glowMaterial.opacity +=
           ((selected ? .32 : hoveredId === node._id ? .22 : visible ? .1 : .015) -
             glowMaterial.opacity) *
@@ -837,9 +922,50 @@ export default function DreamWorld3D({
           edgeHighlighted ? .58 : .08
       })
 
-      const selectedVisual = selectedRef.current
-        ? nodeVisuals.get(selectedRef.current)
+      const selectedNode = selectedRef.current
+        ? nodeRef.current.find((node) => node._id === selectedRef.current) ?? null
         : null
+      const selectedVisual = selectedNode
+        ? nodeVisuals.get(selectedNode._id) ?? null
+        : null
+
+      if (selectedNode) {
+        ensureDreamCell(selectedNode)
+      } else if (activeCellId) {
+        releaseDreamCell()
+      }
+
+      if (activeCell && selectedVisual) {
+        activeCell.update(elapsed, 1)
+        activeCell.render(renderer)
+
+        if (spatialAudio) {
+          spatialAudio.setFocus(1)
+
+          if (soundEnabledRef.current && !spatialAudioStarted) {
+            spatialAudioStarted = true
+            void spatialAudio.ensurePlaying().catch(() => {
+              spatialAudioStarted = false
+            })
+          } else if (!soundEnabledRef.current && spatialAudioStarted) {
+            if (spatialAudio.audio.isPlaying) spatialAudio.audio.pause()
+            spatialAudioStarted = false
+          }
+        }
+      }
+
+      depthOfField.enabled = Boolean(selectedVisual) && settings.depthOfField
+      if (selectedVisual && settings.depthOfField) {
+        const focusDistance = camera.position.distanceTo(
+          selectedVisual.group.position,
+        )
+        depthOfField.uniforms.focus.value +=
+          (focusDistance - depthOfField.uniforms.focus.value) * 0.08
+        depthOfField.uniforms.aperture.value +=
+          (0.000065 - depthOfField.uniforms.aperture.value) * 0.05
+        depthOfField.uniforms.maxblur.value +=
+          (settings.maxBlur - depthOfField.uniforms.maxblur.value) * 0.05
+      }
 
       bloom.strength +=
         ((selectedVisual
@@ -931,6 +1057,9 @@ export default function DreamWorld3D({
       renderer.domElement.removeEventListener('pointercancel', handlePointerLeave)
       renderer.domElement.removeEventListener('pointerleave', handlePointerLeave)
       renderer.domElement.removeEventListener('wheel', handleWheel)
+
+      releaseDreamCell()
+      camera.remove(listener)
 
       nodeVisuals.forEach((visual) => {
         ;(visual.shell.geometry as THREE.BufferGeometry).dispose()
