@@ -56,6 +56,7 @@ export type ArchiveJourneyConfig = {
 
 export type LibraryWorldConfig = {
   source: 'sanity' | 'fallback'
+  syncMode?: 'drafts' | 'published' | 'local'
   welcomeTitle: string
   welcomeSubtitle: string
   welcomeBody: string
@@ -180,6 +181,7 @@ export const DEFAULT_LIBRARY_DISTRICTS: LibraryDistrictConfig[] = [
 
 export const DEFAULT_LIBRARY_WORLD_CONFIG: LibraryWorldConfig = {
   source: 'fallback',
+  syncMode: 'local',
   welcomeTitle: 'DEV LIBRARY',
   welcomeSubtitle: 'An explorable archive of DEV Community writing',
   welcomeBody:
@@ -322,6 +324,33 @@ function sanitizeDistrict(
   }
 }
 
+const MAX_DISTRICT_GAP_BAYS = 5
+
+function compactDistrictRoute(
+  districts: LibraryDistrictConfig[],
+): LibraryDistrictConfig[] {
+  if (districts.length < 2) return districts
+
+  const sorted = [...districts].sort((a, b) => a.bay - b.bay)
+  let previousBay = sorted[0]?.bay ?? 0
+
+  return sorted.map((district, index) => {
+    if (index === 0) {
+      previousBay = district.bay
+      return district
+    }
+
+    const compactedBay = Math.min(
+      district.bay,
+      previousBay + MAX_DISTRICT_GAP_BAYS,
+    )
+    previousBay = compactedBay
+    return compactedBay === district.bay
+      ? district
+      : {...district, bay: compactedBay}
+  })
+}
+
 export function mergeLibraryWorldConfig(
   payload: SanityLibraryWorldPayload | null | undefined,
 ): LibraryWorldConfig {
@@ -341,10 +370,11 @@ export function mergeLibraryWorldConfig(
     )
     .sort((a, b) => a.bay - b.bay)
 
-  const districts =
+  const districts = compactDistrictRoute(
     configuredDistricts.length > 0
       ? configuredDistricts
-      : DEFAULT_LIBRARY_DISTRICTS
+      : DEFAULT_LIBRARY_DISTRICTS,
+  )
 
   const curatedArticles = (payload.curatedArticles ?? [])
     .filter(
