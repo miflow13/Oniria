@@ -781,6 +781,7 @@ export default function DreamWorld3D({
     let libraryFloorGain: GainNode | null = null
     let libraryDroneGain: GainNode | null = null
     let libraryWindGain: GainNode | null = null
+    let libraryFloorOscillator: OscillatorNode | null = null
     let libraryDroneOscillator: OscillatorNode | null = null
     let libraryToneOscillator: OscillatorNode | null = null
     let libraryNoiseSource: AudioBufferSourceNode | null = null
@@ -879,16 +880,17 @@ export default function DreamWorld3D({
       floorFilter.frequency.value = 180
       floorFilter.Q.value = .6
 
-      const floorOscillator = libraryAudioContext.createOscillator()
-      floorOscillator.type = 'sine'
-      floorOscillator.frequency.value = 54
+      libraryFloorOscillator =
+        libraryAudioContext.createOscillator()
+      libraryFloorOscillator.type = 'sine'
+      libraryFloorOscillator.frequency.value = 54
       libraryFloorGain = libraryAudioContext.createGain()
       libraryFloorGain.gain.value = .012
-      floorOscillator
+      libraryFloorOscillator
         .connect(floorFilter)
         .connect(libraryFloorGain)
         .connect(libraryAudioMaster)
-      floorOscillator.start()
+      libraryFloorOscillator.start()
 
       const droneFilter = libraryAudioContext.createBiquadFilter()
       droneFilter.type = 'lowpass'
@@ -6174,6 +6176,7 @@ export default function DreamWorld3D({
         )
       }
       libraryNoiseSource?.stop()
+      libraryFloorOscillator?.stop()
       libraryDroneOscillator?.stop()
       libraryToneOscillator?.stop()
       libraryAudioMaster?.disconnect()
