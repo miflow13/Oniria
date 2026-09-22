@@ -7,6 +7,8 @@ export const DreamPostShader = {
     uIntensity: {value: 0.45},
     uTravel: {value: 0},
     uCinematic: {value: 0},
+    uFlarePosition: {value: new THREE.Vector2(0.5, 0.5)},
+    uFlareStrength: {value: 0},
   },
   vertexShader: `
     varying vec2 vUv;
@@ -21,6 +23,8 @@ export const DreamPostShader = {
     uniform float uIntensity;
     uniform float uTravel;
     uniform float uCinematic;
+    uniform vec2 uFlarePosition;
+    uniform float uFlareStrength;
     varying vec2 vUv;
 
     float hash(vec2 p) {
@@ -47,6 +51,12 @@ export const DreamPostShader = {
       float streak = pow(max(0.0, 1.0 - abs(centered.y * 2.5)), 18.0);
       streak *= pow(max(0.0, 1.0 - abs(centered.x * 1.15)), 4.0);
       color += vec3(0.05, 0.08, 0.12) * streak * uTravel * 0.18;
+
+      vec2 flareDelta = vUv - uFlarePosition;
+      float flareCore = exp(-length(flareDelta) * 34.0);
+      float flareLine = exp(-abs(flareDelta.y) * 120.0) * exp(-abs(flareDelta.x) * 3.2);
+      vec3 flareColor = vec3(0.10, 0.15, 0.19) * (flareCore * 0.8 + flareLine * 0.45);
+      color += flareColor * uFlareStrength * (0.35 + uCinematic * 0.65);
 
       gl_FragColor = vec4(color, base.a);
     }
