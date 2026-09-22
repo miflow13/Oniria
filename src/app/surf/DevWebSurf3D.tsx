@@ -1341,6 +1341,32 @@ export default function DevWebSurf3D({
     liftCabin.add(liftBack)
     scene.add(liftCabin)
 
+    for (let floor = 0; floor < LIBRARY_FLOOR_COUNT; floor += 1) {
+      const liftSignTexture = createTextTexture(
+        'CENTRAL LIFT · LEVEL ' + String(floor + 1).padStart(2, '0'),
+        FLOOR_IDENTITIES[floor] + ' · Pg↑ / Pg↓',
+        '#8ae8ff',
+        760,
+        160,
+      )
+      labelsToDispose.push(liftSignTexture)
+      const liftSignMaterial = new THREE.SpriteMaterial({
+        map: liftSignTexture,
+        transparent: true,
+        depthWrite: false,
+        toneMapped: false,
+      })
+      architecturalMaterials.push(liftSignMaterial)
+      const liftSign = new THREE.Sprite(liftSignMaterial)
+      liftSign.position.set(
+        2.65,
+        floor * LIBRARY_FLOOR_HEIGHT + 1.65,
+        6.15,
+      )
+      liftSign.scale.set(4.4, 1.05, 1)
+      scene.add(liftSign)
+    }
+
     // Main library architecture.
     addFloor(0, -15, 34, 58)
     addFloor(-13, -13, 16, 28)
@@ -2409,6 +2435,8 @@ export default function DevWebSurf3D({
       const nodeId = hit.object.userData.nodeId as string | undefined
       const node = nodeId ? nodeById.get(nodeId) ?? null : null
       if (!node) return null
+      const visual = visuals.get(node.id)
+      if (visual && !visual.group.visible) return null
       return (node.floorIndex ?? 0) === currentFloorIndex
         ? node
         : null
@@ -2658,6 +2686,8 @@ export default function DevWebSurf3D({
         }
       }
 
+      updateArticleLods(now)
+
       const aimed = pickCenter()
       const aimedId = aimed?.id ?? null
       if (aimedId !== hoverId) {
@@ -2684,8 +2714,6 @@ export default function DevWebSurf3D({
 
       const activeVisualEntries =
         visualsByFloor.get(currentFloorIndex) ?? []
-
-      updateArticleLods(now)
 
       if (now - lastDetailSelection > .28) {
         lastDetailSelection = now
