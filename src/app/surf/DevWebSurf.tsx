@@ -82,24 +82,26 @@ function safeTagColor(tag: DevTag | undefined) {
   return SECTION_COPY.topics.accent
 }
 
-function articleTags(article: DevArticleSummary | DevArticle) {
-  const payload = article as DevArticleSummary & {
+function articleTags(
+  article: DevArticleSummary | DevArticle,
+): string[] {
+  const payload = article as unknown as {
     tag_list?: unknown
     tags?: unknown
   }
-  const source = payload.tag_list ?? payload.tags
+  const source: unknown = payload.tag_list ?? payload.tags
 
   if (Array.isArray(source)) {
     return source
       .filter((tag): tag is string => typeof tag === 'string')
-      .map((tag) => tag.trim())
+      .map((tag: string) => tag.trim())
       .filter(Boolean)
   }
 
   if (typeof source === 'string') {
     return source
       .split(',')
-      .map((tag) => tag.trim().replace(/^#/, ''))
+      .map((tag: string) => tag.trim().replace(/^#/, ''))
       .filter(Boolean)
   }
 
