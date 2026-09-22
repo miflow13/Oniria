@@ -1347,16 +1347,20 @@ export default function DevWebSurf3D({
     addFloor(13, -13, 16, 28)
     addFloor(0, -39, 18, 12)
 
-    // Atrium shell and central nave. Side walls are segmented so the
-    // library has actual doorways into each wing instead of invisible
-    // graph-style travel through walls.
+    // The playable archive stops around z=-43, but the physical collection
+    // continues another thirty-plus metres into fog.
+    addFloor(0, -61, 38, 34)
+
+    // Atrium shell and central nave. The deep-archive threshold is open in
+    // the middle, producing a sightline into rows the player cannot reach.
     ;[-8.9, 8.9].forEach((x) => {
       addWall(x, 7, .35, 10, 5.8)
       addWall(x, -12.5, .35, 11, 5.8)
       addWall(x, -32.5, .35, 17, 5.8)
     })
     addWall(0, 14.5, 18, .35, 5.8)
-    addWall(0, -44.5, 18, .35, 5.8)
+    addWall(-6.5, -44.5, 5, .35, 5.8)
+    addWall(6.5, -44.5, 5, .35, 5.8)
 
     // Wing separators leave intentional door-sized gaps.
     addWall(-13, 1.8, 7.5, .28, 4.6)
@@ -1364,17 +1368,22 @@ export default function DevWebSurf3D({
     addWall(13, 1.8, 7.5, .28, 4.6)
     addWall(13, -29.5, 7.5, .28, 4.6)
 
-    // Build shelves from article occupancy. If a shelf exists, it has books.
-    // This removes the distracting empty-furniture problem on every floor.
+    type DensityShelfUnit = {
+      x: number
+      z: number
+      rotationY: number
+      floorBase: number
+      width: number
+      distant: boolean
+    }
+
+    // Build shelves from article occupancy. Real shelves stay fully physical
+    // in the playable collection; distant archive furniture is instanced.
     const occupiedShelfUnits = new Map<
       string,
-      {
-        x: number
-        z: number
-        rotationY: number
-        floorBase: number
-      }
+      Omit<DensityShelfUnit, 'width' | 'distant'>
     >()
+    const densityShelfUnits: DensityShelfUnit[] = []
 
     nodes.forEach((node) => {
       if (node.kind !== 'article' || !node.shelfKey) return
@@ -1406,15 +1415,196 @@ export default function DevWebSurf3D({
 
     occupiedShelfUnits.forEach(
       ({x, z, rotationY, floorBase}) => {
-        addShelf(
+        const width = floorBase === 0 ? 4.5 : 4.45
+        addShelf(x, z, width, rotationY, floorBase)
+        densityShelfUnits.push({
           x,
           z,
-          floorBase === 0 ? 4.5 : 4.45,
           rotationY,
           floorBase,
-        )
+          width,
+          distant: false,
+        })
       },
     )
+
+    // Beyond the collision boundary, banks of cheap shelves keep repeating.
+    // They are deliberately inaccessible: their job is to sell impossible
+    // depth, not add thousands of collision bodies.
+    const distantShelfUnits: DensityShelfUnit[] = []
+    const distantRows = [-49.5, -57.5, -65.5, -73.5]
+    const distantColumns = [-15.2, -10.3, -5.8, 5.8, 10.3, 15.2]
+    for (let floor = 0; floor < LIBRARY_FLOOR_COUNT; floor += 1) {
+      distantRows.forEach((z, row) => {
+        distantColumns.forEach((x, column) => {
+          const unit: DensityShelfUnit = {
+            x,
+            z,
+            rotationY: row % 2 === 0 ? 0 : Math.PI,
+            floorBase: floor * LIBRARY_FLOOR_HEIGHT,
+            width: 4.15,
+            distant: true,
+          }
+          distantShelfUnits.push(unit)
+          densityShelfUnits.push(unit)
+        })
+      })
+    }
+
+    const distantBackGeometry = new THREE.BoxGeometry(1, 1, .12)
+    const distantBoardGeometry = new THREE.BoxGeometry(1, .09, .64)
+    const distantShelfMaterial = new THREE.MeshStandardMaterial({
+      color: 0x171b25,
+      emissive: 0x111a3b,
+      emissiveIntensity: .24,
+      roughness: .7,
+      metalness: .24,
+    })
+    architecturalGeometries.push(
+      distantBackGeometry,
+      distantBoardGeometry,
+    )
+    architecturalMaterials.push(distantShelfMaterial)
+
+    const distantBacks = new THREE.InstancedMesh(
+      distantBackGeometry,
+      distantShelfMaterial,
+      distantShelfUnits.length,
+    )
+    const distantBoards = new THREE.InstancedMesh(
+      distantBoardGeometry,
+      distantShelfMaterial,
+      distantShelfUnits.length * 4,
+    )
+    const densityMatrix = new THREE.Matrix4()
+    const densityPosition = new THREE.Vector3()
+    const densityQuaternion = new THREE.Quaternion()
+    const densityScale = new THREE.Vector3()
+
+    distantShelfUnits.forEach((unit, index) => {
+      densityQuaternion.setFromAxisAngle(
+        new THREE.Vector3(0, 1, 0),
+        unit.rotationY,
+      )
+      densityPosition.set(
+        unit.x,
+        unit.floorBase + 1.74,
+        unit.z - Math.cos(unit.rotationY) * .29,
+      )
+      densityScale.set(unit.width, 3.46, 1)
+      densityMatrix.compose(
+        densityPosition,
+        densityQuaternion,
+        densityScale,
+      )
+      distantBacks.setMatrixAt(index, densityMatrix)
+
+      ;[.18, 1.28, 2.38, 3.48].forEach((boardY, level) => {
+        densityPosition.set(
+          unit.x,
+          unit.floorBase + boardY,
+          unit.z,
+        )
+        densityScale.set(unit.width, 1, 1)
+        densityMatrix.compose(
+          densityPosition,
+          densityQuaternion,
+          densityScale,
+        )
+        distantBoards.setMatrixAt(index * 4 + level, densityMatrix)
+      })
+    })
+    distantBacks.instanceMatrix.needsUpdate = true
+    distantBoards.instanceMatrix.needsUpdate = true
+    scene.add(distantBacks, distantBoards)
+
+    // One instanced spine field fills every shelf, including the unreachable
+    // archive. Real article objects sit slightly forward and replace these
+    // cheap silhouettes when the player gets close.
+    const fillerBooksPerLevel = 14
+    const fillerBookGeometry = new THREE.BoxGeometry(1, 1, 1)
+    const fillerBookMaterial = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      vertexColors: true,
+      emissive: 0x10162d,
+      emissiveIntensity: .18,
+      roughness: .62,
+      metalness: .16,
+    })
+    architecturalGeometries.push(fillerBookGeometry)
+    architecturalMaterials.push(fillerBookMaterial)
+    const fillerBookCount =
+      densityShelfUnits.length * 3 * fillerBooksPerLevel
+    const fillerBooks = new THREE.InstancedMesh(
+      fillerBookGeometry,
+      fillerBookMaterial,
+      fillerBookCount,
+    )
+    const fillerPalette = [
+      0x24304b,
+      0x35477a,
+      0x243b57,
+      0x4b356f,
+      0x21516a,
+      0x3b49df,
+      0x5965e8,
+      0x2c3345,
+    ]
+
+    let fillerIndex = 0
+    densityShelfUnits.forEach((unit, shelfIndex) => {
+      densityQuaternion.setFromAxisAngle(
+        new THREE.Vector3(0, 1, 0),
+        unit.rotationY,
+      )
+      for (let level = 0; level < 3; level += 1) {
+        for (let slot = 0; slot < fillerBooksPerLevel; slot += 1) {
+          const t = slot / (fillerBooksPerLevel - 1)
+          const localX = THREE.MathUtils.lerp(
+            -unit.width / 2 + .19,
+            unit.width / 2 - .19,
+            t,
+          )
+          const seed = shelfIndex * 41 + level * 17 + slot * 7
+          const height = .58 + ((seed % 9) / 8) * .26
+          const width = .13 + ((seed % 5) / 4) * .07
+          const front = unit.distant ? .34 : .325
+          densityPosition.set(
+            unit.x +
+              Math.cos(unit.rotationY) * localX +
+              Math.sin(unit.rotationY) * front,
+            unit.floorBase + .23 + level * 1.1 + height / 2,
+            unit.z -
+              Math.sin(unit.rotationY) * localX +
+              Math.cos(unit.rotationY) * front,
+          )
+          densityScale.set(width, height, .13)
+          densityMatrix.compose(
+            densityPosition,
+            densityQuaternion,
+            densityScale,
+          )
+          fillerBooks.setMatrixAt(fillerIndex, densityMatrix)
+          fillerBooks.setColorAt(
+            fillerIndex,
+            new THREE.Color(
+              fillerPalette[
+                (seed + level + (unit.distant ? 2 : 0)) %
+                  fillerPalette.length
+              ],
+            ),
+          )
+          fillerIndex += 1
+        }
+      }
+    })
+    fillerBooks.instanceMatrix.needsUpdate = true
+    if (fillerBooks.instanceColor) {
+      fillerBooks.instanceColor.needsUpdate = true
+    }
+    fillerBooks.castShadow = false
+    fillerBooks.receiveShadow = false
+    scene.add(fillerBooks)
 
     const ceilingRailGeometry = new THREE.BoxGeometry(.035, .035, 52)
     const ceilingRailMaterial = new THREE.MeshBasicMaterial({
