@@ -745,7 +745,7 @@ export default function DreamWorld3D({
     const scene = new THREE.Scene()
     scene.background = new THREE.Color(0x030611)
     scene.fog = new THREE.FogExp2(
-      0x07101f,
+      libraryMode ? 0x1b0d26 : 0x07101f,
       settings.fogDensity * (libraryMode ? 1.18 : 1),
     )
 
@@ -1558,10 +1558,27 @@ export default function DreamWorld3D({
         libraryArchiveFogMaterials.push(material)
 
         const sprite = new THREE.Sprite(material)
+        const localSide =
+          index % 3 === 0 ? 0 : index % 2 === 0 ? 1 : -1
+        const initialBay = THREE.MathUtils.clamp(
+          .35 + bayOffset,
+          0,
+          ARCHIVE_PATH_RENDER_BAYS,
+        )
+        const initialPoint = archivePathPoint(initialBay)
+        const initialFrame = archivePathFrame(initialBay)
+        const initialSideDistance = localSide * 2.6
+
         sprite.userData.localHazeBayOffset = bayOffset
         sprite.userData.localHazePhase = index * 1.27
-        sprite.userData.localHazeSide =
-          index % 3 === 0 ? 0 : index % 2 === 0 ? 1 : -1
+        sprite.userData.localHazeSide = localSide
+        sprite.position.set(
+          initialPoint[0] +
+            initialFrame.normalX * initialSideDistance,
+          initialPoint[1] + .8,
+          initialPoint[2] +
+            initialFrame.normalZ * initialSideDistance,
+        )
         sprite.scale.set(
           32 + (index % 3) * 6,
           14 + (index % 4) * 2.2,
