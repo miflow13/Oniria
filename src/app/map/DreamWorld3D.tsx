@@ -114,6 +114,7 @@ type Props = {
   diveTimelineProgress: number
   observatoryMode: boolean
   flightMode: boolean
+  inputBlocked?: boolean
   onZoomChange: (zoom: number) => void
   onPanChange: (pan: Pan) => void
   onNodeHover: (node: DreamWorldNode | null) => void
@@ -338,6 +339,7 @@ export default function DreamWorld3D({
   diveTimelineProgress,
   observatoryMode,
   flightMode,
+  inputBlocked = false,
   onZoomChange,
   onPanChange,
   onNodeHover,
@@ -377,6 +379,7 @@ export default function DreamWorld3D({
   const diveTimelineProgressRef = useRef(diveTimelineProgress)
   const observatoryModeRef = useRef(observatoryMode)
   const flightModeRef = useRef(flightMode)
+  const inputBlockedRef = useRef(inputBlocked)
   const onDiveStateChangeRef = useRef(onDiveStateChange)
   const onDiveDreamChangeRef = useRef(onDiveDreamChange)
   const onFlightModeChangeRef = useRef(onFlightModeChange)
@@ -407,6 +410,7 @@ export default function DreamWorld3D({
   diveTimelineProgressRef.current = diveTimelineProgress
   observatoryModeRef.current = observatoryMode
   flightModeRef.current = flightMode
+  inputBlockedRef.current = inputBlocked
   onDiveStateChangeRef.current = onDiveStateChange
   onDiveDreamChangeRef.current = onDiveDreamChange
   onFlightModeChangeRef.current = onFlightModeChange
@@ -2561,7 +2565,13 @@ export default function DreamWorld3D({
     }
 
     function handleFlightKeyDown(event: KeyboardEvent) {
-      if (!flightModeRef.current || diveMode !== 'none') return
+      if (
+        !flightModeRef.current ||
+        diveMode !== 'none' ||
+        inputBlockedRef.current
+      ) {
+        return
+      }
 
       flightKeys.add(event.code)
 
