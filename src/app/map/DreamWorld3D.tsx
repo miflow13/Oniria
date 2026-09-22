@@ -3241,6 +3241,8 @@ export default function DreamWorld3D({
 
       starGeometry.dispose()
       starMaterial.dispose()
+      scene.environment = null
+      cinematicEnvironment.dispose()
       composer.dispose()
       renderer.dispose()
       host.removeChild(renderer.domElement)
