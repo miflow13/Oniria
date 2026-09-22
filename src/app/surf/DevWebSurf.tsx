@@ -8,7 +8,9 @@ import {
   useRef,
   useState,
 } from 'react'
-import DevWebSurf3D from './DevWebSurf3D'
+import DevWebSurf3D, {
+  type SurfDebugMetrics,
+} from './DevWebSurf3D'
 import type {
   DevArticle,
   DevArticleSummary,
@@ -771,6 +773,28 @@ export default function DevWebSurf() {
     floor: number
     nonce: number
   } | null>(null)
+  const [debugOpen, setDebugOpen] = useState(false)
+  const [debugMetrics, setDebugMetrics] =
+    useState<SurfDebugMetrics | null>(null)
+
+  useEffect(() => {
+    const toggleDebug = (event: KeyboardEvent) => {
+      const target = event.target
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        (target instanceof HTMLElement && target.isContentEditable)
+      ) {
+        return
+      }
+      if (event.code !== 'Backquote') return
+      event.preventDefault()
+      setDebugOpen((current) => !current)
+    }
+
+    window.addEventListener('keydown', toggleDebug)
+    return () => window.removeEventListener('keydown', toggleDebug)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -1301,6 +1325,9 @@ export default function DevWebSurf() {
         currentFloor={currentFloor}
         floorRequest={floorRequest}
         onFloorChange={setCurrentFloor}
+        uiOverlayOpen={directoryOpen}
+        debugEnabled={debugOpen}
+        onDebugMetrics={setDebugMetrics}
       />
 
       <header className={styles.chrome}>
@@ -1536,6 +1563,73 @@ export default function DevWebSurf() {
         <i />
         <i />
       </div>
+
+      <button
+        type="button"
+        className={
+          debugOpen
+            ? styles.debugToggle + ' ' + styles.debugToggleActive
+            : styles.debugToggle
+        }
+        onClick={() => setDebugOpen((current) => !current)}
+        title="Toggle developer HUD"
+      >
+        DEV
+      </button>
+
+      {debugOpen && (
+        <aside className={styles.debugHud} aria-label="Developer diagnostics">
+          <div>
+            <strong>Renderer</strong>
+            <span>
+              {debugMetrics
+                ? Math.round(debugMetrics.fps) + ' FPS'
+                : 'measuring…'}
+            </span>
+          </div>
+          <dl>
+            <div>
+              <dt>draws</dt>
+              <dd>{debugMetrics?.drawCalls ?? '—'}</dd>
+            </div>
+            <div>
+              <dt>triangles</dt>
+              <dd>
+                {debugMetrics
+                  ? debugMetrics.triangles.toLocaleString()
+                  : '—'}
+              </dd>
+            </div>
+            <div>
+              <dt>textures</dt>
+              <dd>{debugMetrics?.textures ?? '—'}</dd>
+            </div>
+            <div>
+              <dt>nodes</dt>
+              <dd>{graph.nodes.length}</dd>
+            </div>
+            <div>
+              <dt>catalog</dt>
+              <dd>
+                {catalogLoading
+                  ? 'loading'
+                  : catalogArticles.length.toLocaleString()}
+              </dd>
+            </div>
+            <div>
+              <dt>floor</dt>
+              <dd>{String(currentFloor + 1).padStart(2, '0')}</dd>
+            </div>
+          </dl>
+          <small>
+            bootstrap {loading ? 'loading' : error ? 'error' : 'ready'}
+            {' · '}
+            route {routeLoading ? 'loading' : 'idle'}
+            {' · '}
+            {locked ? 'pointer locked' : 'cursor free'}
+          </small>
+        </aside>
+      )}
 
       <section className={styles.controls}>
         <span><kbd>WASD</kbd> walk</span>
