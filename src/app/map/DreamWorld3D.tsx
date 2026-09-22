@@ -324,6 +324,7 @@ function createLabelTexture(node: DreamWorldNode) {
 function createLibraryRouteLabelTexture(
   title: string,
   code: string,
+  accent = '#80deeb',
 ) {
   const canvas = document.createElement('canvas')
   canvas.width = 768
@@ -333,16 +334,18 @@ function createLibraryRouteLabelTexture(
 
   context.clearRect(0, 0, canvas.width, canvas.height)
   const gradient = context.createLinearGradient(0, 0, canvas.width, 0)
-  gradient.addColorStop(0, 'rgba(71, 209, 225, .04)')
-  gradient.addColorStop(.5, 'rgba(130, 155, 255, .22)')
-  gradient.addColorStop(1, 'rgba(151, 117, 231, .04)')
+  gradient.addColorStop(0, accent + '12')
+  gradient.addColorStop(.5, accent + '42')
+  gradient.addColorStop(1, accent + '12')
   context.fillStyle = gradient
   context.fillRect(0, 18, canvas.width, 156)
 
-  context.strokeStyle = 'rgba(128, 222, 235, .46)'
-  context.lineWidth = 3
+  context.strokeStyle = accent
+  context.globalAlpha = .72
+  context.lineWidth = 4
   context.strokeRect(18, 34, canvas.width - 36, 124)
 
+  context.globalAlpha = 1
   context.textAlign = 'center'
   context.textBaseline = 'middle'
   context.fillStyle = 'rgba(229, 247, 255, .94)'
@@ -2967,6 +2970,7 @@ export default function DreamWorld3D({
         const texture = createLibraryRouteLabelTexture(
           district.label,
           district.code,
+          district.accent,
         )
         const material = new THREE.SpriteMaterial({
           map: texture,
