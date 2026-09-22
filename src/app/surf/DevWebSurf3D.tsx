@@ -1604,6 +1604,13 @@ export default function DevWebSurf3D({
       addFloorSeams(-10.2, archiveCenterZ, 2.85, 88, base, 'z', 9)
       addFloorSeams(10.2, archiveCenterZ, 2.85, 88, base, 'z', 9)
 
+      const bridgeRibGeometry = new THREE.BoxGeometry(
+        8.85,
+        .16,
+        .12,
+      )
+      architecturalGeometries.push(bridgeRibGeometry)
+
       UPPER_BRIDGE_Z.forEach((z) => {
         addFloor(0, z, 9.4, 4.4, floorMaterial, base)
         addFloorInsetSurface(
@@ -1629,6 +1636,19 @@ export default function DevWebSurf3D({
             floor,
             'threshold',
           )
+        })
+
+        // Dark structural ribs under every bridge remain visible from the
+        // storeys below, giving the cross-spans weight and a repeatable unit
+        // of scale as the player looks through the atrium.
+        ;[-1.35, 0, 1.35].forEach((offset) => {
+          const rib = new THREE.Mesh(
+            bridgeRibGeometry,
+            slabUndersideMaterial,
+          )
+          rib.position.set(0, base - .3, z + offset)
+          rib.castShadow = true
+          scene.add(rib)
         })
       })
 
