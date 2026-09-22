@@ -332,26 +332,33 @@ export default function DevLibraryMap() {
     async function populateDistricts() {
       const entries = await Promise.all(
         taggedDistricts.map(async (district) => {
-          const primaryTag = district.devTags[0]
-          if (!primaryTag) {
+          const seedTags = district.devTags.slice(0, 2)
+          if (seedTags.length === 0) {
             return [district.id, []] as const
           }
 
           try {
-            const response = await fetch(
-              '/api/devto?mode=tag&tag=' +
-                encodeURIComponent(primaryTag),
+            const responses = await Promise.all(
+              seedTags.map((tag) =>
+                fetch(
+                  '/api/devto?mode=tag&tag=' +
+                    encodeURIComponent(tag),
+                ),
+              ),
             )
-            if (!response.ok) {
-              return [district.id, []] as const
-            }
+            const payloads = await Promise.all(
+              responses.map(async (response) => {
+                if (!response.ok) return []
+                const payload = (await response.json()) as {
+                  articles?: DevArticleSummary[]
+                }
+                return payload.articles ?? []
+              }),
+            )
 
-            const payload = (await response.json()) as {
-              articles?: DevArticleSummary[]
-            }
             return [
               district.id,
-              payload.articles ?? [],
+              uniqueArticles(...payloads),
             ] as const
           } catch {
             return [district.id, []] as const
@@ -583,7 +590,7 @@ export default function DevLibraryMap() {
         uniqueArticles(
           bootstrap.feed,
           bootstrap.latest,
-        ).slice(0, CATALOG_BOOKS_PER_SHELF * 2),
+        ).slice(0, CATALOG_BOOKS_PER_SHELF * 3),
       )
     }
 
