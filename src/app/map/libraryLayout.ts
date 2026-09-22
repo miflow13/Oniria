@@ -100,7 +100,7 @@ export function archiveWalkwayHalfWidthAtBay(
 
   return (
     ARCHIVE_WALKWAY_HALF_WIDTH +
-    archiveDistrictInfluence(bay, districts) * 2.4 +
+    archiveDistrictInfluence(bay, districts) * 1.55 +
     welcomeInfluence * 3.15
   )
 }
