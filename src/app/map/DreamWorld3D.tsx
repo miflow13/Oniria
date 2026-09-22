@@ -6,6 +6,7 @@ import {EffectComposer} from 'three/examples/jsm/postprocessing/EffectComposer.j
 import {RenderPass} from 'three/examples/jsm/postprocessing/RenderPass.js'
 import {UnrealBloomPass} from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 import {BokehPass} from 'three/examples/jsm/postprocessing/BokehPass.js'
+import {SSAOPass} from 'three/examples/jsm/postprocessing/SSAOPass.js'
 import {ShaderPass} from 'three/examples/jsm/postprocessing/ShaderPass.js'
 import {OutputPass} from 'three/examples/jsm/postprocessing/OutputPass.js'
 import type {Dream, SymbolCategory} from '@/types/dream'
@@ -48,6 +49,11 @@ import {
   type DreamDive,
 } from './dreamworld/dive/createDreamDive'
 import {DreamPostShader} from './dreamworld/effects/dreamPostShader'
+import {createCinematicEnvironment} from './dreamworld/rendering/createCinematicEnvironment'
+import {
+  createPortalSceneTransition,
+  type PortalSceneTransition,
+} from './dreamworld/effects/createPortalSceneTransition'
 
 export type DreamWorldNode = {
   _id: string
@@ -97,6 +103,7 @@ type Props = {
   diveBackRequest: number
   diveTimelineProgress: number
   observatoryMode: boolean
+  flightMode: boolean
   onZoomChange: (zoom: number) => void
   onPanChange: (pan: Pan) => void
   onNodeHover: (node: DreamWorldNode | null) => void
@@ -105,6 +112,7 @@ type Props = {
   onProjectionChange: (projection: ProjectionPoint | null) => void
   onDiveStateChange: (active: boolean, title?: string) => void
   onDiveDreamChange: (dreamId: string, title: string, depth: number) => void
+  onFlightModeChange: (active: boolean) => void
 }
 
 type NodeVisual = {
@@ -299,6 +307,7 @@ export default function DreamWorld3D({
   diveBackRequest,
   diveTimelineProgress,
   observatoryMode,
+  flightMode,
   onZoomChange,
   onPanChange,
   onNodeHover,
@@ -307,6 +316,7 @@ export default function DreamWorld3D({
   onProjectionChange,
   onDiveStateChange,
   onDiveDreamChange,
+  onFlightModeChange,
 }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const nodeRef = useRef(nodes)
@@ -332,8 +342,10 @@ export default function DreamWorld3D({
   const diveBackRequestRef = useRef(diveBackRequest)
   const diveTimelineProgressRef = useRef(diveTimelineProgress)
   const observatoryModeRef = useRef(observatoryMode)
+  const flightModeRef = useRef(flightMode)
   const onDiveStateChangeRef = useRef(onDiveStateChange)
   const onDiveDreamChangeRef = useRef(onDiveDreamChange)
+  const onFlightModeChangeRef = useRef(onFlightModeChange)
 
   nodeRef.current = nodes
   positionsRef.current = positions
@@ -358,8 +370,10 @@ export default function DreamWorld3D({
   diveBackRequestRef.current = diveBackRequest
   diveTimelineProgressRef.current = diveTimelineProgress
   observatoryModeRef.current = observatoryMode
+  flightModeRef.current = flightMode
   onDiveStateChangeRef.current = onDiveStateChange
   onDiveDreamChangeRef.current = onDiveDreamChange
+  onFlightModeChangeRef.current = onFlightModeChange
 
   const graphKey = useMemo(
     () =>
