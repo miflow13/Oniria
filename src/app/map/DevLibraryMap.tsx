@@ -153,6 +153,175 @@ function cleanMarkdown(markdown: string | undefined) {
     .trim()
 }
 
+function devImageProxyUrl(
+  primary: string | null | undefined,
+  fallback?: string | null,
+  variant: 'thumb' | 'full' = 'full',
+) {
+  const source = primary ?? fallback
+  if (!source) return undefined
+
+  let url =
+    '/api/devto?mode=image&variant=' +
+    variant +
+    '&url=' +
+    encodeURIComponent(source)
+
+  if (primary && fallback && fallback !== primary) {
+    url += '&fallback=' + encodeURIComponent(fallback)
+  }
+
+  return url
+}
+
+function sanitizeArticleHtml(
+  html: string | undefined,
+  articleUrl: string | undefined,
+) {
+  if (!html || typeof DOMParser === 'undefined') return ''
+
+  const document = new DOMParser().parseFromString(
+    html,
+    'text/html',
+  )
+  const allowedTags = new Set([
+    'p',
+    'br',
+    'hr',
+    'h1',
+    'h2',
+    'h3',
+    'h4',
+    'h5',
+    'h6',
+    'strong',
+    'b',
+    'em',
+    'i',
+    's',
+    'del',
+    'blockquote',
+    'pre',
+    'code',
+    'ul',
+    'ol',
+    'li',
+    'a',
+    'img',
+    'figure',
+    'figcaption',
+    'details',
+    'summary',
+    'table',
+    'thead',
+    'tbody',
+    'tr',
+    'th',
+    'td',
+  ])
+  const destructiveTags = new Set([
+    'script',
+    'style',
+    'iframe',
+    'object',
+    'embed',
+    'svg',
+    'form',
+    'input',
+    'button',
+    'textarea',
+    'select',
+    'option',
+    'link',
+    'meta',
+  ])
+
+  Array.from(document.body.querySelectorAll('*')).forEach(
+    (element) => {
+      const tag = element.tagName.toLowerCase()
+
+      if (destructiveTags.has(tag)) {
+        element.remove()
+        return
+      }
+
+      if (!allowedTags.has(tag)) {
+        element.replaceWith(...Array.from(element.childNodes))
+        return
+      }
+
+      const allowedAttributes =
+        tag === 'a'
+          ? new Set(['href', 'title'])
+          : tag === 'img'
+            ? new Set([
+                'src',
+                'alt',
+                'title',
+                'width',
+                'height',
+              ])
+            : tag === 'code'
+              ? new Set(['class'])
+              : new Set<string>()
+
+      Array.from(element.attributes).forEach((attribute) => {
+        if (!allowedAttributes.has(attribute.name.toLowerCase())) {
+          element.removeAttribute(attribute.name)
+        }
+      })
+
+      if (tag === 'a') {
+        const rawHref = element.getAttribute('href')
+        if (!rawHref) return
+
+        try {
+          const href = new URL(
+            rawHref,
+            articleUrl ?? 'https://dev.to/',
+          )
+          if (href.protocol !== 'https:' && href.protocol !== 'http:') {
+            element.removeAttribute('href')
+            return
+          }
+          element.setAttribute('href', href.href)
+          element.setAttribute('target', '_blank')
+          element.setAttribute('rel', 'noreferrer noopener')
+        } catch {
+          element.removeAttribute('href')
+        }
+      }
+
+      if (tag === 'img') {
+        const rawSrc = element.getAttribute('src')
+        if (!rawSrc) {
+          element.remove()
+          return
+        }
+
+        try {
+          const src = new URL(
+            rawSrc,
+            articleUrl ?? 'https://dev.to/',
+          )
+          if (src.protocol !== 'https:' && src.protocol !== 'http:') {
+            element.remove()
+            return
+          }
+          element.setAttribute('src', src.href)
+          element.setAttribute('loading', 'lazy')
+          element.setAttribute('decoding', 'async')
+          element.setAttribute('referrerpolicy', 'no-referrer')
+        } catch {
+          element.remove()
+        }
+      }
+    },
+  )
+
+  return document.body.innerHTML
+}
+
 export default function DevLibraryMap() {
   const [bootstrap, setBootstrap] = useState<DevBootstrap | null>(null)
   const [catalog, setCatalog] = useState<DevArticleSummary[]>([])
@@ -183,6 +352,23 @@ export default function DevLibraryMap() {
   >({})
   const [readingBook, setReadingBook] =
     useState<LibraryReadingBook | null>(null)
+  const sanitizedArticleHtml = useMemo(
+    () =>
+      sanitizeArticleHtml(
+        article?.body_html,
+        article?.url,
+      ),
+    [article?.body_html, article?.url],
+  )
+  const articleHeroImage = useMemo(
+    () =>
+      devImageProxyUrl(
+        article?.cover_image,
+        article?.social_image,
+        'full',
+      ),
+    [article?.cover_image, article?.social_image],
+  )
   const [navigation, setNavigation] = useState<{
     nearestId: string | null
     routeTargetId: string | null
@@ -768,10 +954,6 @@ export default function DevLibraryMap() {
         libraryPathBay: shelf.pathBay,
         libraryDistrictId: shelf.districtId,
         libraryBooks: shelf.articles.slice(0, 9).map((article) => {
-          const image =
-            article.cover_image ??
-            article.social_image ??
-            undefined
           const engagement =
             (article.public_reactions_count ?? 0) +
             (article.comments_count ?? 0) * 2
@@ -788,10 +970,11 @@ export default function DevLibraryMap() {
           return {
             id: String(article.id),
             title: article.title,
-            coverUrl: image
-              ? '/api/devto?mode=image&variant=thumb&url=' +
-                encodeURIComponent(image)
-              : undefined,
+            coverUrl: devImageProxyUrl(
+              article.cover_image,
+              article.social_image,
+              'thumb',
+            ),
             activity: Math.min(
               1,
               Math.log2(engagement + 1) / 7,
@@ -1219,10 +1402,30 @@ export default function DevLibraryMap() {
                 ? ' · ' + article.reading_time_minutes + ' min read'
                 : ''}
             </p>
-            <div className={styles.articleBody}>
-              {cleanMarkdown(article.body_markdown) ||
-                article.description}
-            </div>
+            {articleHeroImage && (
+              <img
+                className={styles.readerHeroImage}
+                src={articleHeroImage}
+                alt=""
+                loading="eager"
+                decoding="async"
+              />
+            )}
+            {sanitizedArticleHtml ? (
+              <div
+                className={styles.articleBody}
+                dangerouslySetInnerHTML={{
+                  __html: sanitizedArticleHtml,
+                }}
+              />
+            ) : (
+              <div className={styles.articleBody}>
+                <p>
+                  {cleanMarkdown(article.body_markdown) ||
+                    article.description}
+                </p>
+              </div>
+            )}
             <a
               className={styles.devLink}
               href={article.url}
