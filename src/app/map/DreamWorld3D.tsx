@@ -1201,6 +1201,55 @@ export default function DreamWorld3D({
       depthWrite: false,
     })
 
+    const libraryShelfLight = libraryMode
+      ? new THREE.PointLight(0x8fe9f3, 0, 13, 2)
+      : null
+    if (libraryShelfLight) scene.add(libraryShelfLight)
+
+    const libraryShelfSparkleGeometry = libraryMode
+      ? new THREE.BufferGeometry()
+      : null
+    const libraryShelfSparkleMaterial = libraryMode
+      ? new THREE.PointsMaterial({
+          color: 0xc8f8ff,
+          size: .045,
+          transparent: true,
+          opacity: .62,
+          depthWrite: false,
+          sizeAttenuation: true,
+        })
+      : null
+    let libraryShelfSparkles: THREE.Points | null = null
+
+    if (
+      libraryShelfSparkleGeometry &&
+      libraryShelfSparkleMaterial
+    ) {
+      const sparkleCount = 24
+      const positions = new Float32Array(sparkleCount * 3)
+      for (let index = 0; index < sparkleCount; index += 1) {
+        const sparkleSeed = hashString('library-sparkle:' + index)
+        const offset = index * 3
+        positions[offset] =
+          (seededUnit(sparkleSeed, 1) - .5) * 4.6
+        positions[offset + 1] =
+          (seededUnit(sparkleSeed, 2) - .5) * 3.4
+        positions[offset + 2] =
+          (seededUnit(sparkleSeed, 3) - .5) * 2.2
+      }
+      libraryShelfSparkleGeometry.setAttribute(
+        'position',
+        new THREE.BufferAttribute(positions, 3),
+      )
+      libraryShelfSparkles = new THREE.Points(
+        libraryShelfSparkleGeometry,
+        libraryShelfSparkleMaterial,
+      )
+      libraryShelfSparkles.visible = false
+      libraryShelfSparkles.renderOrder = 4
+      world.add(libraryShelfSparkles)
+    }
+
     for (const node of nodeRef.current) {
       const seed = hashString(node._id)
       const color = new THREE.Color(
@@ -3215,40 +3264,62 @@ export default function DreamWorld3D({
         1 - Math.pow(1 - openingProgress, 3)
 
       libraryBookVisuals.forEach((bookVisual) => {
+        const shelfVisual = nodeVisuals.get(bookVisual.nodeId)
+        const shelfDistance = shelfVisual
+          ? camera.position.distanceTo(shelfVisual.group.position)
+          : Infinity
         const isOpening = openingBook?.visual === bookVisual
         const isHovered = hoveredBook === bookVisual
+        const isApproachedShelf =
+          flightNearestId === bookVisual.nodeId &&
+          shelfDistance < 15
+
+        const showFullDetail =
+          shelfDistance < 27 || isOpening || isHovered
+        const showBookBlocks =
+          shelfDistance < 52 || isOpening || isHovered
+
+        bookVisual.group.visible = showBookBlocks
+        bookVisual.coverHinge.visible = showFullDetail
+
         const positionTarget = bookVisual.basePosition.clone()
         positionTarget.z += isOpening
           ? .72 * openingEase
           : isHovered
             ? .2
-            : 0
+            : isApproachedShelf
+              ? .075
+              : 0
         positionTarget.y += isOpening ? .08 * openingEase : 0
 
         bookVisual.group.position.lerp(
           positionTarget,
-          isOpening ? .2 : .14,
+          isOpening ? .2 : .12,
         )
 
         const targetScale = isOpening
           ? 1 + .13 * openingEase
           : isHovered
             ? 1.045
-            : 1
+            : isApproachedShelf
+              ? 1.018
+              : 1
         bookVisual.group.scale.lerp(
           new THREE.Vector3(
             targetScale,
             targetScale,
             targetScale,
           ),
-          isOpening ? .18 : .12,
+          isOpening ? .18 : .1,
         )
 
         const targetYaw = isOpening
           ? .07 * openingEase
           : isHovered
             ? .025
-            : 0
+            : isApproachedShelf
+              ? .012
+              : 0
         bookVisual.group.rotation.y +=
           (targetYaw - bookVisual.group.rotation.y) * .14
 
@@ -4165,6 +4236,55 @@ export default function DreamWorld3D({
         }
       }
 
+      let nearestLibraryShelfId: string | null = null
+      let nearestLibraryShelfDistance = Infinity
+      const nearestShelfPoint = new THREE.Vector3()
+
+      if (libraryMode) {
+        nodeRef.current.forEach((node) => {
+          if (node.libraryKind !== 'shelf') return
+          const visual = nodeVisuals.get(node._id)
+          if (!visual) return
+          visual.group.getWorldPosition(nearestShelfPoint)
+          const distance = nearestShelfPoint.distanceTo(camera.position)
+          if (distance < nearestLibraryShelfDistance) {
+            nearestLibraryShelfDistance = distance
+            nearestLibraryShelfId = node._id
+          }
+        })
+
+        const nearestVisual = nearestLibraryShelfId
+          ? nodeVisuals.get(nearestLibraryShelfId)
+          : null
+        const focusStrength = THREE.MathUtils.clamp(
+          1 - (nearestLibraryShelfDistance - 7) / 12,
+          0,
+          1,
+        )
+
+        if (libraryShelfLight && nearestVisual) {
+          libraryShelfLight.position
+            .copy(nearestVisual.group.position)
+            .add(new THREE.Vector3(0, 1.35, 1.2))
+          libraryShelfLight.intensity +=
+            (focusStrength * 2.1 - libraryShelfLight.intensity) * .08
+        } else if (libraryShelfLight) {
+          libraryShelfLight.intensity *= .9
+        }
+
+        if (libraryShelfSparkles && nearestVisual) {
+          libraryShelfSparkles.visible = focusStrength > .04
+          libraryShelfSparkles.position.copy(nearestVisual.group.position)
+          libraryShelfSparkles.rotation.y += .0018
+          if (libraryShelfSparkleMaterial) {
+            libraryShelfSparkleMaterial.opacity =
+              .18 + focusStrength * .48
+          }
+        } else if (libraryShelfSparkles) {
+          libraryShelfSparkles.visible = false
+        }
+      }
+
       for (const node of nodeRef.current) {
         const visual = nodeVisuals.get(node._id)
         if (!visual) continue
@@ -4248,13 +4368,29 @@ export default function DreamWorld3D({
                     : .015
                   : .006
 
+        const shelfDistance =
+          node.libraryKind === 'shelf'
+            ? camera.position.distanceTo(visual.group.position)
+            : Infinity
+        const isNearestLibraryShelf =
+          node.libraryKind === 'shelf' &&
+          nearestLibraryShelfId === node._id &&
+          nearestLibraryShelfDistance < 18
+        const nearbyShelfFocusActive =
+          node.libraryKind === 'shelf' &&
+          nearestLibraryShelfDistance < 16
+
         const scaleBoost =
           node.libraryKind === 'shelf'
             ? selected
-              ? 1.035
+              ? 1.045
               : hoveredId === node._id
-                ? 1.018
-                : 1
+                ? 1.025
+                : isNearestLibraryShelf
+                  ? 1.035
+                  : nearbyShelfFocusActive && shelfDistance < 30
+                    ? .965
+                    : 1
             : selected
               ? 1.32
               : hoveredId === node._id
@@ -4271,13 +4407,30 @@ export default function DreamWorld3D({
             typeof visual.group.userData.libraryBaseYaw === 'number'
               ? visual.group.userData.libraryBaseYaw
               : Math.PI
+          const cameraFacingYaw =
+            Math.atan2(
+              camera.position.x - visual.group.position.x,
+              camera.position.z - visual.group.position.z,
+            ) + Math.PI
+          const yawDelta = Math.atan2(
+            Math.sin(cameraFacingYaw - baseYaw),
+            Math.cos(cameraFacingYaw - baseYaw),
+          )
+          const approachStrength = isNearestLibraryShelf
+            ? THREE.MathUtils.clamp(
+                1 - (nearestLibraryShelfDistance - 6) / 12,
+                0,
+                1,
+              )
+            : 0
           visual.group.rotation.y =
             baseYaw +
-            Math.sin(elapsed * .085 + visual.phase) * .012
+            yawDelta * approachStrength * .28 +
+            Math.sin(elapsed * .085 + visual.phase) * .009
           visual.group.rotation.x =
-            Math.sin(elapsed * .07 + visual.phase) * .004
+            Math.sin(elapsed * .07 + visual.phase) * .003
           visual.group.rotation.z =
-            Math.cos(elapsed * .065 + visual.phase) * .003
+            Math.cos(elapsed * .065 + visual.phase) * .002
         } else {
           visual.group.rotation.y += selected ? .007 : .0022
           visual.group.rotation.x =
@@ -4346,11 +4499,24 @@ export default function DreamWorld3D({
         const labelDistance = camera.position.distanceTo(
           visual.group.position,
         )
-        const shelfDistanceOpacity = THREE.MathUtils.clamp(
-          1 - (labelDistance - 18) / 90,
-          .54,
-          .88,
-        )
+        const shelfDistanceOpacity =
+          labelDistance < 24
+            ? .86
+            : labelDistance < 50
+              ? THREE.MathUtils.lerp(
+                  .5,
+                  .12,
+                  (labelDistance - 24) / 26,
+                )
+              : labelDistance < 78
+                ? .045
+                : .012
+        if (node.libraryKind === 'shelf') {
+          visual.label.visible =
+            labelDistance < 88 ||
+            selected ||
+            hoveredId === node._id
+        }
         const labelTarget =
           node.libraryKind === 'shelf'
             ? selected || hoveredId === node._id
@@ -4946,6 +5112,10 @@ export default function DreamWorld3D({
       shelfCoverTextures.forEach((texture) => texture.dispose())
       shelfAccentMaterial.dispose()
       shelfPickMaterial.dispose()
+      libraryShelfSparkleGeometry?.dispose()
+      libraryShelfSparkleMaterial?.dispose()
+      if (libraryShelfSparkles) world.remove(libraryShelfSparkles)
+      if (libraryShelfLight) scene.remove(libraryShelfLight)
 
       nodeVisuals.forEach((visual) => {
         ;(visual.shell.geometry as THREE.BufferGeometry).dispose()
