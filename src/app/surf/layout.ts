@@ -24,3 +24,10 @@ export function shelfLayoutKey(
     shelfKey.replace(/:level-\d+$/, '')
   )
 }
+
+export type LayoutEditorMode = 'translate' | 'rotate'
+
+export type LayoutEditorSelection = ShelfLayoutTransform & {
+  key: string
+  label: string
+}
