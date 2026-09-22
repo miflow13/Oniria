@@ -2303,6 +2303,53 @@ export default function DevWebSurf3D({
     let lastTravelNonce = travelRequestRef.current?.nonce ?? -1
     let lastFloorNonce = floorRequestRef.current?.nonce ?? -1
     let currentFloorIndex = currentFloorRef.current
+    let lastLodUpdate = -1
+
+    function updateArticleLods(now: number) {
+      if (now - lastLodUpdate < .22) return
+      lastLodUpdate = now
+
+      const revealDistanceSq = REAL_BOOK_DISTANCE * REAL_BOOK_DISTANCE
+      articleProxyLods.forEach(({mesh, nodes: proxyNodes}, floorIndex) => {
+        const isCurrentFloor = floorIndex === currentFloorIndex
+
+        proxyNodes.forEach((node, index) => {
+          const visual = visuals.get(node.id)
+          const priority =
+            node.id === selectedRef.current ||
+            node.id === hoverId ||
+            node.id === routeTargetRef.current
+          const distanceSq = camera.position.distanceToSquared(
+            visual?.basePosition ?? proxyPosition.set(...node.position),
+          )
+          const revealReal =
+            isCurrentFloor &&
+            (priority || distanceSq <= revealDistanceSq)
+
+          if (visual) {
+            visual.group.visible = revealReal
+          }
+
+          proxyPosition.set(...node.position)
+          proxyQuaternion.setFromAxisAngle(
+            proxyUp,
+            node.rotationY ?? 0,
+          )
+          const scale = revealReal
+            ? 0
+            : .88 + Math.min(.18, node.importance * .06)
+          proxyScale.setScalar(scale)
+          proxyMatrix.compose(
+            proxyPosition,
+            proxyQuaternion,
+            proxyScale,
+          )
+          mesh.setMatrixAt(index, proxyMatrix)
+        })
+
+        mesh.instanceMatrix.needsUpdate = true
+      })
+    }
 
     let travel:
       | {
@@ -2637,6 +2684,8 @@ export default function DevWebSurf3D({
 
       const activeVisualEntries =
         visualsByFloor.get(currentFloorIndex) ?? []
+
+      updateArticleLods(now)
 
       if (now - lastDetailSelection > .28) {
         lastDetailSelection = now
@@ -3196,6 +3245,7 @@ export default function DevWebSurf3D({
 
         position.copy(point)
         camera.position.copy(point)
+        liftCabin.position.y = point.y - CAMERA_HEIGHT
         camera.lookAt(look)
         camera.fov +=
           (62 - camera.fov) *
@@ -3212,6 +3262,8 @@ export default function DevWebSurf3D({
           euler.setFromQuaternion(camera.quaternion, 'YXZ')
           yaw = euler.y
           pitch = euler.x
+          liftCabin.position.y =
+            currentFloorIndex * LIBRARY_FLOOR_HEIGHT
           floorTravel = null
           floorChangeRef.current(currentFloorIndex)
         }
