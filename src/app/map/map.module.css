@@ -4989,3 +4989,268 @@
     animation: none;
   }
 }
+
+
+/* ==========================================================================
+   Guided hackathon journey
+   ========================================================================== */
+
+.pageGuidedMode .sidebar,
+.pageGuidedMode .mapHeader,
+.pageGuidedMode .timeline,
+.pageGuidedMode .focusBanner,
+.pageGuidedMode .mapHint,
+.pageGuidedMode .mapControls,
+.pageGuidedMode .flightInstructions {
+  opacity: 0 !important;
+  visibility: hidden;
+  pointer-events: none !important;
+}
+
+.pageGuidedMode .topbar {
+  opacity: .08;
+  pointer-events: none;
+}
+
+.pageGuidedMode .flightReticle {
+  opacity: .9;
+}
+
+.guidedStart {
+  position: absolute;
+  z-index: 120;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  color: #e7f1f3;
+  background:
+    radial-gradient(circle at 50% 44%, rgba(93, 191, 187, .09), transparent 28%),
+    radial-gradient(circle at 50% 50%, rgba(120, 94, 185, .08), transparent 48%),
+    rgba(2, 5, 14, .72);
+  backdrop-filter: blur(8px);
+  text-align: center;
+}
+
+.guidedStartOrb {
+  position: relative;
+  width: 94px;
+  height: 94px;
+  margin-bottom: 24px;
+  border-radius: 50%;
+  border: 1px solid rgba(147, 226, 221, .18);
+  box-shadow:
+    0 0 34px rgba(118, 220, 214, .1),
+    inset 0 0 28px rgba(144, 117, 213, .08);
+  animation: guidedOrbFloat 4.2s ease-in-out infinite;
+}
+
+.guidedStartOrb::before,
+.guidedStartOrb::after,
+.guidedStartOrb i {
+  content: '';
+  position: absolute;
+  inset: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+}
+
+.guidedStartOrb::before {
+  width: 52px;
+  height: 52px;
+  background:
+    radial-gradient(circle at 35% 30%, rgba(232,255,255,.5), transparent 10%),
+    radial-gradient(circle, rgba(102, 214, 209, .24), rgba(87, 74, 150, .08) 54%, transparent 72%);
+  box-shadow: 0 0 26px rgba(100, 214, 209, .16);
+}
+
+.guidedStartOrb::after {
+  width: 68px;
+  height: 68px;
+  border: 1px solid rgba(148, 226, 222, .12);
+}
+
+.guidedStartOrb i:nth-child(1) {
+  width: 108px;
+  height: 34px;
+  border: 1px solid rgba(160, 137, 220, .11);
+  transform: translate(-50%, -50%) rotate(26deg);
+}
+
+.guidedStartOrb i:nth-child(2) {
+  width: 34px;
+  height: 108px;
+  border: 1px solid rgba(121, 214, 210, .08);
+  transform: translate(-50%, -50%) rotate(-31deg);
+}
+
+.guidedStartOrb i:nth-child(3) {
+  width: 6px;
+  height: 6px;
+  background: rgba(220, 250, 248, .82);
+  box-shadow: 0 0 18px rgba(144, 232, 226, .5);
+}
+
+.guidedStart > span {
+  color: #6f99a2;
+  font-size: .58rem;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+}
+
+.guidedStart h2 {
+  margin: 9px 0 0;
+  max-width: 640px;
+  color: #f2f8f8;
+  font-size: clamp(2rem, 5vw, 4.2rem);
+  font-weight: 520;
+  line-height: .98;
+  letter-spacing: -.045em;
+}
+
+.guidedStart p {
+  max-width: 520px;
+  margin: 16px auto 0;
+  color: #8295a5;
+  font-size: clamp(.78rem, 1.2vw, .94rem);
+  line-height: 1.65;
+}
+
+.guidedStart > button:not(.guidedStartSkip) {
+  margin-top: 24px;
+  min-width: 172px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 13px;
+  cursor: pointer;
+  color: #e4f7f4;
+  background:
+    linear-gradient(145deg, rgba(98, 198, 192, .15), rgba(93, 77, 151, .08));
+  border: 1px solid rgba(124, 216, 211, .22);
+  border-radius: 999px;
+  padding: 12px 19px;
+  box-shadow:
+    0 12px 38px rgba(0,0,0,.2),
+    0 0 30px rgba(97, 200, 195, .06);
+  font-size: .72rem;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    background 180ms ease;
+}
+
+.guidedStart > button:not(.guidedStartSkip):hover {
+  transform: translateY(-2px);
+  border-color: rgba(147, 231, 226, .4);
+  background:
+    linear-gradient(145deg, rgba(98, 198, 192, .22), rgba(93, 77, 151, .11));
+}
+
+.guidedStart > button b {
+  font-size: .92rem;
+  font-weight: 400;
+}
+
+.guidedStartSkip {
+  margin-top: 11px;
+  cursor: pointer;
+  color: #536b7d;
+  background: transparent;
+  border: 0;
+  padding: 7px 10px;
+  font-size: .59rem;
+}
+
+.guidedStartSkip:hover {
+  color: #8ca2b3;
+}
+
+.demoDirector {
+  padding-top: 36px;
+}
+
+.demoDirectorProgress {
+  position: absolute;
+  left: 15px;
+  right: 42px;
+  top: 13px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.demoDirectorProgress i {
+  flex: 1 1 auto;
+  height: 2px;
+  overflow: hidden;
+  background: rgba(151, 181, 199, .1);
+  border-radius: 999px;
+  transition:
+    background 320ms ease,
+    box-shadow 320ms ease;
+}
+
+.demoDirectorProgressActive {
+  background: rgba(119, 212, 207, .55) !important;
+  box-shadow: 0 0 9px rgba(102, 213, 207, .18);
+}
+
+.demoDirectorProgress span {
+  margin-left: 3px;
+  color: #536b7b;
+  font-size: .49rem;
+  letter-spacing: .04em;
+}
+
+.pageGuidedMode .flightMemoryCard {
+  right: clamp(18px, 3vw, 44px);
+  bottom: clamp(24px, 5vh, 54px);
+}
+
+.pageGuidedMode .demoDirector {
+  top: 24px;
+  left: 24px;
+}
+
+.pageGuidedMode.pageDiveMode .demoDirector {
+  top: auto;
+  bottom: 22px;
+  left: 22px;
+}
+
+@keyframes guidedOrbFloat {
+  0%, 100% {
+    transform: translateY(0) rotate(-1deg);
+  }
+  50% {
+    transform: translateY(-8px) rotate(1deg);
+  }
+}
+
+@media (max-width: 700px) {
+  .guidedStart {
+    padding: 20px;
+  }
+
+  .guidedStart h2 {
+    font-size: clamp(2rem, 11vw, 3rem);
+  }
+
+  .pageGuidedMode .demoDirector,
+  .pageGuidedMode.pageDiveMode .demoDirector {
+    left: 12px;
+    right: 12px;
+    top: auto;
+    bottom: 12px;
+    width: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .guidedStartOrb {
+    animation: none;
+  }
+}
