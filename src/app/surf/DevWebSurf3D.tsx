@@ -48,7 +48,8 @@ type Visual = {
   bookAccent?: string
   coverMaterial?: THREE.MeshBasicMaterial
   coverUrl?: string
-  coverOpacityTarget?: number
+  coverBlend?: number
+  coverBlendTarget?: number
   coverReleaseAt?: number
   archMaterial?: THREE.MeshBasicMaterial
   basePosition: THREE.Vector3
@@ -574,16 +575,13 @@ export default function DevWebSurf3D({
       if (entry.texture) {
         if (visual.coverMaterial.map !== entry.texture) {
           visual.coverMaterial.map = entry.texture
-          visual.coverMaterial.color.set(0xffffff)
-          visual.coverMaterial.opacity = Math.min(
-            visual.coverMaterial.opacity,
-            .08,
-          )
-          visual.coverOpacityTarget = .98
+          visual.coverBlend = .08
+          visual.coverBlendTarget = 1
           visual.coverReleaseAt = undefined
+          visual.coverMaterial.color.setRGB(.24, .24, .28)
           visual.coverMaterial.needsUpdate = true
         } else {
-          visual.coverOpacityTarget = .98
+          visual.coverBlendTarget = 1
           visual.coverReleaseAt = undefined
         }
         return
@@ -621,10 +619,10 @@ export default function DevWebSurf3D({
             visual.coverMaterial
           ) {
             visual.coverMaterial.map = texture
-            visual.coverMaterial.color.set(0xffffff)
-            visual.coverMaterial.opacity = .06
-            visual.coverOpacityTarget = .98
+            visual.coverBlend = .06
+            visual.coverBlendTarget = 1
             visual.coverReleaseAt = undefined
+            visual.coverMaterial.color.setRGB(.22, .22, .26)
             visual.coverMaterial.needsUpdate = true
           }
         },
@@ -635,8 +633,9 @@ export default function DevWebSurf3D({
           if (visual.coverMaterial) {
             visual.coverMaterial.map = null
             visual.coverMaterial.color.set(0x171b28)
-            visual.coverMaterial.opacity = .72
-            visual.coverOpacityTarget = .72
+            visual.coverMaterial.opacity = 1
+            visual.coverBlend = 0
+            visual.coverBlendTarget = 0
             visual.coverReleaseAt = undefined
             visual.coverMaterial.needsUpdate = true
           }
@@ -654,15 +653,16 @@ export default function DevWebSurf3D({
       if (immediate) {
         visual.coverMaterial.map = null
         visual.coverMaterial.color.set(0x171b28)
-        visual.coverMaterial.opacity = .72
-        visual.coverOpacityTarget = .72
+        visual.coverMaterial.opacity = 1
+        visual.coverBlend = 0
+        visual.coverBlendTarget = 0
         visual.coverReleaseAt = undefined
         visual.coverMaterial.needsUpdate = true
         return
       }
 
-      visual.coverOpacityTarget = .08
-      visual.coverReleaseAt = now + .42
+      visual.coverBlendTarget = 0
+      visual.coverReleaseAt = now + .38
     }
 
     function ensureBookTitle(visual: Visual) {
@@ -1547,10 +1547,10 @@ export default function DevWebSurf3D({
 
         const coverMaterial = new THREE.MeshBasicMaterial({
           color: 0x161a27,
-          transparent: true,
-          opacity: .9,
+          transparent: false,
+          opacity: 1,
           toneMapped: false,
-          depthWrite: false,
+          depthWrite: true,
           polygonOffset: true,
           polygonOffsetFactor: -2,
           polygonOffsetUnits: -2,
@@ -1718,7 +1718,8 @@ export default function DevWebSurf3D({
         bookAccent: node.kind === 'article' ? node.accent : undefined,
         coverMaterial: coverMaterialRef,
         coverUrl,
-        coverOpacityTarget: .72,
+        coverBlend: 0,
+        coverBlendTarget: 0,
         archMaterial: archMaterialRef,
         basePosition: new THREE.Vector3(...node.position),
         baseRotationY: node.rotationY ?? 0,
@@ -2402,21 +2403,32 @@ export default function DevWebSurf3D({
         if (node?.kind === 'article') {
           if (visual.coverMaterial) {
             const target =
-              visual.coverOpacityTarget ??
-              (visual.coverMaterial.map ? .98 : .72)
-            visual.coverMaterial.opacity +=
-              (target - visual.coverMaterial.opacity) *
-              (1 - Math.exp(-delta * 7.5))
+              visual.coverBlendTarget ??
+              (visual.coverMaterial.map ? 1 : 0)
+            visual.coverBlend =
+              (visual.coverBlend ?? 0) +
+              (target - (visual.coverBlend ?? 0)) *
+                (1 - Math.exp(-delta * 6.5))
+
+            if (visual.coverMaterial.map) {
+              const brightness =
+                .2 + (visual.coverBlend ?? 0) * .8
+              visual.coverMaterial.color.setRGB(
+                brightness,
+                brightness,
+                Math.min(1, brightness * 1.035),
+              )
+            }
 
             if (
               visual.coverReleaseAt !== undefined &&
               now >= visual.coverReleaseAt &&
-              visual.coverMaterial.opacity <= .14
+              (visual.coverBlend ?? 0) <= .09
             ) {
               visual.coverMaterial.map = null
               visual.coverMaterial.color.set(0x171b28)
-              visual.coverMaterial.opacity = .72
-              visual.coverOpacityTarget = .72
+              visual.coverBlend = 0
+              visual.coverBlendTarget = 0
               visual.coverReleaseAt = undefined
               visual.coverMaterial.needsUpdate = true
             }
