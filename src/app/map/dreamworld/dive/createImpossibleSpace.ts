@@ -166,6 +166,7 @@ export function createImpossibleSpace({
   seed,
   depth,
   maxDepth,
+  environmentMap,
 }: {
   profile: DreamProfile
   currentDream: Dream
@@ -175,6 +176,7 @@ export function createImpossibleSpace({
   seed: number
   depth: number
   maxDepth: number
+  environmentMap: THREE.Texture | null
 }): ImpossibleSpace {
   const group = new THREE.Group()
   const accent = new THREE.Color(profileAccent(profile))
@@ -338,6 +340,7 @@ export function createImpossibleSpace({
       color,
       settings,
       seed + 500 + index * 113,
+      environmentMap,
     )
 
     const frame = new THREE.Group()
@@ -487,6 +490,7 @@ export function createImpossibleSpace({
       color,
       settings,
       seed + 1901,
+      environmentMap,
     )
     cell.portal.position.set(3.1, 2.7, -5.1)
     cell.portal.scale.set(1.25, 1.25, 1)
