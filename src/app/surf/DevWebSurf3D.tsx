@@ -477,12 +477,14 @@ export default function DevWebSurf3D({
       antialias: true,
       powerPreference: 'high-performance',
     })
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5))
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25))
     renderer.toneMapping = THREE.ACESFilmicToneMapping
     renderer.toneMappingExposure = 1.06
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.shadowMap.enabled = true
     renderer.shadowMap.type = THREE.PCFSoftShadowMap
+    renderer.shadowMap.autoUpdate = false
+    renderer.shadowMap.needsUpdate = true
     renderer.domElement.className = styles.canvas
     renderer.domElement.tabIndex = 0
     container.appendChild(renderer.domElement)
@@ -493,7 +495,7 @@ export default function DevWebSurf3D({
     const key = new THREE.DirectionalLight(0xf5f5f5, 2.65)
     key.position.set(-9, 13, 9)
     key.castShadow = true
-    key.shadow.mapSize.set(2048, 2048)
+    key.shadow.mapSize.set(1024, 1024)
     key.shadow.bias = -0.0002
     scene.add(key)
 
@@ -544,9 +546,10 @@ export default function DevWebSurf3D({
         lastUsed: number
       }
     >()
-    const MAX_RESIDENT_COVERS = 20
+    const MAX_RESIDENT_COVERS = 32
     const MAX_ACTIVE_BOOK_DETAILS = 14
     const COVER_LOAD_DISTANCE = 14
+    const COVER_EVICT_AGE = 4.5
     const activeCoverUrls = new Set<string>()
     const detailedBookIds = new Set<string>()
     let lastCoverTrim = 0
@@ -712,7 +715,11 @@ export default function DevWebSurf3D({
       )
 
       const evictionCandidates =
-        overflow > 0 ? resident.slice(-overflow) : []
+        overflow > 0
+          ? resident
+              .slice(-overflow)
+              .filter(([, entry]) => now - entry.lastUsed > COVER_EVICT_AGE)
+          : []
 
       evictionCandidates.forEach(([url, entry]) => {
         const texture = entry.texture
@@ -847,7 +854,7 @@ export default function DevWebSurf3D({
       const right = new THREE.Mesh(sideGeometry, shelfMaterial)
       left.position.set(-width / 2, 1.76, 0)
       right.position.set(width / 2, 1.76, 0)
-      left.castShadow = right.castShadow = true
+      left.castShadow = right.castShadow = floorBase === 0
       group.add(left, right)
 
       const back = new THREE.Mesh(backGeometry, concrete)
@@ -859,7 +866,7 @@ export default function DevWebSurf3D({
       boardLevels.forEach((boardY) => {
         const board = new THREE.Mesh(boardGeometry, shelfMaterial)
         board.position.set(0, boardY, 0)
-        board.castShadow = true
+        board.castShadow = floorBase === 0
         board.receiveShadow = true
         group.add(board)
       })
@@ -1560,7 +1567,7 @@ export default function DevWebSurf3D({
           articleCoverGeometry,
           coverMaterial,
         )
-        cover.position.set(.012, .12, .091)
+        cover.position.set(.012, .12, .096)
         cover.renderOrder = 4
         group.add(cover)
 
@@ -1571,10 +1578,10 @@ export default function DevWebSurf3D({
 
         bookTitleMaterial = new THREE.MeshBasicMaterial({
           color: 0x171b28,
-          transparent: true,
-          opacity: .92,
+          transparent: false,
+          opacity: 1,
           toneMapped: false,
-          depthWrite: false,
+          depthWrite: true,
           polygonOffset: true,
           polygonOffsetFactor: -3,
           polygonOffsetUnits: -3,
@@ -1584,7 +1591,7 @@ export default function DevWebSurf3D({
           articleTitleGeometry,
           bookTitleMaterial,
         )
-        titlePanel.position.set(.012, -.26, .094)
+        titlePanel.position.set(.012, -.26, .101)
         titlePanel.renderOrder = 5
         group.add(titlePanel)
 
@@ -1790,9 +1797,9 @@ export default function DevWebSurf3D({
         )
         const geometry = new THREE.TubeGeometry(
           curve,
-          48,
+          32,
           edge.kind === 'corridor' ? .052 : .027,
-          8,
+          6,
           false,
         )
         const material = new THREE.MeshBasicMaterial({
@@ -1807,9 +1814,9 @@ export default function DevWebSurf3D({
 
         const glowGeometry = new THREE.TubeGeometry(
           curve,
-          48,
+          32,
           edge.kind === 'corridor' ? .105 : .057,
-          8,
+          6,
           false,
         )
         const glowMaterial = new THREE.MeshBasicMaterial({
@@ -1822,7 +1829,7 @@ export default function DevWebSurf3D({
         const glowRoute = new THREE.Mesh(glowGeometry, glowMaterial)
         scene.add(glowRoute)
 
-        const packetGeometry = new THREE.SphereGeometry(.035, 10, 10)
+        const packetGeometry = new THREE.SphereGeometry(.035, 7, 7)
         const packetMaterial = new THREE.MeshBasicMaterial({
           color: baseColor,
           transparent: true,
