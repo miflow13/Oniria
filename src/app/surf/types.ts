@@ -87,13 +87,13 @@ export type SurfNode = {
   articleId?: number
   tag?: string
   section?: LibrarySection
-  floor?: number
   position: [number, number, number]
   rotationY?: number
   shelfKey?: string
   shelfLevel?: number
   shelfSlot?: number
   shelfOrder?: number
+  floorIndex?: number
   importance: number
   accent: string
   payload?: DevArticleSummary

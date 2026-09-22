@@ -153,57 +153,48 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    if (mode === 'stacks') {
-      const requestedPages = Number.parseInt(
-        safeValue(searchParams.get('pages'), '12'),
+    if (mode === 'catalog') {
+      const pageCount = Math.min(
         10,
+        Math.max(1, Number(searchParams.get('pages') ?? 6) || 6),
       )
-      const pageCount = Number.isFinite(requestedPages)
-        ? Math.max(1, Math.min(16, requestedPages))
-        : 12
-      const pages = Array.from(
-        {length: pageCount},
-        (_, index) => index + 1,
+      const perPage = Math.min(
+        100,
+        Math.max(20, Number(searchParams.get('per_page') ?? 100) || 100),
       )
 
-      // Fetch in small waves rather than opening a dozen upstream
-      // connections at once. The result is still returned as one stable
-      // catalog so the Three.js scene only rebuilds once.
-      const batches: unknown[][] = []
-      for (let index = 0; index < pages.length; index += 4) {
-        const wave = pages.slice(index, index + 4)
+      const pages: unknown[][] = []
+      for (let index = 0; index < pageCount; index += 4) {
+        const wave = Array.from(
+          {length: Math.min(4, pageCount - index)},
+          (_, offset) => index + offset + 1,
+        )
         const results = await Promise.all(
           wave.map((page) =>
             devFetch(
-              `/articles?per_page=100&page=${page}`,
+              `/articles?per_page=${perPage}&page=${page}`,
             ).catch(() => []),
           ),
         )
-        batches.push(...results)
+        pages.push(...results)
       }
 
       const seen = new Set<number>()
-      const articles = normalizeArticles(
-        batches.flat(),
-      ).filter((article) => {
-        const id =
-          article &&
-          typeof article === 'object' &&
-          'id' in article &&
-          typeof article.id === 'number'
-            ? article.id
-            : null
-        if (id === null || seen.has(id)) return false
-        seen.add(id)
-        return true
-      })
+      const articles = pages
+        .flatMap((page) => normalizeArticles(page))
+        .filter((article) => {
+          if (!article || typeof article !== 'object') return false
+          const id = Number((article as {id?: unknown}).id)
+          if (!Number.isFinite(id) || seen.has(id)) return false
+          seen.add(id)
+          return true
+        })
 
       return NextResponse.json({
         articles,
-        pages: pages.length,
-        hasMore:
-          Array.isArray(batches[batches.length - 1]) &&
-          batches[batches.length - 1].length === 100,
+        pageCount,
+        perPage,
+        count: articles.length,
       })
     }
 
