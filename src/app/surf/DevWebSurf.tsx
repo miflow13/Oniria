@@ -22,7 +22,7 @@ import type {
 import styles from './surf.module.css'
 
 const DEFAULT_USERNAME = 'mikachu'
-const STACK_FLOOR_COUNT = 3
+const STACK_FLOOR_COUNT = 4
 const STACK_FLOOR_HEIGHT = 4.6
 const STACK_BOOKS_PER_SHELF = 9
 const STACK_SHELVES_PER_FLOOR = 20
@@ -614,7 +614,9 @@ function buildLibraryGraph(
             ? '#4f6dff'
             : placement.floor === 2
               ? '#53d3ff'
-              : '#ae7bff',
+              : placement.floor === 3
+                ? '#ae7bff'
+                : '#ff4fd8',
       })
     })
   }
@@ -1342,7 +1344,10 @@ export default function DevWebSurf() {
             ? 'cataloging stacks…'
             : stackArticles.length + ' live articles'}
         </span>
-        {[0, 1, 2, 3].map((floor) => (
+        {Array.from(
+          {length: STACK_FLOOR_COUNT + 1},
+          (_, floor) => floor,
+        ).map((floor) => (
           <button
             type="button"
             key={floor}
@@ -1440,10 +1445,15 @@ export default function DevWebSurf() {
               {stackLoading
                 ? 'Cataloging hundreds of live DEV articles…'
                 : stackArticles.length +
-                  ' additional articles across 3 floors'}
+                  ' additional articles across ' +
+                  STACK_FLOOR_COUNT +
+                  ' floors'}
             </strong>
             <div>
-              {[1, 2, 3].map((floor) => (
+              {Array.from(
+                {length: STACK_FLOOR_COUNT},
+                (_, index) => index + 1,
+              ).map((floor) => (
                 <button
                   type="button"
                   key={floor}
