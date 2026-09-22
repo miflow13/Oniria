@@ -182,6 +182,37 @@ export const DEFAULT_LIBRARY_DISTRICTS: LibraryDistrictConfig[] = [
   },
 ]
 
+export const PACKED_DISTRICT_START_BAY = 1
+export const PACKED_DISTRICT_GAP_BAYS = 3.4
+
+/**
+ * Convert authored district ordering into a dense visual boulevard.
+ *
+ * Sanity still controls district identity/order through its bay values, but
+ * the renderer receives compact display bays so old authored coordinates do
+ * not recreate 80–90 unit dead zones between categories.
+ */
+export function packLibraryDistricts(
+  districts: LibraryDistrictConfig[],
+): LibraryDistrictConfig[] {
+  const ordered = [...districts]
+    .filter((district) => district.enabled)
+    .sort((a, b) => a.bay - b.bay)
+
+  const packedBayById = new Map(
+    ordered.map((district, index) => [
+      district.id,
+      PACKED_DISTRICT_START_BAY +
+        index * PACKED_DISTRICT_GAP_BAYS,
+    ]),
+  )
+
+  return districts.map((district) => ({
+    ...district,
+    bay: packedBayById.get(district.id) ?? district.bay,
+  }))
+}
+
 export const DEFAULT_LIBRARY_WORLD_CONFIG: LibraryWorldConfig = {
   source: 'fallback',
   syncMode: 'local',
