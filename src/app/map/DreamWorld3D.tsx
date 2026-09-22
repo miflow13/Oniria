@@ -96,6 +96,8 @@ export type DreamWorldNode = {
     id: string
     title: string
     coverUrl?: string
+    activity?: number
+    fresh?: boolean
   }>
 }
 
