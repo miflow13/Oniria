@@ -731,6 +731,18 @@
   border-color: rgba(94, 220, 255, .34);
 }
 
+.layoutAuthoringHudActions .layoutAuthoringDanger {
+  grid-column: 1 / -1;
+  color: #ffd9d9;
+  background: rgba(166, 46, 56, .14);
+  border-color: rgba(255, 105, 118, .28);
+}
+
+.layoutAuthoringHudActions .layoutAuthoringDanger:hover {
+  background: rgba(185, 52, 63, .24);
+  border-color: rgba(255, 120, 132, .48);
+}
+
 .layoutAuthoringHud small {
   display: block;
   color: #7894a7;
