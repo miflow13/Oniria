@@ -9,7 +9,15 @@ import {
   useState,
 } from 'react'
 import DevWebSurf3D from './DevWebSurf3D'
-import {FLOOR_COUNT, ROOMS, ROOM_ORDER, EYE_HEIGHT} from './libraryLayout'
+import {
+  FLOOR_COUNT,
+  ROOMS,
+  ROOM_ORDER,
+  EYE_HEIGHT,
+  SHELF_FRONT_OFFSET,
+  SHELF_LEVEL_Y,
+  SHELF_SLOT_SPACING,
+} from './libraryLayout'
 import type {
   DevArticle,
   DevArticleSummary,
@@ -188,10 +196,10 @@ function shelfPlacement(
   const slot = localIndex % slotsPerLevel
   const anchor = anchors[shelfIndex]
 
-  const localOffset = (slot - 1) * 1.02
-  const y = .7 + level * 1.1
+  const localOffset = (slot - 1) * SHELF_SLOT_SPACING
+  const y = SHELF_LEVEL_Y[level] ?? SHELF_LEVEL_Y[0]
 
-  const front = .42
+  const front = SHELF_FRONT_OFFSET
   const cos = Math.cos(anchor.rotationY)
   const sin = Math.sin(anchor.rotationY)
   const x =
