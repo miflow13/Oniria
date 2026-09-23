@@ -4730,10 +4730,11 @@ export default function DreamWorld3D({
 
       if (event.code === 'KeyR') {
         event.preventDefault()
-        if (
-          libraryMode &&
-          libraryMovementModeRef.current === 'walk'
-        ) {
+        // The old cinematic route is a free-space Bezier curve. In the
+        // enclosed six-room library it can cut through walls, so room mode
+        // intentionally leaves auto-route disabled until a corridor-aware
+        // pathfinder replaces it.
+        if (libraryMode) {
           return
         }
         const sourceNode = nearestFlightNode(12)
