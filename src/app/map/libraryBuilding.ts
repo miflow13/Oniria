@@ -155,6 +155,21 @@ export function createLibraryBuilding(
     [10.8, 2.7],
   )
 
+  addSign(
+    'ONIRIA × DEV LIBRARY',
+    'A live DEV.to archive you can walk through · browse a room · choose a shelf · click a book to read',
+    '#f1b76f',
+    [0, 3.05, 5.35],
+    [10.4, 2.08],
+  )
+  addSign(
+    'HOW TO EXPLORE',
+    'WASD move · mouse look · click books · ESC returns you to the library',
+    '#8fdcf4',
+    [0, 2.02, 5.48],
+    [8.7, 1.32],
+  )
+
   roomDistricts.forEach((district, index) => {
     const room =
       LIBRARY_ROOMS.find(
@@ -569,6 +584,7 @@ export function createLibraryBuilding(
         1.55,
         'height',
       ),
+      loadLibraryAsset('issueDesk', 1.32, 'height'),
     ])
 
     if (disposed) return
@@ -598,6 +614,7 @@ export function createLibraryBuilding(
     const wallSconce = value(15)
     const rollingLadder = value(16)
     const cardCatalogueSecondary = value(17)
+    const issueDesk = value(18)
 
     if (wallPanel) {
       const templateWidth = (template: THREE.Group) =>
@@ -741,6 +758,7 @@ export function createLibraryBuilding(
       pottedPlant,
       wallSconce,
       rollingLadder,
+      issueDesk,
     }
 
     wallSconce?.traverse((child) => {
@@ -787,6 +805,14 @@ export function createLibraryBuilding(
           1.45 * (placement.scale ?? 1),
           placement.yaw ?? 0,
         )
+      } else if (placement.asset === 'issueDesk') {
+        addContactShadow(
+          placement.position[0],
+          placement.position[2],
+          3.75 * (placement.scale ?? 1),
+          1.55 * (placement.scale ?? 1),
+          placement.yaw ?? 0,
+        )
       }
 
       if (placement.floats !== false) {
@@ -805,7 +831,9 @@ export function createLibraryBuilding(
                     ? {tiltX: .005, tiltY: .002, tiltZ: .004}
                     : placement.asset === 'rollingLadder'
                       ? {tiltX: .014, tiltY: .006, tiltZ: .012}
-                      : {tiltX: .012, tiltY: .005, tiltZ: .01}
+                      : placement.asset === 'issueDesk'
+                        ? {tiltX: .004, tiltY: .0015, tiltZ: .003}
+                        : {tiltX: .012, tiltY: .005, tiltZ: .01}
 
         floatingProps.register(instance, {
           phase: floatingPhase(placement.id),
