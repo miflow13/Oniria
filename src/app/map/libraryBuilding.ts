@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import type {LibraryWorldConfig} from '@/lib/libraryWorldConfig'
 import {loadLibraryAsset} from './libraryAssets'
 import {LIBRARY_ROOMS} from './libraryRoomLayout'
 
@@ -19,6 +20,7 @@ export type LibraryBuilding = {
 
 export function createLibraryBuilding(
   scene: THREE.Scene,
+  config: LibraryWorldConfig,
 ): LibraryBuilding {
   const group = new THREE.Group()
   group.name = 'sanity-room-library-building'
@@ -27,6 +29,145 @@ export function createLibraryBuilding(
   let disposed = false
   const localMaterials: THREE.Material[] = []
   const localGeometries: THREE.BufferGeometry[] = []
+  const localTextures: THREE.Texture[] = []
+
+  const createSignTexture = (
+    title: string,
+    subtitle: string,
+    accent: string,
+    width = 1024,
+    height = 256,
+  ) => {
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    const context = canvas.getContext('2d')
+    if (!context) return new THREE.CanvasTexture(canvas)
+
+    context.clearRect(0, 0, width, height)
+    context.fillStyle = 'rgba(8, 10, 16, .9)'
+    context.strokeStyle = accent
+    context.lineWidth = 10
+    context.beginPath()
+    context.roundRect(12, 12, width - 24, height - 24, 30)
+    context.fill()
+    context.stroke()
+
+    context.fillStyle = '#ffffff'
+    context.font = '700 58px system-ui, sans-serif'
+    context.textAlign = 'center'
+    context.textBaseline = 'middle'
+    context.fillText(title.toUpperCase(), width / 2, height * .43)
+
+    context.fillStyle = 'rgba(255,255,255,.68)'
+    context.font = '400 28px system-ui, sans-serif'
+    context.fillText(subtitle, width / 2, height * .7)
+
+    const texture = new THREE.CanvasTexture(canvas)
+    texture.colorSpace = THREE.SRGBColorSpace
+    texture.needsUpdate = true
+    localTextures.push(texture)
+    return texture
+  }
+
+  const addSign = (
+    title: string,
+    subtitle: string,
+    accent: string,
+    position: [number, number, number],
+    scale: [number, number],
+  ) => {
+    const texture = createSignTexture(title, subtitle, accent)
+    const material = new THREE.SpriteMaterial({
+      map: texture,
+      transparent: true,
+      depthWrite: false,
+      toneMapped: false,
+    })
+    localMaterials.push(material)
+    const sprite = new THREE.Sprite(material)
+    sprite.position.set(...position)
+    sprite.scale.set(scale[0], scale[1], 1)
+    sprite.renderOrder = 12
+    group.add(sprite)
+    return sprite
+  }
+
+  const roomDistricts = [...config.districts]
+    .filter((district) => district.enabled)
+    .sort((a, b) => a.roomSlot - b.roomSlot)
+
+  const directoryLine = roomDistricts
+    .map((district, index) => {
+      const arrow = index % 2 === 0 ? '←' : '→'
+      return `${district.label} ${arrow}`
+    })
+    .join('  ·  ')
+
+  addSign(
+    config.welcomeTitle || 'DEV LIBRARY',
+    directoryLine || 'Featured ← · New Arrivals → · Topics ← · Creators → · Search ← · Archive →',
+    '#53d3ff',
+    [0, 3.35, 10.55],
+    [10.8, 2.7],
+  )
+
+  roomDistricts.forEach((district, index) => {
+    const room =
+      LIBRARY_ROOMS.find(
+        (candidate) => candidate.slot === district.roomSlot,
+      ) ?? LIBRARY_ROOMS[index % LIBRARY_ROOMS.length]
+    if (!room) return
+
+    const [x, z] = room.center
+    const signX = x < 0 ? -10.25 : 10.25
+    addSign(
+      district.label,
+      district.description ?? 'Live DEV collection',
+      district.accent,
+      [signX, 3.65, z],
+      [5.1, 1.28],
+    )
+
+    const glowGeometry = new THREE.PlaneGeometry(11.5, 11.5)
+    localGeometries.push(glowGeometry)
+    const glowMaterial = new THREE.MeshBasicMaterial({
+      color: district.accent,
+      transparent: true,
+      opacity: .035,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      toneMapped: false,
+    })
+    localMaterials.push(glowMaterial)
+    const glow = new THREE.Mesh(glowGeometry, glowMaterial)
+    glow.rotation.x = -Math.PI / 2
+    glow.position.set(x, .018, z)
+    glow.renderOrder = 2
+    group.add(glow)
+  })
+
+  const corridorGeometry = new THREE.PlaneGeometry(2.7, 82)
+  localGeometries.push(corridorGeometry)
+  const corridorMaterial = new THREE.MeshBasicMaterial({
+    color: 0x3b49df,
+    transparent: true,
+    opacity: .055,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide,
+    toneMapped: false,
+  })
+  localMaterials.push(corridorMaterial)
+  const corridor = new THREE.Mesh(
+    corridorGeometry,
+    corridorMaterial,
+  )
+  corridor.rotation.x = -Math.PI / 2
+  corridor.position.set(0, .022, -30)
+  corridor.renderOrder = 2
+  group.add(corridor)
 
   const backupFloorMaterial = new THREE.MeshStandardMaterial({
     color: 0xb88958,
@@ -568,6 +709,7 @@ export function createLibraryBuilding(
       scene.remove(group)
       localGeometries.forEach((geometry) => geometry.dispose())
       localMaterials.forEach((material) => material.dispose())
+      localTextures.forEach((texture) => texture.dispose())
     },
   }
 }
