@@ -14,6 +14,8 @@ export const LIBRARY_ASSETS = {
   libraryChair: '/assets/library-kit/library-chair.glb',
   chairWingback: '/assets/library-kit/chair-wingback.glb',
   readingTable: '/assets/library-kit/reading-table.glb',
+  writingDesk: '/assets/library-kit/writing-desk.glb',
+  bookcaseTall: '/assets/library-kit/bookcase-tall.glb',
   clockMantel: '/assets/library-kit/clock-mantel.glb',
   quietSign: '/assets/library-kit/quiet-sign.glb',
   pottedPlant: '/assets/library-kit/library-potted-plant.glb',
@@ -79,6 +81,36 @@ function prepareAsset(
   return root
 }
 
+const loadChunkedBookcaseTall = async () => {
+  const chunks = await Promise.all(
+    Array.from({length: 9}, async (_, index) => {
+      const suffix = String(index).padStart(2, '0')
+      const response = await fetch(
+        `/assets/library-kit/bookcase-tall.glb.b64.${suffix}`,
+      )
+      if (!response.ok) {
+        throw new Error(
+          `Tall bookcase chunk ${suffix} failed: ${response.status}`,
+        )
+      }
+      return (await response.text()).trim()
+    }),
+  )
+
+  const encoded = chunks.join('')
+  const decoded = atob(encoded)
+  const bytes = new Uint8Array(decoded.length)
+  for (let index = 0; index < decoded.length; index += 1) {
+    bytes[index] = decoded.charCodeAt(index)
+  }
+
+  const gltf = await loader.parseAsync(
+    bytes.buffer,
+    '/assets/library-kit/',
+  )
+  return gltf.scene
+}
+
 export function loadLibraryAsset(
   key: LibraryAssetKey,
   targetSize: number,
@@ -87,13 +119,16 @@ export function loadLibraryAsset(
   const path = LIBRARY_ASSETS[key]
   const cacheKey = `${path}:${targetSize}:${mode}`
   if (!cache.has(cacheKey)) {
+    const source =
+      key === 'bookcaseTall'
+        ? loadChunkedBookcaseTall()
+        : loader.loadAsync(path).then(({scene}) => scene)
+
     cache.set(
       cacheKey,
-      loader
-        .loadAsync(path)
-        .then(({scene}) =>
-          prepareAsset(scene, targetSize, mode),
-        ),
+      source.then((scene) =>
+        prepareAsset(scene, targetSize, mode),
+      ),
     )
   }
   return cache.get(cacheKey)!
