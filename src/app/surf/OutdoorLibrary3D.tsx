@@ -530,6 +530,325 @@ export default function OutdoorLibrary3D({
     const plinthGeometry = new THREE.CylinderGeometry(1.9, 2.25, .5, 10)
     geometries.push(unitBox, unitPlane, bookGeometry, plinthGeometry)
 
+    // The archive now lives inside a chain of monumental low-poly halls.
+    // Each terrace gets its own nave so the architecture grows with the
+    // catalog instead of ending at the first room.
+    const libraryStoneMaterial = new THREE.MeshStandardMaterial({
+      color: 0x797b70,
+      roughness: .96,
+      metalness: 0,
+      flatShading: true,
+    })
+    const libraryStoneDarkMaterial = new THREE.MeshStandardMaterial({
+      color: 0x54584f,
+      roughness: .98,
+      metalness: 0,
+      flatShading: true,
+    })
+    const libraryRoofMaterial = new THREE.MeshStandardMaterial({
+      color: 0x39423b,
+      roughness: .9,
+      metalness: .05,
+      flatShading: true,
+    })
+    const libraryTrimMaterial = new THREE.MeshStandardMaterial({
+      color: 0x7a5438,
+      roughness: .86,
+      metalness: .02,
+      flatShading: true,
+    })
+    const libraryWindowMaterial = new THREE.MeshStandardMaterial({
+      color: 0xc9dfc8,
+      emissive: 0x8eb995,
+      emissiveIntensity: .22,
+      roughness: .34,
+      metalness: .02,
+      transparent: true,
+      opacity: .72,
+    })
+    const libraryGoldMaterial = new THREE.MeshStandardMaterial({
+      color: 0xc6a764,
+      emissive: 0x7d612c,
+      emissiveIntensity: .2,
+      roughness: .58,
+      metalness: .34,
+      flatShading: true,
+    })
+    materials.push(
+      libraryStoneMaterial,
+      libraryStoneDarkMaterial,
+      libraryRoofMaterial,
+      libraryTrimMaterial,
+      libraryWindowMaterial,
+      libraryGoldMaterial,
+    )
+
+    const addLibraryBox = (
+      material: THREE.Material,
+      x: number,
+      y: number,
+      z: number,
+      sx: number,
+      sy: number,
+      sz: number,
+      rotationZ = 0,
+    ) => {
+      const mesh = new THREE.Mesh(unitBox, material)
+      mesh.position.set(x, y, z)
+      mesh.scale.set(sx, sy, sz)
+      mesh.rotation.z = rotationZ
+      mesh.castShadow = true
+      mesh.receiveShadow = true
+      scene.add(mesh)
+      return mesh
+    }
+
+    const buildLibraryHall = ({
+      floor,
+      centerZ,
+      depth,
+      grand = false,
+    }: {
+      floor: number
+      centerZ: number
+      depth: number
+      grand?: boolean
+    }) => {
+      const baseY = terraceBaseHeight(floor)
+      const width = grand ? 24.6 : 23.2
+      const halfWidth = width / 2
+      const wallX = halfWidth - .55
+      const roofY = baseY + (grand ? 8.9 : 8.35)
+      const columnHeight = grand ? 7.25 : 6.75
+      const columnY = baseY + columnHeight / 2
+      const frontZ = centerZ + depth / 2
+      const backZ = centerZ - depth / 2
+
+      // Stone floor/plinth: thick enough to read as architecture, but its
+      // walk surface stays aligned with the existing terrain collision plane.
+      addLibraryBox(
+        libraryStoneDarkMaterial,
+        0,
+        baseY - .16,
+        centerZ,
+        width,
+        .32,
+        depth,
+      )
+
+      // Repeating wall bays keep the building massive without becoming a
+      // featureless slab. High translucent panels read as clerestory windows.
+      const baySpacing = grand ? 7.1 : 6.6
+      const bayCount = Math.max(4, Math.floor(depth / baySpacing))
+      for (let bay = 0; bay <= bayCount; bay += 1) {
+        const t = bayCount === 0 ? 0 : bay / bayCount
+        const z = THREE.MathUtils.lerp(frontZ - 1.1, backZ + 1.1, t)
+
+        for (const side of [-1, 1] as const) {
+          const x = side * wallX
+          addLibraryBox(
+            libraryStoneMaterial,
+            x,
+            columnY,
+            z,
+            .58,
+            columnHeight,
+            .72,
+          )
+
+          // Deep external buttresses make each wing visible from across the
+          // landscape and give the low-poly walls a strong silhouette.
+          addLibraryBox(
+            libraryStoneDarkMaterial,
+            side * (wallX + .72),
+            baseY + 1.8,
+            z,
+            .78,
+            3.6,
+            1.05,
+          )
+
+          if (bay < bayCount) {
+            const nextT = (bay + 1) / bayCount
+            const nextZ = THREE.MathUtils.lerp(
+              frontZ - 1.1,
+              backZ + 1.1,
+              nextT,
+            )
+            const midZ = (z + nextZ) / 2
+            const span = Math.max(.4, Math.abs(nextZ - z) - 1.0)
+
+            addLibraryBox(
+              libraryStoneMaterial,
+              x,
+              baseY + 1.35,
+              midZ,
+              .34,
+              2.7,
+              span,
+            )
+            addLibraryBox(
+              libraryWindowMaterial,
+              side * (wallX - .05),
+              baseY + 4.55,
+              midZ,
+              .12,
+              2.6,
+              span * .88,
+            )
+          }
+        }
+      }
+
+      // A tall timber frame runs inside the masonry shell. It visually ties
+      // the low-poly environment pack's logs/woods to the library itself.
+      for (let beam = 0; beam <= bayCount; beam += 1) {
+        const t = bayCount === 0 ? 0 : beam / bayCount
+        const z = THREE.MathUtils.lerp(frontZ - 1.0, backZ + 1.0, t)
+        addLibraryBox(
+          libraryTrimMaterial,
+          0,
+          baseY + 6.55,
+          z,
+          width - 2.1,
+          .28,
+          .34,
+        )
+        for (const x of [-8.8, 8.8]) {
+          addLibraryBox(
+            libraryTrimMaterial,
+            x,
+            baseY + 3.25,
+            z,
+            .32,
+            6.4,
+            .32,
+          )
+        }
+      }
+
+      // Split gable roof leaves a long clerestory opening down the center.
+      // From outside this reads as one huge landmark; from inside it keeps
+      // the sky and surrounding forest present.
+      const roofHalfWidth = grand ? 12.4 : 11.7
+      const roofSlope = grand ? .34 : .31
+      addLibraryBox(
+        libraryRoofMaterial,
+        -5.55,
+        roofY,
+        centerZ,
+        roofHalfWidth,
+        .48,
+        depth + 1.8,
+        roofSlope,
+      )
+      addLibraryBox(
+        libraryRoofMaterial,
+        5.55,
+        roofY,
+        centerZ,
+        roofHalfWidth,
+        .48,
+        depth + 1.8,
+        -roofSlope,
+      )
+
+      // Clerestory ridge beams + warm markers make the nave easy to read
+      // from a distance and keep navigation legible at night.
+      addLibraryBox(
+        libraryGoldMaterial,
+        0,
+        roofY + .7,
+        centerZ,
+        .34,
+        .34,
+        depth + 1.2,
+      )
+      for (let z = frontZ - 3; z > backZ + 2; z -= 12) {
+        const lamp = new THREE.PointLight(
+          floor === 0 ? 0xffd694 : 0xdde8b6,
+          grand ? 4.2 : 3.1,
+          18,
+          2,
+        )
+        lamp.position.set(0, baseY + 5.8, z)
+        scene.add(lamp)
+      }
+
+      // Monumental open portals at both ends keep the player route obvious
+      // while preserving the sense that this is an indoor space.
+      for (const z of [frontZ, backZ]) {
+        for (const side of [-1, 1] as const) {
+          addLibraryBox(
+            libraryStoneMaterial,
+            side * 4.65,
+            baseY + 3.45,
+            z,
+            2.15,
+            6.9,
+            .72,
+          )
+          addLibraryBox(
+            libraryStoneDarkMaterial,
+            side * 8.35,
+            baseY + 2.1,
+            z,
+            4.9,
+            4.2,
+            .58,
+          )
+        }
+        addLibraryBox(
+          libraryStoneMaterial,
+          0,
+          baseY + 7.05,
+          z,
+          11.4,
+          1.05,
+          .78,
+        )
+        addLibraryBox(
+          libraryGoldMaterial,
+          0,
+          baseY + 6.25,
+          z + (z === frontZ ? -.42 : .42),
+          5.45,
+          .18,
+          .16,
+        )
+      }
+
+      // Small side-reading galleries make the shell feel inhabited rather
+      // than simply wrapped around the existing shelves.
+      for (const side of [-1, 1] as const) {
+        for (let z = frontZ - 8; z > backZ + 6; z -= 14) {
+          addLibraryBox(
+            libraryTrimMaterial,
+            side * 9.25,
+            baseY + .44,
+            z,
+            2.35,
+            .18,
+            4.2,
+          )
+          addLibraryBox(
+            libraryTrimMaterial,
+            side * 10.05,
+            baseY + 1.15,
+            z,
+            .2,
+            1.45,
+            4.2,
+          )
+        }
+      }
+    }
+
+    buildLibraryHall({floor: 0, centerZ: -24, depth: 78, grand: true})
+    buildLibraryHall({floor: 1, centerZ: -99, depth: 54})
+    buildLibraryHall({floor: 2, centerZ: -161, depth: 54})
+    buildLibraryHall({floor: 3, centerZ: -223, depth: 50})
+
     const terraceSegments = [
       {floor: 0, z: -23, depth: 86},
       {floor: 1, z: -99, depth: 58},
