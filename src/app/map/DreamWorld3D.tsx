@@ -1104,6 +1104,87 @@ export default function DreamWorld3D({
         ? createLibraryLayoutAuthoring(scene)
         : null
 
+    let librarySkyDomeGeometry: THREE.SphereGeometry | null =
+      null
+    let librarySkyDomeMaterial: THREE.ShaderMaterial | null =
+      null
+    let librarySkyDome: THREE.Mesh | null = null
+
+    if (libraryMode) {
+      // A real exterior backdrop keeps the skylights from reading as black
+      // rectangular holes. Stars, particles and floating debris render in
+      // front of this distant gradient, so the roof opens into a coherent
+      // Oniria night sky instead of the scene clear color.
+      librarySkyDomeGeometry =
+        new THREE.SphereGeometry(260, 40, 24)
+      librarySkyDomeMaterial =
+        new THREE.ShaderMaterial({
+          side: THREE.BackSide,
+          depthWrite: false,
+          depthTest: true,
+          toneMapped: false,
+          transparent: false,
+          uniforms: {
+            zenithColor: {
+              value: new THREE.Color(0x02040c),
+            },
+            upperColor: {
+              value: new THREE.Color(0x091326),
+            },
+            horizonColor: {
+              value: new THREE.Color(0x2b1c32),
+            },
+            warmHaze: {
+              value: new THREE.Color(0x513426),
+            },
+          },
+          vertexShader: `
+            varying vec3 vLocalPosition;
+
+            void main() {
+              vLocalPosition = position;
+              gl_Position = projectionMatrix *
+                modelViewMatrix *
+                vec4(position, 1.0);
+            }
+          `,
+          fragmentShader: `
+            varying vec3 vLocalPosition;
+            uniform vec3 zenithColor;
+            uniform vec3 upperColor;
+            uniform vec3 horizonColor;
+            uniform vec3 warmHaze;
+
+            void main() {
+              vec3 direction = normalize(vLocalPosition);
+              float height = direction.y * 0.5 + 0.5;
+              float upperMix = smoothstep(0.42, 0.9, height);
+              vec3 sky = mix(horizonColor, upperColor, upperMix);
+              sky = mix(
+                sky,
+                zenithColor,
+                smoothstep(0.72, 1.0, height)
+              );
+
+              float horizonBand =
+                exp(-pow((height - 0.5) * 7.5, 2.0));
+              sky += warmHaze * horizonBand * 0.12;
+
+              gl_FragColor = vec4(sky, 1.0);
+            }
+          `,
+        })
+      librarySkyDome = new THREE.Mesh(
+        librarySkyDomeGeometry,
+        librarySkyDomeMaterial,
+      )
+      librarySkyDome.position.set(0, 8, -30)
+      librarySkyDome.renderOrder = -20
+      librarySkyDome.frustumCulled = false
+      librarySkyDome.name = 'library-exterior-sky-dome'
+      farWorld.add(librarySkyDome)
+    }
+
     const starCount = settings.starCount
     const starPositions = new Float32Array(starCount * 3)
     const starSizes = new Float32Array(starCount)
@@ -4568,7 +4649,9 @@ export default function DreamWorld3D({
         (value): value is NonNullable<typeof value> => value !== null,
       )
 
-    const clusterAudios = [...nodeRef.current]
+    const clusterAudios = (libraryMode
+      ? []
+      : [...nodeRef.current])
       .filter((node) => node.frequency >= 2)
       .sort((a, b) => b.frequency - a.frequency)
       .slice(0, 3)
@@ -7299,7 +7382,7 @@ export default function DreamWorld3D({
         activeCell.update(elapsed, 1)
         activeCell.render(renderer)
 
-        if (spatialAudio) {
+        if (spatialAudio && !libraryMode) {
           spatialAudio.setFocus(1)
 
           if (soundEnabledRef.current && !spatialAudioStarted) {
@@ -8106,6 +8189,9 @@ export default function DreamWorld3D({
 
       starGeometry.dispose()
       starMaterial.dispose()
+      if (librarySkyDome) farWorld.remove(librarySkyDome)
+      librarySkyDomeGeometry?.dispose()
+      librarySkyDomeMaterial?.dispose()
       scene.environment = null
       cinematicEnvironment.dispose()
       composer.dispose()
