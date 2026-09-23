@@ -70,16 +70,17 @@ const WORLD_HALF_WIDTH = 46
 const PATH_HALF_WIDTH = 4.25
 const SHELF_X = 7.1
 const TERRACE_SPAWN_Z = [9, -79, -141, -203]
+const TERRACE_LIBRARY_Z = [6, -96, -158, -220]
 const TERRACE_RAMP_START = [-64, -126, -188]
 const TERRACE_RAMP_END = [-72, -134, -196]
 
 const LIBRARY_ZONES: Record<LibrarySection, THREE.Vector3> = {
-  atrium: new THREE.Vector3(0, 0, 8),
-  featured: new THREE.Vector3(24, 0, -7),
-  latest: new THREE.Vector3(3, 0, -24),
-  topics: new THREE.Vector3(-24, 0, -7),
-  creators: new THREE.Vector3(-23, 0, -31),
-  search: new THREE.Vector3(22, 0, -31),
+  atrium: new THREE.Vector3(0, 0, 6),
+  featured: new THREE.Vector3(23, 0, 6),
+  latest: new THREE.Vector3(0, 0, -19),
+  topics: new THREE.Vector3(-23, 0, 6),
+  creators: new THREE.Vector3(-18, 0, -19),
+  search: new THREE.Vector3(18, 0, -19),
   archive: new THREE.Vector3(0, 4, -96),
 }
 
@@ -257,7 +258,7 @@ function buildLayout(nodes: SurfNode[]) {
 
     if (node.kind === 'home') {
       layout.set(node.id, {
-        position: new THREE.Vector3(0, baseY + 1.55, 9.5),
+        position: new THREE.Vector3(0, baseY + 1.55, 7.5),
         rotationY: 0,
         floor,
         side: 0,
@@ -266,8 +267,12 @@ function buildLayout(nodes: SurfNode[]) {
     }
 
     if (node.kind === 'section') {
+      const sectionAnchor =
+        floor === 0
+          ? LIBRARY_ZONES[section]
+          : new THREE.Vector3(0, 0, TERRACE_LIBRARY_Z[floor])
       layout.set(node.id, {
-        position: LIBRARY_ZONES[section].clone().setY(baseY + 1.55),
+        position: sectionAnchor.clone().setY(baseY + 1.55),
         rotationY: 0,
         floor,
         side: 0,
@@ -280,7 +285,10 @@ function buildLayout(nodes: SurfNode[]) {
       const index = Math.max(0, peers.findIndex((candidate) => candidate.id === node.id))
       const side: -1 | 1 = index % 2 === 0 ? -1 : 1
       const row = Math.floor(index / 2)
-      const anchor = floor === 0 ? LIBRARY_ZONES[section] : new THREE.Vector3(0, baseY, TERRACE_SPAWN_Z[floor])
+      const anchor =
+        floor === 0
+          ? LIBRARY_ZONES[section]
+          : new THREE.Vector3(0, baseY, TERRACE_LIBRARY_Z[floor])
       layout.set(node.id, {
         position: new THREE.Vector3(anchor.x + side * 3.55, baseY + 1.35, anchor.z - 2.8 - row * 2.15),
         rotationY: side < 0 ? Math.PI / 2 : -Math.PI / 2,
@@ -297,7 +305,10 @@ function buildLayout(nodes: SurfNode[]) {
     const row = local % 4
     const slot = Math.floor(local / 4) % 10
     const bay = Math.floor(local / 40)
-    const anchor = floor === 0 ? LIBRARY_ZONES[section] : new THREE.Vector3(0, baseY, TERRACE_SPAWN_Z[floor])
+    const anchor =
+      floor === 0
+        ? LIBRARY_ZONES[section]
+        : new THREE.Vector3(0, baseY, TERRACE_LIBRARY_Z[floor])
     const sectionAnchor = anchor.z - 2.6
     const bayCenterZ = sectionAnchor - bay * 5.6
     const z = bayCenterZ + 1.72 - slot * .38
@@ -478,7 +489,7 @@ export default function OutdoorLibrary3D({
     scene.fog = new THREE.FogExp2(0xa7c0b7, .0085)
 
     const camera = new THREE.PerspectiveCamera(68, 1, .05, 330)
-    camera.position.set(0, CAMERA_HEIGHT, 13)
+    camera.position.set(0, CAMERA_HEIGHT, 26.5)
     camera.rotation.order = 'YXZ'
 
     const renderer = new THREE.WebGLRenderer({antialias: true, powerPreference: 'high-performance'})
@@ -651,38 +662,44 @@ export default function OutdoorLibrary3D({
       doors: Array<'north' | 'south' | 'east' | 'west'>
     }
 
-    // The complex is deliberately composed as rooms around outdoor courts,
-    // rather than one axis of ever-longer naves. Each room owns its openings;
-    // collision follows the structural wall segments, so doors stay walkable.
+    // A connected campus: one dominant reading hall, attached public wings,
+    // two cloister-like garden courts, then progressively denser archive
+    // buildings on the upper terraces. Shared-wall rooms use matching centered
+    // door openings so the complex reads as architecture rather than boxes
+    // scattered across the landscape.
     const libraryRooms: LibraryRoom[] = [
-      {key: 'grand-hall', floor: 0, x: 0, z: 7, width: 28, depth: 23, grand: true, doors: ['north', 'south', 'east', 'west']},
-      {key: 'featured-gallery', floor: 0, x: 24, z: -7, width: 18, depth: 18, doors: ['west', 'south']},
-      {key: 'periodicals', floor: 0, x: 3, z: -25, width: 19, depth: 17, doors: ['north', 'east', 'west']},
-      {key: 'reference', floor: 0, x: -24, z: -7, width: 18, depth: 18, doors: ['east', 'south']},
-      {key: 'creator-study', floor: 0, x: -23, z: -31, width: 18, depth: 18, doors: ['north', 'east']},
-      {key: 'search-room', floor: 0, x: 22, z: -31, width: 18, depth: 18, doors: ['north', 'west']},
-      {key: 'archive-court', floor: 1, x: 0, z: -96, width: 27, depth: 25, grand: true, doors: ['north', 'south', 'east', 'west']},
-      {key: 'archive-east', floor: 1, x: 25, z: -103, width: 17, depth: 30, doors: ['west', 'south']},
-      {key: 'research-stacks', floor: 2, x: -10, z: -158, width: 25, depth: 28, doors: ['north', 'east', 'west']},
-      {key: 'archive-west', floor: 2, x: -33, z: -164, width: 16, depth: 25, doors: ['east', 'south']},
-      {key: 'deep-stacks', floor: 3, x: 8, z: -220, width: 28, depth: 31, grand: true, doors: ['north', 'west']},
-      {key: 'deep-annex', floor: 3, x: -25, z: -226, width: 17, depth: 25, doors: ['east', 'north']},
+      {key: 'grand-hall', floor: 0, x: 0, z: 6, width: 30, depth: 28, grand: true, doors: ['north', 'south', 'east', 'west']},
+      {key: 'featured-gallery', floor: 0, x: 23, z: 6, width: 16, depth: 18, doors: ['west', 'south']},
+      {key: 'reference', floor: 0, x: -23, z: 6, width: 16, depth: 18, doors: ['east', 'south']},
+      {key: 'periodicals', floor: 0, x: 0, z: -19, width: 20, depth: 22, doors: ['north', 'south', 'east', 'west']},
+      {key: 'creator-study', floor: 0, x: -18, z: -19, width: 16, depth: 18, doors: ['north', 'east']},
+      {key: 'search-room', floor: 0, x: 18, z: -19, width: 16, depth: 18, doors: ['north', 'west']},
+
+      {key: 'archive-hall', floor: 1, x: 0, z: -96, width: 30, depth: 28, grand: true, doors: ['north', 'south', 'east', 'west']},
+      {key: 'archive-east', floor: 1, x: 23, z: -96, width: 16, depth: 20, doors: ['west']},
+      {key: 'archive-west', floor: 1, x: -23, z: -96, width: 16, depth: 20, doors: ['east']},
+
+      {key: 'research-stacks', floor: 2, x: 0, z: -158, width: 30, depth: 28, doors: ['north', 'south', 'east', 'west']},
+      {key: 'research-east', floor: 2, x: 23, z: -158, width: 16, depth: 20, doors: ['west']},
+      {key: 'research-west', floor: 2, x: -23, z: -158, width: 16, depth: 20, doors: ['east']},
+
+      {key: 'deep-stacks', floor: 3, x: 0, z: -220, width: 30, depth: 32, grand: true, doors: ['north', 'east', 'west']},
+      {key: 'deep-east-annex', floor: 3, x: 23, z: -220, width: 16, depth: 24, doors: ['west']},
+      {key: 'deep-west-annex', floor: 3, x: -23, z: -220, width: 16, depth: 24, doors: ['east']},
     ]
 
     const buildLibraryRoom = (room: LibraryRoom) => {
       const baseY = terraceBaseHeight(room.floor)
-      // Grand rooms use a second clerestory tier assembled from the authored
-      // wall/window kit. Their roofs therefore sit materially higher than the
-      // one-storey reading rooms instead of flattening the whole complex into
-      // one long pavilion.
-      const wallHeight = room.grand ? 7.15 : 4.7
-      const roofY = baseY + wallHeight + .42
+      const wallHeight = room.grand ? 7 : 4.7
+      const upperInset = room.grand ? 1.2 : 0
+      const roofWidth = Math.max(4, room.width - upperInset * 2)
+      const roofDepth = Math.max(4, room.depth - upperInset * 2)
+      const roofY = baseY + wallHeight + .08
       const halfWidth = room.width / 2
       const halfDepth = room.depth / 2
       const opening = 4.8
+
       const addWall = (x: number, z: number, width: number, depth: number) => {
-        // Visible masonry is supplied later by the authored GLB kit. Keep the
-        // collision representation simple so doorway openings remain reliable.
         addLibraryCollider(x, z, width, depth)
       }
       const addNorthSouthWall = (z: number, open: boolean) => {
@@ -698,65 +715,69 @@ export default function OutdoorLibrary3D({
         addWall(x, room.z + (opening + span) / 2, .56, span)
       }
 
+      // A thin structural slab lives below the authored parquet. It never
+      // competes visually with the library kit.
       addLibraryBox(
         libraryStoneDarkMaterial,
         room.x,
         baseY - .17,
         room.z,
-        room.width + .7,
+        room.width + .45,
         .34,
-        room.depth + .7,
+        room.depth + .45,
       )
       addNorthSouthWall(room.z + halfDepth, room.doors.includes('north'))
       addNorthSouthWall(room.z - halfDepth, room.doors.includes('south'))
       addEastWestWall(room.x - halfWidth, room.doors.includes('west'))
       addEastWestWall(room.x + halfWidth, room.doors.includes('east'))
 
-      // The kit does not include roof meshes, so only the roof shell remains
-      // procedural. It is deliberately compact and pitched; the actual facade,
-      // corners, windows, floors and interior stacks all come from repo assets.
-      const roofPitch = room.grand ? .25 : .2
+      // Roofs now hug their wall tops. Grand buildings roof the inset
+      // clerestory footprint instead of throwing a giant black slab over the
+      // whole lower storey.
+      const roofPitch = room.grand ? .18 : .13
+      const roofHalfWidth = roofWidth * .53
+      const roofOffset = roofWidth * .235
       addLibraryBox(
         libraryRoofMaterial,
-        room.x - room.width * .235,
+        room.x - roofOffset,
         roofY,
         room.z,
-        room.width * .55,
-        .42,
-        room.depth + .75,
+        roofHalfWidth,
+        .3,
+        roofDepth + .3,
         roofPitch,
       )
       addLibraryBox(
         libraryRoofMaterial,
-        room.x + room.width * .235,
+        room.x + roofOffset,
         roofY,
         room.z,
-        room.width * .55,
-        .42,
-        room.depth + .75,
+        roofHalfWidth,
+        .3,
+        roofDepth + .3,
         -roofPitch,
       )
       addLibraryBox(
         libraryGoldMaterial,
         room.x,
-        roofY + (room.grand ? .64 : .5),
+        roofY + .38,
         room.z,
-        .22,
-        .2,
-        room.depth * .7,
+        .18,
+        .16,
+        roofDepth * .72,
       )
 
       const light = new THREE.PointLight(
         room.grand ? 0xffd694 : 0xe9dfb6,
-        room.grand ? 3.7 : 2.3,
-        19,
+        room.grand ? 3.5 : 2.1,
+        room.grand ? 22 : 17,
         2,
       )
-      light.position.set(room.x, baseY + wallHeight - .85, room.z)
+      light.position.set(room.x, baseY + wallHeight - .9, room.z)
       scene.add(light)
     }
 
-    libraryRooms.forEach(buildLibraryRoom)
+    libraryRooms.forEach(buildLibraryRoom)    libraryRooms.forEach(buildLibraryRoom)
 
     const terraceSegments = [
       {floor: 0, z: -23, depth: 86},
@@ -795,44 +816,61 @@ export default function OutdoorLibrary3D({
       }
     })
 
-    const mainPath = new THREE.Mesh(unitBox, pathMaterial)
-    mainPath.scale.set(PATH_HALF_WIDTH * 2, .08, 260)
-    mainPath.position.set(0, .05, -116)
-    mainPath.receiveShadow = true
-    scene.add(mainPath)
+    // Paths are now outdoor circulation only. The old 260m strip ran through
+    // parquet and caused overlapping surfaces inside the library. Short,
+    // deliberate walks connect entrances, courtyards, terraces and ramps.
+    const addOutdoorWalk = (
+      from: THREE.Vector3,
+      to: THREE.Vector3,
+      width = 4.9,
+    ) => makePathSegment(scene, from, to, width, pathMaterial, unitBox)
 
-    // Garden walks make the public rooms legible as a campus: each branch
-    // leaves the grand hall and crosses open air before entering its chamber.
-    const gardenWalks = [
-      [LIBRARY_ZONES.atrium, LIBRARY_ZONES.featured],
-      [LIBRARY_ZONES.atrium, LIBRARY_ZONES.topics],
-      [LIBRARY_ZONES.atrium, LIBRARY_ZONES.latest],
-      [LIBRARY_ZONES.latest, LIBRARY_ZONES.creators],
-      [LIBRARY_ZONES.latest, LIBRARY_ZONES.search],
+    addOutdoorWalk(
+      new THREE.Vector3(0, .08, WORLD_NEAR_Z),
+      new THREE.Vector3(0, .08, 20.25),
+      5.2,
+    )
+    addOutdoorWalk(
+      new THREE.Vector3(0, .08, -30.2),
+      new THREE.Vector3(0, .08, TERRACE_RAMP_START[0]),
+      5.2,
+    )
+
+    // Twin garden courts between the front and rear wings.
+    addOutdoorWalk(
+      new THREE.Vector3(-23, .08, -3.15),
+      new THREE.Vector3(-18, .08, -9.85),
+      2.35,
+    )
+    addOutdoorWalk(
+      new THREE.Vector3(23, .08, -3.15),
+      new THREE.Vector3(18, .08, -9.85),
+      2.35,
+    )
+
+    const terraceWalks = [
+      {floor: 1, front: [-72, -82], back: [-110, -126]},
+      {floor: 2, front: [-134, -144], back: [-172, -188]},
+      {floor: 3, front: [-196, -204], back: null},
     ] as const
-    gardenWalks.forEach(([from, to]) => {
-      const start = from.clone().setY(.08)
-      const end = to.clone().setY(.08)
-      makePathSegment(scene, start, end, 3.2, pathMaterial, unitBox)
+    terraceWalks.forEach(({floor, front, back}) => {
+      const y = terraceBaseHeight(floor) + .08
+      addOutdoorWalk(
+        new THREE.Vector3(0, y, front[0]),
+        new THREE.Vector3(0, y, front[1]),
+        5.2,
+      )
+      if (back) {
+        addOutdoorWalk(
+          new THREE.Vector3(0, y, back[0]),
+          new THREE.Vector3(0, y, back[1]),
+          5.2,
+        )
+      }
     })
 
-    for (let floor = 1; floor < TERRACE_COUNT; floor += 1) {
-      const terracePath = new THREE.Mesh(unitBox, pathMaterial)
-      terracePath.scale.set(PATH_HALF_WIDTH * 2, .08, floor === 3 ? 58 : 54)
-      terracePath.position.set(0, terraceBaseHeight(floor) + .05, floor === 1 ? -99 : floor === 2 ? -161 : -224)
-      terracePath.receiveShadow = true
-      scene.add(terracePath)
-    }
-
-    for (const x of [-PATH_HALF_WIDTH - .35, PATH_HALF_WIDTH + .35]) {
-      const edge = new THREE.Mesh(unitBox, pathEdgeMaterial)
-      edge.scale.set(.16, .09, 258)
-      edge.position.set(x, .1, -116)
-      scene.add(edge)
-    }
-
     const commons = new THREE.Mesh(plinthGeometry, stoneMaterial)
-    commons.position.set(0, .22, 9)
+    commons.position.set(0, .22, 24)
     commons.receiveShadow = true
     scene.add(commons)
 
@@ -847,7 +885,7 @@ export default function OutdoorLibrary3D({
     geometries.push(commonsRingGeometry)
     const commonsRing = new THREE.Mesh(commonsRingGeometry, commonsRingMaterial)
     commonsRing.rotation.x = Math.PI / 2
-    commonsRing.position.set(0, .53, 9)
+    commonsRing.position.set(0, .53, 24)
     scene.add(commonsRing)
 
     const shelfCenters = new Map<string, THREE.Vector3>()
@@ -1331,23 +1369,33 @@ export default function OutdoorLibrary3D({
         baseY: number,
       ) => {
         if (!floorParquet) return
-        const usableWidth = Math.max(2, width - .75)
-        const usableDepth = Math.max(2, depth - .75)
+        const usableWidth = Math.max(2, width - .55)
+        const usableDepth = Math.max(2, depth - .55)
         const countX = Math.max(1, Math.ceil(usableWidth / floorTileX))
         const countZ = Math.max(1, Math.ceil(usableDepth / floorTileZ))
-        const spacingX = usableWidth / countX
-        const spacingZ = usableDepth / countZ
+        const cellWidth = usableWidth / countX
+        const cellDepth = usableDepth / countZ
 
         for (let ix = 0; ix < countX; ix += 1) {
-          const x = centerX - usableWidth / 2 + spacingX * (ix + .5)
+          const x = centerX - usableWidth / 2 + cellWidth * (ix + .5)
           for (let iz = 0; iz < countZ; iz += 1) {
-            const z = centerZ - usableDepth / 2 + spacingZ * (iz + .5)
-            placeLibraryAsset(floorParquet, x, baseY + .015, z)
+            const z = centerZ - usableDepth / 2 + cellDepth * (iz + .5)
+            const tile = placeLibraryAsset(
+              floorParquet,
+              x,
+              baseY + .012,
+              z,
+            )
+            // Fit every parquet tile to its own non-overlapping cell. The
+            // previous grid kept 6.2m tiles but squeezed their centers closer
+            // together, causing the diagonal seams and z-fighting in screenshots.
+            tile.scale.x *= (cellWidth / floorBounds.x) * .995
+            tile.scale.z *= (cellDepth / floorBounds.z) * .995
           }
         }
       }
 
-      // Build each room as an actual enclosed library volume. Wall panels and
+      // Build each room as an actual enclosed library volume.      // Build each room as an actual enclosed library volume. Wall panels and
       // arched windows are alternated inside continuous runs, wall-corner GLBs
       // terminate every facade, and the grand halls receive a second tier of
       // scaled clerestory windows. Door declarations cut real openings instead
@@ -1365,6 +1413,8 @@ export default function OutdoorLibrary3D({
         const baseY = terraceBaseHeight(floor)
         const halfWidth = width / 2
         const halfDepth = depth / 2
+        const upperInset = grand ? 1.2 : 0
+        const upperY = baseY + 4.42
         const frontZ = centerZ + halfDepth
         const backZ = centerZ - halfDepth
 
@@ -1415,32 +1465,44 @@ export default function OutdoorLibrary3D({
             }
           }
 
-          // Grand halls rise above the wings with an honest second facade tier.
-          // Using the window asset at half scale creates a clerestory band while
-          // retaining the exact architectural language of the supplied kit.
+          // Only the main reading hall and major archive halls get a second
+          // storey. It is inset and built from BOTH wall panels and windows so
+          // it reads as a real clerestory volume rather than a floating ribbon
+          // of glass above the roofline.
           if (grand) {
-            const clerestory = archedWindow ?? primaryWall
             const upperScale = .52
-            const upperY = baseY + 4.56
+            const upperHalfWidth = halfWidth - upperInset
+            const upperHalfDepth = halfDepth - upperInset
+            const upperWidth = width - upperInset * 2
+            const upperDepth = depth - upperInset * 2
             const upperSpan = Math.max(.7, wallBaySpan * upperScale * .94)
+            let upperBay = 0
+            const chooseUpperBay = () => {
+              const template =
+                archedWindow && upperBay % 3 === 1
+                  ? archedWindow
+                  : primaryWall
+              upperBay += 1
+              return template
+            }
 
             for (const side of [-1, 1] as const) {
-              for (const z of wallBayPositions(centerZ, depth, upperSpan)) {
+              for (const z of wallBayPositions(centerZ, upperDepth, upperSpan)) {
                 placeLibraryAsset(
-                  clerestory,
-                  centerX + side * halfWidth,
+                  chooseUpperBay(),
+                  centerX + side * upperHalfWidth,
                   upperY,
                   z,
                   upperScale,
                   side < 0 ? Math.PI / 2 : -Math.PI / 2,
                 )
               }
-              for (const x of wallBayPositions(centerX, width, upperSpan)) {
+              for (const x of wallBayPositions(centerX, upperWidth, upperSpan)) {
                 placeLibraryAsset(
-                  clerestory,
+                  chooseUpperBay(),
                   x,
                   upperY,
-                  centerZ + side * halfDepth,
+                  centerZ + side * upperHalfDepth,
                   upperScale,
                   side < 0 ? 0 : Math.PI,
                 )
@@ -1449,7 +1511,7 @@ export default function OutdoorLibrary3D({
           }
         }
 
-        if (wallCorner) {
+        if (wallCorner) {        if (wallCorner) {
           const cornerInset = .08
           const corners = [
             {x: centerX - halfWidth, z: frontZ - cornerInset, r: Math.PI / 2},
@@ -1467,20 +1529,30 @@ export default function OutdoorLibrary3D({
               corner.r,
             )
             if (grand) {
+              const upperHalfWidth = halfWidth - upperInset
+              const upperHalfDepth = halfDepth - upperInset
+              const upperCorner =
+                corner.x < centerX
+                  ? corner.z > centerZ
+                    ? {x: centerX - upperHalfWidth, z: centerZ + upperHalfDepth, r: Math.PI / 2}
+                    : {x: centerX - upperHalfWidth, z: centerZ - upperHalfDepth, r: 0}
+                  : corner.z > centerZ
+                    ? {x: centerX + upperHalfWidth, z: centerZ + upperHalfDepth, r: Math.PI}
+                    : {x: centerX + upperHalfWidth, z: centerZ - upperHalfDepth, r: -Math.PI / 2}
               placeLibraryAsset(
                 wallCorner,
-                corner.x,
-                baseY + 4.56,
-                corner.z,
+                upperCorner.x,
+                upperY,
+                upperCorner.z,
                 .52,
-                corner.r,
+                upperCorner.r,
               )
             }
           })
         }
 
         if (pendantLight) {
-          const lightY = baseY + (grand ? 6.35 : 4.15)
+          const lightY = baseY + (grand ? 6.05 : 4.05)
           const rows = grand ? [-3.5, 3.5] : [0]
           const zStep = grand ? 8.5 : 9.5
           for (let z = frontZ - 5; z > backZ + 4; z -= zStep) {
@@ -1563,9 +1635,9 @@ export default function OutdoorLibrary3D({
       if (issueDesk) {
         placeLibraryAsset(
           issueDesk,
-          -5.1,
+          -4.8,
           publicY + .04,
-          5.6,
+          9.2,
           1,
           Math.PI / 2,
           0,
@@ -1575,9 +1647,9 @@ export default function OutdoorLibrary3D({
       if (displayCase) {
         placeLibraryAsset(
           displayCase,
-          24,
+          25.2,
           publicY + .04,
-          -7,
+          3.1,
           1,
           -Math.PI / 2,
           0,
@@ -1587,9 +1659,9 @@ export default function OutdoorLibrary3D({
       if (periodicalRack) {
         placeLibraryAsset(
           periodicalRack,
-          3,
+          0,
           publicY + .04,
-          -24,
+          -15.2,
           1,
           -Math.PI / 2,
           0,
@@ -1599,9 +1671,9 @@ export default function OutdoorLibrary3D({
       if (cardCatalogue) {
         placeLibraryAsset(
           cardCatalogue,
-          -24,
+          -23,
           publicY + .04,
-          -7,
+          2.8,
           .95,
           -Math.PI / 2,
           0,
@@ -1612,8 +1684,8 @@ export default function OutdoorLibrary3D({
       // These are quiet, furnished rooms off the public circulation rather
       // than furniture squeezed into the main route.
       const readingZones = [
-        {x: 3, z: -25, rotation: .08},
-        {x: -23, z: -31, rotation: -Math.PI + .08},
+        {x: 0, z: -23.1, rotation: .08},
+        {x: -18, z: -21.7, rotation: -Math.PI + .08},
       ]
       readingZones.forEach((zone, zoneIndex) => {
         if (readingRug) {
