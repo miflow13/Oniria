@@ -17,9 +17,12 @@ const room = (section: string, x: number, z: number, accent: number): RoomLayout
   doorway: [x < 0 ? -8 : 8, z],
   travel: [x < 0 ? -10 : 10, z],
   accent,
-  shelves: [z - 2.9, z + 2.9].flatMap((row, index) => [
-    {id: `${section}-outer-${index}`, x: x + (x < 0 ? -3.4 : 3.4), z: row, rotationY: 0},
-    {id: `${section}-inner-${index}`, x: x + (x < 0 ? 2.5 : -2.5), z: row, rotationY: 0},
+  shelves: [
+    {z: z - 2.9, rotationY: 0},
+    {z: z + 2.9, rotationY: Math.PI},
+  ].flatMap(({z: row, rotationY}, index) => [
+    {id: `${section}-outer-${index}`, x: x + (x < 0 ? -3.4 : 3.4), z: row, rotationY},
+    {id: `${section}-inner-${index}`, x: x + (x < 0 ? 2.5 : -2.5), z: row, rotationY},
   ]),
 })
 

@@ -191,15 +191,17 @@ function shelfPlacement(
   const localOffset = (slot - 1) * 1.02
   const y = .7 + level * 1.1
 
-  let x = anchor.x
-  let z = anchor.z + .42
-
-  if (Math.abs(anchor.rotationY) < .1) {
-    x += localOffset
-  } else {
-    z += localOffset
-    x += Math.sign(anchor.rotationY) * .42
-  }
+  const front = .42
+  const cos = Math.cos(anchor.rotationY)
+  const sin = Math.sin(anchor.rotationY)
+  const x =
+    anchor.x +
+    cos * localOffset +
+    sin * front
+  const z =
+    anchor.z -
+    sin * localOffset +
+    cos * front
 
   return {
     position: [x, y, z],
@@ -549,12 +551,11 @@ function buildLibraryGraph(
         tag: isTag ? dynamicLabel.slice(1) : undefined,
         username: isProfile ? dynamicLabel.slice(1) : undefined,
         section,
-        position:
-          section === 'topics'
-            ? [13, 1.2, -20.4]
-            : section === 'creators'
-              ? [13, 1.2, -28.5]
-              : [-13, 1.1, -22.4],
+        position: [
+          ROOMS[section].center[0],
+          section === 'search' ? 1.1 : 1.2,
+          ROOMS[section].center[1],
+        ],
         importance: 1.8,
         accent: SECTION_COPY[section].accent,
       })

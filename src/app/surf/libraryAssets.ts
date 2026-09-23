@@ -1,31 +1,87 @@
 import * as THREE from 'three'
+import {DRACOLoader} from 'three/addons/loaders/DRACOLoader.js'
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js'
 
-// Assets were not present in this checkout. Set a path only after placing
-// the corresponding licensed model under public/library/.
-export const LIBRARY_ASSETS: Record<'bookshelf' | 'lawn' | 'sky', string | null> = {
-  bookshelf: null,
-  lawn: null,
-  sky: null,
-}
+export const LIBRARY_ASSETS = {
+  wallPanel: '/assets/library-kit/library-wall-panel.glb',
+  wallCorner: '/assets/library-kit/library-wall-corner.glb',
+  floorParquet: '/assets/library-kit/library-floor-parquet.glb',
+  stackShelf: '/assets/library-kit/stack-shelf.glb',
+  bookPacked: '/assets/library-kit/book-row-packed.glb',
+  bookLeaning: '/assets/library-kit/book-row-leaning.glb',
+  chair: '/assets/library-kit/library-chair.glb',
+  issueDesk: '/assets/library-kit/issue-desk.glb',
+  cardCatalogue: '/assets/library-kit/card-catalogue.glb',
+  displayCase: '/assets/library-kit/display-case.glb',
+  periodicalRack: '/assets/library-kit/periodical-rack.glb',
+  pendantLight: '/assets/library-kit/library-pendant-light.glb',
+  archedWindow: '/assets/library-kit/arched-window.glb',
+  readingRug: '/assets/library-kit/reading-rug.glb',
+  rollingLadder: '/assets/library-kit/rolling-ladder.glb',
+  floorLamp: '/assets/library-kit/library-floor-lamp.glb',
+  readingTable: '/assets/library-kit/reading-table.glb',
+  summerClouds: '/assets/library-kit/summer-clouds.glb',
+} as const
+
+export type LibraryAssetKey = keyof typeof LIBRARY_ASSETS
+export type LibraryAssetFitMode = 'height' | 'span'
 
 const cache = new Map<string, Promise<THREE.Group>>()
 const loader = new GLTFLoader()
+const dracoLoader = new DRACOLoader()
+dracoLoader.setDecoderPath('/draco/')
+dracoLoader.setDecoderConfig({type: 'js'})
+loader.setDRACOLoader(dracoLoader)
 
-export function loadLibraryAsset(path: string, targetSize: number) {
-  const key = `${path}:${targetSize}`
+function prepareAsset(
+  root: THREE.Group,
+  targetSize: number,
+  mode: LibraryAssetFitMode,
+) {
+  root.updateMatrixWorld(true)
+  let bounds = new THREE.Box3().setFromObject(root)
+  const size = bounds.getSize(new THREE.Vector3())
+  const denominator =
+    mode === 'height'
+      ? size.y
+      : Math.max(size.x, size.z)
+
+  if (!Number.isFinite(denominator) || denominator <= 0) {
+    throw new Error('Library asset has no measurable bounds.')
+  }
+
+  root.scale.multiplyScalar(targetSize / denominator)
+  root.updateMatrixWorld(true)
+  bounds = new THREE.Box3().setFromObject(root)
+  const center = bounds.getCenter(new THREE.Vector3())
+  root.position.x -= center.x
+  root.position.y -= bounds.min.y
+  root.position.z -= center.z
+  root.updateMatrixWorld(true)
+
+  root.traverse((child) => {
+    if (!(child instanceof THREE.Mesh)) return
+    child.castShadow = true
+    child.receiveShadow = true
+    child.frustumCulled = true
+  })
+
+  return root
+}
+
+export function loadLibraryAsset(
+  path: string,
+  targetSize: number,
+  mode: LibraryAssetFitMode = 'height',
+) {
+  const key = `${path}:${targetSize}:${mode}`
   if (!cache.has(key)) {
-    cache.set(key, loader.loadAsync(path).then(({scene}) => {
-      const bounds = new THREE.Box3().setFromObject(scene)
-      const size = bounds.getSize(new THREE.Vector3())
-      const max = Math.max(size.x, size.y, size.z)
-      if (!Number.isFinite(max) || max <= 0) throw new Error(`Empty model: ${path}`)
-      scene.scale.setScalar(targetSize / max)
-      const normalized = new THREE.Box3().setFromObject(scene)
-      const center = normalized.getCenter(new THREE.Vector3())
-      scene.position.set(-center.x, -normalized.min.y, -center.z)
-      return scene
-    }))
+    cache.set(
+      key,
+      loader.loadAsync(path).then(({scene}) =>
+        prepareAsset(scene, targetSize, mode),
+      ),
+    )
   }
   return cache.get(key)!
 }

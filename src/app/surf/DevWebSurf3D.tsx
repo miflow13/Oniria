@@ -1116,113 +1116,512 @@ export default function DevWebSurf3D({
     })
     architecturalGeometries.push(scanGateGeometry)
 
-    // The readable floor is a corridor with six side rooms. Decorative upper
-    // levels have no collision, routes or article nodes.
+    // One readable ground floor: a strong central spine with six room
+    // neighborhoods. Primitive slabs remain as collision-safe backing while
+    // the authored library kit supplies the visible architecture.
     addFloor(0, -30, 49, 91)
+
+    const wallRuns = [
+      {x: -24.4, z: -30, length: 90, axis: 'z' as const, rotationY: Math.PI / 2, windows: true},
+      {x: 24.4, z: -30, length: 90, axis: 'z' as const, rotationY: -Math.PI / 2, windows: true},
+      {x: 0, z: 14.7, length: 49, axis: 'x' as const, rotationY: Math.PI, windows: true},
+      {x: 0, z: -75, length: 49, axis: 'x' as const, rotationY: 0, windows: true},
+    ]
+
     addWall(-24.4, -30, .3, 90, 6)
     addWall(24.4, -30, .3, 90, 6)
     addWall(0, -75, 49, .3, 6)
     addWall(0, 14.7, 49, .3, 6)
+
     for (const z of [-22, -42, -62]) {
       addWall(-16.2, z, 16, .28, 5)
       addWall(16.2, z, 16, .28, 5)
+      wallRuns.push(
+        {x: -16.2, z, length: 16, axis: 'x', rotationY: 0, windows: false},
+        {x: 16.2, z, length: 16, axis: 'x', rotationY: 0, windows: false},
+      )
     }
-    // Every corridor opening is wider than the player's collision diameter.
+
+    // Doorways are cut into the corridor-facing room walls. These exact wall
+    // segments are also reused when the GLB wall panels arrive asynchronously.
     for (const section of ROOM_ORDER) {
       const {center, doorway, accent} = ROOMS[section]
       const left = center[0] < 0
       const edgeX = left ? -8 : 8
+      const rotationY = left ? Math.PI / 2 : -Math.PI / 2
+
       for (const dz of [-6, 6]) {
         addWall(edgeX, center[1] + dz, .28, 8.6, 5)
+        wallRuns.push({
+          x: edgeX,
+          z: center[1] + dz,
+          length: 8.6,
+          axis: 'z',
+          rotationY,
+          windows: false,
+        })
       }
+
       addSectionFloorGlow(section, center[0], center[1], 6)
       addDoorwayBeacon(section, doorway[0], doorway[1], Math.PI / 2)
-      addSectionSign(section, left ? -11 : 11, 3.9, center[1], '#' + accent.toString(16).padStart(6, '0'), left ? Math.PI / 2 : -Math.PI / 2)
+      addSectionSign(
+        section,
+        left ? -11 : 11,
+        3.9,
+        center[1],
+        '#' + accent.toString(16).padStart(6, '0'),
+        rotationY,
+      )
+
       const light = new THREE.PointLight(accent, 3.3, 13, 2)
       light.position.set(center[0], 3.4, center[1])
       scene.add(light)
-      // Each room has a recognisable center object and floor treatment.
-      const pedestalGeometry = section === 'topics'
-        ? new THREE.IcosahedronGeometry(.7, 1)
-        : section === 'search'
-          ? new THREE.BoxGeometry(1.35, 1.05, 1.35)
-          : section === 'creators'
-            ? new THREE.CylinderGeometry(.58, .8, 1.15, 12)
-            : section === 'archive'
-              ? new THREE.OctahedronGeometry(.77)
-              : section === 'latest'
-                ? new THREE.ConeGeometry(.85, 1.4, 6)
-                : new THREE.TorusGeometry(.76, .17, 8, 20)
-      architecturalGeometries.push(pedestalGeometry)
-      const pedestalMaterial = new THREE.MeshStandardMaterial({color: accent, metalness: .65, roughness: .38})
-      architecturalMaterials.push(pedestalMaterial)
-      const pedestal = new THREE.Mesh(pedestalGeometry, pedestalMaterial)
-      pedestal.position.set(center[0], 1.05, center[1])
-      scene.add(pedestal)
-      collisionRects.push({minX: center[0]-1.1, maxX: center[0]+1.1, minZ: center[1]-1.1, maxZ: center[1]+1.1, minY: 0, maxY: 2})
     }
+
     addSectionFloorGlow('atrium', 0, 8, 5)
     addSectionSign('atrium', 0, 4.5, 7, '#f5f5f5')
     addWall(-8, 9, .28, 11, 5)
     addWall(8, 9, .28, 11, 5)
-    // Framing above eye level hints at a much taller building without
-    // implying access to shelves that cannot be reached.
+    wallRuns.push(
+      {x: -8, z: 9, length: 11, axis: 'z', rotationY: Math.PI / 2, windows: false},
+      {x: 8, z: 9, length: 11, axis: 'z', rotationY: -Math.PI / 2, windows: false},
+    )
+
+    // A visible circulation runner makes the building legible immediately
+    // from the entrance and keeps the eye pointed toward the archive landmark.
+    const spineGeometry = new THREE.BoxGeometry(2.7, .022, 82)
+    architecturalGeometries.push(spineGeometry)
+    const spineMaterial = new THREE.MeshBasicMaterial({
+      color: 0x3b49df,
+      transparent: true,
+      opacity: .1,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+    architecturalMaterials.push(spineMaterial)
+    const spine = new THREE.Mesh(spineGeometry, spineMaterial)
+    spine.position.set(0, .018, -30)
+    scene.add(spine)
+
+    const directoryTexture = createTextTexture(
+      'DEV LIBRARY DIRECTORY',
+      'Featured ← · New Arrivals → · Topics ← · Creators → · Search ← · Archive →',
+      '#53d3ff',
+      1024,
+      256,
+    )
+    labelsToDispose.push(directoryTexture)
+    const directoryMaterial = new THREE.SpriteMaterial({
+      map: directoryTexture,
+      transparent: true,
+      depthWrite: false,
+      toneMapped: false,
+    })
+    architecturalMaterials.push(directoryMaterial)
+    const directory = new THREE.Sprite(directoryMaterial)
+    directory.position.set(0, 2.7, 10.65)
+    directory.scale.set(8.8, 2.2, 1)
+    scene.add(directory)
+
+    // The upper silhouette suggests scale without creating fake navigable
+    // floors. The playable collection remains entirely on the ground floor.
     for (const y of [6.4, 10.6, 14.8]) {
       for (const x of [-22.7, 22.7]) {
         const balcony = addFloor(x, -30, 2.7, 87, floorMaterial, y)
         balcony.userData.decorative = true
         for (let z = -69; z < 8; z += 5) {
-          const silhouette = new THREE.Mesh(new THREE.BoxGeometry(1.4, 2.2, 2.6), shelfMaterial)
+          const silhouette = new THREE.Mesh(
+            new THREE.BoxGeometry(1.4, 2.2, 2.6),
+            shelfMaterial,
+          )
           architecturalGeometries.push(silhouette.geometry)
           silhouette.position.set(x, y + 1.1, z)
           scene.add(silhouette)
         }
       }
     }
-    // Ground shelves exist only when their stable shelf ID has live books.
-    const occupiedShelfUnits = new Map<string, {x: number; z: number; rotationY: number}>()
+
+    // Every room keeps physical shelf positions even before its live query is
+    // opened. Empty neighborhoods therefore still read as a real library.
+    const occupiedShelfKeys = new Set<string>()
     nodes.forEach((node) => {
       if (node.kind !== 'article' || !node.shelfKey) return
-      const key = node.shelfKey.replace(/:level-\d+$/, '')
-      if (occupiedShelfUnits.has(key)) return
-      const shelf = ROOMS[node.section ?? 'archive'].shelves.find((item) => key.includes(item.id))
-      if (shelf) occupiedShelfUnits.set(key, shelf)
+      occupiedShelfKeys.add(node.shelfKey.replace(/:level-\d+$/, ''))
     })
-    occupiedShelfUnits.forEach(({x, z, rotationY}) => addShelf(x, z, 4.5, rotationY))
-    // The model adapter is dormant until a real file is supplied. The
-    // procedural shelf keeps the same collision and book anchor positions.
-    const shelfAssetPath = LIBRARY_ASSETS.bookshelf
-    if (shelfAssetPath) {
-      void loadLibraryAsset(shelfAssetPath, 4.5).then((model) => {
-        if (destroyed) return
-        occupiedShelfUnits.forEach(({x, z, rotationY}) => {
-          const instance = model.clone(true)
-          instance.position.set(x, 0, z)
-          instance.rotation.y = rotationY
-          scene.add(instance)
-        })
-      }).catch(() => {/* The procedural shelves remain usable. */})
-    }
+
+    const shelfUnits = ROOM_ORDER.flatMap((section) =>
+      ROOMS[section].shelves.map((anchor) => ({
+        section,
+        key: section + ':' + anchor.id,
+        ...anchor,
+      })),
+    )
+    const fallbackShelves = new Map<string, THREE.Group>()
+    shelfUnits.forEach((shelf) => {
+      fallbackShelves.set(
+        shelf.key,
+        addShelf(shelf.x, shelf.z, 4.5, shelf.rotationY),
+      )
+    })
+
     const markerGeometry = new THREE.CylinderGeometry(.9, 1.2, 3.4, 12)
     architecturalGeometries.push(markerGeometry)
     const marker = new THREE.Mesh(markerGeometry, brass)
     marker.position.set(LANDMARK[0], 1.7, LANDMARK[1])
     scene.add(marker)
-    collisionRects.push({minX: -1.3, maxX: 1.3, minZ: -73.3, maxZ: -70.7, minY: 0, maxY: 4})
+    collisionRects.push({
+      minX: -1.3,
+      maxX: 1.3,
+      minZ: -73.3,
+      maxZ: -70.7,
+      minY: 0,
+      maxY: 4,
+    })
 
-    const deskGeometry = new THREE.BoxGeometry(3, .95, 1)
-    architecturalGeometries.push(deskGeometry)
-    const desk = new THREE.Mesh(deskGeometry, brass)
-    desk.position.set(-3.8, .48, 8)
-    scene.add(desk)
-    collisionRects.push({minX: -5.3, maxX: -2.3, minZ: 7.5, maxZ: 8.5, minY: 0, maxY: 1.2})
+    // Keep a lightweight glow at the information desk. The actual desk is
+    // replaced by the authored issue-desk GLB below.
     const deskGlowGeometry = new THREE.TorusGeometry(.55, .03, 8, 48)
     architecturalGeometries.push(deskGlowGeometry)
-    const deskGlowMaterial = new THREE.MeshBasicMaterial({color: 0x7295ff, transparent: true, opacity: .3})
+    const deskGlowMaterial = new THREE.MeshBasicMaterial({
+      color: 0x7295ff,
+      transparent: true,
+      opacity: .3,
+    })
     architecturalMaterials.push(deskGlowMaterial)
     const deskGlow = new THREE.Mesh(deskGlowGeometry, deskGlowMaterial)
     deskGlow.position.set(-3.8, 1.05, 8)
     scene.add(deskGlow)
+
+    function addPropCollider(
+      x: number,
+      z: number,
+      width: number,
+      depth: number,
+      height = 2.2,
+    ) {
+      collisionRects.push({
+        minX: x - width / 2,
+        maxX: x + width / 2,
+        minZ: z - depth / 2,
+        maxZ: z + depth / 2,
+        minY: 0,
+        maxY: height,
+      })
+    }
+
+    function placeAsset(
+      template: THREE.Group,
+      x: number,
+      y: number,
+      z: number,
+      scale = 1,
+      rotationY = 0,
+      rotationX = 0,
+    ) {
+      const instance = template.clone(true)
+      instance.position.x += x
+      instance.position.y += y
+      instance.position.z += z
+      instance.scale.multiplyScalar(scale)
+      instance.rotation.y += rotationY
+      instance.rotation.x += rotationX
+      instance.traverse((child) => {
+        if (!(child instanceof THREE.Mesh)) return
+        child.castShadow = true
+        child.receiveShadow = true
+        child.frustumCulled = true
+      })
+      scene.add(instance)
+      return instance
+    }
+
+    const libraryRequests = [
+      ['wallPanel', 5, 'height'],
+      ['wallCorner', 5, 'height'],
+      ['floorParquet', 5.8, 'span'],
+      ['stackShelf', 3.5, 'height'],
+      ['bookPacked', 2.45, 'span'],
+      ['bookLeaning', 2.35, 'span'],
+      ['chair', 1.05, 'height'],
+      ['issueDesk', 1.45, 'height'],
+      ['cardCatalogue', 1.85, 'height'],
+      ['displayCase', 1.45, 'height'],
+      ['periodicalRack', 1.75, 'height'],
+      ['pendantLight', 1.05, 'height'],
+      ['archedWindow', 5, 'height'],
+      ['readingRug', 3.8, 'span'],
+      ['rollingLadder', 2.8, 'height'],
+      ['floorLamp', 1.65, 'height'],
+      ['readingTable', 1.25, 'height'],
+      ['summerClouds', 13.5, 'span'],
+    ] as const
+
+    void Promise.allSettled(
+      libraryRequests.map(([key, target, mode]) =>
+        loadLibraryAsset(LIBRARY_ASSETS[key], target, mode),
+      ),
+    ).then((results) => {
+      if (destroyed) return
+
+      const loaded = Object.fromEntries(
+        libraryRequests.map(([key], index) => [
+          key,
+          results[index].status === 'fulfilled'
+            ? (results[index] as PromiseFulfilledResult<THREE.Group>).value
+            : null,
+        ]),
+      ) as Record<(typeof libraryRequests)[number][0], THREE.Group | null>
+
+      results.forEach((result, index) => {
+        if (result.status === 'rejected') {
+          console.warn(
+            '[DevWebSurf3D] Library asset failed:',
+            libraryRequests[index][0],
+            result.reason,
+          )
+        }
+      })
+
+      const wallPanel = loaded.wallPanel
+      const wallCorner = loaded.wallCorner
+      const floorParquet = loaded.floorParquet
+      const stackShelf = loaded.stackShelf
+      const bookPacked = loaded.bookPacked
+      const bookLeaning = loaded.bookLeaning
+      const chair = loaded.chair
+      const issueDesk = loaded.issueDesk
+      const cardCatalogue = loaded.cardCatalogue
+      const displayCase = loaded.displayCase
+      const periodicalRack = loaded.periodicalRack
+      const pendantLight = loaded.pendantLight
+      const archedWindow = loaded.archedWindow
+      const readingRug = loaded.readingRug
+      const rollingLadder = loaded.rollingLadder
+      const floorLamp = loaded.floorLamp
+      const readingTable = loaded.readingTable
+      const summerClouds = loaded.summerClouds
+
+      const bayPositions = (
+        center: number,
+        length: number,
+        span: number,
+      ) => {
+        const count = Math.max(1, Math.ceil(length / Math.max(.6, span * .94)))
+        const spacing = length / count
+        return Array.from(
+          {length: count},
+          (_, index) => center - length / 2 + spacing * (index + .5),
+        )
+      }
+
+      if (wallPanel) {
+        const wallSize = new THREE.Box3()
+          .setFromObject(wallPanel)
+          .getSize(new THREE.Vector3())
+        const wallSpan = Math.max(.9, wallSize.x)
+
+        wallRuns.forEach((run) => {
+          const positions = bayPositions(
+            run.axis === 'x' ? run.x : run.z,
+            run.length,
+            wallSpan,
+          )
+          positions.forEach((positionValue, index) => {
+            const template =
+              run.windows && archedWindow && index % 4 === 1
+                ? archedWindow
+                : wallPanel
+            placeAsset(
+              template,
+              run.axis === 'x' ? positionValue : run.x,
+              .04,
+              run.axis === 'z' ? positionValue : run.z,
+              1,
+              run.rotationY,
+            )
+          })
+        })
+      }
+
+      if (wallCorner) {
+        const corners = [
+          {x: -24.4, z: 14.7, r: Math.PI / 2},
+          {x: 24.4, z: 14.7, r: Math.PI},
+          {x: 24.4, z: -75, r: -Math.PI / 2},
+          {x: -24.4, z: -75, r: 0},
+        ]
+        corners.forEach(({x, z, r}) =>
+          placeAsset(wallCorner, x, .04, z, 1, r),
+        )
+      }
+
+      if (floorParquet) {
+        const floorSize = new THREE.Box3()
+          .setFromObject(floorParquet)
+          .getSize(new THREE.Vector3())
+        const tileX = Math.max(2.4, floorSize.x)
+        const tileZ = Math.max(2.4, floorSize.z)
+
+        const tileArea = (
+          centerX: number,
+          centerZ: number,
+          width: number,
+          depth: number,
+        ) => {
+          const countX = Math.max(1, Math.ceil(width / tileX))
+          const countZ = Math.max(1, Math.ceil(depth / tileZ))
+          const cellX = width / countX
+          const cellZ = depth / countZ
+
+          for (let ix = 0; ix < countX; ix += 1) {
+            for (let iz = 0; iz < countZ; iz += 1) {
+              const x = centerX - width / 2 + cellX * (ix + .5)
+              const z = centerZ - depth / 2 + cellZ * (iz + .5)
+              const tile = placeAsset(floorParquet, x, .008, z)
+              tile.scale.x *= (cellX / floorSize.x) * .995
+              tile.scale.z *= (cellZ / floorSize.z) * .995
+            }
+          }
+        }
+
+        tileArea(0, -30, 15.3, 89)
+        ROOM_ORDER.forEach((section) => {
+          const [x, z] = ROOMS[section].center
+          tileArea(x, z, 15.5, 16.4)
+        })
+        tileArea(0, 9, 15.3, 10.5)
+      }
+
+      if (stackShelf) {
+        shelfUnits.forEach((shelf, index) => {
+          fallbackShelves.get(shelf.key)!.visible = false
+          placeAsset(
+            stackShelf,
+            shelf.x,
+            .02,
+            shelf.z,
+            1,
+            shelf.rotationY,
+          )
+
+          if (!occupiedShelfKeys.has(shelf.key)) {
+            const filler = index % 2 === 0 ? bookPacked : bookLeaning
+            if (filler) {
+              placeAsset(
+                filler,
+                shelf.x,
+                .84,
+                shelf.z,
+                .88,
+                shelf.rotationY,
+              )
+              placeAsset(
+                filler,
+                shelf.x,
+                1.86,
+                shelf.z,
+                .82,
+                shelf.rotationY,
+              )
+            }
+          }
+        })
+      }
+
+      if (pendantLight) {
+        ROOM_ORDER.forEach((section) => {
+          const [x, z] = ROOMS[section].center
+          placeAsset(pendantLight, x, 4.05, z)
+        })
+        for (const z of [6, -8, -28, -48, -68]) {
+          placeAsset(pendantLight, 0, 4.2, z, .92)
+        }
+      }
+
+      if (issueDesk) {
+        placeAsset(issueDesk, -3.8, .03, 8, 1, Math.PI / 2)
+        placeAsset(issueDesk, -16, .03, -52, .9, 0)
+        addPropCollider(-3.8, 8, 3, 1.4, 1.6)
+        addPropCollider(-16, -52, 2.7, 1.5, 1.6)
+      }
+
+      if (displayCase) {
+        placeAsset(displayCase, -16, .03, -12, 1, Math.PI / 2)
+        addPropCollider(-16, -12, 2.1, 1.1, 1.8)
+      }
+
+      if (periodicalRack) {
+        placeAsset(periodicalRack, 16, .03, -12, 1, -Math.PI / 2)
+        addPropCollider(16, -12, 1.8, 1, 1.9)
+      }
+
+      if (cardCatalogue) {
+        placeAsset(cardCatalogue, -16, .03, -32, .95, Math.PI / 2)
+        placeAsset(cardCatalogue, -12.5, .03, -52, .86, Math.PI / 2)
+        addPropCollider(-16, -32, 2.2, 1.4, 2)
+      }
+
+      if (readingRug) {
+        placeAsset(readingRug, 16, .018, -32, .92)
+        placeAsset(readingRug, -16, .018, -12, .72)
+      }
+
+      if (readingTable) {
+        placeAsset(readingTable, 16, .03, -32)
+        addPropCollider(16, -32, 2.7, 2.2, 1.4)
+      }
+
+      if (chair) {
+        const creatorChairs = [
+          {x: 14.7, z: -32, r: Math.PI / 2},
+          {x: 17.3, z: -32, r: -Math.PI / 2},
+          {x: 16, z: -33.5, r: 0},
+          {x: 16, z: -30.5, r: Math.PI},
+        ]
+        creatorChairs.forEach(({x, z, r}) =>
+          placeAsset(chair, x, .03, z, .96, r),
+        )
+      }
+
+      if (floorLamp) {
+        placeAsset(floorLamp, 18.3, .03, -30.2, .96)
+        placeAsset(floorLamp, -18.2, .03, -10.2, .96)
+        placeAsset(floorLamp, 18.4, .03, -50.2, .96)
+      }
+
+      if (rollingLadder) {
+        placeAsset(rollingLadder, 18.8, .03, -54.2, .9, Math.PI)
+        addPropCollider(18.8, -54.2, 1.3, 1.1, 3)
+      }
+
+      // The cloud model remains exterior decoration: it is visible through
+      // the authored arched windows but never enters the navigable collision
+      // volume.
+      if (summerClouds) {
+        const cloudPlacements = [
+          {x: -34, y: 9, z: -8, s: .75},
+          {x: 35, y: 11, z: -35, s: .92},
+          {x: -36, y: 13, z: -62, s: 1.05},
+        ]
+        cloudPlacements.forEach(({x, y, z, s}, index) =>
+          placeAsset(
+            summerClouds,
+            x,
+            y,
+            z,
+            s,
+            index * .8,
+          ),
+        )
+      }
+
+      renderer.shadowMap.needsUpdate = true
+      console.info(
+        '[DevWebSurf3D] Loaded library kit:',
+        Object.values(loaded).filter(Boolean).length + '/' + libraryRequests.length,
+      )
+    })
+
     const nodeById = new Map(nodes.map((node) => [node.id, node]))
     const visuals = new Map<string, Visual>()
     const interactive: THREE.Object3D[] = []
