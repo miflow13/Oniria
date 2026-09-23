@@ -323,6 +323,9 @@ export default function DevLibraryMap() {
   const [districtSamples, setDistrictSamples] = useState<
     Record<string, DevArticleSummary[]>
   >({})
+  const [curatedLiveArticles, setCuratedLiveArticles] = useState<
+    DevArticleSummary[]
+  >([])
   const [readingBook, setReadingBook] =
     useState<LibraryReadingBook | null>(null)
   const sanitizedArticleHtml = useMemo(
@@ -537,6 +540,55 @@ export default function DevLibraryMap() {
 
   useEffect(() => {
     let cancelled = false
+    const ids = [...new Set(
+      worldConfig.curatedArticles
+        .filter((item) => item.featured)
+        .map((item) => item.devArticleId),
+    )]
+
+    if (ids.length === 0) {
+      setCuratedLiveArticles([])
+      return () => {
+        cancelled = true
+      }
+    }
+
+    async function loadCuratedArticles() {
+      const articles = await Promise.all(
+        ids.map(async (id) => {
+          try {
+            const response = await fetch(
+              '/api/devto?mode=article&id=' + id,
+            )
+            if (!response.ok) return null
+            const payload = (await response.json()) as {
+              article?: DevArticle
+            }
+            return payload.article ?? null
+          } catch {
+            return null
+          }
+        }),
+      )
+
+      if (cancelled) return
+      setCuratedLiveArticles(
+        articles.filter(
+          (article): article is DevArticle =>
+            Boolean(article),
+        ),
+      )
+    }
+
+    void loadCuratedArticles()
+
+    return () => {
+      cancelled = true
+    }
+  }, [worldConfig.curatedArticles])
+
+  useEffect(() => {
+    let cancelled = false
 
     const taggedDistricts = worldConfig.districts.filter(
       (district) =>
@@ -687,6 +739,7 @@ export default function DevLibraryMap() {
       )
 
     const allKnownArticles = uniqueArticles(
+      curatedLiveArticles,
       bootstrap.feed,
       bootstrap.latest,
       bootstrap.profileArticles,
@@ -699,8 +752,11 @@ export default function DevLibraryMap() {
         .filter((item) => item.featured)
         .map((item) => item.devArticleId),
     )
-    const curatorPicks = allKnownArticles.filter((article) =>
-      curatorIds.has(article.id),
+    const curatorPicks = uniqueArticles(
+      curatedLiveArticles,
+      allKnownArticles.filter((article) =>
+        curatorIds.has(article.id),
+      ),
     )
 
     const articlesForDistrict = (
@@ -800,6 +856,7 @@ export default function DevLibraryMap() {
     bootstrap,
     catalog,
     creators,
+    curatedLiveArticles,
     dynamicArticles,
     dynamicTitle,
     roomWorldConfig,
