@@ -41,7 +41,7 @@ const CATALOG_PAGE_SIZE = 100
 const CATALOG_BOOKS_PER_SHELF = 9
 const DISTRICT_RENDERED_SHELF_LIMIT = 8
 const DISTRICT_VISIBLE_ARTICLE_CAPACITY =
-  DISTRICT_RENDERED_SHELF_LIMIT * CATALOG_BOOKS_PER_SHELF
+  DISTRICT_RENDERED_SHELF_LIMIT * CATALOG_BOOKS_PER_SHELF * 2
 const DISTRICT_SHELF_PAIR_OFFSETS = [-.68, .68] as const
 
 const SHELF_ACCENTS: Record<LibraryShelfKind, string> = {
@@ -81,6 +81,7 @@ function makeShelf(
     accent: SHELF_ACCENTS[kind],
     world: placement.world,
     yaw: placement.yaw,
+    doubleSided: placement.doubleSided,
     endCaps: placement.endCaps,
     floatId: placement.floatId,
     pathBay: placement.pathBay,
@@ -870,13 +871,16 @@ export default function DevLibraryMap() {
         const source = articlesForDistrict(district)
         const kind = shelfKindForSource(district.sourceMode)
 
+        let articleOffset = 0
         placements.forEach((placement, shelfIndex) => {
-          const offset =
-            shelfIndex * CATALOG_BOOKS_PER_SHELF
+          const shelfCapacity =
+            CATALOG_BOOKS_PER_SHELF *
+            (placement.doubleSided ? 2 : 1)
           const articles = source.slice(
-            offset,
-            offset + CATALOG_BOOKS_PER_SHELF,
+            articleOffset,
+            articleOffset + shelfCapacity,
           )
+          articleOffset += shelfCapacity
           const shelfNumber = String(shelfIndex + 1).padStart(2, '0')
           const subtitle =
             district.sourceMode === 'catalog'
@@ -922,10 +926,16 @@ export default function DevLibraryMap() {
       if (!district) return
 
       const source = articlesForDistrict(district)
-      const roomCount = roomShelfPlacements(
+      const roomArticleOffset = roomShelfPlacements(
         district,
         district.roomSlot,
-      ).length
+      ).reduce(
+        (total, placement) =>
+          total +
+          CATALOG_BOOKS_PER_SHELF *
+            (placement.doubleSided ? 2 : 1),
+        0,
+      )
       const placements = hallwayShelfPlacements(
         district,
         side,
@@ -934,7 +944,8 @@ export default function DevLibraryMap() {
 
       placements.forEach((placement, shelfIndex) => {
         const offset =
-          (roomCount + shelfIndex) * CATALOG_BOOKS_PER_SHELF
+          roomArticleOffset +
+          shelfIndex * CATALOG_BOOKS_PER_SHELF
         const articles = source.slice(
           offset,
           offset + CATALOG_BOOKS_PER_SHELF,
@@ -991,11 +1002,14 @@ export default function DevLibraryMap() {
         accent: shelf.accent,
         world: shelf.world,
         libraryYaw: shelf.yaw,
+        libraryDoubleSided: shelf.doubleSided,
         libraryShelfEndCaps: shelf.endCaps,
         libraryFloatId: shelf.floatId,
         libraryPathBay: shelf.pathBay,
         libraryDistrictId: shelf.districtId,
-        libraryBooks: shelf.articles.slice(0, 9).map((article) => {
+        libraryBooks: shelf.articles
+          .slice(0, shelf.doubleSided ? 18 : 9)
+          .map((article) => {
           const engagement =
             (article.public_reactions_count ?? 0) +
             (article.comments_count ?? 0) * 2
