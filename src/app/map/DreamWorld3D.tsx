@@ -2380,7 +2380,7 @@ export default function DreamWorld3D({
             }
             authoredShelf.traverse((child) => {
               if (!(child instanceof THREE.Mesh)) return
-              child.castShadow = renderer.shadowMap.enabled
+              child.castShadow = false
               child.receiveShadow = true
               child.frustumCulled = true
             })
@@ -6023,7 +6023,7 @@ export default function DreamWorld3D({
       if (
         libraryMode &&
         pendingShelfHydrators.size > 0 &&
-        elapsed - lastShelfHydrationAt > .12
+        elapsed - lastShelfHydrationAt > .16
       ) {
         let hydrateId: string | null = null
         let hydrateDistance = Infinity
@@ -6044,7 +6044,7 @@ export default function DreamWorld3D({
         // Only hydrate shelves near the player's current zone. Shelf frames
         // remain visible everywhere, while books and covers stream in as the
         // player approaches instead of all being built during first paint.
-        if (hydrateId && hydrateDistance < 34) {
+        if (hydrateId && hydrateDistance < 26) {
           pendingShelfHydrators.get(hydrateId)?.()
           lastShelfHydrationAt = elapsed
         }
