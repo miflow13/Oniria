@@ -1554,6 +1554,24 @@ export default function DreamWorld3D({
       return sprite
     })
 
+    if (libraryMode) {
+      // Dream-map set dressing is not part of the enclosed DEV Library.
+      // Hide it rather than letting rings, monoliths, stairs, debris and
+      // foreground dream fog leak into the physical rooms.
+      nebulae.forEach((sprite) => {
+        sprite.visible = false
+      })
+      fragments.forEach((fragment) => {
+        fragment.visible = false
+      })
+      landmarks.forEach((landmark) => {
+        landmark.visible = false
+      })
+      foregroundFog.forEach((sprite) => {
+        sprite.visible = false
+      })
+    }
+
     const libraryAtmosphere = libraryMode
       ? createLibraryAtmosphere({
           world,
