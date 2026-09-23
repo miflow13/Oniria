@@ -52,8 +52,10 @@ export const libraryDistrictType = defineType({
     }),
     defineField({
       name: 'order',
-      title: 'Studio order',
+      title: 'Legacy sort order',
       type: 'number',
+      description:
+        'Compatibility field. The six-room Studio navigation now follows Physical room.',
       initialValue: 50,
       validation: (rule) => rule.integer().min(0).max(999),
     }),
@@ -135,11 +137,22 @@ export const libraryDistrictType = defineType({
     }),
     defineField({
       name: 'roomSlot',
-      title: 'Physical room slot',
+      title: 'Physical room',
       type: 'number',
       description:
-        '0–5 maps the district into the six-room library floor plan.',
+        'Canonical six-room floor-plan position. Keep this aligned with the room identity below.',
       initialValue: 0,
+      options: {
+        list: [
+          {title: 'R-01 · Featured', value: 0},
+          {title: 'R-02 · New Arrivals', value: 1},
+          {title: 'R-03 · Topics', value: 2},
+          {title: 'R-04 · Creators', value: 3},
+          {title: 'R-05 · Search', value: 4},
+          {title: 'R-06 · Archive', value: 5},
+        ],
+        layout: 'radio',
+      },
       validation: (rule) => rule.required().integer().min(0).max(5),
     }),
     defineField({
@@ -162,9 +175,10 @@ export const libraryDistrictType = defineType({
       const tagSummary =
         (tags ?? []).slice(0, 2).join(', ') || 'live DEV'
       return {
-        title: `${enabled === false ? '○' : '●'} ${title ?? 'Untitled room'}`,
+        title:
+          `${enabled === false ? '○' : '●'} R-${String(Number(roomSlot ?? 0) + 1).padStart(2, '0')} · ${title ?? 'Untitled room'}`,
         subtitle:
-          `${code ?? 'No code'} · room ${Number(roomSlot ?? 0) + 1} · ${sourceMode ?? 'tagged'} · ${tagSummary}`,
+          `${code ?? 'No code'} · ${sourceMode ?? 'tagged'} · ${tagSummary}`,
       }
     },
   },
