@@ -87,6 +87,7 @@ import {
   LIBRARY_EYE_HEIGHT,
   LIBRARY_SPAWN,
   clampLibraryWalkPosition,
+  roomForDistrict,
 } from './libraryRoomLayout'
 
 export type DreamWorldNode = {
@@ -786,6 +787,28 @@ export default function DreamWorld3D({
       activeLibraryConfig.districts.length > 0
         ? activeLibraryConfig.districts
         : DEFAULT_LIBRARY_WORLD_CONFIG.districts
+    const roomDistrictEntries = activeDistricts.map(
+      (district, index) => ({
+        district,
+        center: roomForDistrict(district, index).center,
+      }),
+    )
+    const nearestRoomEntry = (x: number, z: number) => {
+      let nearest = roomDistrictEntries[0] ?? null
+      let nearestDistance = Infinity
+
+      roomDistrictEntries.forEach((entry) => {
+        const dx = x - entry.center[0]
+        const dz = z - entry.center[1]
+        const distance = dx * dx + dz * dz
+        if (distance < nearestDistance) {
+          nearest = entry
+          nearestDistance = distance
+        }
+      })
+
+      return nearest
+    }
     const libraryMode = nodeRef.current.some(
       (node) => node.libraryKind === 'shelf',
     )
@@ -4859,6 +4882,13 @@ export default function DreamWorld3D({
         diveMode === 'none' &&
         !observatoryModeRef.current
 
+      const currentRoomEntry = libraryMode
+        ? nearestRoomEntry(
+            camera.position.x,
+            camera.position.z,
+          )
+        : null
+
       if (flightActive && !previousFlightMode) {
         flightPosition.copy(camera.position)
         flightEuler.setFromQuaternion(camera.quaternion, 'YXZ')
@@ -5161,6 +5191,10 @@ export default function DreamWorld3D({
       libraryAtmosphere?.update({
         elapsed,
         camera,
+        activeDistrictId:
+          currentRoomEntry?.district.id,
+        activeRoomCenter:
+          currentRoomEntry?.center,
         districts: activeDistricts,
       })
 
@@ -5213,6 +5247,8 @@ export default function DreamWorld3D({
         ),
         elapsed,
         currentBay: currentArchiveBay,
+        activeAudioProfile:
+          currentRoomEntry?.district.audioProfile,
         districts: activeDistricts,
       })
 
@@ -6229,21 +6265,10 @@ export default function DreamWorld3D({
       let atmospherePreset =
         globalAtmospherePreset
 
-      if (libraryMode && activeDistricts.length > 0) {
-        const atmosphereBay = archiveBayFromWorldZ(
-          camera.position.z,
-        )
-        const nearestAtmosphereDistrict =
-          activeDistricts.reduce((nearest, candidate) =>
-            Math.abs(candidate.bay - atmosphereBay) <
-            Math.abs(nearest.bay - atmosphereBay)
-              ? candidate
-              : nearest,
-          )
-
+      if (libraryMode && currentRoomEntry) {
         atmospherePreset =
           getLibraryAtmosphereVisualPreset(
-            nearestAtmosphereDistrict.atmosphere,
+            currentRoomEntry.district.atmosphere,
           )
       }
 
