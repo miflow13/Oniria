@@ -5832,24 +5832,6 @@ export default function DreamWorld3D({
       nearDustGeometry.dispose()
       nearDustMaterial.dispose()
       scene.remove(nearDust)
-      libraryWalkwayGeometry?.dispose()
-      libraryWalkwayRailGeometry?.dispose()
-      libraryWalkwayPanelMaterial?.dispose()
-      libraryWalkwayUnderlayMaterial?.dispose()
-      libraryWalkwayRailMaterial?.dispose()
-      libraryGridRoadGeometry?.dispose()
-      libraryGridRailGeometry?.dispose()
-      libraryGridRoadMaterial?.dispose()
-      libraryGridUnderlayMaterial?.dispose()
-      libraryGridRailMaterial?.dispose()
-      libraryArrowGeometry?.dispose()
-      libraryArrowMaterial?.dispose()
-      libraryGuardGeometry?.dispose()
-      libraryGuardMaterial?.dispose()
-      libraryJunctionGeometry?.dispose()
-      libraryJunctionMaterial?.dispose()
-      libraryRouteDotGeometry?.dispose()
-      libraryRouteDotMaterial?.dispose()
       libraryRouteTextures.forEach((texture) => texture.dispose())
       libraryRouteMaterials.forEach((material) => material.dispose())
       libraryDistrictLandmarkGeometries.forEach((geometry) =>
@@ -5861,20 +5843,6 @@ export default function DreamWorld3D({
       libraryRouteObjects.forEach((object) => {
         if (object instanceof THREE.Object3D) world.remove(object)
       })
-      if (libraryArrows) world.remove(libraryArrows)
-      if (libraryGuards) world.remove(libraryGuards)
-      if (libraryJunctions) world.remove(libraryJunctions)
-      if (libraryRouteDots) world.remove(libraryRouteDots)
-      if (libraryWalkwayUnderlay) {
-        world.remove(libraryWalkwayUnderlay)
-      }
-      if (libraryWalkway) world.remove(libraryWalkway)
-      if (libraryWalkwayRails) world.remove(libraryWalkwayRails)
-      if (libraryGridUnderlay) {
-        world.remove(libraryGridUnderlay)
-      }
-      if (libraryGridRoads) world.remove(libraryGridRoads)
-      if (libraryGridRails) world.remove(libraryGridRails)
       shaftGeometries.forEach((geometry) => geometry.dispose())
       shaftMaterials.forEach((material) => material.dispose())
 
