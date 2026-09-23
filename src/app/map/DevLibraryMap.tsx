@@ -39,7 +39,6 @@ const DEFAULT_USERNAME = 'mikachu'
 const QUALITY: DreamQuality = 'cinematic'
 const CATALOG_PAGE_SIZE = 100
 const CATALOG_BOOKS_PER_SHELF = 9
-const FRONT_PAGE_SHELF_TARGET = 8
 const DISTRICT_RENDERED_SHELF_LIMIT = 4
 const DISTRICT_VISIBLE_ARTICLE_CAPACITY =
   DISTRICT_RENDERED_SHELF_LIMIT * CATALOG_BOOKS_PER_SHELF
@@ -788,9 +787,9 @@ export default function DevLibraryMap() {
       articlesByDistrict.set(district.id, [])
     })
 
-    // FRONT PAGE is the public entrance, not a strict taxonomy bucket.
-    // Let it grow into a substantial arrival collection from the live feed,
-    // latest posts, and streamed catalogue instead of stopping at 3 shelves.
+    // FRONT PAGE is a large virtual collection, but its physical
+    // footprint is intentionally fixed just like every other district.
+    // The 3D plaza must not expand as the streamed catalogue grows.
     const frontPageDistrict = districts.find(
       (district) => district.id === 'front-page',
     )
@@ -801,10 +800,6 @@ export default function DevLibraryMap() {
           bootstrap.feed,
           bootstrap.latest,
           catalog,
-        ).slice(
-          0,
-          CATALOG_BOOKS_PER_SHELF *
-            FRONT_PAGE_SHELF_TARGET,
         ),
       )
     }
@@ -874,26 +869,26 @@ export default function DevLibraryMap() {
       const allDistrictArticles =
         articlesByDistrict.get(district.id) ?? []
       const districtArticles =
-        district.id === 'deep-stacks' &&
+        (district.id === 'deep-stacks' ||
+          district.id === 'front-page') &&
         allDistrictArticles.length >
           DISTRICT_VISIBLE_ARTICLE_CAPACITY
-          ? allDistrictArticles.slice(
-              -DISTRICT_VISIBLE_ARTICLE_CAPACITY,
-            )
+          ? district.id === 'deep-stacks'
+            ? allDistrictArticles.slice(
+                -DISTRICT_VISIBLE_ARTICLE_CAPACITY,
+              )
+            : allDistrictArticles.slice(
+                0,
+                DISTRICT_VISIBLE_ARTICLE_CAPACITY,
+              )
           : allDistrictArticles
       const availableShelfCount = Math.ceil(
         districtArticles.length / CATALOG_BOOKS_PER_SHELF,
       )
-      const renderedShelfCount =
-        district.id === 'front-page'
-          ? Math.min(
-              availableShelfCount,
-              FRONT_PAGE_SHELF_TARGET,
-            )
-          : Math.min(
-              availableShelfCount,
-              DISTRICT_RENDERED_SHELF_LIMIT,
-            )
+      const renderedShelfCount = Math.min(
+        availableShelfCount,
+        DISTRICT_RENDERED_SHELF_LIMIT,
+      )
 
       for (
         let localIndex = 0;
@@ -910,15 +905,13 @@ export default function DevLibraryMap() {
           localIndex % 2 === 0 ? -1 : 1
         const pairIndex = Math.floor(localIndex / 2)
         const bay =
-          district.id === 'front-page'
-            ? .68 + pairIndex * .46
-            : district.bay +
-              (DISTRICT_SHELF_PAIR_OFFSETS[
-                Math.min(
-                  pairIndex,
-                  DISTRICT_SHELF_PAIR_OFFSETS.length - 1,
-                )
-              ] ?? 0)
+          district.bay +
+          (DISTRICT_SHELF_PAIR_OFFSETS[
+            Math.min(
+              pairIndex,
+              DISTRICT_SHELF_PAIR_OFFSETS.length - 1,
+            )
+          ] ?? 0)
         const shelfId =
           'shelf:catalog:' +
           district.id +
@@ -950,18 +943,9 @@ export default function DevLibraryMap() {
             bay,
             side,
             {
-              laneBias:
-                district.id === 'front-page'
-                  ? -2.15
-                  : -.72,
-              alongJitterScale:
-                district.id === 'front-page'
-                  ? .05
-                  : .04,
-              yawJitterScale:
-                district.id === 'front-page'
-                  ? .12
-                  : .14,
+              laneBias: -.35,
+              alongJitterScale: .04,
+              yawJitterScale: .14,
             },
             districts,
           ),
