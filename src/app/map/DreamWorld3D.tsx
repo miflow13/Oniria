@@ -989,21 +989,14 @@ export default function DreamWorld3D({
     composer.addPass(renderPass)
 
     const ssao = new SSAOPass(scene, camera, 1, 1)
-    const librarySsaoEnabled =
-      libraryMode &&
-      settings.ssao &&
-      qualityRef.current !== 'low'
-    // Reintroduce a very short-radius AO pass for architectural contact only.
-    // The old full-strength library SSAO caused halos on thin book covers;
-    // this tighter radius keeps the payoff under shelves/columns/arches.
-    ssao.enabled = libraryMode
-      ? librarySsaoEnabled
-      : settings.ssao
-    ssao.kernelRadius = libraryMode
-      ? Math.min(settings.ssaoKernelRadius, 4)
-      : settings.ssaoKernelRadius
-    ssao.minDistance = libraryMode ? .0008 : .002
-    ssao.maxDistance = libraryMode ? .045 : .12
+    // Keep library SSAO disabled. Thin book covers, wall trim and bright
+    // panels produce unstable crawling halos in screen space; the library
+    // already uses deliberate contact-shadow/AO geometry at the places that
+    // matter visually.
+    ssao.enabled = settings.ssao && !libraryMode
+    ssao.kernelRadius = settings.ssaoKernelRadius
+    ssao.minDistance = 0.002
+    ssao.maxDistance = 0.12
     composer.addPass(ssao)
 
     const depthOfField = new BokehPass(scene, camera, {
@@ -1016,9 +1009,9 @@ export default function DreamWorld3D({
 
     const bloom = new UnrealBloomPass(
       new THREE.Vector2(1, 1),
-      libraryMode ? .14 : settings.bloomStrength,
-      libraryMode ? .2 : settings.bloomRadius,
-      libraryMode ? 1.08 : settings.bloomThreshold,
+      libraryMode ? .075 : settings.bloomStrength,
+      libraryMode ? .14 : settings.bloomRadius,
+      libraryMode ? 1.16 : settings.bloomThreshold,
     )
     // High-threshold library bloom is intentionally lamp-only. Pale walls and
     // book covers sit below threshold, while the emissive bulbs pick up a
@@ -2721,30 +2714,45 @@ export default function DreamWorld3D({
         libraryFloatingProps.register(group, {
           phase: floatingPhase(shelfFloatId),
           hoverAmplitude: wallBoundShelf
-            ? .02 + seededUnit(shelfFloatSeed, 143) * .014
-            : .072 + seededUnit(shelfFloatSeed, 143) * .045,
+            ? .035 + seededUnit(shelfFloatSeed, 143) * .022
+            : .11 + seededUnit(shelfFloatSeed, 143) * .065,
           hoverSpeed: wallBoundShelf
-            ? .048 + seededUnit(shelfFloatSeed, 144) * .022
-            : .052 + seededUnit(shelfFloatSeed, 144) * .04,
-          // Freestanding shelves now feel genuinely suspended: they translate
-          // slightly as well as turning on all three axes. Wall-bound shelves
-          // keep the same language at a much smaller amplitude so they never
-          // visibly leave the architecture.
+            ? .09 + seededUnit(shelfFloatSeed, 144) * .035
+            : .105 + seededUnit(shelfFloatSeed, 144) * .045,
+          secondaryHoverAmplitude: wallBoundShelf
+            ? .008 + seededUnit(shelfFloatSeed, 150) * .008
+            : .022 + seededUnit(shelfFloatSeed, 150) * .026,
+          secondaryHoverSpeed: wallBoundShelf
+            ? .18 + seededUnit(shelfFloatSeed, 151) * .05
+            : .22 + seededUnit(shelfFloatSeed, 151) * .08,
+          // Wall-bound shelves slide primarily along the wall. Freestanding
+          // shelves get a larger sideways arc plus a smaller fore/aft drift
+          // so the whole object reads as suspended rather than vibrating.
           tiltX: wallBoundShelf
-            ? .005 + seededUnit(shelfFloatSeed, 145) * .004
-            : .032 + seededUnit(shelfFloatSeed, 145) * .024,
+            ? .009 + seededUnit(shelfFloatSeed, 145) * .007
+            : .05 + seededUnit(shelfFloatSeed, 145) * .035,
           tiltY: wallBoundShelf
-            ? .003 + seededUnit(shelfFloatSeed, 147) * .003
-            : .022 + seededUnit(shelfFloatSeed, 147) * .022,
+            ? .006 + seededUnit(shelfFloatSeed, 147) * .005
+            : .035 + seededUnit(shelfFloatSeed, 147) * .028,
           tiltZ: wallBoundShelf
-            ? .004 + seededUnit(shelfFloatSeed, 146) * .004
-            : .022 + seededUnit(shelfFloatSeed, 146) * .02,
-          driftX: wallBoundShelf
-            ? .008 + seededUnit(shelfFloatSeed, 148) * .008
-            : .075 + seededUnit(shelfFloatSeed, 148) * .055,
-          driftZ: wallBoundShelf
-            ? .006 + seededUnit(shelfFloatSeed, 149) * .006
-            : .06 + seededUnit(shelfFloatSeed, 149) * .045,
+            ? .008 + seededUnit(shelfFloatSeed, 146) * .006
+            : .042 + seededUnit(shelfFloatSeed, 146) * .03,
+          driftX: wallBoundShelf ? 0 : .025,
+          driftZ: wallBoundShelf ? 0 : .018,
+          driftSide: wallBoundShelf
+            ? .055 + seededUnit(shelfFloatSeed, 148) * .045
+            : .18 + seededUnit(shelfFloatSeed, 148) * .13,
+          driftForward: wallBoundShelf
+            ? .004 + seededUnit(shelfFloatSeed, 149) * .005
+            : .055 + seededUnit(shelfFloatSeed, 149) * .05,
+          driftSpeedSide: wallBoundShelf
+            ? .12 + seededUnit(shelfFloatSeed, 152) * .055
+            : .15 + seededUnit(shelfFloatSeed, 152) * .09,
+          driftSpeedForward: wallBoundShelf
+            ? .075 + seededUnit(shelfFloatSeed, 153) * .03
+            : .095 + seededUnit(shelfFloatSeed, 153) * .045,
+          driftSpeedX: .13,
+          driftSpeedZ: .1,
         })
       }
 
@@ -7090,9 +7098,9 @@ export default function DreamWorld3D({
           ? .47
           : .55)
       const bloomTarget = libraryMode
-        ? (.14 +
-            (readingRitualActive ? .025 : 0) +
-            (selectedVisual ? .015 : 0)) *
+        ? (.075 +
+            (readingRitualActive ? .012 : 0) +
+            (selectedVisual ? .008 : 0)) *
           atmospherePreset.bloomScale
         : (selectedVisual
             ? libraryBloomStrength * 1.05
