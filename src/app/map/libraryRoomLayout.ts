@@ -132,22 +132,19 @@ export function roomShelfPlacements(
     district.sourceMode === 'topics' ||
     district.sourceMode === 'catalog'
 
-  // Build true library stack rows that run from the corridor side toward
-  // each room's outer/back wall. Three shelf modules make one long row while
-  // the gaps between rows stay wide enough to browse comfortably.
-  //
-  // Search keeps only two rows so the floating card catalogue remains the
-  // unmistakable centerpiece; every other collection gets four full rows.
+  // Use fewer, wider-separated aisles. Each freestanding row still spans
+  // almost the full room depth, but the larger gaps make browsing feel like
+  // a real library instead of a packed storage maze.
   const rowOffsets =
     district.sourceMode === 'search'
-      ? [-5.5, 5.5]
-      : [-6.6, -2.2, 2.2, 6.6]
+      ? [-6.2, 6.2]
+      : [-7.2, 0, 7.2]
   const sideDirection = x < 0 ? -1 : 1
-  const depthOffsets = [-4.6, 0, 4.6]
+  const depthOffsets = [-4.7, 0, 4.7]
 
   const placements: RoomShelfPlacement[] = []
   rowOffsets.forEach((zOffset, rowIndex) => {
-    const yaw = rowIndex < rowOffsets.length / 2 ? 0 : Math.PI
+    const yaw = rowIndex % 2 === 0 ? 0 : Math.PI
     depthOffsets.forEach((depthOffset, columnIndex) => {
       const placementIndex =
         rowIndex * depthOffsets.length + columnIndex
@@ -172,6 +169,38 @@ export function roomShelfPlacements(
         pathBay: district.bay,
         districtId: district.id,
       })
+    })
+  })
+
+  // Finish every room with single-sided floating shelves on the true outer
+  // wall. They face inward and sit between the freestanding aisles so they
+  // add density without pinching circulation.
+  const outerWallX = x < 0 ? -23.45 : 23.45
+  const wallYaw = x < 0 ? Math.PI / 2 : -Math.PI / 2
+  const wallOffsets =
+    district.sourceMode === 'search'
+      ? [-3.4, 3.4]
+      : [-4.8, 4.8]
+  const wallBaseHeight =
+    district.sourceMode === 'catalog'
+      ? .82
+      : district.sourceMode === 'featured'
+        ? .72
+        : .58
+
+  wallOffsets.forEach((zOffset, wallIndex) => {
+    placements.push({
+      world: [
+        outerWallX,
+        wallBaseHeight + wallIndex * .08,
+        z + zOffset,
+      ],
+      yaw: wallYaw,
+      doubleSided: false,
+      endCaps: 'none',
+      floatId: `${district.id}:back-wall:${wallIndex}`,
+      pathBay: district.bay,
+      districtId: district.id,
     })
   })
 
