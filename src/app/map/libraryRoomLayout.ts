@@ -104,19 +104,19 @@ const shelfHoverHeights = (
 ): readonly number[] => {
   switch (sourceMode) {
     case 'featured':
-      return [.82, .9, 1.02, .94, .88, 1.06, .98, .86]
+      return [.82, .9, 1.02, .94, .88, 1.06, .98, .86, 1.04, .92, 1.08, .9]
     case 'latest':
-      return [.5, .58, .66, .54, .6, .7, .62, .52]
+      return [.5, .58, .66, .54, .6, .7, .62, .52, .68, .56, .72, .6]
     case 'topics':
-      return [.66, .74, .84, .7, .78, .9, .82, .68]
+      return [.66, .74, .84, .7, .78, .9, .82, .68, .88, .76, .92, .72]
     case 'creators':
-      return [.76, .86, .96, .8, .9, 1.02, .92, .78]
+      return [.76, .86, .96, .8, .9, 1.02, .92, .78, .98, .84, 1.04, .88]
     case 'search':
-      return [.58, .7, .66, .56]
+      return [.58, .66, .72, .56, .64, .7]
     case 'catalog':
-      return [.88, 1, 1.1, .94, 1.04, 1.16, 1.08, .9]
+      return [.88, 1, 1.1, .94, 1.04, 1.16, 1.08, .9, 1.12, .98, 1.18, 1.02]
     default:
-      return [.62, .7, .8, .66, .74, .86, .78, .64]
+      return [.62, .7, .8, .66, .74, .86, .78, .64, .82, .72, .88, .68]
   }
 }
 
@@ -132,27 +132,28 @@ export function roomShelfPlacements(
     district.sourceMode === 'topics' ||
     district.sourceMode === 'catalog'
 
-  // Search intentionally stays sparse so the floating card catalogue remains
-  // the room hero. Every other collection gets eight real DEV shelves: four
-  // suspended rows with two shelves per row, leaving the room center readable.
+  // Build true library stack rows that run from the corridor side toward
+  // each room's outer/back wall. Three shelf modules make one long row while
+  // the gaps between rows stay wide enough to browse comfortably.
+  //
+  // Search keeps only two rows so the floating card catalogue remains the
+  // unmistakable centerpiece; every other collection gets four full rows.
   const rowOffsets =
     district.sourceMode === 'search'
-      ? [-4.25, 4.25]
-      : [-5.4, -3.2, 3.2, 5.4]
-  const xOffsets =
-    district.sourceMode === 'search'
-      ? [-2.65, 2.65]
-      : [-3, 3]
+      ? [-5.5, 5.5]
+      : [-6.6, -2.2, 2.2, 6.6]
+  const sideDirection = x < 0 ? -1 : 1
+  const depthOffsets = [-4.6, 0, 4.6]
 
   const placements: RoomShelfPlacement[] = []
   rowOffsets.forEach((zOffset, rowIndex) => {
     const yaw = rowIndex < rowOffsets.length / 2 ? 0 : Math.PI
-    xOffsets.forEach((xOffset, columnIndex) => {
+    depthOffsets.forEach((depthOffset, columnIndex) => {
       const placementIndex =
-        rowIndex * xOffsets.length + columnIndex
+        rowIndex * depthOffsets.length + columnIndex
       placements.push({
         world: [
-          x + xOffset,
+          x + depthOffset * sideDirection,
           heights[placementIndex] ?? heights.at(-1) ?? .7,
           z + zOffset,
         ],
@@ -162,7 +163,9 @@ export function roomShelfPlacements(
           useEndCaps
             ? columnIndex === 0
               ? 'left'
-              : 'right'
+              : columnIndex === depthOffsets.length - 1
+                ? 'right'
+                : 'none'
             : 'none',
         floatId:
           `${district.id}:room-row-${rowIndex}:col-${columnIndex}`,
