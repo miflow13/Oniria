@@ -191,9 +191,23 @@ const journey = {
   ],
 }
 
+const roomIds = districts.map((district) => district._id)
+const legacyDistricts = await client.fetch(
+  `*[
+    _type == "libraryDistrict" &&
+    !(_id in $roomIds)
+  ]{_id}`,
+  {roomIds},
+)
+
 let transaction = client.transaction()
 for (const district of districts) {
   transaction = transaction.createOrReplace(district)
+}
+for (const legacy of legacyDistricts) {
+  transaction = transaction.patch(legacy._id, {
+    set: {enabled: false},
+  })
 }
 transaction = transaction.createOrReplace(config)
 transaction = transaction.createOrReplace(journey)
@@ -203,3 +217,8 @@ await transaction.commit()
 console.log(
   `Seeded Oniria Library Control + ${districts.length} rooms + Library Tour into "${dataset}".`,
 )
+if (legacyDistricts.length > 0) {
+  console.log(
+    `Disabled ${legacyDistricts.length} legacy library district document(s) without deleting them.`,
+  )
+}
