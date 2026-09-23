@@ -399,25 +399,26 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({error: 'Missing tag'}, {status: 400})
       }
 
-      const [pageOne, pageTwo] = await Promise.all([
-        devFetch(
-          `/articles?tag=${encodeURIComponent(tag)}&per_page=100&page=1`,
-        ).catch(() => []),
-        devFetch(
-          `/articles?tag=${encodeURIComponent(tag)}&per_page=100&page=2`,
-        ).catch(() => []),
-      ])
-      const seen = new Set<number>()
-      const articles = [pageOne, pageTwo]
-        .flatMap((page) => normalizeArticles(page))
-        .filter((article) => {
-          if (seen.has(article.id)) return false
-          seen.add(article.id)
-          return true
-        })
+      const perPage = Math.min(
+        100,
+        Math.max(
+          20,
+          Number(searchParams.get('per_page') ?? 40) || 40,
+        ),
+      )
+      const page = Math.max(
+        1,
+        Number(searchParams.get('page') ?? 1) || 1,
+      )
+      const raw = await devFetch(
+        `/articles?tag=${encodeURIComponent(tag)}&per_page=${perPage}&page=${page}`,
+      ).catch(() => [])
       return NextResponse.json({
         tag,
-        articles,
+        page,
+        perPage,
+        articles: normalizeArticles(raw),
+        hasMore: Array.isArray(raw) && raw.length >= perPage,
       })
     }
 
