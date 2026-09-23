@@ -7290,6 +7290,7 @@ export default function DreamWorld3D({
       })
 
       libraryAtmosphere?.dispose()
+      libraryCityScene?.dispose()
 
       nearDustGeometry.dispose()
       nearDustMaterial.dispose()
