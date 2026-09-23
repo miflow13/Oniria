@@ -234,9 +234,9 @@ export function createLibraryAtmosphere({
   const dustMaterial = new THREE.PointsMaterial({
     map: dustTexture,
     color: 0xffe8c7,
-    size: .065,
+    size: .075,
     transparent: true,
-    opacity: .24,
+    opacity: .3,
     depthWrite: false,
     alphaTest: .025,
     sizeAttenuation: true,
@@ -415,7 +415,7 @@ export function createLibraryAtmosphere({
       }
       dustPositionAttribute.needsUpdate = true
       dustMaterial.opacity =
-        .19 + Math.sin(elapsed * .17) * .025
+        .25 + Math.sin(elapsed * .17) * .03
 
       hazePlanes.forEach((plane, index) => {
         const material =
