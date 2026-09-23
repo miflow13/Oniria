@@ -1513,7 +1513,6 @@ export default function OutdoorLibrary3D({
       console.info(
         `[OutdoorLibrary3D] Loaded ${loadedCount}/${libraryAssetRequests.length} library assets`,
       )
-
       // Skin each distinct chamber with authored modules. The primitive shell
       // owns collision; this layer supplies the architectural detail players see.
       libraryRooms.forEach(({floor, x: centerX, z: centerZ, depth, width, doors}) => {
