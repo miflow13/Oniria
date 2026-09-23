@@ -30,6 +30,7 @@ import type {
 } from './libraryTypes'
 import styles from './library.module.css'
 import {
+  hallwayShelfPlacements,
   roomShelfPlacements,
   type RoomShelfPlacement,
 } from './libraryRoomLayout'
@@ -38,7 +39,7 @@ const DEFAULT_USERNAME = 'mikachu'
 const QUALITY: DreamQuality = 'cinematic'
 const CATALOG_PAGE_SIZE = 100
 const CATALOG_BOOKS_PER_SHELF = 9
-const DISTRICT_RENDERED_SHELF_LIMIT = 4
+const DISTRICT_RENDERED_SHELF_LIMIT = 8
 const DISTRICT_VISIBLE_ARTICLE_CAPACITY =
   DISTRICT_RENDERED_SHELF_LIMIT * CATALOG_BOOKS_PER_SHELF
 const DISTRICT_SHELF_PAIR_OFFSETS = [-.68, .68] as const
@@ -305,6 +306,8 @@ export default function DevLibraryMap() {
   const catalogNextPageRef = useRef(1)
   const catalogLoadingRef = useRef(false)
   const catalogHasMoreRef = useRef(true)
+  const bootstrapRefreshingRef = useRef(false)
+  const [devRefreshTick, setDevRefreshTick] = useState(0)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const [article, setArticle] = useState<DevArticle | null>(null)
@@ -472,46 +475,55 @@ export default function DevLibraryMap() {
     [],
   )
 
-  useEffect(() => {
-    let cancelled = false
+  const refreshDevBootstrap = useCallback(
+    async (initial = false) => {
+      if (bootstrapRefreshingRef.current) return
+      bootstrapRefreshingRef.current = true
 
-    void refreshWorldConfig(true)
-
-    async function load() {
       try {
-        setLoading(true)
-        const bootstrapResponse = await fetch(
+        if (initial) setLoading(true)
+        const response = await fetch(
           '/api/devto?mode=bootstrap&username=' +
-            encodeURIComponent(DEFAULT_USERNAME),
+            encodeURIComponent(DEFAULT_USERNAME) +
+            '&_=' +
+            Date.now(),
+          {
+            cache: 'no-store',
+            headers: {'cache-control': 'no-cache'},
+          },
         )
 
-        if (!bootstrapResponse.ok) {
+        if (!response.ok) {
           throw new Error('Could not load DEV library')
         }
 
-        const bootstrapPayload =
-          (await bootstrapResponse.json()) as DevBootstrap
+        const payload = (await response.json()) as DevBootstrap
+        setBootstrap(payload)
+        setDevRefreshTick((current) => current + 1)
 
-        if (cancelled) return
-        setBootstrap(bootstrapPayload)
-        void loadMoreCatalog()
+        if (initial && catalog.length === 0) {
+          void loadMoreCatalog()
+        }
       } catch (caught) {
-        if (cancelled) return
-        setError(
-          caught instanceof Error
-            ? caught.message
-            : 'Could not load DEV library',
-        )
+        if (initial) {
+          setError(
+            caught instanceof Error
+              ? caught.message
+              : 'Could not load DEV library',
+          )
+        }
       } finally {
-        if (!cancelled) setLoading(false)
+        bootstrapRefreshingRef.current = false
+        if (initial) setLoading(false)
       }
-    }
+    },
+    [catalog.length, loadMoreCatalog],
+  )
 
-    void load()
-    return () => {
-      cancelled = true
-    }
-  }, [loadMoreCatalog, refreshWorldConfig])
+  useEffect(() => {
+    void refreshWorldConfig(true)
+    void refreshDevBootstrap(true)
+  }, [refreshDevBootstrap, refreshWorldConfig])
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -539,6 +551,41 @@ export default function DevLibraryMap() {
       )
     }
   }, [refreshWorldConfig])
+
+  useEffect(() => {
+    if (!worldConfig.liveDevUpdates) return
+
+    const refreshIfVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshDevBootstrap(false)
+      }
+    }
+    const interval = window.setInterval(
+      refreshIfVisible,
+      90_000,
+    )
+
+    const refreshOnVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshDevBootstrap(false)
+      }
+    }
+
+    window.addEventListener('focus', refreshIfVisible)
+    document.addEventListener(
+      'visibilitychange',
+      refreshOnVisibility,
+    )
+
+    return () => {
+      window.clearInterval(interval)
+      window.removeEventListener('focus', refreshIfVisible)
+      document.removeEventListener(
+        'visibilitychange',
+        refreshOnVisibility,
+      )
+    }
+  }, [refreshDevBootstrap, worldConfig.liveDevUpdates])
 
   useEffect(() => {
     let cancelled = false
@@ -587,7 +634,7 @@ export default function DevLibraryMap() {
     return () => {
       cancelled = true
     }
-  }, [worldConfig.curatedArticles])
+  }, [devRefreshTick, worldConfig.curatedArticles])
 
   useEffect(() => {
     let cancelled = false
@@ -653,7 +700,7 @@ export default function DevLibraryMap() {
     return () => {
       cancelled = true
     }
-  }, [worldConfig.districts])
+  }, [devRefreshTick, worldConfig.districts])
 
   const resumeFirstPersonControls = useCallback(() => {
     const canvas = document.querySelector<HTMLCanvasElement>(
