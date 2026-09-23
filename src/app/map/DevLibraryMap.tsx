@@ -41,6 +41,8 @@ const CATALOG_PAGE_SIZE = 100
 const CATALOG_BOOKS_PER_SHELF = 9
 const FRONT_PAGE_SHELF_TARGET = 8
 const DISTRICT_RENDERED_SHELF_LIMIT = 4
+const DISTRICT_VISIBLE_ARTICLE_CAPACITY =
+  DISTRICT_RENDERED_SHELF_LIMIT * CATALOG_BOOKS_PER_SHELF
 const DISTRICT_SHELF_PAIR_OFFSETS = [-.48, .48] as const
 
 const SHELF_ACCENTS: Record<LibraryShelfKind, string> = {
@@ -834,9 +836,51 @@ export default function DevLibraryMap() {
       }
     })
 
+    // Deep Stacks is the archive reservoir, not just the "no tag matched"
+    // bucket. Include semantic-district overflow so it is always populated
+    // and keeps gaining material as more DEV pages are fetched, without
+    // expanding its physical shelf count.
+    const deepStacksDistrict = districts.find(
+      (district) => district.id === 'deep-stacks',
+    )
+    if (deepStacksDistrict) {
+      const existingDeepStacks =
+        articlesByDistrict.get(deepStacksDistrict.id) ?? []
+      const overflow = districts
+        .filter(
+          (district) =>
+            district.id !== 'front-page' &&
+            district.id !== 'deep-stacks',
+        )
+        .flatMap((district) =>
+          (
+            articlesByDistrict.get(district.id) ?? []
+          ).slice(DISTRICT_VISIBLE_ARTICLE_CAPACITY),
+        )
+
+      const reservoir = uniqueArticles(
+        existingDeepStacks,
+        overflow,
+        remaining,
+      )
+
+      articlesByDistrict.set(
+        deepStacksDistrict.id,
+        reservoir,
+      )
+    }
+
     districts.forEach((district) => {
-      const districtArticles =
+      const allDistrictArticles =
         articlesByDistrict.get(district.id) ?? []
+      const districtArticles =
+        district.id === 'deep-stacks' &&
+        allDistrictArticles.length >
+          DISTRICT_VISIBLE_ARTICLE_CAPACITY
+          ? allDistrictArticles.slice(
+              -DISTRICT_VISIBLE_ARTICLE_CAPACITY,
+            )
+          : allDistrictArticles
       const availableShelfCount = Math.ceil(
         districtArticles.length / CATALOG_BOOKS_PER_SHELF,
       )
@@ -880,7 +924,7 @@ export default function DevLibraryMap() {
           district.id +
           ':' +
           localIndex
-        const totalLoaded = districtArticles.length
+        const totalLoaded = allDistrictArticles.length
         const shelf = makeShelf(
           shelfId,
           district.label +
