@@ -471,7 +471,7 @@ function createLibraryWelcomeTexture(config: LibraryWorldConfig) {
       accent: 'rgba(140, 124, 255, .18)',
       body: [
         'Next.js + React + TypeScript + Three.js.',
-        'DEV API data is streamed into seeded districts, shelves, paths, covers, and atmosphere.',
+        'DEV API data is streamed into city districts, shelves, streets, covers, and atmosphere.',
       ],
     },
     {
@@ -548,7 +548,7 @@ function createLibraryWelcomeTexture(config: LibraryWorldConfig) {
   context.font = '700 25px ui-monospace, monospace'
   context.fillText(
     config.archiveStatus +
-      ' · follow the holographic boulevard · district signs float overhead',
+      ' · explore streets and intersections · district signs float overhead',
     100,
     846,
   )
@@ -2100,6 +2100,63 @@ export default function DreamWorld3D({
         wire.userData.libraryDecorative = true
         wire.userData.libraryLandmarkWire = true
         group.add(wire)
+
+        if (
+          district.landmarkType ===
+          'dev-monument'
+        ) {
+          const devLetterMaterial =
+            new THREE.MeshBasicMaterial({
+              color: 0xf4fbff,
+              transparent: true,
+              opacity: .97,
+              depthWrite: false,
+              toneMapped: false,
+            })
+          libraryDistrictLandmarkMaterials.push(
+            devLetterMaterial,
+          )
+
+          const addLetterBar = (
+            x: number,
+            y: number,
+            width: number,
+            height: number,
+            rotationZ = 0,
+          ) => {
+            const barGeometry =
+              new THREE.BoxGeometry(
+                width,
+                height,
+                .14,
+              )
+            const bar = new THREE.Mesh(
+              barGeometry,
+              devLetterMaterial,
+            )
+            bar.position.set(x, y, -.29)
+            bar.rotation.z = rotationZ
+            bar.userData.libraryDecorative = true
+            group.add(bar)
+            libraryDistrictLandmarkGeometries.push(
+              barGeometry,
+            )
+          }
+
+          // D
+          addLetterBar(-1.2, 0, .17, 1.18)
+          addLetterBar(-.83, .5, .76, .17)
+          addLetterBar(-.83, -.5, .76, .17)
+          addLetterBar(-.46, 0, .17, 1.18)
+          // E
+          addLetterBar(-.02, 0, .17, 1.18)
+          addLetterBar(.3, .5, .66, .17)
+          addLetterBar(.26, 0, .56, .16)
+          addLetterBar(.3, -.5, .66, .17)
+          // V
+          addLetterBar(.93, .03, .17, 1.13, .23)
+          addLetterBar(1.39, .03, .17, 1.13, -.23)
+        }
 
         const haloGeometry =
           new THREE.RingGeometry(2, 2.45, 48)
