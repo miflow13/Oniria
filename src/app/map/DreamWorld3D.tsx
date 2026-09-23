@@ -6639,17 +6639,21 @@ export default function DreamWorld3D({
           flightVelocity.y = 0
         } else {
           // Free flight remains available for inspection, but the rebuilt
-          // library is an interior space rather than an infinite boulevard.
-          flightPosition.x = THREE.MathUtils.clamp(
+          // library is still a physical interior. Reuse the X/Z collision
+          // solver so flying cannot phase through shelves or divider walls.
+          const clamped = clampLibraryWalkPosition(
             flightPosition.x,
-            LIBRARY_BUILDING_BOUNDS.minX,
-            LIBRARY_BUILDING_BOUNDS.maxX,
-          )
-          flightPosition.z = THREE.MathUtils.clamp(
             flightPosition.z,
-            LIBRARY_BUILDING_BOUNDS.minZ,
-            LIBRARY_BUILDING_BOUNDS.maxZ,
           )
+          if (
+            clamped.x !== flightPosition.x ||
+            clamped.z !== flightPosition.z
+          ) {
+            flightVelocity.x *= .3
+            flightVelocity.z *= .3
+          }
+          flightPosition.x = clamped.x
+          flightPosition.z = clamped.z
           flightPosition.y = THREE.MathUtils.clamp(
             flightPosition.y,
             .65,
