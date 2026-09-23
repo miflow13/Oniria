@@ -32,28 +32,28 @@ const SECTION_COPY: Record<
   {title: string; subtitle: string; accent: string}
 > = {
   atrium: {
-    title: 'The Infinite Stacks',
-    subtitle: 'index hall',
+    title: 'The Stackwell',
+    subtitle: 'the Well',
     accent: '#f5f5f5',
   },
   featured: {
-    title: 'Featured Stacks',
-    subtitle: 'popular this week',
+    title: 'JavaScript District',
+    subtitle: 'live #javascript strata',
     accent: '#3b49df',
   },
   latest: {
-    title: 'New Arrivals',
-    subtitle: 'freshly published',
+    title: 'New Growth',
+    subtitle: 'fresh articles settling into the archive',
     accent: '#5b6cff',
   },
   topics: {
-    title: 'Topic Stacks',
-    subtitle: 'browse by tag',
+    title: 'District Index',
+    subtitle: 'browse the archive by tag',
     accent: '#3b49df',
   },
   creators: {
-    title: 'Creator Stacks',
-    subtitle: 'authors and their collections',
+    title: 'Author Index',
+    subtitle: 'creator collections and pillars',
     accent: '#7c83ff',
   },
   search: {
@@ -62,8 +62,8 @@ const SECTION_COPY: Record<
     accent: '#3b49df',
   },
   archive: {
-    title: 'Deep Archive',
-    subtitle: 'the collection receding into the dark',
+    title: 'Deep Strata',
+    subtitle: 'older layers disappearing into the Well',
     accent: '#a3a3a3',
   },
 }
@@ -263,8 +263,8 @@ function buildLibraryGraph(
   addNode({
     id: 'dev-home',
     kind: 'home',
-    title: 'The Infinite Stacks',
-    subtitle: 'index hall',
+    title: 'The Stackwell',
+    subtitle: 'the Well',
     href: 'https://dev.to/',
     section: 'atrium',
     position: [0, .55, 7],
@@ -580,10 +580,10 @@ function buildLibraryGraph(
         kind: isTag ? 'tag' : isProfile ? 'profile' : 'search',
         title: dynamicLabel,
         subtitle: isTag
-          ? 'live topic wing'
+          ? 'live district index'
           : isProfile
             ? 'live creator study'
-            : 'temporary search aisle',
+            : 'temporary index shelf',
         tag: isTag ? dynamicLabel.slice(1) : undefined,
         username: isProfile ? dynamicLabel.slice(1) : undefined,
         section,
@@ -1075,8 +1075,8 @@ export default function DevWebSurf() {
     return (
       <main className={styles.loadingScreen}>
         <div className={styles.loadingCore} aria-hidden="true" />
-        <span>opening the infinite stacks</span>
-        <strong>Indexing the live DEV collection…</strong>
+        <span>entering the Stackwell</span>
+        <strong>Tracing the live DEV strata…</strong>
         {error && <small>{error}</small>}
       </main>
     )
@@ -1160,7 +1160,7 @@ export default function DevWebSurf() {
         : 'section:featured'
 
   const breadcrumb = [
-    'DEV // Infinite Stacks',
+    'DEV // Stackwell',
     SECTION_COPY[currentSection].title,
     activeNode?.title,
   ].filter(Boolean)
@@ -1170,13 +1170,13 @@ export default function DevWebSurf() {
     label: string
     target: string
   }> = [
-    {section: 'atrium', label: 'Home', target: 'dev-home'},
-    {section: 'featured', label: 'Featured', target: 'section:featured'},
-    {section: 'latest', label: 'New', target: 'section:latest'},
-    {section: 'topics', label: 'Topics', target: 'section:topics'},
-    {section: 'creators', label: 'Creators', target: 'section:creators'},
+    {section: 'atrium', label: 'Well', target: 'dev-home'},
+    {section: 'featured', label: '#javascript', target: 'section:featured'},
+    {section: 'latest', label: 'New Growth', target: 'section:latest'},
+    {section: 'topics', label: 'Districts', target: 'section:topics'},
+    {section: 'creators', label: 'Authors', target: 'section:creators'},
     {section: 'search', label: 'Search', target: 'section:search'},
-    {section: 'archive', label: 'Archive', target: 'section:archive'},
+    {section: 'archive', label: 'Deep Strata', target: 'section:archive'},
   ]
 
   return (
@@ -1216,7 +1216,7 @@ export default function DevWebSurf() {
           }}
         >
           <b>DEV</b>
-          <span>Infinite Stacks</span>
+          <span>Stackwell</span>
         </button>
 
         <form className={styles.addressBar} onSubmit={submitSearch}>
@@ -1225,7 +1225,7 @@ export default function DevWebSurf() {
             ref={searchInputRef}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search the infinite stacks: article, @creator, #topic"
+            placeholder="Search the Stackwell: article, @creator, #topic"
             aria-label="Search the DEV library"
           />
           <kbd>↵</kbd>
@@ -1247,7 +1247,7 @@ export default function DevWebSurf() {
       </nav>
 
       {currentFloor === 0 && (
-        <nav className={styles.wingRail} aria-label="Browse library stacks">
+        <nav className={styles.wingRail} aria-label="Browse Stackwell districts">
           {wingLinks.map((item) => (
             <button
               type="button"
@@ -1275,7 +1275,7 @@ export default function DevWebSurf() {
         </nav>
       )}
 
-      <nav className={styles.floorRail} aria-label="Archive levels">
+      <nav className={styles.floorRail} aria-label="Stackwell levels">
         <span>Level</span>
         {Array.from({length: LIBRARY_FLOOR_COUNT}, (_, floor) => (
           <button
@@ -1313,18 +1313,17 @@ export default function DevWebSurf() {
       {directoryOpen && (
         <aside className={styles.directory}>
           <div className={styles.directoryHeading}>
-            <span>DEV Library Directory</span>
+            <span>Stackwell Index</span>
             <button
               type="button"
               onClick={() => setDirectoryOpen(false)}
-              aria-label="Close directory"
+              aria-label="Close Stackwell index"
             >
               ×
             </button>
           </div>
           <p>
-            Browse the collection like a place. Pick a wing and follow the
-            illuminated floor route.
+            Use the Well as your landmark. Choose a district or trace a route into the archive.
           </p>
 
           <div className={styles.directoryGrid}>
@@ -1336,22 +1335,22 @@ export default function DevWebSurf() {
               type="button"
               onClick={() => walkTo('section:featured')}
             >
-              <b>Featured today</b>
-              <small>popular reading hall</small>
+              <b>#javascript district</b>
+              <small>live articles in the first archive zone</small>
             </button>
             <button
               type="button"
               onClick={() => walkTo('section:topics')}
             >
-              <b>Explore topics</b>
-              <small>tag wings and doorways</small>
+              <b>District index</b>
+              <small>tags become places in the archive</small>
             </button>
             <button
               type="button"
               onClick={() => walkTo('section:creators')}
             >
-              <b>Creators</b>
-              <small>author studies and collections</small>
+              <b>Author index</b>
+              <small>creator collections and future pillars</small>
             </button>
             <button
               type="button"
@@ -1361,7 +1360,7 @@ export default function DevWebSurf() {
               }}
             >
               <b>Search</b>
-              <small>use the card catalog</small>
+              <small>query the live archive index</small>
             </button>
             <button type="button" onClick={surpriseMe}>
               <b>Surprise me</b>
@@ -1374,7 +1373,7 @@ export default function DevWebSurf() {
             className={styles.archiveLink}
             onClick={() => walkTo('section:archive')}
           >
-            Restricted stacks · Deep Archive →
+            Descend into the Deep Strata →
           </button>
         </aside>
       )}
