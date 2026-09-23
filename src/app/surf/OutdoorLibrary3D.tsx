@@ -1350,6 +1350,14 @@ export default function OutdoorLibrary3D({
     const clockRight = new THREE.Vector3()
     const movement = new THREE.Vector3()
     const yAxis = new THREE.Vector3(0, 1, 0)
+    const canOccupy = (x: number, z: number) =>
+      !libraryColliders.some(
+        (collider) =>
+          x >= collider.minX &&
+          x <= collider.maxX &&
+          z >= collider.minZ &&
+          z <= collider.maxZ,
+      )
 
     const animate = (time: number) => {
       frame = requestAnimationFrame(animate)
@@ -1402,14 +1410,6 @@ export default function OutdoorLibrary3D({
             WORLD_FAR_Z,
             WORLD_NEAR_Z,
           )
-          const canOccupy = (x: number, z: number) =>
-            !libraryColliders.some(
-              (collider) =>
-                x >= collider.minX &&
-                x <= collider.maxX &&
-                z >= collider.minZ &&
-                z <= collider.maxZ,
-            )
           if (canOccupy(nextX, camera.position.z)) {
             camera.position.x = nextX
           }
