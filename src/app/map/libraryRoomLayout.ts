@@ -28,6 +28,7 @@ export type LibraryRoomShelfSlotId =
   | 'B1'
   | 'B2'
   | 'B3'
+  | 'B4'
   | 'E1'
   | 'E2'
   | 'O1'
@@ -41,12 +42,13 @@ export type LibraryRoomShelfSlot = {
   lateral: number
   facing: 'north' | 'south' | 'entry' | 'outer'
   doubleSided: boolean
+  widthScale?: number
 }
 
 // Visual blueprint, viewed from above:
 //
 //                  DIVIDER / BACK WALL
-//             B1        B2        B3
+//          B1      B2      B3      B4
 //
 //       O1       S1          S2       E1
 //
@@ -66,9 +68,13 @@ export const LIBRARY_ROOM_SHELF_SLOTS: readonly LibraryRoomShelfSlot[] = [
   {id: 'S3', zone: 'freestanding', inward: 5.9, lateral: 4.6, facing: 'south', doubleSided: true},
   {id: 'S4', zone: 'freestanding', inward: 11.35, lateral: 4.6, facing: 'south', doubleSided: true},
 
-  {id: 'B1', zone: 'divider-wall', inward: 3, lateral: -9.45, facing: 'north', doubleSided: false},
-  {id: 'B2', zone: 'divider-wall', inward: 8.1, lateral: -9.45, facing: 'north', doubleSided: false},
-  {id: 'B3', zone: 'divider-wall', inward: 13.2, lateral: -9.45, facing: 'north', doubleSided: false},
+  // Four slightly narrower wall cases fill the ~16-unit divider wall cleanly.
+  // Keeping them at full height but scaling only shelf width preserves the
+  // architecture while fitting more article capacity without overlap.
+  {id: 'B1', zone: 'divider-wall', inward: 2.2, lateral: -9.45, facing: 'north', doubleSided: false, widthScale: .78},
+  {id: 'B2', zone: 'divider-wall', inward: 6.15, lateral: -9.45, facing: 'north', doubleSided: false, widthScale: .78},
+  {id: 'B3', zone: 'divider-wall', inward: 10.1, lateral: -9.45, facing: 'north', doubleSided: false, widthScale: .78},
+  {id: 'B4', zone: 'divider-wall', inward: 14.05, lateral: -9.45, facing: 'north', doubleSided: false, widthScale: .78},
 
   {id: 'E1', zone: 'entry-wall', inward: .55, lateral: -5.6, facing: 'entry', doubleSided: false},
   {id: 'E2', zone: 'entry-wall', inward: .55, lateral: 5.6, facing: 'entry', doubleSided: false},
@@ -209,6 +215,7 @@ export type RoomShelfPlacement = {
   districtId: string
   slotId: string
   zone: LibraryRoomShelfZone | 'hallway'
+  widthScale: number
 }
 
 export type LibraryRoomLayoutIssue = {
@@ -267,12 +274,17 @@ export function roomShelfPlacementRect(
   const sideFacing =
     Math.abs(Math.sin(placement.yaw)) > .5
   const margin = shelfSafetyMargin(placement)
+  const widthScale = placement.widthScale ?? 1
   return rectFromCenter(
     placement.world[0],
     placement.world[2],
-    (sideFacing ? LIBRARY_SHELF_DEPTH : LIBRARY_SHELF_WIDTH) +
+    (sideFacing
+      ? LIBRARY_SHELF_DEPTH
+      : LIBRARY_SHELF_WIDTH * widthScale) +
       margin * 2,
-    (sideFacing ? LIBRARY_SHELF_WIDTH : LIBRARY_SHELF_DEPTH) +
+    (sideFacing
+      ? LIBRARY_SHELF_WIDTH * widthScale
+      : LIBRARY_SHELF_DEPTH) +
       margin * 2,
   )
 }
@@ -421,11 +433,14 @@ export function roomShelfBlueprintPlacements(
       yaw: shelfYawForSlot(slot, sideDirection),
       doubleSided: slot.doubleSided,
       endCaps,
-      floatId: `${district.id}:slot:${slot.id}`,
+      // Encode the zone into the float id so motion policy can distinguish
+      // wall-bound shelves from freestanding shelves without guessing names.
+      floatId: `${district.id}:${slot.zone}:${slot.id}`,
       pathBay: district.bay,
       districtId: district.id,
       slotId: slot.id,
       zone: slot.zone,
+      widthScale: slot.widthScale ?? 1,
     }
   })
 }
@@ -489,6 +504,7 @@ export function hallwayShelfPlacements(
     districtId: district.id,
     slotId: `H${index + 1}`,
     zone: 'hallway',
+    widthScale: 1,
   }))
 }
 
