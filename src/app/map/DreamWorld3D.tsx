@@ -2452,21 +2452,28 @@ export default function DreamWorld3D({
         group.rotation.y = baseYaw
         const shelfFloatId = node.libraryFloatId ?? node._id
         const shelfFloatSeed = hashString(shelfFloatId)
+        const wallBoundShelf =
+          shelfFloatId.includes(':back-wall:') ||
+          shelfFloatId.startsWith('hallway:')
         libraryFloatingProps.register(group, {
           phase: floatingPhase(shelfFloatId),
-          hoverAmplitude:
-            .045 + seededUnit(shelfFloatSeed, 143) * .035,
-          hoverSpeed:
-            .07 + seededUnit(shelfFloatSeed, 144) * .045,
-          // Shelves stay authored toward their aisle; they never billboard
-          // toward the camera. Slow bounded pitch/yaw/roll gives them the
-          // suspended zero-g feel without making books unreadable.
-          tiltX:
-            .018 + seededUnit(shelfFloatSeed, 145) * .018,
-          tiltY:
-            .006 + seededUnit(shelfFloatSeed, 147) * .008,
-          tiltZ:
-            .012 + seededUnit(shelfFloatSeed, 146) * .014,
+          hoverAmplitude: wallBoundShelf
+            ? .018 + seededUnit(shelfFloatSeed, 143) * .012
+            : .045 + seededUnit(shelfFloatSeed, 143) * .035,
+          hoverSpeed: wallBoundShelf
+            ? .055 + seededUnit(shelfFloatSeed, 144) * .025
+            : .07 + seededUnit(shelfFloatSeed, 144) * .045,
+          // Freestanding shelves visibly drift in 3D; wall-bound shelves
+          // remain much calmer so they do not clip through architecture.
+          tiltX: wallBoundShelf
+            ? .004 + seededUnit(shelfFloatSeed, 145) * .004
+            : .018 + seededUnit(shelfFloatSeed, 145) * .018,
+          tiltY: wallBoundShelf
+            ? .002 + seededUnit(shelfFloatSeed, 147) * .002
+            : .006 + seededUnit(shelfFloatSeed, 147) * .008,
+          tiltZ: wallBoundShelf
+            ? .003 + seededUnit(shelfFloatSeed, 146) * .003
+            : .012 + seededUnit(shelfFloatSeed, 146) * .014,
         })
       }
 
