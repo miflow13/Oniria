@@ -2,18 +2,18 @@ import {defineArrayMember, defineField, defineType} from 'sanity'
 
 export const libraryDistrictType = defineType({
   name: 'libraryDistrict',
-  title: 'Library District',
+  title: 'Library Room',
   type: 'document',
   fields: [
     defineField({
       name: 'title',
-      title: 'District name',
+      title: 'Room name',
       type: 'string',
       validation: (rule) => rule.required().max(80),
     }),
     defineField({
       name: 'slug',
-      title: 'District ID',
+      title: 'Room ID',
       type: 'slug',
       options: {source: 'title', maxLength: 64},
       validation: (rule) => rule.required(),
@@ -44,9 +44,10 @@ export const libraryDistrictType = defineType({
     }),
     defineField({
       name: 'routeBay',
-      title: 'Position on archive route',
+      title: 'Cinematic depth band',
       type: 'number',
-      description: '0 is the welcome end; 72 is the current Deep Stacks limit.',
+      description:
+        'Internal atmosphere coordinate. Defaults are 1, 4, and 7 for the three room rows.',
       validation: (rule) => rule.required().min(0).max(72),
     }),
     defineField({
@@ -152,13 +153,18 @@ export const libraryDistrictType = defineType({
     select: {
       title: 'title',
       code: 'code',
+      sourceMode: 'sourceMode',
+      roomSlot: 'roomSlot',
       tags: 'devTags',
       enabled: 'enabled',
     },
-    prepare({title, code, tags, enabled}) {
+    prepare({title, code, sourceMode, roomSlot, tags, enabled}) {
+      const tagSummary =
+        (tags ?? []).slice(0, 2).join(', ') || 'live DEV'
       return {
-        title: `${enabled === false ? '○' : '●'} ${title ?? 'Untitled district'}`,
-        subtitle: `${code ?? 'No code'} · ${(tags ?? []).slice(0, 3).join(', ') || 'no DEV tags'}`,
+        title: `${enabled === false ? '○' : '●'} ${title ?? 'Untitled room'}`,
+        subtitle:
+          `${code ?? 'No code'} · room ${Number(roomSlot ?? 0) + 1} · ${sourceMode ?? 'tagged'} · ${tagSummary}`,
       }
     },
   },
