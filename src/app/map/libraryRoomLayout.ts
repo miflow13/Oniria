@@ -823,7 +823,10 @@ export const LIBRARY_FURNISHINGS: LibraryFurnishingPlacement[] = [
   ...LIBRARY_HALL_READING_Z.map(
     (z, index): LibraryFurnishingPlacement => ({
       id: `hall-reading-desk-${index + 1}`,
-      asset: 'writingDesk',
+      // Use the proven-visible reading table mesh for the central
+      // suspended desks. Their motion profile is keyed by the hall desk id,
+      // so they still behave much lighter than ordinary room tables.
+      asset: 'readingTable',
       position: [0, .24, z],
       yaw: index % 2 === 0 ? 0 : Math.PI,
       scale: .94,
