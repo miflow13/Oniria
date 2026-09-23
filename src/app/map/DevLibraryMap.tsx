@@ -1232,26 +1232,17 @@ export default function DevLibraryMap() {
               nearestShelf?.title ??
               'Open space'}
           </strong>
-          {routeShelf ? (
-            <small className={styles.routeActive}>
-              {movementMode === 'fly'
-                ? 'R ROUTE → ' + routeShelf.title
-                : 'G · WALK · switch to FLY for auto-route'}
-            </small>
-          ) : (
-            <small>
-              G · {movementMode === 'walk' ? 'WALK' : 'FLY'} · WASD move
-              · E inspect / close book
-              {movementMode === 'fly' ? ' · R auto-route' : ''}
-              {catalogLoading
-                ? ' · extending catalogue…'
-                : catalogHasMore
-                  ? ' · ' +
-                    catalog.length +
-                    ' catalogue articles loaded'
-                  : ' · catalogue end reached'}
-            </small>
-          )}
+          <small>
+            G · {movementMode === 'walk' ? 'WALK' : 'FLY'} · WASD move
+            · E inspect / close book
+            {catalogLoading
+              ? ' · extending catalogue…'
+              : catalogHasMore
+                ? ' · ' +
+                  catalog.length +
+                  ' catalogue articles loaded'
+                : ' · catalogue end reached'}
+          </small>
         </div>
       </header>
 
