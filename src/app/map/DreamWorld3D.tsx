@@ -989,14 +989,21 @@ export default function DreamWorld3D({
     composer.addPass(renderPass)
 
     const ssao = new SSAOPass(scene, camera, 1, 1)
-    // Screen-space AO produces crawling halos on the library's thin book
-    // covers, bright wall panels and fake contact-shadow planes. The library
-    // already has deliberate contact grounding, so keep SSAO for the dream
-    // worlds and disable it for this interior.
-    ssao.enabled = settings.ssao && !libraryMode
-    ssao.kernelRadius = settings.ssaoKernelRadius
-    ssao.minDistance = 0.002
-    ssao.maxDistance = 0.12
+    const librarySsaoEnabled =
+      libraryMode &&
+      settings.ssao &&
+      qualityRef.current !== 'low'
+    // Reintroduce a very short-radius AO pass for architectural contact only.
+    // The old full-strength library SSAO caused halos on thin book covers;
+    // this tighter radius keeps the payoff under shelves/columns/arches.
+    ssao.enabled = libraryMode
+      ? librarySsaoEnabled
+      : settings.ssao
+    ssao.kernelRadius = libraryMode
+      ? Math.min(settings.ssaoKernelRadius, 4)
+      : settings.ssaoKernelRadius
+    ssao.minDistance = libraryMode ? .0008 : .002
+    ssao.maxDistance = libraryMode ? .045 : .12
     composer.addPass(ssao)
 
     const depthOfField = new BokehPass(scene, camera, {
@@ -1009,14 +1016,14 @@ export default function DreamWorld3D({
 
     const bloom = new UnrealBloomPass(
       new THREE.Vector2(1, 1),
-      settings.bloomStrength,
-      settings.bloomRadius,
-      settings.bloomThreshold,
+      libraryMode ? .14 : settings.bloomStrength,
+      libraryMode ? .2 : settings.bloomRadius,
+      libraryMode ? 1.08 : settings.bloomThreshold,
     )
-    // Even restrained bloom was blowing out the library's pale architecture
-    // and emissive covers. Keep bloom for the dream worlds, but render the
-    // library cleanly with authored light pools instead.
-    bloom.enabled = !libraryMode
+    // High-threshold library bloom is intentionally lamp-only. Pale walls and
+    // book covers sit below threshold, while the emissive bulbs pick up a
+    // restrained warm halo.
+    bloom.enabled = true
     composer.addPass(bloom)
 
     const dreamPost = new ShaderPass(DreamPostShader)
@@ -1040,7 +1047,7 @@ export default function DreamWorld3D({
         new THREE.HemisphereLight(
           0xd8c8b0,
           0x05070b,
-          .095,
+          .24,
         ),
       )
     } else {
@@ -7074,13 +7081,19 @@ export default function DreamWorld3D({
           )
       }
 
+      const readingRitualActive =
+        libraryReadingRitual?.isActive() ?? false
+
       const libraryBloomStrength =
         settings.bloomStrength *
         (selectedVisual?.group.userData.libraryKind === 'shelf'
           ? .47
           : .55)
       const bloomTarget = libraryMode
-        ? 0
+        ? (.14 +
+            (readingRitualActive ? .025 : 0) +
+            (selectedVisual ? .015 : 0)) *
+          atmospherePreset.bloomScale
         : (selectedVisual
             ? libraryBloomStrength * 1.05
             : settings.bloomStrength * .52) *
@@ -7095,8 +7108,6 @@ export default function DreamWorld3D({
           .03
       }
 
-      const readingRitualActive =
-        libraryReadingRitual?.isActive() ?? false
       const baseExposure = libraryMode
         ? readingRitualActive
           ? .48
@@ -7137,7 +7148,7 @@ export default function DreamWorld3D({
         const fogTarget =
           settings.fogDensity *
             (libraryMode
-              ? .14 * atmospherePreset.fogScale * hazeScale
+              ? .2 * atmospherePreset.fogScale * hazeScale
               : 1) *
             selectedFogScale +
           birthFog
