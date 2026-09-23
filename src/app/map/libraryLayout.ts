@@ -96,6 +96,24 @@ export function archiveOffsetPathPoint(
   ]
 }
 
+
+export function archiveDistrictGridLaneOffset(
+  districtIndex: number,
+) {
+  // Keep FRONT PAGE centered, then distribute later districts across the
+  // left/center/right avenues. Repeating the pattern creates city blocks
+  // instead of one sequence of rooms.
+  const lanePattern = [0, -1, 1, 0, -1, 1, 0, 1] as const
+  const lane =
+    lanePattern[
+      ((districtIndex % lanePattern.length) +
+        lanePattern.length) %
+        lanePattern.length
+    ] ?? 0
+
+  return lane * ARCHIVE_GRID_LANE_OFFSET
+}
+
 export type ArchiveGridRoadSegment = {
   id: string
   kind: 'main' | 'side' | 'cross'
@@ -345,6 +363,7 @@ export type ArchiveShelfPlacement = {
 export type ArchiveShelfPlacementOptions = {
   laneBias?: number
   laneDistance?: number
+  centerLateralOffset?: number
   heightBias?: number
   heightJitterScale?: number
   lateralJitterScale?: number
@@ -370,7 +389,10 @@ export function archiveShelfPlacement(
   const alongJitter =
     (seededUnit(seed, 7) - .5) * .82 * alongJitterScale
   const fractionalBay = bay + alongJitter / ARCHIVE_BAY_SPACING
-  const center = archivePathPoint(fractionalBay)
+  const center = archiveOffsetPathPoint(
+    fractionalBay,
+    options.centerLateralOffset ?? 0,
+  )
   const frame = archivePathFrame(fractionalBay)
   const laneDistance =
     options.laneDistance ??
