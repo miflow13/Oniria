@@ -8,6 +8,14 @@ export const LIBRARY_SHELF_WIDTH = 4.5
 export const LIBRARY_SHELF_DEPTH = .72
 export const LIBRARY_SHELF_HEIGHT = 3.5
 
+// Every room uses the same circulation contract: a wide, uninterrupted
+// center approach from the hallway door, two browsing banks to either side,
+// and a shallow back-wall collection. Keeping these values centralized makes
+// it hard for future content-specific layouts to accidentally block a door.
+export const LIBRARY_ROOM_DOORWAY_CLEAR_HALF_WIDTH = 2.35
+export const LIBRARY_ROOM_SHELF_ROW_OFFSET = 5.15
+export const LIBRARY_ROOM_SHELF_COLUMN_OFFSETS = [-5.15, 0, 5.15] as const
+
 export const LIBRARY_BUILDING_BOUNDS = {
   minX: -24.1,
   maxX: 24.1,
@@ -132,57 +140,69 @@ export function roomShelfPlacements(
     district.sourceMode === 'topics' ||
     district.sourceMode === 'catalog'
 
-  // Use fewer, wider-separated aisles. Each freestanding row still spans
-  // almost the full room depth, but the larger gaps make browsing feel like
-  // a real library instead of a packed storage maze.
-  const loungeHeavyRoom =
-    district.sourceMode === 'featured' ||
-    district.sourceMode === 'creators' ||
-    district.sourceMode === 'search'
-  const rowOffsets = loungeHeavyRoom
-    ? [-5.8, 5.8]
-    : [-5.8, 0, 5.8]
+  // Repeatable room template:
+  //
+  //               BACK WALL
+  //        [S]        [S]        [S]
+  //
+  //   [S]       [S]       [S]      <- north browsing bank
+  //
+  //          wide center approach
+  //             from doorway
+  //
+  //   [S]       [S]       [S]      <- south browsing bank
+  //
+  //                 DOOR
+  //
+  // The center strip around room.z is intentionally shelf-free from the
+  // hallway threshold to the back of the room. That fixes the previous
+  // placement where the inner-middle shelf sat directly in front of each
+  // doorway. All six freestanding shelves are double-sided.
   const sideDirection = x < 0 ? -1 : 1
-  const depthOffsets = [-5.2, 0, 5.2]
-
+  const rowOffsets = [
+    -LIBRARY_ROOM_SHELF_ROW_OFFSET,
+    LIBRARY_ROOM_SHELF_ROW_OFFSET,
+  ] as const
   const placements: RoomShelfPlacement[] = []
+
   rowOffsets.forEach((zOffset, rowIndex) => {
-    const yaw = rowIndex % 2 === 0 ? 0 : Math.PI
-    depthOffsets.forEach((depthOffset, columnIndex) => {
-      const placementIndex =
-        rowIndex * depthOffsets.length + columnIndex
-      placements.push({
-        world: [
-          x + depthOffset * sideDirection,
-          heights[placementIndex] ?? heights.at(-1) ?? .7,
-          z + zOffset,
-        ],
-        yaw,
-        doubleSided: true,
-        endCaps:
-          useEndCaps
-            ? columnIndex === 0
-              ? 'left'
-              : columnIndex === depthOffsets.length - 1
-                ? 'right'
-                : 'none'
-            : 'none',
-        floatId:
-          `${district.id}:room-row-${rowIndex}:col-${columnIndex}`,
-        pathBay: district.bay,
-        districtId: district.id,
-      })
-    })
+    LIBRARY_ROOM_SHELF_COLUMN_OFFSETS.forEach(
+      (depthOffset, columnIndex) => {
+        const placementIndex =
+          rowIndex * LIBRARY_ROOM_SHELF_COLUMN_OFFSETS.length +
+          columnIndex
+
+        placements.push({
+          world: [
+            x + depthOffset * sideDirection,
+            heights[placementIndex] ?? heights.at(-1) ?? .7,
+            z + zOffset,
+          ],
+          yaw: rowIndex === 0 ? 0 : Math.PI,
+          doubleSided: true,
+          endCaps:
+            useEndCaps
+              ? columnIndex === 0
+                ? 'left'
+                : columnIndex ===
+                    LIBRARY_ROOM_SHELF_COLUMN_OFFSETS.length - 1
+                  ? 'right'
+                  : 'none'
+              : 'none',
+          floatId:
+            `${district.id}:room-bank-${rowIndex}:col-${columnIndex}`,
+          pathBay: district.bay,
+          districtId: district.id,
+        })
+      },
+    )
   })
 
-  // The room's back wall is the solid divider at the deep (-Z) end of the
-  // room, not the windowed exterior wall. Three single-sided cases finish
-  // that wall and face back into the room.
+  // Finish every room with the same three single-sided back-wall cases. They
+  // sit against the solid deep divider and face inward. Because they are well
+  // behind the doorway approach, they add density without creating a choke
+  // point or changing the circulation pattern between rooms.
   const backWallZ = z - 9.48
-  const wallOffsets =
-    district.sourceMode === 'search'
-      ? [-4.8, 0, 4.8]
-      : [-5.2, 0, 5.2]
   const wallBaseHeight =
     district.sourceMode === 'catalog'
       ? .78
@@ -190,23 +210,23 @@ export function roomShelfPlacements(
         ? .68
         : .54
 
-  wallOffsets.forEach((xOffset, wallIndex) => {
-    placements.push({
-      world: [
-        x + xOffset,
-        wallBaseHeight + (wallIndex % 2) * .07,
-        backWallZ,
-      ],
-      // Local +Z is the readable book face, so yaw 0 points the shelf
-      // inward from the back wall toward the room center.
-      yaw: 0,
-      doubleSided: false,
-      endCaps: 'none',
-      floatId: `${district.id}:back-wall:${wallIndex}`,
-      pathBay: district.bay,
-      districtId: district.id,
-    })
-  })
+  LIBRARY_ROOM_SHELF_COLUMN_OFFSETS.forEach(
+    (xOffset, wallIndex) => {
+      placements.push({
+        world: [
+          x + xOffset,
+          wallBaseHeight + (wallIndex % 2) * .07,
+          backWallZ,
+        ],
+        yaw: 0,
+        doubleSided: false,
+        endCaps: 'none',
+        floatId: `${district.id}:back-wall:${wallIndex}`,
+        pathBay: district.bay,
+        districtId: district.id,
+      })
+    },
+  )
 
   return placements
 }
