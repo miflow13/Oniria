@@ -1228,11 +1228,35 @@ export default function Stackwell3D({
       side: THREE.DoubleSide,
     })
     materials.push(devMaterial)
+
+    // DEV Beacon: a physical monolith mounted to the Well, not a loose HUD sign.
+    const beaconBodyGeometry = new THREE.BoxGeometry(6.2, 2.3, .52)
+    const beaconBodyMaterial = new THREE.MeshStandardMaterial({
+      color: 0x08090c,
+      emissive: 0x20242a,
+      emissiveIntensity: .28,
+      metalness: .84,
+      roughness: .22,
+    })
+    geometries.push(beaconBodyGeometry)
+    materials.push(beaconBodyMaterial)
+    const beaconBody = new THREE.Mesh(beaconBodyGeometry, beaconBodyMaterial)
+    beaconBody.position.set(0, FLOOR_HEIGHT * 3 + 3.2, 6)
+    scene.add(beaconBody)
+
     const devPlaneGeometry = new THREE.PlaneGeometry(5.5, 1.8)
     geometries.push(devPlaneGeometry)
     const devPlane = new THREE.Mesh(devPlaneGeometry, devMaterial)
-    devPlane.position.set(0, FLOOR_HEIGHT * 3 + 3.2, 6.02)
+    devPlane.position.set(0, FLOOR_HEIGHT * 3 + 3.2, 6.28)
     scene.add(devPlane)
+
+    const beaconSpineGeometry = new THREE.BoxGeometry(.3, 11.5, .3)
+    geometries.push(beaconSpineGeometry)
+    for (const x of [-2.6, 2.6]) {
+      const spine = new THREE.Mesh(beaconSpineGeometry, beaconBodyMaterial)
+      spine.position.set(x, FLOOR_HEIGHT * 3 - 1.1, 6)
+      scene.add(spine)
+    }
 
     const sectionMarkerGeometry = new THREE.PlaneGeometry(4.7, 1.08)
     const signBeamGeometry = new THREE.BoxGeometry(12.5, .12, .14)
@@ -1748,16 +1772,36 @@ export default function Stackwell3D({
         visual.group.position.lerp(temp, 1 - Math.exp(-delta * 12))
         visual.group.rotation.y = THREE.MathUtils.lerp(
           visual.group.rotation.y,
-          visual.rotationY + (active ? inward * .045 : 0),
-          1 - Math.exp(-delta * 10),
+          visual.rotationY + (active ? inward * .17 : 0),
+          1 - Math.exp(-delta * 9),
         )
-        const scale = selected ? 1.1 : hovered ? 1.06 : 1
+        const scale = selected ? 1.12 : hovered ? 1.075 : 1
         visual.group.scale.lerp(
           targetScale.setScalar(scale),
           1 - Math.exp(-delta * 10),
         )
+
+        const activeVisual =
+          (selectedRef.current && bookVisuals.get(selectedRef.current)) ||
+          (hoverId && bookVisuals.get(hoverId)) ||
+          null
+        const neighboring =
+          activeVisual !== null &&
+          activeVisual.floor === visual.floor &&
+          activeVisual.side === visual.side &&
+          Math.abs(activeVisual.base.z - visual.base.z) < 2.2
+        const dimmedNeighbor = neighboring && !active
+
         visual.mesh.material.emissiveIntensity +=
-          ((selected ? .95 : hovered ? .72 : routed ? .54 : .18) -
+          ((selected
+            ? .95
+            : hovered
+              ? .72
+              : routed
+                ? .54
+                : dimmedNeighbor
+                  ? .055
+                  : .18) -
             visual.mesh.material.emissiveIntensity) *
           (1 - Math.exp(-delta * 8))
       })
