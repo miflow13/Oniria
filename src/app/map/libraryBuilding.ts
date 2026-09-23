@@ -190,23 +190,23 @@ export function createLibraryBuilding(
     config.welcomeTitle || 'DEV LIBRARY',
     directoryLine || 'Featured ← · New Arrivals → · Topics ← · Creators → · Search ← · Archive →',
     '#53d3ff',
-    [0, 3.35, 10.55],
-    [10.8, 2.7],
+    [0, 3.45, 10.55],
+    [7.2, 1.5],
   )
 
   addSign(
     'WELCOME TO ONIRIA',
     'Sanity curates this living DEV.to library. Live articles become books, and each room is a collection you can physically browse.',
     '#f1b76f',
-    [0, 3.05, 5.35],
-    [10.4, 2.08],
+    [0, 2.68, 5.5],
+    [5.4, 1.12],
   )
   addSign(
     'HOW TO EXPLORE',
     'WASD move · mouse look · choose a shelf · click a book to read · ESC returns you to the library',
     '#8fdcf4',
-    [0, 2.02, 5.48],
-    [8.7, 1.32],
+    [0, 1.92, 5.55],
+    [4.8, .78],
   )
 
   roomDistricts.forEach((district, index) => {
@@ -231,7 +231,7 @@ export function createLibraryBuilding(
     const glowMaterial = new THREE.MeshBasicMaterial({
       color: district.accent,
       transparent: true,
-      opacity: .035,
+      opacity: .018,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
       side: THREE.DoubleSide,
@@ -250,7 +250,7 @@ export function createLibraryBuilding(
   const corridorMaterial = new THREE.MeshBasicMaterial({
     color: 0x3b49df,
     transparent: true,
-    opacity: .055,
+    opacity: .026,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide,
@@ -421,12 +421,12 @@ export function createLibraryBuilding(
     const sourceMode = district?.sourceMode ?? room.sourceMode
     const roomIntensity =
       sourceMode === 'featured'
-        ? .72
+        ? .42
         : sourceMode === 'catalog'
-          ? .34
+          ? .18
           : sourceMode === 'creators'
-            ? .54
-            : .46
+            ? .3
+            : .25
 
     const accentLight = new THREE.PointLight(
       new THREE.Color(accent),
@@ -442,8 +442,8 @@ export function createLibraryBuilding(
     // other, which makes the hallway read as alternating pools of light.
     const pendantGlow = new THREE.PointLight(
       sourceMode === 'catalog' ? 0xe6dfd5 : 0xffd3a0,
-      sourceMode === 'featured' ? 1.08 : sourceMode === 'catalog' ? .58 : .86,
-      10.5,
+      sourceMode === 'featured' ? .76 : sourceMode === 'catalog' ? .36 : .58,
+      8.2,
       2,
     )
     pendantGlow.position.set(x, 3.82, z)
@@ -455,8 +455,8 @@ export function createLibraryBuilding(
     // light do most of the illumination instead of flattening the whole room.
     const roomSpot = new THREE.SpotLight(
       sourceMode === 'catalog' ? 0xb9c8e8 : 0xffe6c9,
-      sourceMode === 'featured' ? .42 : sourceMode === 'catalog' ? .18 : .3,
-      10,
+      sourceMode === 'featured' ? .24 : sourceMode === 'catalog' ? .08 : .14,
+      7.5,
       Math.PI / 3.6,
       .78,
       2,
@@ -472,8 +472,8 @@ export function createLibraryBuilding(
   ;[6, -8, -28, -48, -68].forEach((z, index) => {
     const corridorLight = new THREE.PointLight(
       index === 4 ? 0xe2e0dd : 0xffd3a0,
-      index === 4 ? .62 : .82,
-      11,
+      index === 4 ? .34 : .52,
+      8.5,
       2,
     )
     corridorLight.position.set(0, 3.92, z)
@@ -483,14 +483,14 @@ export function createLibraryBuilding(
   })
 
   ;[
-    {position: [-18.2, 2.8, -12] as const, intensity: .62},
-    {position: [18, 2.75, -32] as const, intensity: .5},
-    {position: [-16, 2.9, -52] as const, intensity: .7},
+    {position: [-18.2, 2.8, -12] as const, intensity: .4},
+    {position: [18, 2.75, -32] as const, intensity: .32},
+    {position: [-16, 2.9, -52] as const, intensity: .46},
   ].forEach(({position, intensity}) => {
     const readingLight = new THREE.PointLight(
       0xffcf9e,
       intensity,
-      6.5,
+      5.5,
       2,
     )
     readingLight.position.set(
@@ -784,6 +784,60 @@ export function createLibraryBuilding(
       backupCeiling.visible = false
     }
 
+    // The central runner is intentionally anchored to the floor: it is the
+    // one major interior element that does not participate in zero gravity.
+    // Tile the authored rug down the full circulation spine and normalize each
+    // clone into a narrow runner segment regardless of the source asset's axis.
+    if (readingRug) {
+      const rugSize = new THREE.Box3()
+        .setFromObject(readingRug)
+        .getSize(new THREE.Vector3())
+      const longAxisIsX = rugSize.x >= rugSize.z
+      const sourceLength = Math.max(
+        .001,
+        longAxisIsX ? rugSize.x : rugSize.z,
+      )
+      const sourceWidth = Math.max(
+        .001,
+        longAxisIsX ? rugSize.z : rugSize.x,
+      )
+      const runnerWidth = 3.05
+      const runnerStartZ = 10.2
+      const runnerEndZ = -71.2
+      const runnerSpan = runnerStartZ - runnerEndZ
+      const segmentCount = Math.ceil(runnerSpan / 6.2)
+      const segmentLength = runnerSpan / segmentCount
+
+      for (let index = 0; index < segmentCount; index += 1) {
+        const z =
+          runnerStartZ -
+          segmentLength * (index + .5)
+        const runner = placeAsset(
+          readingRug,
+          0,
+          .025,
+          z,
+          1,
+          longAxisIsX ? Math.PI / 2 : 0,
+        )
+        runner.name = `library-central-runner-${index}`
+        if (longAxisIsX) {
+          runner.scale.x *=
+            (segmentLength / sourceLength) * 1.025
+          runner.scale.z *= runnerWidth / sourceWidth
+        } else {
+          runner.scale.x *= runnerWidth / sourceWidth
+          runner.scale.z *=
+            (segmentLength / sourceLength) * 1.025
+        }
+        runner.traverse((child) => {
+          if (!(child instanceof THREE.Mesh)) return
+          child.castShadow = false
+          child.receiveShadow = true
+        })
+      }
+    }
+
     const furnishingTemplates = {
       column,
       readingRug,
@@ -857,27 +911,77 @@ export function createLibraryBuilding(
       if (placement.floats !== false) {
         const motionProfile =
           placement.asset === 'readingRug'
-            ? {tiltX: .007, tiltY: .0025, tiltZ: .005}
+            ? {
+                tiltX: .01,
+                tiltY: .006,
+                tiltZ: .008,
+                driftX: .018,
+                driftZ: .014,
+              }
             : placement.asset === 'libraryChair' ||
                 placement.asset === 'chairWingback'
-              ? {tiltX: .03, tiltY: .012, tiltZ: .022}
+              ? {
+                  tiltX: .045,
+                  tiltY: .03,
+                  tiltZ: .036,
+                  driftX: .07,
+                  driftZ: .055,
+                }
               : placement.asset === 'readingTable'
-                ? {tiltX: .016, tiltY: .006, tiltZ: .012}
+                ? {
+                    tiltX: .034,
+                    tiltY: .028,
+                    tiltZ: .03,
+                    driftX: .085,
+                    driftZ: .065,
+                  }
                 : placement.asset === 'cardCatalogue' ||
                     placement.asset === 'cardCatalogueSecondary'
-                  ? {tiltX: .007, tiltY: .003, tiltZ: .006}
+                  ? {
+                      tiltX: .015,
+                      tiltY: .012,
+                      tiltZ: .013,
+                      driftX: .035,
+                      driftZ: .026,
+                    }
                   : placement.asset === 'column'
-                    ? {tiltX: .005, tiltY: .002, tiltZ: .004}
+                    ? {
+                        tiltX: .009,
+                        tiltY: .005,
+                        tiltZ: .008,
+                        driftX: .012,
+                        driftZ: .01,
+                      }
                     : placement.asset === 'rollingLadder'
-                      ? {tiltX: .014, tiltY: .006, tiltZ: .012}
+                      ? {
+                          tiltX: .026,
+                          tiltY: .02,
+                          tiltZ: .022,
+                          driftX: .04,
+                          driftZ: .032,
+                        }
                       : placement.asset === 'issueDesk'
-                        ? {tiltX: .004, tiltY: .0015, tiltZ: .003}
-                        : {tiltX: .012, tiltY: .005, tiltZ: .01}
+                        ? {
+                            tiltX: .007,
+                            tiltY: .005,
+                            tiltZ: .006,
+                            driftX: .014,
+                            driftZ: .01,
+                          }
+                        : {
+                            tiltX: .026,
+                            tiltY: .018,
+                            tiltZ: .022,
+                            driftX: .052,
+                            driftZ: .04,
+                          }
 
         floatingProps.register(instance, {
           phase: floatingPhase(placement.id),
-          hoverAmplitude: placement.hoverAmplitude,
-          hoverSpeed: placement.hoverSpeed,
+          hoverAmplitude:
+            placement.hoverAmplitude *
+            (placement.asset === 'readingTable' ? 1.45 : 1.22),
+          hoverSpeed: placement.hoverSpeed * .88,
           tiltX: Math.max(
             placement.tiltX ?? 0,
             motionProfile.tiltX,
@@ -890,6 +994,8 @@ export function createLibraryBuilding(
             placement.tiltZ ?? 0,
             motionProfile.tiltZ,
           ),
+          driftX: motionProfile.driftX,
+          driftZ: motionProfile.driftZ,
         })
       }
     })
