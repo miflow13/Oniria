@@ -464,6 +464,74 @@ export default function DevLibraryMap() {
       )
     }
 
+    const copyLayoutExport = async (text: string) => {
+      try {
+        await navigator.clipboard.writeText(text)
+        return true
+      } catch {
+        try {
+          const textarea = document.createElement('textarea')
+          textarea.value = text
+          textarea.style.position = 'fixed'
+          textarea.style.left = '-9999px'
+          document.body.appendChild(textarea)
+          textarea.select()
+          const copied = document.execCommand('copy')
+          textarea.remove()
+          return copied
+        } catch {
+          return false
+        }
+      }
+    }
+
+    const handleLayoutExport = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{
+          markers?: Array<{
+            id: string
+            label: string
+            roomSlot: number
+            districtId: string
+            x: number
+            y: number
+            z: number
+            yaw: number
+            width: number
+            depth: number
+            createdAt: string
+            persistence?: string
+          }>
+          count?: number
+        }>
+      ).detail
+
+      const markers = [...(detail?.markers ?? [])].sort(
+        (a, b) =>
+          a.roomSlot - b.roomSlot ||
+          a.label.localeCompare(b.label),
+      )
+      const payload = JSON.stringify(
+        {
+          format: 'oniria-library-layout-pins-v1',
+          exportedAt: new Date().toISOString(),
+          count: markers.length,
+          markers,
+        },
+        null,
+        2,
+      )
+
+      void copyLayoutExport(payload).then((copied) => {
+        setLayoutHudVisible(true)
+        setLayoutHudStatus(
+          copied
+            ? `COPIED ${markers.length} PINS · PASTE INTO CHAT`
+            : `COPY FAILED · ${markers.length} PINS READY`,
+        )
+      })
+    }
+
     window.addEventListener('keydown', handleLayoutKey, true)
     window.addEventListener(
       'oniria:layout-pin-result',
@@ -476,6 +544,10 @@ export default function DevLibraryMap() {
     window.addEventListener(
       'oniria:layout-pin-button',
       handleLayoutButton,
+    )
+    window.addEventListener(
+      'oniria:layout-pin-export',
+      handleLayoutExport,
     )
 
     return () => {
@@ -495,6 +567,10 @@ export default function DevLibraryMap() {
       window.removeEventListener(
         'oniria:layout-pin-button',
         handleLayoutButton,
+      )
+      window.removeEventListener(
+        'oniria:layout-pin-export',
+        handleLayoutExport,
       )
     }
   }, [])
@@ -1463,6 +1539,20 @@ export default function DevLibraryMap() {
               }
             >
               Remove nearest
+            </button>
+            <button
+              type="button"
+              className={styles.layoutAuthoringExport}
+              onClick={() => {
+                setLayoutHudStatus('EXPORTING PINS…')
+                window.dispatchEvent(
+                  new CustomEvent(
+                    'oniria:layout-pin-export-request',
+                  ),
+                )
+              }}
+            >
+              Copy pins JSON
             </button>
           </div>
           <small>
