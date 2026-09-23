@@ -302,6 +302,13 @@ export function createLibraryBuilding(
     )
   }
 
+  const roomDistrictBySlot = new Map(
+    roomDistricts.map((district) => [
+      district.roomSlot,
+      district,
+    ]),
+  )
+
   for (const room of LIBRARY_ROOMS) {
     const [x, z] = room.center
     const left = x < 0
@@ -320,20 +327,72 @@ export function createLibraryBuilding(
       })
     }
 
-    const light = new THREE.PointLight(room.accent, 1.05, 11, 2)
-    light.position.set(x, 3.35, z)
-    group.add(light)
+    const district = roomDistrictBySlot.get(room.slot)
+    const accent = district?.accent ?? '#' + room.accent.toString(16)
+    const sourceMode = district?.sourceMode ?? room.sourceMode
+    const roomIntensity =
+      sourceMode === 'featured'
+        ? .72
+        : sourceMode === 'catalog'
+          ? .34
+          : sourceMode === 'creators'
+            ? .54
+            : .46
+
+    const accentLight = new THREE.PointLight(
+      new THREE.Color(accent),
+      roomIntensity,
+      10,
+      2,
+    )
+    accentLight.position.set(x, 3.05, z)
+    group.add(accentLight)
+
+    const warmFill = new THREE.PointLight(
+      sourceMode === 'catalog' ? 0xd6d7e6 : 0xffddb8,
+      sourceMode === 'featured' ? .82 : sourceMode === 'catalog' ? .32 : .56,
+      9,
+      2,
+    )
+    warmFill.position.set(x, 3.55, z)
+    group.add(warmFill)
+
+    const roomSpot = new THREE.SpotLight(
+      sourceMode === 'catalog' ? 0xb9c8e8 : 0xffe6c9,
+      sourceMode === 'featured' ? 1.05 : sourceMode === 'catalog' ? .44 : .72,
+      12,
+      Math.PI / 3.4,
+      .72,
+      2,
+    )
+    roomSpot.position.set(x, 4.72, z)
+    roomSpot.castShadow = false
+    roomSpot.target.position.set(x, .8, z)
+    group.add(roomSpot, roomSpot.target)
   }
 
+  // Warm pools make the long central spine readable without flattening the
+  // whole building. These match the pendant-model positions below.
+  ;[6, -8, -28, -48, -68].forEach((z, index) => {
+    const corridorLight = new THREE.PointLight(
+      index === 4 ? 0xd5d9eb : 0xffdfb8,
+      index === 4 ? .38 : .58,
+      12,
+      2,
+    )
+    corridorLight.position.set(0, 3.85, z)
+    group.add(corridorLight)
+  })
+
   ;[
-    {position: [-18.2, 2.8, -12] as const, intensity: .68},
-    {position: [18, 2.75, -32] as const, intensity: .48},
-    {position: [-16, 2.9, -52] as const, intensity: .52},
+    {position: [-18.2, 2.8, -12] as const, intensity: .62},
+    {position: [18, 2.75, -32] as const, intensity: .5},
+    {position: [-16, 2.9, -52] as const, intensity: .7},
   ].forEach(({position, intensity}) => {
     const readingLight = new THREE.PointLight(
-      0xffd7aa,
+      0xffcf9e,
       intensity,
-      7,
+      6.5,
       2,
     )
     readingLight.position.set(
@@ -640,12 +699,39 @@ export function createLibraryBuilding(
       )
       instance.name = `library-furnishing-${placement.id}`
       if (placement.floats !== false) {
+        const motionProfile =
+          placement.asset === 'readingRug'
+            ? {tiltX: .007, tiltY: .0025, tiltZ: .005}
+            : placement.asset === 'libraryChair' ||
+                placement.asset === 'chairWingback'
+              ? {tiltX: .03, tiltY: .012, tiltZ: .022}
+              : placement.asset === 'readingTable'
+                ? {tiltX: .016, tiltY: .006, tiltZ: .012}
+                : placement.asset === 'cardCatalogue' ||
+                    placement.asset === 'cardCatalogueSecondary'
+                  ? {tiltX: .007, tiltY: .003, tiltZ: .006}
+                  : placement.asset === 'column'
+                    ? {tiltX: .005, tiltY: .002, tiltZ: .004}
+                    : placement.asset === 'rollingLadder'
+                      ? {tiltX: .014, tiltY: .006, tiltZ: .012}
+                      : {tiltX: .012, tiltY: .005, tiltZ: .01}
+
         floatingProps.register(instance, {
           phase: floatingPhase(placement.id),
           hoverAmplitude: placement.hoverAmplitude,
           hoverSpeed: placement.hoverSpeed,
-          tiltX: placement.tiltX,
-          tiltZ: placement.tiltZ,
+          tiltX: Math.max(
+            placement.tiltX ?? 0,
+            motionProfile.tiltX,
+          ),
+          tiltY: Math.max(
+            placement.tiltY ?? 0,
+            motionProfile.tiltY,
+          ),
+          tiltZ: Math.max(
+            placement.tiltZ ?? 0,
+            motionProfile.tiltZ,
+          ),
         })
       }
     })
