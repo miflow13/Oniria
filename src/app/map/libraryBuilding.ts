@@ -66,6 +66,73 @@ export function createLibraryBuilding(
   const localGeometries: THREE.BufferGeometry[] = []
   const localTextures: THREE.Texture[] = []
 
+  const makeWoodSurfaceMaps = () => {
+    const size = 96
+    const roughCanvas = document.createElement('canvas')
+    roughCanvas.width = size
+    roughCanvas.height = size
+    const roughContext = roughCanvas.getContext('2d')
+    const normalCanvas = document.createElement('canvas')
+    normalCanvas.width = size
+    normalCanvas.height = size
+    const normalContext = normalCanvas.getContext('2d')
+
+    if (roughContext && normalContext) {
+      const roughImage = roughContext.createImageData(size, size)
+      const normalImage = normalContext.createImageData(size, size)
+
+      for (let y = 0; y < size; y += 1) {
+        for (let x = 0; x < size; x += 1) {
+          const index = (y * size + x) * 4
+          const grain =
+            Math.sin(y * .38) * .46 +
+            Math.sin(y * .11 + x * .045) * .32 +
+            Math.sin(y * .92 + x * .018) * .22
+          const rough = Math.round(
+            THREE.MathUtils.clamp(202 + grain * 24, 172, 232),
+          )
+          roughImage.data[index] = rough
+          roughImage.data[index + 1] = rough
+          roughImage.data[index + 2] = rough
+          roughImage.data[index + 3] = 255
+
+          const nx = Math.round(
+            THREE.MathUtils.clamp(128 + grain * 8, 118, 138),
+          )
+          const ny = Math.round(
+            THREE.MathUtils.clamp(
+              128 + Math.sin(y * .42) * 5,
+              120,
+              136,
+            ),
+          )
+          normalImage.data[index] = nx
+          normalImage.data[index + 1] = ny
+          normalImage.data[index + 2] = 252
+          normalImage.data[index + 3] = 255
+        }
+      }
+
+      roughContext.putImageData(roughImage, 0, 0)
+      normalContext.putImageData(normalImage, 0, 0)
+    }
+
+    const roughness = new THREE.CanvasTexture(roughCanvas)
+    const normal = new THREE.CanvasTexture(normalCanvas)
+    ;[roughness, normal].forEach((texture) => {
+      texture.wrapS = THREE.RepeatWrapping
+      texture.wrapT = THREE.RepeatWrapping
+      texture.repeat.set(2.4, 5.4)
+      texture.minFilter = THREE.LinearMipmapLinearFilter
+      texture.magFilter = THREE.LinearFilter
+      texture.needsUpdate = true
+      localTextures.push(texture)
+    })
+    return {roughness, normal}
+  }
+
+  const woodSurfaceMaps = makeWoodSurfaceMaps()
+
   // Cheap contact grounding for floating rugs/tables. These are deliberately
   // unlit transparent planes rather than real shadow casters, so the library
   // gets soft floor contact without multiplying shadow-map work.
@@ -1210,6 +1277,13 @@ export function createLibraryBuilding(
               material.roughness,
               .82,
             )
+            if (!material.roughnessMap) {
+              material.roughnessMap = woodSurfaceMaps.roughness
+            }
+            if (!material.normalMap) {
+              material.normalMap = woodSurfaceMaps.normal
+              material.normalScale.set(.14, .14)
+            }
             material.metalness = Math.min(
               material.metalness,
               .025,
@@ -1479,6 +1553,50 @@ export function createLibraryBuilding(
       )
       instance.name = `library-furnishing-${placement.id}`
 
+      if (placement.asset === 'column') {
+        instance.updateMatrixWorld(true)
+        const bounds = new THREE.Box3().setFromObject(instance)
+        const size = bounds.getSize(new THREE.Vector3())
+        const radius = Math.max(.22, Math.max(size.x, size.z) * .54)
+        const baseGeometry = new THREE.CylinderGeometry(
+          radius * 1.12,
+          radius * 1.2,
+          .13,
+          18,
+        )
+        const capitalGeometry = new THREE.CylinderGeometry(
+          radius * 1.18,
+          radius * 1.08,
+          .15,
+          18,
+        )
+        localGeometries.push(baseGeometry, capitalGeometry)
+
+        const baseTrim = new THREE.Mesh(
+          baseGeometry,
+          trimMaterial,
+        )
+        baseTrim.position.set(
+          placement.position[0],
+          bounds.min.y + .065,
+          placement.position[2],
+        )
+        baseTrim.receiveShadow = true
+        group.add(baseTrim)
+
+        const capitalTrim = new THREE.Mesh(
+          capitalGeometry,
+          trimMaterial,
+        )
+        capitalTrim.position.set(
+          placement.position[0],
+          bounds.max.y - .075,
+          placement.position[2],
+        )
+        capitalTrim.receiveShadow = true
+        group.add(capitalTrim)
+      }
+
       if (placement.asset === 'wallSconce') {
         instance.updateMatrixWorld(true)
         const bounds = new THREE.Box3().setFromObject(instance)
@@ -1698,7 +1816,7 @@ export function createLibraryBuilding(
         )
       })
 
-      ;[6, -8, -28, -48, -68].forEach(
+      ;[6, -8, -18, -28, -38, -48, -58, -68].forEach(
         (z, index) => {
           const fixture = placeAsset(
             pendantLight,
