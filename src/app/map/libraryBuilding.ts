@@ -31,6 +31,26 @@ export type LibraryBuilding = {
   dispose: () => void
 }
 
+// Normalized from Mika's in-world rug survey. X is intentionally centered on
+// the corridor; the measured Z cadence and the larger break around -42 are
+// preserved so the runner reads as discrete old-library rugs, not one strip.
+const SURVEYED_HALL_RUG_Z = [
+  -1.6,
+  -6.3,
+  -10.65,
+  -15.25,
+  -20.45,
+  -25.3,
+  -29.85,
+  -34.55,
+  -39.45,
+  -47.8,
+  -53.05,
+  -58,
+  -63.7,
+  -69.55,
+] as const
+
 export function createLibraryBuilding(
   scene: THREE.Scene,
   config: LibraryWorldConfig,
@@ -859,29 +879,66 @@ export function createLibraryBuilding(
 
     archedWindow?.traverse((child) => {
       if (!(child instanceof THREE.Mesh)) return
-      const materials = Array.isArray(child.material)
+
+      const sourceMaterials = Array.isArray(child.material)
         ? child.material
         : [child.material]
-      materials.forEach((material) => {
+      const litMaterials = sourceMaterials.map((material) => {
+        // Some supplied window panels use MeshBasicMaterial + vertex colors,
+        // which makes the cyan glass/panels glow independently of the room.
+        // Convert those to Standard material while preserving their maps and
+        // vertex colors so ambient/pendant lighting actually shapes them.
+        if (material instanceof THREE.MeshBasicMaterial) {
+          const lit = new THREE.MeshStandardMaterial({
+            color: material.color.clone(),
+            map: material.map,
+            vertexColors: material.vertexColors,
+            transparent: material.transparent,
+            opacity: material.opacity,
+            alphaTest: material.alphaTest,
+            side: material.side,
+            roughness: .76,
+            metalness: 0,
+            envMapIntensity: .08,
+            toneMapped: true,
+          })
+          localMaterials.push(lit)
+          return lit
+        }
+
         material.toneMapped = true
         if (
           material instanceof THREE.MeshStandardMaterial ||
           material instanceof THREE.MeshPhysicalMaterial
         ) {
-          material.emissiveIntensity = Math.min(
-            material.emissiveIntensity,
-            .035,
-          )
+          material.emissive.setHex(0x000000)
+          material.emissiveIntensity = 0
           material.envMapIntensity = Math.min(
             material.envMapIntensity,
-            .08,
+            .1,
           )
           material.roughness = Math.max(
             material.roughness,
-            .58,
+            .72,
           )
+          material.metalness = Math.min(
+            material.metalness,
+            .04,
+          )
+          if (material instanceof THREE.MeshPhysicalMaterial) {
+            material.clearcoat = Math.min(material.clearcoat, .08)
+            material.clearcoatRoughness = Math.max(
+              material.clearcoatRoughness,
+              .65,
+            )
+          }
         }
+        return material
       })
+
+      child.material = Array.isArray(child.material)
+        ? litMaterials
+        : litMaterials[0]
     })
 
     if (wallPanel) {
@@ -941,6 +998,43 @@ export function createLibraryBuilding(
     }
 
     if (floorParquet) {
+      floorParquet.traverse((child) => {
+        if (!(child instanceof THREE.Mesh)) return
+        const materials = Array.isArray(child.material)
+          ? child.material
+          : [child.material]
+        materials.forEach((material) => {
+          material.toneMapped = true
+          if (
+            material instanceof THREE.MeshStandardMaterial ||
+            material instanceof THREE.MeshPhysicalMaterial
+          ) {
+            material.roughness = Math.max(
+              material.roughness,
+              .82,
+            )
+            material.metalness = Math.min(
+              material.metalness,
+              .025,
+            )
+            material.envMapIntensity = Math.min(
+              material.envMapIntensity,
+              .12,
+            )
+            if (material instanceof THREE.MeshPhysicalMaterial) {
+              material.clearcoat = Math.min(
+                material.clearcoat,
+                .06,
+              )
+              material.clearcoatRoughness = Math.max(
+                material.clearcoatRoughness,
+                .72,
+              )
+            }
+          }
+        })
+      })
+
       const size = new THREE.Box3()
         .setFromObject(floorParquet)
         .getSize(new THREE.Vector3())
@@ -962,6 +1056,29 @@ export function createLibraryBuilding(
       }
 
       backupFloor.visible = false
+
+      const wearGeometry = new THREE.PlaneGeometry(3.35, 84)
+      const wearMaterial = new THREE.MeshStandardMaterial({
+        color: 0x6b4f36,
+        transparent: true,
+        opacity: .055,
+        roughness: .7,
+        metalness: 0,
+        envMapIntensity: .08,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        toneMapped: true,
+      })
+      localGeometries.push(wearGeometry)
+      localMaterials.push(wearMaterial)
+      const wearPath = new THREE.Mesh(
+        wearGeometry,
+        wearMaterial,
+      )
+      wearPath.rotation.x = -Math.PI / 2
+      wearPath.position.set(0, .014, -31)
+      wearPath.renderOrder = 1
+      group.add(wearPath)
     }
 
     if (roofTile) {
@@ -1013,35 +1130,25 @@ export function createLibraryBuilding(
       backupCeiling.visible = false
     }
 
-    // The central runner is intentionally anchored to the floor: it is the
-    // one major interior element that does not participate in zero gravity.
-    // Tile the authored rug down the full circulation spine and normalize each
-    // clone into a narrow runner segment regardless of the source asset's axis.
+    // Surveyed corridor rugs: use the authored GLB's real measured footprint
+    // instead of stretching it into one continuous runner. This keeps the
+    // woven asset looking physical and preserves intentional breathing room.
     if (readingRug) {
       const rugSize = new THREE.Box3()
         .setFromObject(readingRug)
         .getSize(new THREE.Vector3())
       const longAxisIsX = rugSize.x >= rugSize.z
-      const sourceLength = Math.max(
+      const measuredLength = Math.max(
         .001,
         longAxisIsX ? rugSize.x : rugSize.z,
       )
-      const sourceWidth = Math.max(
+      const measuredWidth = Math.max(
         .001,
         longAxisIsX ? rugSize.z : rugSize.x,
       )
-      const runnerWidth = 3.05
-      const runnerStartZ = 10.2
-      const runnerEndZ = -71.2
-      const runnerSpan = runnerStartZ - runnerEndZ
-      const segmentCount = Math.ceil(runnerSpan / 6.2)
-      const segmentLength = runnerSpan / segmentCount
 
-      for (let index = 0; index < segmentCount; index += 1) {
-        const z =
-          runnerStartZ -
-          segmentLength * (index + .5)
-        const runner = placeAsset(
+      SURVEYED_HALL_RUG_Z.forEach((z, index) => {
+        const rug = placeAsset(
           readingRug,
           0,
           .025,
@@ -1049,22 +1156,51 @@ export function createLibraryBuilding(
           1,
           longAxisIsX ? Math.PI / 2 : 0,
         )
-        runner.name = `library-central-runner-${index}`
-        if (longAxisIsX) {
-          runner.scale.x *=
-            (segmentLength / sourceLength) * 1.025
-          runner.scale.z *= runnerWidth / sourceWidth
-        } else {
-          runner.scale.x *= runnerWidth / sourceWidth
-          runner.scale.z *=
-            (segmentLength / sourceLength) * 1.025
+        rug.name = `library-surveyed-hall-rug-${index}`
+
+        // Loader already normalizes the longest span to 4.2. Only cap width
+        // if the source asset happens to be unusually broad.
+        if (measuredWidth > 3.2) {
+          const widthScale = 3.2 / measuredWidth
+          if (longAxisIsX) {
+            rug.scale.z *= widthScale
+          } else {
+            rug.scale.x *= widthScale
+          }
         }
-        runner.traverse((child) => {
+
+        rug.traverse((child) => {
           if (!(child instanceof THREE.Mesh)) return
           child.castShadow = false
           child.receiveShadow = true
+          const materials = Array.isArray(child.material)
+            ? child.material
+            : [child.material]
+          materials.forEach((material) => {
+            if (
+              material instanceof THREE.MeshStandardMaterial ||
+              material instanceof THREE.MeshPhysicalMaterial
+            ) {
+              material.roughness = Math.max(
+                material.roughness,
+                .78,
+              )
+              material.envMapIntensity = Math.min(
+                material.envMapIntensity,
+                .14,
+              )
+            }
+          })
         })
-      }
+
+        addContactShadow(
+          0,
+          z,
+          longAxisIsX ? measuredLength : measuredWidth,
+          longAxisIsX ? measuredWidth : measuredLength,
+          longAxisIsX ? Math.PI / 2 : 0,
+        )
+      })
     }
 
     const furnishingTemplates = {
