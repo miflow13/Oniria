@@ -24,6 +24,13 @@ export const LIBRARY_ROOM_BACK_WALL_OFFSETS = [-5.15, 0, 5.15] as const
 // without narrowing the doorway itself.
 export const LIBRARY_ROOM_ENTRY_WALL_Z_OFFSETS = [-6, 6] as const
 export const LIBRARY_ROOM_ENTRY_WALL_INSET = 7.5
+// Keep the freestanding banks closer to the room center so the outer half of
+// each room is usable instead of leaving a dead strip behind one shelf bank.
+export const LIBRARY_ROOM_INWARD_SHIFT = 1.9
+// The exterior wall is roughly 8.4 units from each room center. Shelves sit
+// just inside it rather than outside the building envelope.
+export const LIBRARY_ROOM_OUTER_WALL_INSET = 7.5
+export const LIBRARY_ROOM_OUTER_WALL_Z_OFFSETS = [-5.8, 0, 5.8] as const
 
 export const LIBRARY_BUILDING_BOUNDS = {
   minX: -24.1,
@@ -184,7 +191,11 @@ export function roomShelfPlacements(
 
         placements.push({
           world: [
-            x + depthOffset * sideDirection,
+            x +
+              depthOffset * sideDirection +
+              (sideDirection < 0
+                ? LIBRARY_ROOM_INWARD_SHIFT
+                : -LIBRARY_ROOM_INWARD_SHIFT),
             heights[placementIndex] ?? heights.at(-1) ?? .7,
             z + zOffset,
           ],
@@ -259,6 +270,33 @@ export function roomShelfPlacements(
         doubleSided: false,
         endCaps: 'none',
         floatId: `${district.id}:entry-wall:${entryIndex}`,
+        pathBay: district.bay,
+        districtId: district.id,
+      })
+    },
+  )
+
+  // Use the previously empty exterior side of every room too. These three
+  // shelves sit just inside the outer wall and face inward, filling the large
+  // dead areas visible in the first rooms without changing the doorway or
+  // central cross-room circulation.
+  const outerWallX =
+    x + sideDirection * LIBRARY_ROOM_OUTER_WALL_INSET
+  const outerWallYaw =
+    sideDirection < 0 ? Math.PI / 2 : -Math.PI / 2
+
+  LIBRARY_ROOM_OUTER_WALL_Z_OFFSETS.forEach(
+    (zOffset, outerIndex) => {
+      placements.push({
+        world: [
+          outerWallX,
+          wallBaseHeight + (outerIndex % 2) * .05,
+          z + zOffset,
+        ],
+        yaw: outerWallYaw,
+        doubleSided: false,
+        endCaps: 'none',
+        floatId: `${district.id}:outer-wall:${outerIndex}`,
         pathBay: district.bay,
         districtId: district.id,
       })
