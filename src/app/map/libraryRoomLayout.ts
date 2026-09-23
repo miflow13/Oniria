@@ -13,8 +13,12 @@ export const LIBRARY_SHELF_HEIGHT = 3.5
 // and a shallow back-wall collection. Keeping these values centralized makes
 // it hard for future content-specific layouts to accidentally block a door.
 export const LIBRARY_ROOM_DOORWAY_CLEAR_HALF_WIDTH = 2.35
-export const LIBRARY_ROOM_SHELF_ROW_OFFSET = 5.15
-export const LIBRARY_ROOM_SHELF_COLUMN_OFFSETS = [-5.15, 0, 5.15] as const
+export const LIBRARY_ROOM_SHELF_ROW_OFFSET = 4.85
+// Two shelves per freestanding bank leave a generous walk-through gap in the
+// middle. The old three-column bank made the center case act like a wall and
+// trapped the back-wall collection behind it.
+export const LIBRARY_ROOM_SHELF_COLUMN_OFFSETS = [-4.5, 4.5] as const
+export const LIBRARY_ROOM_BACK_WALL_OFFSETS = [-5.15, 0, 5.15] as const
 
 export const LIBRARY_BUILDING_BOUNDS = {
   minX: -24.1,
@@ -145,19 +149,20 @@ export function roomShelfPlacements(
   //               BACK WALL
   //        [S]        [S]        [S]
   //
-  //   [S]       [S]       [S]      <- north browsing bank
+  //   [S]                 [S]       <- north browsing bank
   //
-  //          wide center approach
-  //             from doorway
+  //       wide center approach +
+  //        cross-room walk-through
   //
-  //   [S]       [S]       [S]      <- south browsing bank
+  //   [S]                 [S]       <- south browsing bank
   //
   //                 DOOR
   //
   // The center strip around room.z is intentionally shelf-free from the
-  // hallway threshold to the back of the room. That fixes the previous
-  // placement where the inner-middle shelf sat directly in front of each
-  // doorway. All six freestanding shelves are double-sided.
+  // hallway threshold to the back of the room. Each freestanding bank also
+  // has a large center gap, so visitors can pass through the bank to reach
+  // the back-wall cases instead of being funneled around a middle shelf.
+  // All four freestanding shelves are double-sided.
   const sideDirection = x < 0 ? -1 : 1
   const rowOffsets = [
     -LIBRARY_ROOM_SHELF_ROW_OFFSET,
@@ -210,7 +215,7 @@ export function roomShelfPlacements(
         ? .68
         : .54
 
-  LIBRARY_ROOM_SHELF_COLUMN_OFFSETS.forEach(
+  LIBRARY_ROOM_BACK_WALL_OFFSETS.forEach(
     (xOffset, wallIndex) => {
       placements.push({
         world: [
@@ -275,6 +280,7 @@ export type LibraryFurnishingAsset =
   | 'pottedPlant'
   | 'wallSconce'
   | 'rollingLadder'
+  | 'issueDesk'
 
 export type LibraryFurnishingPlacement = {
   id: string
@@ -293,6 +299,11 @@ export type LibraryFurnishingPlacement = {
 }
 
 export const LIBRARY_FURNISHINGS: LibraryFurnishingPlacement[] = [
+  // The Issue Desk is the first deliberate stop after spawn. It sits far
+  // enough forward to feel like a welcome counter while leaving generous
+  // space to walk around either side into the atrium.
+  {id: 'atrium-issue-desk', asset: 'issueDesk', position: [0, .08, 6.35], yaw: Math.PI, scale: 1, hoverAmplitude: .012, hoverSpeed: .075, tiltX: .0025, tiltZ: .002, collider: [3.6, 1.35], castsShadow: true},
+
   // Atrium threshold and one deliberately off-axis reading island.
   {id: 'atrium-column-left', asset: 'column', position: [-5.25, .05, 7], hoverAmplitude: .012, hoverSpeed: .1, tiltZ: .0006, collider: [.9, .9]},
   {id: 'atrium-column-right', asset: 'column', position: [5.25, .05, 7], hoverAmplitude: .012, hoverSpeed: .1, tiltZ: .0006, collider: [.9, .9]},
@@ -373,13 +384,13 @@ export const LIBRARY_FURNISHINGS: LibraryFurnishingPlacement[] = [
   {id: 'archive-sconce-south', asset: 'wallSconce', position: [7.82, 1.95, -49.5], yaw: -Math.PI / 2, hoverAmplitude: 0, hoverSpeed: 0, floats: false},
 
   // Ladders stay close to floating shelf faces and inherit restrained drift.
-  {id: 'new-ladder-north', asset: 'rollingLadder', position: [16.7, .24, -14.55], hoverAmplitude: .02, hoverSpeed: .09, tiltZ: .003, collider: [1.3, .78]},
-  {id: 'new-ladder-south', asset: 'rollingLadder', position: [14.4, .38, -9.45], yaw: Math.PI, hoverAmplitude: .022, hoverSpeed: .1, tiltZ: .0035, collider: [1.3, .78]},
-  {id: 'topics-ladder-north', asset: 'rollingLadder', position: [-17.4, .32, -34.55], hoverAmplitude: .02, hoverSpeed: .085, tiltZ: .003, collider: [1.3, .78]},
-  {id: 'topics-ladder-south', asset: 'rollingLadder', position: [-14.2, .46, -29.45], yaw: Math.PI, hoverAmplitude: .024, hoverSpeed: .095, tiltZ: .0035, collider: [1.3, .78]},
-  {id: 'archive-ladder-north-west', asset: 'rollingLadder', position: [13.4, .52, -54.5], hoverAmplitude: .018, hoverSpeed: .075, tiltZ: .0025, collider: [1.3, .78]},
-  {id: 'archive-ladder-north-east', asset: 'rollingLadder', position: [18.5, .68, -54.5], hoverAmplitude: .02, hoverSpeed: .08, tiltZ: .003, collider: [1.3, .78]},
-  {id: 'archive-ladder-south', asset: 'rollingLadder', position: [16, .6, -49.5], yaw: Math.PI, hoverAmplitude: .022, hoverSpeed: .085, tiltZ: .003, collider: [1.3, .78]},
+  {id: 'new-ladder-north', asset: 'rollingLadder', position: [20.5, .24, -16.72], hoverAmplitude: .02, hoverSpeed: .09, tiltZ: .003, collider: [1.3, .78]},
+  {id: 'new-ladder-south', asset: 'rollingLadder', position: [11.5, .38, -7.28], yaw: Math.PI, hoverAmplitude: .022, hoverSpeed: .1, tiltZ: .0035, collider: [1.3, .78]},
+  {id: 'topics-ladder-north', asset: 'rollingLadder', position: [-20.5, .32, -36.72], hoverAmplitude: .02, hoverSpeed: .085, tiltZ: .003, collider: [1.3, .78]},
+  {id: 'topics-ladder-south', asset: 'rollingLadder', position: [-11.5, .46, -27.28], yaw: Math.PI, hoverAmplitude: .024, hoverSpeed: .095, tiltZ: .0035, collider: [1.3, .78]},
+  {id: 'archive-ladder-north-west', asset: 'rollingLadder', position: [11.5, .52, -56.72], hoverAmplitude: .018, hoverSpeed: .075, tiltZ: .0025, collider: [1.3, .78]},
+  {id: 'archive-ladder-north-east', asset: 'rollingLadder', position: [20.5, .68, -56.72], hoverAmplitude: .02, hoverSpeed: .08, tiltZ: .003, collider: [1.3, .78]},
+  {id: 'archive-ladder-south', asset: 'rollingLadder', position: [20.5, .6, -47.28], yaw: Math.PI, hoverAmplitude: .022, hoverSpeed: .085, tiltZ: .003, collider: [1.3, .78]},
 ]
 
 type WalkCollisionRect = {
