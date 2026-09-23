@@ -1104,12 +1104,22 @@ export default function DevLibraryMap() {
         .slice(-2)
         .some((item) => item.id === shelf.id)
 
+    if (archiveApproach && catalog.length === 0) {
+      if (
+        lastCatalogLoadTriggerRef.current !== 'archive:first-page'
+      ) {
+        lastCatalogLoadTriggerRef.current = 'archive:first-page'
+        void loadMoreCatalog(1)
+      }
+      return
+    }
+
     if (archiveApproach && isLastVisibleCatalogShelf) {
       if (
         lastCatalogLoadTriggerRef.current !== candidate
       ) {
         lastCatalogLoadTriggerRef.current = candidate
-        void loadMoreCatalog()
+        void loadMoreCatalog(1)
       }
       return
     }
@@ -1118,6 +1128,7 @@ export default function DevLibraryMap() {
     // to its last shelf fetches the next page without polling continuously.
     lastCatalogLoadTriggerRef.current = null
   }, [
+    catalog.length,
     catalogHasMore,
     catalogLoading,
     catalogShelfCount,
