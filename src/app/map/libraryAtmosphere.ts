@@ -25,9 +25,11 @@ type CreateLibraryAtmosphereArgs = {
 type LibraryAtmosphereUpdate = {
   elapsed: number
   camera: THREE.Camera
+  activeDistrictId?: string
+  activeRoomCenter?: [number, number]
   districts: Pick<
     LibraryDistrictConfig,
-    'bay' | 'accent' | 'atmosphere'
+    'id' | 'bay' | 'accent' | 'atmosphere'
   >[]
 }
 
@@ -333,7 +335,13 @@ export function createLibraryAtmosphere({
   let disposed = false
 
   return {
-    update({elapsed, camera, districts}) {
+    update({
+      elapsed,
+      camera,
+      activeDistrictId,
+      activeRoomCenter,
+      districts,
+    }) {
       if (disposed) return
 
       hazePlanes.forEach((plane, index) => {
@@ -395,14 +403,19 @@ export function createLibraryAtmosphere({
         camera.position.z,
       )
       const nearestDistrict =
-        districts.length > 0
+        (activeDistrictId
+          ? districts.find(
+              (district) => district.id === activeDistrictId,
+            )
+          : null) ??
+        (districts.length > 0
           ? districts.reduce((nearest, candidate) =>
               Math.abs(candidate.bay - cameraBay) <
               Math.abs(nearest.bay - cameraBay)
                 ? candidate
                 : nearest,
             )
-          : null
+          : null)
 
       let districtAtmosphereStrength = 1
 
@@ -432,9 +445,11 @@ export function createLibraryAtmosphere({
         districtAtmosphereStrength =
           visualPreset.hazeStrength
 
-        const districtPoint = archivePathPoint(
-          nearestDistrict.bay,
-        )
+        const districtPoint =
+          activeRoomCenter &&
+          nearestDistrict.id === activeDistrictId
+            ? [activeRoomCenter[0], 0, activeRoomCenter[1]]
+            : archivePathPoint(nearestDistrict.bay)
         districtLight.position.set(
           districtPoint[0],
           districtPoint[1] + 3.2,
