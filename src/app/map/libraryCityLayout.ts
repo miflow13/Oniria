@@ -254,13 +254,18 @@ export const CITY_ROADS: CityRoadSegment[] = [
 ]
 
 export const CITY_EMPTY_BLOCKS: CityEmptyBlock[] = [
-  {id: 'block-a', x: -5, z: -17, width: 9, depth: 9, height: .45},
-  {id: 'block-b', x: 8, z: -21, width: 8, depth: 10, height: .72},
-  {id: 'block-c', x: -11, z: -39, width: 10, depth: 8, height: .62},
-  {id: 'block-d', x: 10, z: -41, width: 9, depth: 8, height: .5},
-  {id: 'block-e', x: 27, z: -2, width: 8, depth: 9, height: .66},
-  {id: 'block-f', x: -27, z: -5, width: 7, depth: 10, height: .52},
-  {id: 'block-g', x: 20, z: -43, width: 7, depth: 7, height: .78},
+  // These are intentionally low/medium "city mass" rather than skyscrapers.
+  // Their job is to break sightlines and create corners, alleys, and reveals.
+  {id: 'block-a', x: -5, z: -17, width: 9, depth: 9, height: 1.65},
+  {id: 'block-b', x: 8, z: -21, width: 8, depth: 10, height: 2.15},
+  {id: 'block-c', x: -11, z: -39, width: 10, depth: 8, height: 1.8},
+  {id: 'block-d', x: 10, z: -41, width: 9, depth: 8, height: 1.45},
+  {id: 'block-e', x: 27, z: -2, width: 8, depth: 9, height: 1.9},
+  {id: 'block-f', x: -27, z: -5, width: 7, depth: 10, height: 1.55},
+  {id: 'block-g', x: 20, z: -43, width: 7, depth: 7, height: 2.35},
+  {id: 'block-h', x: -17, z: -14, width: 6, depth: 6, height: 1.2},
+  {id: 'block-i', x: 16, z: -19, width: 6, depth: 5.5, height: 1.35},
+  {id: 'block-j', x: -2, z: -44, width: 6.5, depth: 5.5, height: 1.7},
 ]
 
 function faceTargetYaw(
