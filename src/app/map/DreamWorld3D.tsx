@@ -6455,76 +6455,71 @@ export default function DreamWorld3D({
             14,
           )
         } else if (libraryWalking) {
-          const startZ = archivePathPoint(0)[2]
-          const endZ =
-            archivePathPoint(ARCHIVE_PATH_RENDER_BAYS)[2]
-          const targetZ = THREE.MathUtils.clamp(
-            flightPosition.z,
-            endZ,
-            startZ,
-          )
-          const settle =
-            1 - Math.exp(-delta * 8.5)
-          flightPosition.z = THREE.MathUtils.lerp(
-            flightPosition.z,
-            targetZ,
-            settle,
-          )
-
-          const pathBay = archiveBayFromWorldZ(
-            flightPosition.z,
-          )
-          const pathPoint = new THREE.Vector3(
-            ...archivePathPoint(pathBay),
-          )
-          const frame = archivePathFrame(pathBay)
-          const normal = new THREE.Vector3(
-            frame.normalX,
-            0,
-            frame.normalZ,
-          )
-          const relative = flightPosition
-            .clone()
-            .sub(pathPoint)
-          const lateral = relative.dot(normal)
-          const maxLateral = Math.max(
-            1.25,
-            archiveWalkwayHalfWidthAtBay(pathBay, activeDistricts) - .48,
-          )
-          const clampedLateral = THREE.MathUtils.clamp(
-            lateral,
-            -maxLateral,
-            maxLateral,
-          )
-
-          if (Math.abs(clampedLateral - lateral) > .0001) {
-            flightPosition.addScaledVector(
-              normal,
-              clampedLateral - lateral,
+          const walkSurface =
+            archiveWalkSurfaceAtPosition(
+              flightPosition.x,
+              flightPosition.z,
+              activeDistricts,
+              libraryGridSegments,
             )
-            const outwardVelocity =
-              flightVelocity.dot(normal)
+
+          if (walkSurface) {
+            const offsetX =
+              flightPosition.x - walkSurface.centerX
+            const offsetZ =
+              flightPosition.z - walkSurface.centerZ
+            const distance =
+              Math.hypot(offsetX, offsetZ)
+
             if (
-              (lateral > maxLateral && outwardVelocity > 0) ||
-              (lateral < -maxLateral && outwardVelocity < 0)
+              distance >
+                walkSurface.halfWidth + .0001 &&
+              distance > .0001
             ) {
-              flightVelocity.addScaledVector(
-                normal,
-                -outwardVelocity * .86,
-              )
+              const normalX = offsetX / distance
+              const normalZ = offsetZ / distance
+              const correction =
+                distance - walkSurface.halfWidth
+
+              flightPosition.x -= normalX * correction
+              flightPosition.z -= normalZ * correction
+
+              const outwardVelocity =
+                flightVelocity.x * normalX +
+                flightVelocity.z * normalZ
+              if (outwardVelocity > 0) {
+                flightVelocity.x -=
+                  normalX * outwardVelocity * .86
+                flightVelocity.z -=
+                  normalZ * outwardVelocity * .86
+              }
             }
+
+            const eyeHeight = 1.64
+            const groundY =
+              walkSurface.groundY +
+              ARCHIVE_WALKWAY_Y_OFFSET +
+              eyeHeight
+            flightPosition.y = THREE.MathUtils.lerp(
+              flightPosition.y,
+              groundY,
+              1 - Math.exp(-delta * 11),
+            )
+          } else {
+            const fallbackBay =
+              archiveBayFromWorldZ(flightPosition.z)
+            const fallbackPoint = archivePathPoint(
+              fallbackBay,
+            )
+            flightPosition.y = THREE.MathUtils.lerp(
+              flightPosition.y,
+              fallbackPoint[1] +
+                ARCHIVE_WALKWAY_Y_OFFSET +
+                1.64,
+              1 - Math.exp(-delta * 11),
+            )
           }
 
-          const eyeHeight = 1.64
-          const groundY =
-            pathPoint.y +
-            ARCHIVE_WALKWAY_Y_OFFSET +
-            eyeHeight
-          flightPosition.y = THREE.MathUtils.lerp(
-            flightPosition.y,
-            groundY,
-            1 - Math.exp(-delta * 11),
-          )
           flightVelocity.y = 0
         } else {
           // The DEV catalogue extends as the user explores, so free flight
