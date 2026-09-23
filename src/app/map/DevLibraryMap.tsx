@@ -31,6 +31,8 @@ import type {
 } from './libraryTypes'
 import styles from './library.module.css'
 import {
+  archivePathFrame,
+  archivePathPoint,
   archiveShelfPlacement,
   resolveArchiveShelfClearance,
   type ArchiveShelfPlacement,
@@ -85,6 +87,40 @@ function makeShelf(
     pathBay: placement.pathBay,
     districtId: placement.districtId,
     articles,
+  }
+}
+
+function arrivalShelfPlacement(
+  id: string,
+  row: 0 | 1 | 2,
+  side: -1 | 1,
+): ArchiveShelfPlacement {
+  const rowBays = [-.18, .16, .5] as const
+  const laneDistances = [9.2, 10.35, 11.5] as const
+  const bay = rowBays[row]
+  const center = archivePathPoint(bay)
+  const frame = archivePathFrame(.15)
+  const laneDistance = laneDistances[row]
+
+  const world: [number, number, number] = [
+    center[0] + frame.normalX * side * laneDistance,
+    center[1] + .12,
+    center[2] + frame.normalZ * side * laneDistance,
+  ]
+
+  // Face all foyer shelves toward the same arrival-axis center instead of
+  // following the curve independently. This keeps Featured / My DEV /
+  // Creators readable and prevents them from visually hiding behind the
+  // FRONT PAGE district bookcases.
+  const inwardX = -frame.normalX * side
+  const inwardZ = -frame.normalZ * side
+  const yaw = Math.atan2(inwardX, inwardZ) + Math.PI
+
+  return {
+    world,
+    yaw,
+    pathBay: bay,
+    districtId: 'arrival',
   }
 }
 
@@ -720,12 +756,10 @@ export default function DevLibraryMap() {
         'Featured',
         'popular this week',
         'featured',
-        archiveShelfPlacement(
+        arrivalShelfPlacement(
           'shelf:featured',
-          -.45,
+          0,
           -1,
-          {laneBias: 2.2, heightJitterScale: 0, lateralJitterScale: 0, alongJitterScale: 0, lookAheadScale: 0, yawJitterScale: 0},
-          districts,
         ),
         featured,
       ),
@@ -734,12 +768,10 @@ export default function DevLibraryMap() {
         'New',
         'freshly published',
         'latest',
-        archiveShelfPlacement(
+        arrivalShelfPlacement(
           'shelf:new',
-          -.45,
+          0,
           1,
-          {laneBias: 2.2, heightJitterScale: 0, lateralJitterScale: 0, alongJitterScale: 0, lookAheadScale: 0, yawJitterScale: 0},
-          districts,
         ),
         latest,
       ),
@@ -750,12 +782,10 @@ export default function DevLibraryMap() {
           : 'My DEV',
         'creator shelf',
         'mine',
-        archiveShelfPlacement(
+        arrivalShelfPlacement(
           'shelf:mine',
-          .05,
+          1,
           -1,
-          {laneBias: 2.75, heightJitterScale: 0, lateralJitterScale: 0, alongJitterScale: 0, lookAheadScale: 0, yawJitterScale: 0},
-          districts,
         ),
         mine,
       ),
@@ -764,12 +794,10 @@ export default function DevLibraryMap() {
         'Topics',
         'choose a DEV tag',
         'topics',
-        archiveShelfPlacement(
+        arrivalShelfPlacement(
           'shelf:topics',
-          .05,
           1,
-          {laneBias: 2.75, heightJitterScale: 0, lateralJitterScale: 0, alongJitterScale: 0, lookAheadScale: 0, yawJitterScale: 0},
-          districts,
+          1,
         ),
         dynamicTitle?.startsWith('#') ? dynamicArticles : [],
       ),
@@ -778,12 +806,10 @@ export default function DevLibraryMap() {
         'Creators',
         'browse author shelves',
         'creators',
-        archiveShelfPlacement(
+        arrivalShelfPlacement(
           'shelf:creators',
-          .52,
+          2,
           -1,
-          {laneBias: 3.1, heightJitterScale: 0, lateralJitterScale: 0, alongJitterScale: 0, lookAheadScale: 0, yawJitterScale: 0},
-          districts,
         ),
         dynamicTitle?.startsWith('@')
           ? dynamicArticles
@@ -798,27 +824,15 @@ export default function DevLibraryMap() {
           'Search',
           query || 'search results',
           'search',
-          archiveShelfPlacement(
+          arrivalShelfPlacement(
             'shelf:search',
-            .52,
+            2,
             1,
-            {laneBias: 3.1, heightJitterScale: 0, lateralJitterScale: 0, alongJitterScale: 0, lookAheadScale: 0, yawJitterScale: 0},
-            districts,
           ),
           searchResults.slice(0, CATALOG_BOOKS_PER_SHELF),
         ),
       )
     }
-
-    // Utility shelves belong to the arrival foyer, not FRONT PAGE.
-    // Giving them a separate layout identity prevents the clearance resolver
-    // from treating them as part of the Featured district and nudging them
-    // back into its plaza.
-    result.forEach((shelf) => {
-      if (shelf.kind !== 'catalog') {
-        shelf.districtId = 'arrival'
-      }
-    })
 
     const fallbackDistrict =
       districts.find((district) => district.id === 'deep-stacks') ??
