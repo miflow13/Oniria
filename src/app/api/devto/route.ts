@@ -237,54 +237,33 @@ export async function GET(request: NextRequest) {
 
     if (mode === 'bootstrap') {
       const username = safeValue(searchParams.get('username'), 'mikachu')
+      const perPage = Math.min(
+        80,
+        Math.max(30, Number(searchParams.get('per_page') ?? 60) || 60),
+      )
 
       const [
         profile,
         profileArticles,
         feedPageOne,
-        feedPageTwo,
-        feedPageThree,
         latestPageOne,
-        latestPageTwo,
-        latestPageThree,
         tags,
       ] = await Promise.all([
         devFetch(`/users/${encodeURIComponent(username)}`).catch(() => null),
         devFetch(
-          `/articles?username=${encodeURIComponent(username)}&per_page=100`,
+          `/articles?username=${encodeURIComponent(username)}&per_page=30`,
         ).catch(() => []),
-        devFetch('/articles?per_page=100&page=1&top=7').catch(() => []),
-        devFetch('/articles?per_page=100&page=2&top=7').catch(() => []),
-        devFetch('/articles?per_page=100&page=3&top=7').catch(() => []),
-        devFetch('/articles?per_page=100&page=1').catch(() => []),
-        devFetch('/articles?per_page=100&page=2').catch(() => []),
-        devFetch('/articles?per_page=100&page=3').catch(() => []),
+        devFetch(`/articles?per_page=${perPage}&page=1&top=7`).catch(() => []),
+        devFetch(`/articles?per_page=${perPage}&page=1`).catch(() => []),
         devFetch('/tags?per_page=30').catch(() => []),
       ])
-
-      const dedupe = (groups: unknown[]) => {
-        const seen = new Set<number>()
-        return groups
-          .flatMap((group) => normalizeArticles(group))
-          .filter((article) => {
-            if (!article || typeof article !== 'object') return false
-            const id = Number((article as {id?: unknown}).id)
-            if (!Number.isFinite(id) || seen.has(id)) return false
-            seen.add(id)
-            return true
-          })
-      }
 
       return NextResponse.json(
         {
           profile,
           profileArticles: normalizeArticles(profileArticles),
-          feed: dedupe([feedPageOne, feedPageTwo, feedPageThree]),
-          latest: dedupe([
-            latestPageOne,
-            latestPageTwo,
-            latestPageThree,
-          ]),
+          feed: normalizeArticles(feedPageOne),
+          latest: normalizeArticles(latestPageOne),
           tags,
         },
         {
@@ -294,6 +273,41 @@ export async function GET(request: NextRequest) {
           },
         },
       )
+    }
+
+    if (mode === 'collection') {
+      const collection = safeValue(
+        searchParams.get('collection'),
+        'latest',
+      )
+      if (collection !== 'featured' && collection !== 'latest') {
+        return NextResponse.json(
+          {error: 'Invalid collection'},
+          {status: 400},
+        )
+      }
+
+      const page = Math.max(
+        2,
+        Number(searchParams.get('page') ?? 2) || 2,
+      )
+      const perPage = Math.min(
+        100,
+        Math.max(30, Number(searchParams.get('per_page') ?? 80) || 80),
+      )
+      const top = collection === 'featured' ? '&top=7' : ''
+      const raw = await devFetch(
+        `/articles?per_page=${perPage}&page=${page}${top}`,
+      ).catch(() => [])
+
+      const articles = normalizeArticles(raw)
+      return NextResponse.json({
+        collection,
+        page,
+        perPage,
+        articles,
+        hasMore: Array.isArray(raw) && raw.length >= perPage,
+      })
     }
 
     if (mode === 'catalog') {
