@@ -447,8 +447,64 @@ export function createLibraryBuilding(
         )
       })
 
-      const wallZs = [-5, -10, -29, -34, -49, -54, -68]
-      wallZs.forEach((z, index) => {
+      const outerSideRuns = wallRuns.filter(
+        (run) =>
+          run.windows &&
+          run.axis === 'z' &&
+          Math.abs(run.x) > 20,
+      )
+      const wallPanelWidth = wallPanel
+        ? Math.max(
+            .1,
+            new THREE.Box3()
+              .setFromObject(wallPanel)
+              .getSize(new THREE.Vector3()).x,
+          )
+        : 2
+      const windowZs = outerSideRuns.flatMap((run) => {
+        const count = Math.max(
+          1,
+          Math.ceil(
+            run.length / Math.max(.65, wallPanelWidth * .97),
+          ),
+        )
+        const cell = run.length / count
+        return Array.from({length: count}, (_, index) => {
+          const useWindow =
+            index > 1 &&
+            index < count - 2 &&
+            index % 4 === 2
+          if (!useWindow) return null
+          return (
+            run.z -
+            run.length / 2 +
+            cell * (index + .5)
+          )
+        }).filter((z): z is number => z !== null)
+      })
+      const nookZs = [-5.2, -25.3, -45.3]
+      const roomShelfRows = LIBRARY_ROOMS.flatMap((room) => [
+        room.center[1] - 2.9,
+        room.center[1] + 2.9,
+      ])
+      const candidateZs = Array.from(
+        {length: 34},
+        (_, index) => 1.5 - index * 2.05,
+      ).filter(
+        (z) =>
+          z > -69 &&
+          !windowZs.some(
+            (windowZ) => Math.abs(z - windowZ) < 1.35,
+          ) &&
+          !nookZs.some(
+            (nookZ) => Math.abs(z - nookZ) < 2.1,
+          ) &&
+          !roomShelfRows.some(
+            (shelfZ) => Math.abs(z - shelfZ) < 1.3,
+          ),
+      )
+
+      candidateZs.forEach((z, index) => {
         placeDecoy(-23.35, z, Math.PI / 2, index)
         placeDecoy(23.35, z, -Math.PI / 2, index)
       })
