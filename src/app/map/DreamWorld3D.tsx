@@ -2346,6 +2346,11 @@ export default function DreamWorld3D({
       )
 
       activeDistricts.forEach((district, index) => {
+        // Landmarks are punctuation, not mandatory furniture. Keep the
+        // opening DEV monument, then render one hero landmark every other
+        // district so the boulevard has visual breathing room.
+        const hasLandmark = index % 2 === 0
+
         const center = new THREE.Vector3(...archivePathPoint(district.bay))
         const expectedLandmarkHeight =
           district.landmarkType === 'archive-tower'
@@ -2365,7 +2370,9 @@ export default function DreamWorld3D({
         // silhouette never tangles with the district label in screenshots.
         center.y +=
           ARCHIVE_WALKWAY_Y_OFFSET +
-          Math.max(6.55, expectedLandmarkHeight + 1.72)
+          (hasLandmark
+            ? Math.max(6.55, expectedLandmarkHeight + 1.72)
+            : 5.45)
 
         const texture = createLibraryRouteLabelTexture(
           district.label,
@@ -2393,6 +2400,11 @@ export default function DreamWorld3D({
         libraryRouteTextures.push(texture)
         libraryRouteMaterials.push(material)
         libraryRouteObjects.push(marker)
+
+        // Every district keeps its sign, shelves, atmosphere, route guards,
+        // and junction marker. Only alternate districts get the large hero
+        // landmark/aura stack.
+        if (!hasLandmark) return
 
         const pathCenter = new THREE.Vector3(
           ...archivePathPoint(district.bay),
