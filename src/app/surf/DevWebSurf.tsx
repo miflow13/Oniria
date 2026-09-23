@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import DevWebSurf3D from './DevWebSurf3D'
+import InfiniteStacks3D from './InfiniteStacks3D'
 import type {
   DevArticle,
   DevArticleSummary,
@@ -1237,7 +1237,7 @@ export default function DevWebSurf() {
 
   return (
     <main className={styles.page}>
-      <DevWebSurf3D
+      <InfiniteStacks3D
         nodes={graph.nodes}
         edges={graph.edges}
         selectedId={selectedId}
