@@ -985,6 +985,125 @@ export function createLibraryBuilding(
   })
   localMaterials.push(trimMaterial, ventMaterial)
 
+  const archwayMaterial = new THREE.MeshStandardMaterial({
+    color: 0xc9b99f,
+    roughness: .72,
+    metalness: .025,
+    envMapIntensity: .16,
+  })
+  const archwayInsetMaterial = new THREE.MeshStandardMaterial({
+    color: 0x5c4634,
+    roughness: .77,
+    metalness: .035,
+    envMapIntensity: .12,
+  })
+  localMaterials.push(archwayMaterial, archwayInsetMaterial)
+
+  const archJambGeometry = new THREE.BoxGeometry(
+    .24,
+    3.02,
+    .28,
+  )
+  const archCapitalGeometry = new THREE.BoxGeometry(
+    .32,
+    .16,
+    .44,
+  )
+  const archCurveGeometry = new THREE.TorusGeometry(
+    1.76,
+    .12,
+    8,
+    36,
+    Math.PI,
+  )
+  const archInsetGeometry = new THREE.TorusGeometry(
+    1.76,
+    .045,
+    6,
+    36,
+    Math.PI,
+  )
+  const archKeystoneGeometry = new THREE.BoxGeometry(
+    .34,
+    .34,
+    .38,
+  )
+  localGeometries.push(
+    archJambGeometry,
+    archCapitalGeometry,
+    archCurveGeometry,
+    archInsetGeometry,
+    archKeystoneGeometry,
+  )
+
+  // Each physical room gets an architectural threshold facing the central
+  // corridor. The geometry hugs the existing doorway edges so walk clearance
+  // and the authored room collision layout remain unchanged.
+  LIBRARY_ROOMS.forEach((room) => {
+    const leftRoom = room.center[0] < 0
+    const edgeX = leftRoom ? -7.88 : 7.88
+    const doorwayZ = room.center[1]
+    const springY = 3.02
+
+    ;[-1.76, 1.76].forEach((offset) => {
+      const jamb = new THREE.Mesh(
+        archJambGeometry,
+        archwayMaterial,
+      )
+      jamb.position.set(
+        edgeX,
+        springY / 2,
+        doorwayZ + offset,
+      )
+      jamb.receiveShadow = true
+      group.add(jamb)
+
+      const capital = new THREE.Mesh(
+        archCapitalGeometry,
+        archwayInsetMaterial,
+      )
+      capital.position.set(
+        edgeX,
+        springY + .02,
+        doorwayZ + offset,
+      )
+      group.add(capital)
+    })
+
+    const arch = new THREE.Mesh(
+      archCurveGeometry,
+      archwayMaterial,
+    )
+    arch.rotation.y = Math.PI / 2
+    arch.position.set(edgeX, springY, doorwayZ)
+    arch.receiveShadow = true
+    group.add(arch)
+
+    const inset = new THREE.Mesh(
+      archInsetGeometry,
+      archwayInsetMaterial,
+    )
+    inset.rotation.y = Math.PI / 2
+    inset.position.set(
+      edgeX + (leftRoom ? .125 : -.125),
+      springY,
+      doorwayZ,
+    )
+    group.add(inset)
+
+    const keystone = new THREE.Mesh(
+      archKeystoneGeometry,
+      archwayInsetMaterial,
+    )
+    keystone.position.set(
+      edgeX,
+      springY + 1.74,
+      doorwayZ,
+    )
+    keystone.rotation.x = Math.PI / 4
+    group.add(keystone)
+  })
+
   const addTrimRun = (run: WallRun, y: number, height: number) => {
     const geometry =
       run.axis === 'x'
@@ -1083,7 +1202,7 @@ export function createLibraryBuilding(
   const pendantPoolMaterial = new THREE.MeshBasicMaterial({
     map: pendantPoolTexture,
     transparent: true,
-    opacity: .58,
+    opacity: .28,
     depthWrite: false,
     depthTest: true,
     blending: THREE.NormalBlending,
@@ -1102,7 +1221,7 @@ export function createLibraryBuilding(
   const sconceHaloMaterial = new THREE.MeshBasicMaterial({
     map: pendantPoolTexture,
     transparent: true,
-    opacity: .42,
+    opacity: .24,
     depthWrite: false,
     depthTest: true,
     blending: THREE.NormalBlending,
@@ -1178,10 +1297,10 @@ export function createLibraryBuilding(
 
     const spot = new THREE.SpotLight(
       0xffddb2,
-      spotIntensity,
-      Math.max(4.8, distance - .8),
-      Math.PI / 5.4,
-      .76,
+      spotIntensity * .58,
+      Math.max(4.6, distance - 1.1),
+      Math.PI / 4.45,
+      .9,
       2,
     )
     spot.position.copy(point.position)
@@ -1207,6 +1326,88 @@ export function createLibraryBuilding(
     group.add(pool)
 
   }
+
+  const roomCeilingFixtureGeometry =
+    new THREE.CylinderGeometry(.28, .34, .065, 20)
+  const roomCeilingLensGeometry =
+    new THREE.CircleGeometry(.245, 20)
+  const roomCeilingFixtureMaterial =
+    new THREE.MeshStandardMaterial({
+      color: 0x6f573d,
+      roughness: .58,
+      metalness: .22,
+      envMapIntensity: .2,
+    })
+  const roomCeilingLensMaterial =
+    new THREE.MeshStandardMaterial({
+      color: 0xffe6bf,
+      emissive: 0xffbd72,
+      emissiveIntensity: .72,
+      roughness: .4,
+      metalness: 0,
+      envMapIntensity: .08,
+      side: THREE.DoubleSide,
+      toneMapped: true,
+    })
+  localGeometries.push(
+    roomCeilingFixtureGeometry,
+    roomCeilingLensGeometry,
+  )
+  localMaterials.push(
+    roomCeilingFixtureMaterial,
+    roomCeilingLensMaterial,
+  )
+
+  // Two shallow ceiling fixtures per room fill the shelf faces and upper
+  // molding without flattening the warm pendant pools in the main hall.
+  LIBRARY_ROOMS.forEach((room) => {
+    const [roomX, roomZ] = room.center
+
+    ;[-4.6, 4.6].forEach((zOffset, fixtureIndex) => {
+      const fixture = new THREE.Mesh(
+        roomCeilingFixtureGeometry,
+        roomCeilingFixtureMaterial,
+      )
+      fixture.position.set(
+        roomX,
+        4.91,
+        roomZ + zOffset,
+      )
+      fixture.name =
+        `library-room-ceiling-fixture-${room.slot}-${fixtureIndex}`
+      group.add(fixture)
+
+      const lens = new THREE.Mesh(
+        roomCeilingLensGeometry,
+        roomCeilingLensMaterial,
+      )
+      lens.rotation.x = Math.PI / 2
+      lens.position.set(
+        roomX,
+        4.872,
+        roomZ + zOffset,
+      )
+      lens.name =
+        `library-room-ceiling-lens-${room.slot}-${fixtureIndex}`
+      group.add(lens)
+
+      const fill = new THREE.PointLight(
+        0xffd2a1,
+        22,
+        5.6,
+        2,
+      )
+      fill.position.set(
+        roomX,
+        4.68,
+        roomZ + zOffset,
+      )
+      fill.castShadow = false
+      fill.name =
+        `library-room-ceiling-light-${room.slot}-${fixtureIndex}`
+      group.add(fill)
+    })
+  })
 
   const ready = (async () => {
     const requests = await Promise.allSettled([
@@ -1888,12 +2089,28 @@ export function createLibraryBuilding(
       instance.name = `library-furnishing-${placement.id}`
 
       if (placement.id.startsWith('hall-reading-desk-')) {
-        // These writing desks are intentionally much lighter than the shelf
-        // masses. Rebase from the measured post-scale bounds and give the
-        // animation enough vertical clearance to roam without touching rugs.
+        // Central desks use the proven-visible reading-table mesh. Rebase from
+        // real post-scale bounds, force the moving meshes renderable, and keep
+        // enough clearance for the full zero-gravity animation envelope.
+        instance.traverse((child) => {
+          if (!(child instanceof THREE.Mesh)) return
+          child.visible = true
+          child.frustumCulled = false
+          const materials = Array.isArray(child.material)
+            ? child.material
+            : [child.material]
+          materials.forEach((material) => {
+            material.visible = true
+            material.transparent = false
+            material.opacity = 1
+            material.depthWrite = true
+            material.toneMapped = true
+            material.needsUpdate = true
+          })
+        })
         instance.updateMatrixWorld(true)
         const deskBounds = new THREE.Box3().setFromObject(instance)
-        const targetBottomY = floorSurfaceY + .78
+        const targetBottomY = floorSurfaceY + .72
         const lift = targetBottomY - deskBounds.min.y
         instance.position.y += lift
         instance.updateMatrixWorld(true)
@@ -2109,7 +2326,8 @@ export function createLibraryBuilding(
                             driftZ: .04,
                           }
 
-        const lightDesk = placement.asset === 'writingDesk'
+        const lightDesk =
+          placement.id.startsWith('hall-reading-desk-')
         floatingProps.register(instance, {
           phase: floatingPhase(placement.id),
           hoverAmplitude:
