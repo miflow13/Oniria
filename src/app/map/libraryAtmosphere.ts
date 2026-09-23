@@ -114,29 +114,16 @@ export function createLibraryAtmosphere({
   const hazeMaterials: THREE.MeshBasicMaterial[] = []
   const hazePlanes: THREE.Mesh[] = []
 
-  const hazeSpecs = [
-    {
-      color: 'rgba(73, 132, 176, 0.36)',
-      position: [-28, 7, -72] as const,
-      scale: [92, 42] as const,
-      opacity: .036,
-      rotation: -.035,
-    },
-    {
-      color: 'rgba(111, 82, 176, 0.36)',
-      position: [32, -4, -145] as const,
-      scale: [126, 54] as const,
-      opacity: .031,
-      rotation: .045,
-    },
-    {
-      color: 'rgba(52, 153, 157, 0.36)',
-      position: [-18, 13, -228] as const,
-      scale: [158, 64] as const,
-      opacity: .027,
-      rotation: -.02,
-    },
-  ]
+  // The enclosed library uses colored light, not colored air. The old
+  // boulevard haze planes are intentionally disabled so white architecture,
+  // books and floating furniture stay crisp.
+  const hazeSpecs: Array<{
+    color: string
+    position: readonly [number, number, number]
+    scale: readonly [number, number]
+    opacity: number
+    rotation: number
+  }> = []
 
   hazeSpecs.forEach((spec, index) => {
     const texture = createNebulaTexture(spec.color)
@@ -175,14 +162,7 @@ export function createLibraryAtmosphere({
   const archiveFog: THREE.Sprite[] = []
   const localHaze: THREE.Sprite[] = []
 
-  const fogTextureColors = [
-    'rgba(224, 92, 188, 0.34)',
-    'rgba(170, 91, 214, 0.32)',
-    'rgba(235, 119, 179, 0.28)',
-    'rgba(124, 104, 205, 0.27)',
-    'rgba(83, 205, 220, 0.24)',
-    'rgba(118, 126, 232, 0.23)',
-  ]
+  const fogTextureColors: string[] = []
 
   const fogTextures = fogTextureColors.map((color) => {
     const texture = createNebulaTexture(color)
@@ -210,14 +190,7 @@ export function createLibraryAtmosphere({
     return material
   })
 
-  const fogBankCount =
-    quality === 'cinematic'
-      ? 40
-      : quality === 'high'
-        ? 30
-        : quality === 'medium'
-          ? 22
-          : 14
+  const fogBankCount = 0
 
   for (let index = 0; index < fogBankCount; index += 1) {
     const t = index / (fogBankCount - 1)
@@ -268,16 +241,7 @@ export function createLibraryAtmosphere({
     archiveFog.push(sprite)
   }
 
-  const localHazeOffsets = [
-    -1.6,
-    -.7,
-    .15,
-    1,
-    1.9,
-    3,
-    4.3,
-    5.8,
-  ] as const
+  const localHazeOffsets: readonly number[] = []
 
   localHazeOffsets.forEach((bayOffset, index) => {
     const material = new THREE.SpriteMaterial({
