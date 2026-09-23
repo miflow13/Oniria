@@ -25,8 +25,7 @@ const DEFAULT_USERNAME = 'mikachu'
 const LIBRARY_FLOOR_COUNT = 4
 const LIBRARY_FLOOR_HEIGHT = 5.2
 const DEEP_CATALOG_PAGES = 8
-const MEGA_SHELF_CAPACITY =
-  (LIBRARY_FLOOR_COUNT - 1) * 4 * 6 * 9
+const MEGA_SHELF_CAPACITY = DEEP_CATALOG_PAGES * 100
 
 const SECTION_COPY: Record<
   LibrarySection,
@@ -160,95 +159,47 @@ type ShelfPlacement = Pick<
   | 'floorIndex'
 >
 
-const SHELF_ANCHORS: Partial<
-  Record<
-    LibrarySection,
-    Array<{
-      id: string
-      x: number
-      z: number
-      rotationY: number
-      front: number
-    }>
-  >
-> = {
-  featured: [
-    {id: 'featured-left', x: -4.9, z: -10, rotationY: 0, front: .42},
-    {id: 'featured-right', x: 4.9, z: -10, rotationY: 0, front: .42},
-    {id: 'featured-deep-left', x: -4.9, z: -17, rotationY: 0, front: .42},
-    {id: 'featured-deep-right', x: 4.9, z: -17, rotationY: 0, front: .42},
-  ],
-  latest: [
-    {id: 'latest-outer', x: -14.8, z: -10, rotationY: Math.PI / 2, front: .42},
-    {id: 'latest-inner', x: -11.1, z: -10, rotationY: Math.PI / 2, front: .42},
-    {id: 'latest-deep-outer', x: -14.8, z: -18, rotationY: Math.PI / 2, front: .42},
-    {id: 'latest-deep-inner', x: -11.1, z: -18, rotationY: Math.PI / 2, front: .42},
-  ],
-  topics: [
-    {id: 'topics-inner', x: 11.1, z: -10, rotationY: -Math.PI / 2, front: .42},
-    {id: 'topics-outer', x: 14.8, z: -10, rotationY: -Math.PI / 2, front: .42},
-    {id: 'topics-deep-inner', x: 11.1, z: -18, rotationY: -Math.PI / 2, front: .42},
-    {id: 'topics-deep-outer', x: 14.8, z: -18, rotationY: -Math.PI / 2, front: .42},
-  ],
-  creators: [
-    {id: 'creators-inner', x: 11.1, z: -25.5, rotationY: -Math.PI / 2, front: .42},
-    {id: 'creators-outer', x: 14.8, z: -25.5, rotationY: -Math.PI / 2, front: .42},
-  ],
-  search: [
-    {id: 'search-outer', x: -14.8, z: -25.5, rotationY: Math.PI / 2, front: .42},
-    {id: 'search-inner', x: -11.1, z: -25.5, rotationY: Math.PI / 2, front: .42},
-  ],
-  archive: [
-    {id: 'archive-left', x: -4.6, z: -39.5, rotationY: 0, front: .42},
-    {id: 'archive-right', x: 4.6, z: -39.5, rotationY: 0, front: .42},
-  ],
+const STACK_WALL_X = 7.15
+
+const STACK_SECTION_Z: Record<LibrarySection, number> = {
+  atrium: 7,
+  featured: -12,
+  latest: -30,
+  topics: -48,
+  creators: -66,
+  search: -84,
+  archive: -104,
 }
 
 function shelfPlacement(
   section: LibrarySection,
   index: number,
 ): ShelfPlacement {
-  const anchors = SHELF_ANCHORS[section]
-  if (!anchors?.length) {
-    return {
-      position: [0, .74, -12 - index * 1.1],
-      rotationY: 0,
-      shelfKey: section + ':fallback',
-      shelfLevel: 0,
-      shelfSlot: index,
-      shelfOrder: index,
-      floorIndex: 0,
-    }
-  }
-
-  const booksPerShelf = 9
-  const slotsPerLevel = 3
-  const shelfIndex = Math.floor(index / booksPerShelf) % anchors.length
-  const localIndex = index % booksPerShelf
-  const level = Math.floor(localIndex / slotsPerLevel)
-  const slot = localIndex % slotsPerLevel
-  const anchor = anchors[shelfIndex]
-
-  const localOffset = (slot - 1) * 1.02
-  const y = .7 + level * 1.1
-
-  let x = anchor.x
-  let z = anchor.z + anchor.front
-
-  if (Math.abs(anchor.rotationY) < .1) {
-    x += localOffset
-  } else {
-    z += localOffset
-    x += Math.sign(anchor.rotationY) * anchor.front
-  }
+  const side = index % 2 === 0 ? -1 : 1
+  const local = Math.floor(index / 2)
+  const row = local % 4
+  const slot = Math.floor(local / 4) % 9
+  const bay = Math.floor(local / 36)
 
   return {
-    position: [x, y, z],
-    rotationY: anchor.rotationY,
-    shelfKey: section + ':' + anchor.id + ':level-' + level,
-    shelfLevel: level,
+    position: [
+      side * STACK_WALL_X,
+      .8 + row * .82,
+      STACK_SECTION_Z[section] - 3 - bay * 4.6 - slot * .38,
+    ],
+    rotationY: side < 0 ? Math.PI / 2 : -Math.PI / 2,
+    shelfKey:
+      'stack:' +
+      section +
+      ':f0:side' +
+      side +
+      ':bay' +
+      bay +
+      ':row' +
+      row,
+    shelfLevel: row,
     shelfSlot: slot,
-    shelfOrder: localIndex,
+    shelfOrder: index,
     floorIndex: 0,
   }
 }
@@ -257,39 +208,32 @@ function megaShelfPlacement(index: number): ShelfPlacement {
   const catalogFloorCount = LIBRARY_FLOOR_COUNT - 1
   const floorIndex = 1 + (index % catalogFloorCount)
   const floorBookIndex = Math.floor(index / catalogFloorCount)
-  const booksPerShelf = 9
-  const shelfIndex = Math.floor(floorBookIndex / booksPerShelf)
-  const localIndex = floorBookIndex % booksPerShelf
-  const level = Math.floor(localIndex / 3)
-  const slot = localIndex % 3
-
-  const columns = [-12, -4, 4, 12]
-  const rows = [-9.5, -15.2, -20.9, -26.6, -32.3, -38]
-  const columnIndex = shelfIndex % columns.length
-  const rowIndex = Math.floor(shelfIndex / columns.length) % rows.length
-  const rotationY = rowIndex % 2 === 0 ? 0 : Math.PI
-  const localOffset = (slot - 1) * .96
+  const side = floorBookIndex % 2 === 0 ? -1 : 1
+  const local = Math.floor(floorBookIndex / 2)
+  const row = local % 4
+  const slot = Math.floor(local / 4) % 9
+  const bay = Math.floor(local / 36)
   const floorBase = floorIndex * LIBRARY_FLOOR_HEIGHT
 
   return {
     position: [
-      columns[columnIndex] + localOffset,
-      floorBase + .7 + level * 1.1,
-      rows[rowIndex] + (rotationY === 0 ? .42 : -.42),
+      side * STACK_WALL_X,
+      floorBase + .8 + row * .82,
+      -10 - bay * 4.6 - slot * .38,
     ],
-    rotationY,
+    rotationY: side < 0 ? Math.PI / 2 : -Math.PI / 2,
     shelfKey:
-      'catalog:f' +
+      'stack:archive:f' +
       floorIndex +
-      ':r' +
-      rowIndex +
-      ':c' +
-      columnIndex +
-      ':level-' +
-      level,
-    shelfLevel: level,
+      ':side' +
+      side +
+      ':bay' +
+      bay +
+      ':row' +
+      row,
+    shelfLevel: row,
     shelfSlot: slot,
-    shelfOrder: localIndex,
+    shelfOrder: floorBookIndex,
     floorIndex,
   }
 }
