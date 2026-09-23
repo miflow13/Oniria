@@ -338,6 +338,10 @@ export default function DevLibraryMap() {
   >([])
   const [readingBook, setReadingBook] =
     useState<LibraryReadingBook | null>(null)
+  const [layoutHudVisible, setLayoutHudVisible] =
+    useState(false)
+  const [layoutHudStatus, setLayoutHudStatus] =
+    useState('READY · P DROP · SHIFT+P REMOVE')
   const sanitizedArticleHtml = useMemo(
     () =>
       sanitizeArticleHtml(
@@ -362,6 +366,107 @@ export default function DevLibraryMap() {
     nearestId: null,
     routeTargetId: null,
   })
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('layoutDebug') === '1') {
+      setLayoutHudVisible(true)
+    }
+
+    const sendLayoutRequest = (
+      remove: boolean,
+      source: string,
+    ) => {
+      setLayoutHudVisible(true)
+      setLayoutHudStatus(
+        remove
+          ? `${source} CAPTURED · REMOVE REQUEST SENT`
+          : `${source} CAPTURED · DROP REQUEST SENT`,
+      )
+      window.dispatchEvent(
+        new CustomEvent('oniria:layout-pin-request', {
+          detail: {remove, source},
+        }),
+      )
+    }
+
+    const handleLayoutKey = (event: KeyboardEvent) => {
+      if (
+        event.repeat ||
+        (event.code !== 'KeyP' && event.code !== 'F8')
+      ) {
+        return
+      }
+
+      const target = event.target
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        (target instanceof HTMLElement &&
+          target.isContentEditable)
+      ) {
+        return
+      }
+
+      event.preventDefault()
+      event.stopPropagation()
+      sendLayoutRequest(
+        event.shiftKey,
+        event.code === 'KeyP' ? 'P' : 'F8',
+      )
+    }
+
+    const handleLayoutResult = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{
+          ok?: boolean
+          message?: string
+          roomSlot?: number
+        }>
+      ).detail
+      setLayoutHudVisible(true)
+      setLayoutHudStatus(
+        detail?.message ??
+          (detail?.ok ? 'PIN ACTION COMPLETE' : 'PIN ACTION FAILED'),
+      )
+    }
+
+    const handleLayoutButton = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{remove?: boolean}>
+      ).detail
+      sendLayoutRequest(
+        Boolean(detail?.remove),
+        'BUTTON',
+      )
+    }
+
+    window.addEventListener('keydown', handleLayoutKey, true)
+    window.addEventListener(
+      'oniria:layout-pin-result',
+      handleLayoutResult,
+    )
+    window.addEventListener(
+      'oniria:layout-pin-button',
+      handleLayoutButton,
+    )
+
+    return () => {
+      window.removeEventListener(
+        'keydown',
+        handleLayoutKey,
+        true,
+      )
+      window.removeEventListener(
+        'oniria:layout-pin-result',
+        handleLayoutResult,
+      )
+      window.removeEventListener(
+        'oniria:layout-pin-button',
+        handleLayoutButton,
+      )
+    }
+  }, [])
 
   const roomWorldConfig = useMemo<LibraryWorldConfig>(
     () => ({
@@ -1292,6 +1397,48 @@ export default function DevLibraryMap() {
         onFlightModeChange={setFlightMode}
         onLibraryMovementModeChange={setMovementMode}
       />
+
+      {layoutHudVisible && (
+        <aside
+          className={styles.layoutAuthoringHud}
+          aria-live="polite"
+        >
+          <div className={styles.layoutAuthoringHudHeader}>
+            <strong>LAYOUT PIN MODE</strong>
+            <span>P / F8</span>
+          </div>
+          <p>{layoutHudStatus}</p>
+          <div className={styles.layoutAuthoringHudActions}>
+            <button
+              type="button"
+              onClick={() =>
+                window.dispatchEvent(
+                  new CustomEvent('oniria:layout-pin-button', {
+                    detail: {remove: false},
+                  }),
+                )
+              }
+            >
+              Drop pin
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                window.dispatchEvent(
+                  new CustomEvent('oniria:layout-pin-button', {
+                    detail: {remove: true},
+                  }),
+                )
+              }
+            >
+              Remove nearest
+            </button>
+          </div>
+          <small>
+            Stand in a room · face shelf direction · P drops · Shift+P removes
+          </small>
+        </aside>
+      )}
 
       <header className={styles.topbar}>
         <div className={styles.brand}>
