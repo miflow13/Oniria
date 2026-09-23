@@ -5,6 +5,7 @@ export type FloatingPropOptions = {
   hoverAmplitude: number
   hoverSpeed: number
   tiltX?: number
+  tiltY?: number
   tiltZ?: number
 }
 
@@ -62,10 +63,14 @@ export function createFloatingPropRegistry(): FloatingPropRegistry {
         )
         prop.object.rotation.set(
           prop.baseRotationX +
-            Math.sin(wave * .73 + .8) * (prop.tiltX ?? 0),
-          prop.baseRotationY,
+            Math.sin(wave * .47 + prop.phase * .37) *
+              (prop.tiltX ?? 0),
+          prop.baseRotationY +
+            Math.sin(wave * .31 + prop.phase * .73 + 1.2) *
+              (prop.tiltY ?? 0),
           prop.baseRotationZ +
-            Math.cos(wave * .61 + 1.7) * (prop.tiltZ ?? 0),
+            Math.cos(wave * .39 + prop.phase * .51 + 1.7) *
+              (prop.tiltZ ?? 0),
         )
       }
     },
