@@ -2715,46 +2715,52 @@ export default function DreamWorld3D({
     const edgeVisuals: EdgeVisual[] = []
     const samples = 28
 
-    for (const edge of edges) {
-      const array = new Float32Array(samples * 3)
-      const geometry = new THREE.BufferGeometry()
-      geometry.setAttribute('position', new THREE.BufferAttribute(array, 3))
-
-      const material = new THREE.LineBasicMaterial({
-        color: edge.weight > 2 ? 0xc2a7ff : 0x7ecfd8,
-        transparent: true,
-        opacity: .045,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-      })
-
-      const line = new THREE.Line(geometry, material)
-      world.add(line)
-
-      const pulseMaterial = new THREE.MeshBasicMaterial({
-        color: edge.weight > 2 ? 0xe0c9ff : 0xa4f2ef,
-        transparent: true,
-        opacity: .11,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-      })
-      const pulse = new THREE.Mesh(
-        new THREE.SphereGeometry(.035 + Math.min(edge.weight, 4) * .008, 10, 10),
-        pulseMaterial,
-      )
-      world.add(pulse)
-
-      edgeVisuals.push({
-        line,
-        pulse,
-        geometry,
-        positions: array,
-        material,
-        source: edge.source,
-        target: edge.target,
-        phase: seededUnit(hashString(edge.id), 43),
-        weight: edge.weight,
-      })
+    // The city streets replace the dream graph as the library's spatial
+    // language. Cross-city relationship lines made blocks read as clutter
+    // and undermined the mockup's clean urban plan.
+    if (!libraryMode) {
+      for (const edge of edges) {
+        const array = new Float32Array(samples * 3)
+        const geometry = new THREE.BufferGeometry()
+        geometry.setAttribute('position', new THREE.BufferAttribute(array, 3))
+  
+        const material = new THREE.LineBasicMaterial({
+          color: edge.weight > 2 ? 0xc2a7ff : 0x7ecfd8,
+          transparent: true,
+          opacity: .045,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        })
+  
+        const line = new THREE.Line(geometry, material)
+        world.add(line)
+  
+        const pulseMaterial = new THREE.MeshBasicMaterial({
+          color: edge.weight > 2 ? 0xe0c9ff : 0xa4f2ef,
+          transparent: true,
+          opacity: .11,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        })
+        const pulse = new THREE.Mesh(
+          new THREE.SphereGeometry(.035 + Math.min(edge.weight, 4) * .008, 10, 10),
+          pulseMaterial,
+        )
+        world.add(pulse)
+  
+        edgeVisuals.push({
+          line,
+          pulse,
+          geometry,
+          positions: array,
+          material,
+          source: edge.source,
+          target: edge.target,
+          phase: seededUnit(hashString(edge.id), 43),
+          weight: edge.weight,
+        })
+      }
+  
     }
 
     const raycaster = new THREE.Raycaster()
