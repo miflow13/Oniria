@@ -63,8 +63,10 @@ import {
   ARCHIVE_WALKWAY_HALF_WIDTH,
   ARCHIVE_WALKWAY_Y_OFFSET,
   archiveBayFromWorldZ,
+  archiveDistrictGridLaneOffset,
   archiveDistrictInfluence,
   archiveGridRoadSegments,
+  archiveOffsetPathPoint,
   archivePathFrame,
   archivePathPoint,
   archiveWalkSurfaceAtPosition,
@@ -2526,7 +2528,14 @@ export default function DreamWorld3D({
         // district so the boulevard has visual breathing room.
         const hasLandmark = index % 2 === 0
 
-        const center = new THREE.Vector3(...archivePathPoint(district.bay))
+        const districtLaneOffset =
+          archiveDistrictGridLaneOffset(index)
+        const center = new THREE.Vector3(
+          ...archiveOffsetPathPoint(
+            district.bay,
+            districtLaneOffset,
+          ),
+        )
         const expectedLandmarkHeight =
           district.landmarkType === 'archive-tower'
             ? 4.8
@@ -2582,7 +2591,10 @@ export default function DreamWorld3D({
         if (!hasLandmark) return
 
         const pathCenter = new THREE.Vector3(
-          ...archivePathPoint(district.bay),
+          ...archiveOffsetPathPoint(
+            district.bay,
+            districtLaneOffset,
+          ),
         )
         const frame = archivePathFrame(district.bay)
 
@@ -3203,11 +3215,24 @@ export default function DreamWorld3D({
       )
       const guardDummy = new THREE.Object3D()
       activeDistricts.forEach((district, index) => {
-        const center = new THREE.Vector3(...archivePathPoint(district.bay))
+        const laneOffset =
+          archiveDistrictGridLaneOffset(index)
+        const center = new THREE.Vector3(
+          ...archiveOffsetPathPoint(
+            district.bay,
+            laneOffset,
+          ),
+        )
         const frame = archivePathFrame(district.bay)
         const halfWidth =
-          ARCHIVE_WALKWAY_HALF_WIDTH +
-          archiveDistrictInfluence(district.bay, activeDistricts) * 2.4
+          laneOffset === 0
+            ? ARCHIVE_WALKWAY_HALF_WIDTH +
+              archiveDistrictInfluence(
+                district.bay,
+                activeDistricts,
+              ) *
+                2.4
+            : 3.35
         const sideVector = new THREE.Vector3(
           frame.normalX,
           0,
@@ -3254,7 +3279,12 @@ export default function DreamWorld3D({
       )
       const junctionDummy = new THREE.Object3D()
       activeDistricts.forEach((district, index) => {
-        const center = new THREE.Vector3(...archivePathPoint(district.bay))
+        const center = new THREE.Vector3(
+          ...archiveOffsetPathPoint(
+            district.bay,
+            archiveDistrictGridLaneOffset(index),
+          ),
+        )
         center.y += ARCHIVE_WALKWAY_Y_OFFSET + .07
         junctionDummy.position.copy(center)
         junctionDummy.rotation.set(Math.PI / 2, 0, 0)
