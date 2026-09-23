@@ -925,8 +925,8 @@ export default function DevLibraryMap() {
       return
     }
 
-    // Moving away from a loading edge arms the trigger again, so returning
-    // to Deep Stacks fetches the next page without polling continuously.
+    // Moving away from the Archive edge arms the trigger again, so returning
+    // to its last shelf fetches the next page without polling continuously.
     lastCatalogLoadTriggerRef.current = null
   }, [
     catalogHasMore,
@@ -973,7 +973,9 @@ export default function DevLibraryMap() {
       }
       setDynamicTitle('#' + tag)
       setDynamicArticles(payload.articles ?? [])
-      setSelectedId('shelf:topics')
+      setSelectedId(
+        shelves.find((shelf) => shelf.kind === 'topics')?.id ?? null,
+      )
     } catch {
       setError('Could not load topic shelf')
     } finally {
@@ -994,7 +996,9 @@ export default function DevLibraryMap() {
       }
       setDynamicTitle('@' + username)
       setDynamicArticles(payload.articles ?? [])
-      setSelectedId('shelf:creators')
+      setSelectedId(
+        shelves.find((shelf) => shelf.kind === 'creators')?.id ?? null,
+      )
     } catch {
       setError('Could not load creator shelf')
     } finally {
@@ -1018,7 +1022,9 @@ export default function DevLibraryMap() {
         articles: DevArticleSummary[]
       }
       setSearchResults(payload.articles ?? [])
-      setSelectedId('shelf:search')
+      setSelectedId(
+        shelves.find((shelf) => shelf.kind === 'search')?.id ?? null,
+      )
       document.exitPointerLock?.()
     } catch {
       setError('Could not search DEV')
