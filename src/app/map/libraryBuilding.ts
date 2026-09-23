@@ -8,6 +8,7 @@ import {
   roomDoorwayClearanceRect,
   roomShelfBlueprintPlacements,
   roomShelfPlacementRect,
+  surveyedRoomShelfPlacements,
   validateRoomShelfPlacements,
 } from './libraryRoomLayout'
 import {
@@ -333,6 +334,24 @@ export function createLibraryBuilding(
           placement.world[0],
           placement.world[2],
           invalid,
+        )
+      })
+
+      surveyedRoomShelfPlacements(
+        district,
+        index,
+      ).forEach((placement) => {
+        addDebugRect(
+          roomShelfPlacementRect(placement),
+          0x9f6cff,
+          .22,
+          .09,
+        )
+        addDebugLabel(
+          placement.slotId,
+          placement.world[0],
+          placement.world[2],
+          false,
         )
       })
     })
