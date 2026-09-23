@@ -43,7 +43,7 @@ const CATALOG_BOOKS_PER_SHELF = 9
 const DISTRICT_RENDERED_SHELF_LIMIT = 4
 const DISTRICT_VISIBLE_ARTICLE_CAPACITY =
   DISTRICT_RENDERED_SHELF_LIMIT * CATALOG_BOOKS_PER_SHELF
-const DISTRICT_SHELF_PAIR_OFFSETS = [-.48, .48] as const
+const DISTRICT_SHELF_PAIR_OFFSETS = [-.68, .68] as const
 
 const SHELF_ACCENTS: Record<LibraryShelfKind, string> = {
   featured: '#8c7cff',
@@ -977,7 +977,7 @@ export default function DevLibraryMap() {
             {
               // District bookcases are architecture, not debris: keep each
               // pair level, mirrored, and square to the boulevard.
-              laneDistance: 8.45,
+              laneDistance: 7.7,
               heightJitterScale: 0,
               lateralJitterScale: 0,
               alongJitterScale: 0,
