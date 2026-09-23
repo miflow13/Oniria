@@ -1410,6 +1410,57 @@ export function createLibraryBuilding(
     })
   })
 
+  // Surveyed September 23 from the in-world layout pin tool. Keep the
+  // horizontal coordinates exact, but project the floor-level pin upward to
+  // the authored ceiling so the marker becomes a real architectural fixture.
+  const surveyedLatestLight = {
+    x: 16.154,
+    z: 5.369,
+  } as const
+
+  const surveyedFixture = new THREE.Mesh(
+    roomCeilingFixtureGeometry,
+    roomCeilingFixtureMaterial,
+  )
+  surveyedFixture.position.set(
+    surveyedLatestLight.x,
+    4.91,
+    surveyedLatestLight.z,
+  )
+  surveyedFixture.name =
+    'library-surveyed-ceiling-fixture-latest-front'
+  group.add(surveyedFixture)
+
+  const surveyedLens = new THREE.Mesh(
+    roomCeilingLensGeometry,
+    roomCeilingLensMaterial,
+  )
+  surveyedLens.rotation.x = Math.PI / 2
+  surveyedLens.position.set(
+    surveyedLatestLight.x,
+    4.872,
+    surveyedLatestLight.z,
+  )
+  surveyedLens.name =
+    'library-surveyed-ceiling-lens-latest-front'
+  group.add(surveyedLens)
+
+  const surveyedFill = new THREE.PointLight(
+    0xffd2a1,
+    28,
+    6.2,
+    2,
+  )
+  surveyedFill.position.set(
+    surveyedLatestLight.x,
+    4.68,
+    surveyedLatestLight.z,
+  )
+  surveyedFill.castShadow = false
+  surveyedFill.name =
+    'library-surveyed-ceiling-light-latest-front'
+  group.add(surveyedFill)
+
   const ready = (async () => {
     const requests = await Promise.allSettled([
       loadLibraryAsset('wallPanel', 5, 'height'),
@@ -2154,6 +2205,14 @@ export function createLibraryBuilding(
         instance.updateMatrixWorld(true)
       }
 
+      if (placement.asset === 'column') {
+        // These freestanding columns are decorative rather than structural.
+        // Lift them enough that the zero-gravity motion reads immediately,
+        // but keep substantially more ceiling clearance than the plants.
+        instance.position.y += .2
+        instance.updateMatrixWorld(true)
+      }
+
       if (placement.id.startsWith('hall-reading-desk-')) {
         // Central desks use the proven-visible reading-table mesh. Rebase from
         // real post-scale bounds, force the moving meshes renderable, and keep
@@ -2370,11 +2429,11 @@ export function createLibraryBuilding(
                     }
                   : placement.asset === 'column'
                     ? {
-                        tiltX: .009,
-                        tiltY: .005,
-                        tiltZ: .008,
-                        driftX: .012,
-                        driftZ: .01,
+                        tiltX: .042,
+                        tiltY: .065,
+                        tiltZ: .048,
+                        driftX: .16,
+                        driftZ: .13,
                       }
                     : placement.asset === 'rollingLadder'
                       ? {
@@ -2403,6 +2462,7 @@ export function createLibraryBuilding(
         const lightDesk =
           placement.id.startsWith('hall-reading-desk-')
         const lightPlant = placement.asset === 'pottedPlant'
+        const floatingColumn = placement.asset === 'column'
         floatingProps.register(instance, {
           phase: floatingPhase(placement.id),
           hoverAmplitude:
@@ -2411,12 +2471,22 @@ export function createLibraryBuilding(
               ? 1.7
               : lightPlant
                 ? 5.8
+              : floatingColumn
+                ? 6.5
               : placement.asset === 'readingTable'
                 ? 1.45
                 : 1.22),
           hoverSpeed:
             placement.hoverSpeed *
-            (lightDesk ? 1.22 : lightPlant ? 1.55 : .88),
+            (
+              lightDesk
+                ? 1.22
+                : lightPlant
+                  ? 1.55
+                  : floatingColumn
+                    ? 1.42
+                    : .88
+            ),
           tiltX: Math.max(
             placement.tiltX ?? 0,
             motionProfile.tiltX,
@@ -2435,6 +2505,8 @@ export function createLibraryBuilding(
             ? .29
             : lightPlant
               ? .24
+            : floatingColumn
+              ? .19
             : placement.asset === 'readingTable'
               ? .16
               : .13,
@@ -2442,6 +2514,8 @@ export function createLibraryBuilding(
             ? .23
             : lightPlant
               ? .2
+            : floatingColumn
+              ? .16
             : placement.asset === 'readingTable'
               ? .125
               : .105,
@@ -2449,6 +2523,8 @@ export function createLibraryBuilding(
             ? .62
             : lightPlant
               ? .58
+            : floatingColumn
+              ? .3
             : placement.asset === 'readingTable'
               ? .1
               : placement.asset === 'libraryChair' ||
@@ -2459,6 +2535,8 @@ export function createLibraryBuilding(
             ? .4
             : lightPlant
               ? .46
+            : floatingColumn
+              ? .18
             : placement.asset === 'readingTable'
               ? .04
               : .025,
@@ -2466,15 +2544,25 @@ export function createLibraryBuilding(
             ? .31
             : lightPlant
               ? .26
+            : floatingColumn
+              ? .21
             : placement.asset === 'readingTable'
               ? .18
               : .15,
           driftSpeedForward:
-            lightDesk ? .24 : lightPlant ? .2 : .105,
+            lightDesk
+              ? .24
+              : lightPlant
+                ? .2
+                : floatingColumn
+                  ? .16
+                  : .105,
           secondaryHoverAmplitude: lightDesk
             ? .095
             : lightPlant
               ? .085
+            : floatingColumn
+              ? .055
             : placement.asset === 'readingTable'
               ? .026
               : .014,
@@ -2482,6 +2570,8 @@ export function createLibraryBuilding(
             ? .39
             : lightPlant
               ? .36
+            : floatingColumn
+              ? .3
             : placement.asset === 'readingTable'
               ? .23
               : .19,
