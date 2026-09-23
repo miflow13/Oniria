@@ -847,16 +847,12 @@ export default function DreamWorld3D({
     const atmosphereFogTarget = new THREE.Color()
     const atmosphereLightTarget = new THREE.Color()
     scene.background = sceneBackgroundColor
-    scene.fog = new THREE.FogExp2(
-      libraryMode
-        ? globalAtmospherePreset.fog
-        : 0x07101f,
-      settings.fogDensity *
-        (libraryMode
-          ? globalAtmospherePreset.fogScale *
-            (.55 + activeLibraryConfig.hazeIntensity * .85)
-          : 1),
-    )
+    scene.fog = libraryMode
+      ? null
+      : new THREE.FogExp2(
+          0x07101f,
+          settings.fogDensity,
+        )
 
     const camera = new THREE.PerspectiveCamera(
       43,
@@ -946,16 +942,22 @@ export default function DreamWorld3D({
     composer.addPass(dreamPost)
     composer.addPass(new OutputPass())
 
-    scene.add(
-      new THREE.AmbientLight(
-        0x7182b6,
-        libraryMode ? .38 : .75,
-      ),
-    )
+    if (libraryMode) {
+      scene.add(
+        new THREE.HemisphereLight(
+          0xf3eee4,
+          0x17202b,
+          .52,
+        ),
+      )
+      scene.add(new THREE.AmbientLight(0xffffff, .14))
+    } else {
+      scene.add(new THREE.AmbientLight(0x7182b6, .75))
+    }
 
     const keyLight = new THREE.DirectionalLight(
-      0xd4e5ff,
-      libraryMode ? 1.02 : 2.1,
+      libraryMode ? 0xfff3df : 0xd4e5ff,
+      libraryMode ? .72 : 2.1,
     )
     keyLight.position.set(-5, 6, 8)
     keyLight.castShadow = renderer.shadowMap.enabled
@@ -969,7 +971,7 @@ export default function DreamWorld3D({
 
     const violetLight = new THREE.PointLight(
       0xb791ff,
-      libraryMode ? 4 : 12,
+      libraryMode ? .38 : 12,
       20,
       2,
     )
@@ -978,7 +980,7 @@ export default function DreamWorld3D({
 
     const cyanLight = new THREE.PointLight(
       0x72e2df,
-      libraryMode ? 3.6 : 11,
+      libraryMode ? .3 : 11,
       20,
       2,
     )
@@ -6481,20 +6483,26 @@ export default function DreamWorld3D({
       const atmosphereLightScale = libraryMode
         ? atmospherePreset.lightStrength
         : 1
+      const violetTarget =
+        (libraryMode
+          ? selectedVisual
+            ? .52
+            : .38
+          : selectedVisual
+            ? 4.7
+            : 4) * atmosphereLightScale
+      const cyanTarget =
+        (libraryMode
+          ? selectedVisual
+            ? .44
+            : .3
+          : selectedVisual
+            ? 4.3
+            : 3.6) * atmosphereLightScale
       violetLight.intensity +=
-        (
-          (selectedVisual ? 4.7 : 4) *
-            atmosphereLightScale -
-          violetLight.intensity
-        ) *
-        .035
+        (violetTarget - violetLight.intensity) * .035
       cyanLight.intensity +=
-        (
-          (selectedVisual ? 4.3 : 3.6) *
-            atmosphereLightScale -
-          cyanLight.intensity
-        ) *
-        .035
+        (cyanTarget - cyanLight.intensity) * .035
 
       if (flightActive && flightInitialized) {
         const routeActive = Boolean(flightRoute)
