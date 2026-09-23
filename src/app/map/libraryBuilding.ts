@@ -1640,6 +1640,14 @@ export function createLibraryBuilding(
       )
       instance.name = `library-furnishing-${placement.id}`
 
+      if (placement.id.startsWith('hall-reading-desk-')) {
+        // Corridor desks are authored from the surveyed rug centers, but their
+        // vertical position must follow the real parquet top. Keep enough
+        // clearance that the lowest point of the hover cycle still reads as
+        // suspended rather than clipping into the rug/floor.
+        instance.position.y = floorSurfaceY + .2
+      }
+
       if (placement.asset === 'column') {
         instance.updateMatrixWorld(true)
         const bounds = new THREE.Box3().setFromObject(instance)
