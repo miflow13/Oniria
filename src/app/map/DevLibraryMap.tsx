@@ -1419,6 +1419,7 @@ export default function DevLibraryMap() {
           return {
             id: String(article.id),
             title: article.title,
+            author: article.user.name || article.user.username,
             coverUrl: devImageProxyUrl(
               article.cover_image,
               article.social_image,
