@@ -31,13 +31,10 @@ import type {
 } from './libraryTypes'
 import styles from './library.module.css'
 import {
-  archiveDistrictGridLaneOffset,
-  archivePathFrame,
-  archivePathPoint,
-  archiveShelfPlacement,
-  resolveArchiveShelfClearance,
-  type ArchiveShelfPlacement,
-} from './libraryLayout'
+  cityArrivalShelfPlacement,
+  cityDistrictShelfPlacement,
+  type CityShelfPlacement,
+} from './libraryCityLayout'
 
 const DEFAULT_USERNAME = 'mikachu'
 const QUALITY: DreamQuality = 'cinematic'
@@ -46,7 +43,6 @@ const CATALOG_BOOKS_PER_SHELF = 9
 const DISTRICT_RENDERED_SHELF_LIMIT = 4
 const DISTRICT_VISIBLE_ARTICLE_CAPACITY =
   DISTRICT_RENDERED_SHELF_LIMIT * CATALOG_BOOKS_PER_SHELF
-const DISTRICT_SHELF_PAIR_OFFSETS = [-.68, .68] as const
 
 const SHELF_ACCENTS: Record<LibraryShelfKind, string> = {
   featured: '#8c7cff',
@@ -74,7 +70,7 @@ function makeShelf(
   title: string,
   subtitle: string,
   kind: LibraryShelfKind,
-  placement: ArchiveShelfPlacement,
+  placement: CityShelfPlacement,
   articles: DevArticleSummary[],
 ): LibraryShelf {
   return {
@@ -88,40 +84,6 @@ function makeShelf(
     pathBay: placement.pathBay,
     districtId: placement.districtId,
     articles,
-  }
-}
-
-function arrivalShelfPlacement(
-  id: string,
-  row: 0 | 1 | 2,
-  side: -1 | 1,
-): ArchiveShelfPlacement {
-  const rowBays = [-.18, .16, .5] as const
-  const laneDistances = [9.2, 10.35, 11.5] as const
-  const bay = rowBays[row]
-  const center = archivePathPoint(bay)
-  const frame = archivePathFrame(.15)
-  const laneDistance = laneDistances[row]
-
-  const world: [number, number, number] = [
-    center[0] + frame.normalX * side * laneDistance,
-    center[1] + .12,
-    center[2] + frame.normalZ * side * laneDistance,
-  ]
-
-  // Face all foyer shelves toward the same arrival-axis center instead of
-  // following the curve independently. This keeps Featured / My DEV /
-  // Creators readable and prevents them from visually hiding behind the
-  // FRONT PAGE district bookcases.
-  const inwardX = -frame.normalX * side
-  const inwardZ = -frame.normalZ * side
-  const yaw = Math.atan2(inwardX, inwardZ) + Math.PI
-
-  return {
-    world,
-    yaw,
-    pathBay: bay,
-    districtId: 'arrival',
   }
 }
 
@@ -757,11 +719,7 @@ export default function DevLibraryMap() {
         'Featured',
         'popular this week',
         'featured',
-        arrivalShelfPlacement(
-          'shelf:featured',
-          0,
-          -1,
-        ),
+        cityArrivalShelfPlacement(0),
         featured,
       ),
       makeShelf(
@@ -769,11 +727,7 @@ export default function DevLibraryMap() {
         'New',
         'freshly published',
         'latest',
-        arrivalShelfPlacement(
-          'shelf:new',
-          0,
-          1,
-        ),
+        cityArrivalShelfPlacement(1),
         latest,
       ),
       makeShelf(
@@ -783,11 +737,7 @@ export default function DevLibraryMap() {
           : 'My DEV',
         'creator shelf',
         'mine',
-        arrivalShelfPlacement(
-          'shelf:mine',
-          1,
-          -1,
-        ),
+        cityArrivalShelfPlacement(2),
         mine,
       ),
       makeShelf(
@@ -795,11 +745,7 @@ export default function DevLibraryMap() {
         'Topics',
         'choose a DEV tag',
         'topics',
-        arrivalShelfPlacement(
-          'shelf:topics',
-          1,
-          1,
-        ),
+        cityArrivalShelfPlacement(3),
         dynamicTitle?.startsWith('#') ? dynamicArticles : [],
       ),
       makeShelf(
@@ -807,11 +753,7 @@ export default function DevLibraryMap() {
         'Creators',
         'browse author shelves',
         'creators',
-        arrivalShelfPlacement(
-          'shelf:creators',
-          2,
-          -1,
-        ),
+        cityArrivalShelfPlacement(4),
         dynamicTitle?.startsWith('@')
           ? dynamicArticles
           : creatorPreview,
@@ -825,11 +767,7 @@ export default function DevLibraryMap() {
           'Search',
           query || 'search results',
           'search',
-          arrivalShelfPlacement(
-            'shelf:search',
-            2,
-            1,
-          ),
+          cityArrivalShelfPlacement(5),
           searchResults.slice(0, CATALOG_BOOKS_PER_SHELF),
         ),
       )
@@ -948,17 +886,6 @@ export default function DevLibraryMap() {
           offset,
           offset + CATALOG_BOOKS_PER_SHELF,
         )
-        const side: -1 | 1 =
-          localIndex % 2 === 0 ? -1 : 1
-        const pairIndex = Math.floor(localIndex / 2)
-        const bay =
-          district.bay +
-          (DISTRICT_SHELF_PAIR_OFFSETS[
-            Math.min(
-              pairIndex,
-              DISTRICT_SHELF_PAIR_OFFSETS.length - 1,
-            )
-          ] ?? 0)
         const shelfId =
           'shelf:catalog:' +
           district.id +
@@ -985,31 +912,10 @@ export default function DevLibraryMap() {
                 ' loaded'
               : ''),
           'catalog',
-          archiveShelfPlacement(
-            shelfId,
-            bay,
-            side,
-            {
-              // District bookcases are architecture, not debris: keep each
-              // pair level, mirrored, and square to the boulevard.
-              laneDistance:
-                archiveDistrictGridLaneOffset(
-                  districtIndex,
-                ) === 0
-                  ? 6.5
-                  : 5.15,
-              centerLateralOffset:
-                archiveDistrictGridLaneOffset(
-                  districtIndex,
-                ),
-              heightJitterScale: 0,
-              lateralJitterScale: 0,
-              alongJitterScale: 0,
-              lookAheadScale: 0,
-              yawJitterScale: 0,
-              orientationBay: district.bay,
-            },
-            districts,
+          cityDistrictShelfPlacement(
+            district,
+            districtIndex,
+            localIndex,
           ),
           shelfArticles,
         )
@@ -1019,28 +925,7 @@ export default function DevLibraryMap() {
       }
     })
 
-    const resolvedPlacements = resolveArchiveShelfClearance(
-      result.map((shelf) => ({
-        world: shelf.world,
-        yaw: shelf.yaw,
-        pathBay: shelf.pathBay,
-        districtId: shelf.districtId,
-      })),
-      districts,
-    )
-
-    return result.map((shelf, index) => {
-      const placement = resolvedPlacements[index]
-      if (!placement) return shelf
-
-      return {
-        ...shelf,
-        world: placement.world,
-        yaw: placement.yaw,
-        pathBay: placement.pathBay,
-        districtId: placement.districtId,
-      }
-    })
+    return result
   }, [
     bootstrap,
     catalog,
