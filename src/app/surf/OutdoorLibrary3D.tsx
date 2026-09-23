@@ -4,6 +4,7 @@ import {useEffect, useRef} from 'react'
 import * as THREE from 'three'
 import {FBXLoader} from 'three/examples/jsm/loaders/FBXLoader.js'
 import {GLTFLoader} from 'three/examples/jsm/loaders/GLTFLoader.js'
+import {DRACOLoader} from 'three/examples/jsm/loaders/DRACOLoader.js'
 import type {LibrarySection, SurfEdge, SurfNode} from './types'
 import styles from './surf.module.css'
 
@@ -1125,6 +1126,13 @@ export default function OutdoorLibrary3D({
 
     const loader = new FBXLoader()
     const gltfLoader = new GLTFLoader()
+    const dracoLoader = new DRACOLoader()
+    dracoLoader.setDecoderPath(
+      'https://www.gstatic.com/draco/versioned/decoders/1.5.7/',
+    )
+    dracoLoader.preload()
+    gltfLoader.setDRACOLoader(dracoLoader)
+
     let disposed = false
     const environmentRoots: THREE.Object3D[] = []
     const libraryRoots: THREE.Object3D[] = []
@@ -1297,27 +1305,43 @@ export default function OutdoorLibrary3D({
       }
     })
 
-    Promise.allSettled([
-      loadLibraryTemplate(LIBRARY_ASSETS.wallPanel, 4.7, 'height'),
-      loadLibraryTemplate(LIBRARY_ASSETS.wallCorner, 4.7, 'height'),
-      loadLibraryTemplate(LIBRARY_ASSETS.floorParquet, 6.2, 'span'),
-      loadLibraryTemplate(LIBRARY_ASSETS.stackShelf, 3.5, 'height'),
-      loadLibraryTemplate(LIBRARY_ASSETS.bookPacked, 2.45, 'span'),
-      loadLibraryTemplate(LIBRARY_ASSETS.bookLeaning, 2.35, 'span'),
-      loadLibraryTemplate(LIBRARY_ASSETS.chair, 1.05, 'height'),
-      loadLibraryTemplate(LIBRARY_ASSETS.issueDesk, 1.45, 'height'),
-      loadLibraryTemplate(LIBRARY_ASSETS.cardCatalogue, 1.85, 'height'),
-      loadLibraryTemplate(LIBRARY_ASSETS.displayCase, 1.45, 'height'),
-      loadLibraryTemplate(LIBRARY_ASSETS.periodicalRack, 1.75, 'height'),
-      loadLibraryTemplate(LIBRARY_ASSETS.pendantLight, 1.05, 'height'),
-      loadLibraryTemplate(LIBRARY_ASSETS.archedWindow, 3.25, 'height'),
-      loadLibraryTemplate(LIBRARY_ASSETS.readingRug, 3.8, 'span'),
-      loadLibraryTemplate(LIBRARY_ASSETS.rollingLadder, 2.8, 'height'),
-      loadLibraryTemplate(LIBRARY_ASSETS.floorLamp, 1.65, 'height'),
-      loadLibraryTemplate(LIBRARY_ASSETS.readingTable, 1.25, 'height'),
-      loadLibraryTemplate(LIBRARY_ASSETS.summerClouds, 13.5, 'span'),
-    ]).then((results) => {
+    const libraryAssetRequests = [
+      [LIBRARY_ASSETS.wallPanel, 4.7, 'height'],
+      [LIBRARY_ASSETS.wallCorner, 4.7, 'height'],
+      [LIBRARY_ASSETS.floorParquet, 6.2, 'span'],
+      [LIBRARY_ASSETS.stackShelf, 3.5, 'height'],
+      [LIBRARY_ASSETS.bookPacked, 2.45, 'span'],
+      [LIBRARY_ASSETS.bookLeaning, 2.35, 'span'],
+      [LIBRARY_ASSETS.chair, 1.05, 'height'],
+      [LIBRARY_ASSETS.issueDesk, 1.45, 'height'],
+      [LIBRARY_ASSETS.cardCatalogue, 1.85, 'height'],
+      [LIBRARY_ASSETS.displayCase, 1.45, 'height'],
+      [LIBRARY_ASSETS.periodicalRack, 1.75, 'height'],
+      [LIBRARY_ASSETS.pendantLight, 1.05, 'height'],
+      [LIBRARY_ASSETS.archedWindow, 3.25, 'height'],
+      [LIBRARY_ASSETS.readingRug, 3.8, 'span'],
+      [LIBRARY_ASSETS.rollingLadder, 2.8, 'height'],
+      [LIBRARY_ASSETS.floorLamp, 1.65, 'height'],
+      [LIBRARY_ASSETS.readingTable, 1.25, 'height'],
+      [LIBRARY_ASSETS.summerClouds, 13.5, 'span'],
+    ] as const
+
+    Promise.allSettled(
+      libraryAssetRequests.map(([path, target, mode]) =>
+        loadLibraryTemplate(path, target, mode),
+      ),
+    ).then((results) => {
       if (disposed) return
+
+      results.forEach((result, index) => {
+        if (result.status === 'rejected') {
+          console.error(
+            '[OutdoorLibrary3D] Failed to load library asset:',
+            libraryAssetRequests[index][0],
+            result.reason,
+          )
+        }
+      })
 
       const [
         wallPanel,
@@ -1340,6 +1364,13 @@ export default function OutdoorLibrary3D({
         summerClouds,
       ] = results.map((result) =>
         result.status === 'fulfilled' ? result.value : null,
+      )
+
+      const loadedCount = results.filter(
+        (result) => result.status === 'fulfilled',
+      ).length
+      console.info(
+        `[OutdoorLibrary3D] Loaded ${loadedCount}/${libraryAssetRequests.length} library assets`,
       )
 
       const halls = [
@@ -1926,6 +1957,7 @@ export default function OutdoorLibrary3D({
       libraryRoots.forEach((root) => scene.remove(root))
       importedGeometries.forEach((geometry) => geometry.dispose())
       importedMaterials.forEach((material) => material.dispose())
+      dracoLoader.dispose()
       geometries.forEach((geometry) => geometry.dispose())
       materials.forEach((material) => material.dispose())
       textures.forEach((texture) => texture.dispose())
