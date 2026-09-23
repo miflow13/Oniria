@@ -64,23 +64,23 @@ type NavigationTarget = {
 const TERRACE_COUNT = 4
 const TERRACE_RISE = 4
 const CAMERA_HEIGHT = 1.62
-const WORLD_NEAR_Z = 18
+const WORLD_NEAR_Z = 28
 const WORLD_FAR_Z = -250
-const WORLD_HALF_WIDTH = 14
+const WORLD_HALF_WIDTH = 46
 const PATH_HALF_WIDTH = 4.25
 const SHELF_X = 7.1
 const TERRACE_SPAWN_Z = [9, -79, -141, -203]
 const TERRACE_RAMP_START = [-64, -126, -188]
 const TERRACE_RAMP_END = [-72, -134, -196]
 
-const SECTION_Z: Record<LibrarySection, number> = {
-  atrium: 8,
-  featured: -8,
-  latest: -19,
-  topics: -29,
-  creators: -38,
-  search: -47,
-  archive: -56,
+const LIBRARY_ZONES: Record<LibrarySection, THREE.Vector3> = {
+  atrium: new THREE.Vector3(0, 0, 8),
+  featured: new THREE.Vector3(24, 0, -7),
+  latest: new THREE.Vector3(3, 0, -24),
+  topics: new THREE.Vector3(-24, 0, -7),
+  creators: new THREE.Vector3(-23, 0, -31),
+  search: new THREE.Vector3(22, 0, -31),
+  archive: new THREE.Vector3(0, 4, -96),
 }
 
 const SECTION_ORDER: LibrarySection[] = [
@@ -168,12 +168,13 @@ function groundHeightAtZ(z: number) {
   return terraceBaseHeight(terraceForZ(z))
 }
 
-function sectionForPosition(z: number, floor: number): LibrarySection {
+function sectionForPosition(x: number, z: number, floor: number): LibrarySection {
   if (floor > 0) return 'archive'
   let best: LibrarySection = 'atrium'
   let bestDistance = Number.POSITIVE_INFINITY
   for (const section of SECTION_ORDER) {
-    const distance = Math.abs(z - SECTION_Z[section])
+    const anchor = LIBRARY_ZONES[section]
+    const distance = Math.hypot(x - anchor.x, z - anchor.z)
     if (distance < bestDistance) {
       bestDistance = distance
       best = section
@@ -266,7 +267,7 @@ function buildLayout(nodes: SurfNode[]) {
 
     if (node.kind === 'section') {
       layout.set(node.id, {
-        position: new THREE.Vector3(0, baseY + 1.55, SECTION_Z[section]),
+        position: LIBRARY_ZONES[section].clone().setY(baseY + 1.55),
         rotationY: 0,
         floor,
         side: 0,
@@ -279,9 +280,9 @@ function buildLayout(nodes: SurfNode[]) {
       const index = Math.max(0, peers.findIndex((candidate) => candidate.id === node.id))
       const side: -1 | 1 = index % 2 === 0 ? -1 : 1
       const row = Math.floor(index / 2)
-      const anchorZ = floor === 0 ? SECTION_Z[section] : TERRACE_SPAWN_Z[floor]
+      const anchor = floor === 0 ? LIBRARY_ZONES[section] : new THREE.Vector3(0, baseY, TERRACE_SPAWN_Z[floor])
       layout.set(node.id, {
-        position: new THREE.Vector3(side * 3.55, baseY + 1.35, anchorZ - 2.8 - row * 2.15),
+        position: new THREE.Vector3(anchor.x + side * 3.55, baseY + 1.35, anchor.z - 2.8 - row * 2.15),
         rotationY: side < 0 ? Math.PI / 2 : -Math.PI / 2,
         floor,
         side,
@@ -296,10 +297,12 @@ function buildLayout(nodes: SurfNode[]) {
     const row = local % 4
     const slot = Math.floor(local / 4) % 10
     const bay = Math.floor(local / 40)
-    const sectionAnchor = floor === 0 ? SECTION_Z[section] - 2.6 : TERRACE_SPAWN_Z[floor] - 6
+    const anchor = floor === 0 ? LIBRARY_ZONES[section] : new THREE.Vector3(0, baseY, TERRACE_SPAWN_Z[floor])
+    const sectionAnchor = anchor.z - 2.6
     const bayCenterZ = sectionAnchor - bay * 5.6
     const z = bayCenterZ + 1.72 - slot * .38
-    const x = side * (SHELF_X - .42)
+    const roomShelfX = floor === 0 ? 5.7 : SHELF_X
+    const x = anchor.x + side * (roomShelfX - .42)
     const shelfKey = `${section}:f${floor}:s${side}:b${bay}`
 
     layout.set(node.id, {
@@ -308,7 +311,7 @@ function buildLayout(nodes: SurfNode[]) {
       floor,
       side,
       shelfKey,
-      shelfCenter: new THREE.Vector3(side * SHELF_X, baseY + 1.6, bayCenterZ),
+      shelfCenter: new THREE.Vector3(anchor.x + side * roomShelfX, baseY + 1.6, bayCenterZ),
     })
   })
 
@@ -905,10 +908,77 @@ export default function OutdoorLibrary3D({
       }
     }
 
-    buildLibraryHall({floor: 0, centerZ: -24, depth: 78, grand: true})
-    buildLibraryHall({floor: 1, centerZ: -99, depth: 54})
-    buildLibraryHall({floor: 2, centerZ: -161, depth: 54})
-    buildLibraryHall({floor: 3, centerZ: -223, depth: 50})
+    type LibraryRoom = {
+      key: string
+      floor: number
+      x: number
+      z: number
+      width: number
+      depth: number
+      grand?: boolean
+      doors: Array<'north' | 'south' | 'east' | 'west'>
+    }
+
+    // The complex is deliberately composed as rooms around outdoor courts,
+    // rather than one axis of ever-longer naves. Each room owns its openings;
+    // collision follows the structural wall segments, so doors stay walkable.
+    const libraryRooms: LibraryRoom[] = [
+      {key: 'grand-hall', floor: 0, x: 0, z: 7, width: 28, depth: 23, grand: true, doors: ['north', 'south', 'east', 'west']},
+      {key: 'featured-gallery', floor: 0, x: 24, z: -7, width: 18, depth: 18, doors: ['west', 'south']},
+      {key: 'periodicals', floor: 0, x: 3, z: -25, width: 19, depth: 17, doors: ['north', 'east', 'west']},
+      {key: 'reference', floor: 0, x: -24, z: -7, width: 18, depth: 18, doors: ['east', 'south']},
+      {key: 'creator-study', floor: 0, x: -23, z: -31, width: 18, depth: 18, doors: ['north', 'east']},
+      {key: 'search-room', floor: 0, x: 22, z: -31, width: 18, depth: 18, doors: ['north', 'west']},
+      {key: 'archive-court', floor: 1, x: 0, z: -96, width: 27, depth: 25, grand: true, doors: ['north', 'south', 'east', 'west']},
+      {key: 'archive-east', floor: 1, x: 25, z: -103, width: 17, depth: 30, doors: ['west', 'south']},
+      {key: 'research-stacks', floor: 2, x: -10, z: -158, width: 25, depth: 28, doors: ['north', 'east', 'west']},
+      {key: 'archive-west', floor: 2, x: -33, z: -164, width: 16, depth: 25, doors: ['east', 'south']},
+      {key: 'deep-stacks', floor: 3, x: 8, z: -220, width: 28, depth: 31, grand: true, doors: ['north', 'west']},
+      {key: 'deep-annex', floor: 3, x: -25, z: -226, width: 17, depth: 25, doors: ['east', 'north']},
+    ]
+
+    const buildLibraryRoom = (room: LibraryRoom) => {
+      const baseY = terraceBaseHeight(room.floor)
+      const wallHeight = room.grand ? 7.6 : 6.2
+      const roofY = baseY + wallHeight + .85
+      const halfWidth = room.width / 2
+      const halfDepth = room.depth / 2
+      const opening = 4.8
+      const addWall = (x: number, z: number, width: number, depth: number) => {
+        addLibraryBox(libraryStoneMaterial, x, baseY + wallHeight / 2, z, width, wallHeight, depth)
+        addLibraryCollider(x, z, width, depth)
+      }
+      const addNorthSouthWall = (z: number, open: boolean) => {
+        if (!open) return addWall(room.x, z, room.width, .56)
+        const span = (room.width - opening) / 2
+        addWall(room.x - (opening + span) / 2, z, span, .56)
+        addWall(room.x + (opening + span) / 2, z, span, .56)
+      }
+      const addEastWestWall = (x: number, open: boolean) => {
+        if (!open) return addWall(x, room.z, .56, room.depth)
+        const span = (room.depth - opening) / 2
+        addWall(x, room.z - (opening + span) / 2, .56, span)
+        addWall(x, room.z + (opening + span) / 2, .56, span)
+      }
+
+      addLibraryBox(libraryStoneDarkMaterial, room.x, baseY - .17, room.z, room.width + .7, .34, room.depth + .7)
+      addNorthSouthWall(room.z + halfDepth, room.doors.includes('north'))
+      addNorthSouthWall(room.z - halfDepth, room.doors.includes('south'))
+      addEastWestWall(room.x - halfWidth, room.doors.includes('west'))
+      addEastWestWall(room.x + halfWidth, room.doors.includes('east'))
+
+      // Varied room-by-room roof volumes create a readable silhouette from
+      // the landscape while preserving clerestory light within each chamber.
+      addLibraryBox(libraryRoofMaterial, room.x - room.width * .22, roofY, room.z, room.width * .58, .48, room.depth + .9, room.grand ? .34 : .28)
+      addLibraryBox(libraryRoofMaterial, room.x + room.width * .22, roofY, room.z, room.width * .58, .48, room.depth + .9, room.grand ? -.34 : -.28)
+      addLibraryBox(libraryGoldMaterial, room.x, roofY + .7, room.z, .26, .26, room.depth * .72)
+
+      const light = new THREE.PointLight(room.grand ? 0xffd694 : 0xe9dfb6, room.grand ? 3.7 : 2.3, 19, 2)
+      light.position.set(room.x, baseY + wallHeight - 1.2, room.z)
+      scene.add(light)
+    }
+
+    libraryRooms.forEach(buildLibraryRoom)
 
     const terraceSegments = [
       {floor: 0, z: -23, depth: 86},
@@ -919,18 +989,18 @@ export default function OutdoorLibrary3D({
 
     terraceSegments.forEach(({floor, z, depth}) => {
       const ground = new THREE.Mesh(unitBox, grassMaterial)
-      ground.scale.set(34, .72, depth)
+      ground.scale.set(104, .72, depth)
       ground.position.set(0, terraceBaseHeight(floor) - .38, z)
       ground.receiveShadow = true
       scene.add(ground)
 
       const leftCliff = new THREE.Mesh(unitBox, cliffMaterial)
       leftCliff.scale.set(4.8, 1.8 + floor * .5, depth)
-      leftCliff.position.set(-19.2, terraceBaseHeight(floor) - 1.05, z)
+      leftCliff.position.set(-53, terraceBaseHeight(floor) - 1.05, z)
       leftCliff.receiveShadow = true
       scene.add(leftCliff)
       const rightCliff = leftCliff.clone()
-      rightCliff.position.x = 19.2
+      rightCliff.position.x = 53
       scene.add(rightCliff)
     })
 
@@ -952,6 +1022,21 @@ export default function OutdoorLibrary3D({
     mainPath.position.set(0, .05, -116)
     mainPath.receiveShadow = true
     scene.add(mainPath)
+
+    // Garden walks make the public rooms legible as a campus: each branch
+    // leaves the grand hall and crosses open air before entering its chamber.
+    const gardenWalks = [
+      [LIBRARY_ZONES.atrium, LIBRARY_ZONES.featured],
+      [LIBRARY_ZONES.atrium, LIBRARY_ZONES.topics],
+      [LIBRARY_ZONES.atrium, LIBRARY_ZONES.latest],
+      [LIBRARY_ZONES.latest, LIBRARY_ZONES.creators],
+      [LIBRARY_ZONES.latest, LIBRARY_ZONES.search],
+    ] as const
+    gardenWalks.forEach(([from, to]) => {
+      const start = from.clone().setY(.08)
+      const end = to.clone().setY(.08)
+      makePathSegment(scene, start, end, 3.2, pathMaterial, unitBox)
+    })
 
     for (let floor = 1; floor < TERRACE_COUNT; floor += 1) {
       const terracePath = new THREE.Mesh(unitBox, pathMaterial)
@@ -1276,12 +1361,20 @@ export default function OutdoorLibrary3D({
       const addRoot = (root: THREE.Object3D | null) => {
         if (root) environmentRoots.push(root)
       }
+      const canPlaceLandscape = (x: number, z: number) =>
+        !libraryRooms.some(
+          (room) =>
+            Math.abs(x - room.x) < room.width / 2 + 3 &&
+            Math.abs(z - room.z) < room.depth / 2 + 3,
+        )
 
       if (terrainA) {
         for (let index = 0; index < 16; index += 1) {
           const side = index % 2 === 0 ? -1 : 1
           const z = 10 - Math.floor(index / 2) * 33
-          const clone = cloneAt(terrainA, scene, side * (15.5 + seeded(index, 11) * 5), z, .82 + seeded(index, 12) * .36, seeded(index, 13) * Math.PI * 2, -.22)
+          const x = side * (15.5 + seeded(index, 11) * 5)
+          if (!canPlaceLandscape(x, z)) continue
+          const clone = cloneAt(terrainA, scene, x, z, .82 + seeded(index, 12) * .36, seeded(index, 13) * Math.PI * 2, -.22)
           addRoot(clone)
         }
       }
@@ -1290,7 +1383,9 @@ export default function OutdoorLibrary3D({
         for (let index = 0; index < 10; index += 1) {
           const side = index % 2 === 0 ? -1 : 1
           const z = -6 - Math.floor(index / 2) * 52
-          const clone = cloneAt(terrainB, scene, side * (24 + seeded(index, 14) * 8), z, .9 + seeded(index, 15) * .42, seeded(index, 16) * Math.PI * 2, -1.2)
+          const x = side * (24 + seeded(index, 14) * 8)
+          if (!canPlaceLandscape(x, z)) continue
+          const clone = cloneAt(terrainB, scene, x, z, .9 + seeded(index, 15) * .42, seeded(index, 16) * Math.PI * 2, -1.2)
           addRoot(clone)
         }
       }
@@ -1301,6 +1396,7 @@ export default function OutdoorLibrary3D({
           const z = WORLD_NEAR_Z - 4 - seeded(index, 21) * 258
           const side = index % 2 === 0 ? -1 : 1
           const x = side * (10.8 + seeded(index, 22) * 14)
+          if (!canPlaceLandscape(x, z)) continue
           const template = treeTemplates[index % treeTemplates.length]
           const clone = cloneAt(template, scene, x, z, .72 + seeded(index, 23) * .62, seeded(index, 24) * Math.PI * 2)
           addRoot(clone)
@@ -1312,6 +1408,7 @@ export default function OutdoorLibrary3D({
           const z = WORLD_NEAR_Z - 8 - seeded(index, 31) * 250
           const side = index % 2 === 0 ? -1 : 1
           const x = side * (8.9 + seeded(index, 32) * 6.5)
+          if (!canPlaceLandscape(x, z)) continue
           const clone = cloneAt(bush, scene, x, z, .65 + seeded(index, 33) * .65, seeded(index, 34) * Math.PI * 2)
           addRoot(clone)
         }
@@ -1322,6 +1419,7 @@ export default function OutdoorLibrary3D({
           const z = WORLD_NEAR_Z - seeded(index, 41) * 260
           const side = index % 2 === 0 ? -1 : 1
           const x = side * (9 + seeded(index, 42) * 9)
+          if (!canPlaceLandscape(x, z)) continue
           const clone = cloneAt(rock, scene, x, z, .55 + seeded(index, 43) * 1.05, seeded(index, 44) * Math.PI * 2)
           addRoot(clone)
         }
@@ -1332,6 +1430,7 @@ export default function OutdoorLibrary3D({
           const z = 2 - seeded(index, 51) * 238
           const side = index % 2 === 0 ? -1 : 1
           const x = side * (10 + seeded(index, 52) * 5)
+          if (!canPlaceLandscape(x, z)) continue
           const clone = cloneAt(log, scene, x, z, .75 + seeded(index, 53) * .55, seeded(index, 54) * Math.PI * 2)
           addRoot(clone)
         }
@@ -1415,17 +1514,9 @@ export default function OutdoorLibrary3D({
         `[OutdoorLibrary3D] Loaded ${loadedCount}/${libraryAssetRequests.length} library assets`,
       )
 
-      const halls = [
-        {floor: 0, centerZ: -24, depth: 78, width: 24.6, grand: true},
-        {floor: 1, centerZ: -99, depth: 54, width: 23.2, grand: false},
-        {floor: 2, centerZ: -161, depth: 54, width: 23.2, grand: false},
-        {floor: 3, centerZ: -223, depth: 50, width: 23.2, grand: false},
-      ] as const
-
-      // Skin the procedural halls with the authored kit. The primitive shell
-      // still handles collision and silhouette; these modules provide the
-      // readable architecture and material detail.
-      halls.forEach(({floor, centerZ, depth, width}) => {
+      // Skin each distinct chamber with authored modules. The primitive shell
+      // owns collision; this layer supplies the architectural detail players see.
+      libraryRooms.forEach(({floor, x: centerX, z: centerZ, depth, width, doors}) => {
         const baseY = terraceBaseHeight(floor)
         const halfWidth = width / 2
         const wallX = halfWidth - .62
@@ -1435,7 +1526,7 @@ export default function OutdoorLibrary3D({
         if (floorParquet) {
           for (let z = frontZ - 3.1; z > backZ + 2.7; z -= 6.05) {
             for (const x of [-6.05, 0, 6.05]) {
-              placeLibraryAsset(floorParquet, x, baseY + .015, z)
+              placeLibraryAsset(floorParquet, centerX + x, baseY + .015, z)
             }
           }
         }
@@ -1444,13 +1535,20 @@ export default function OutdoorLibrary3D({
           let bay = 0
           for (let z = frontZ - 4.2; z > backZ + 3.8; z -= 5.65) {
             for (const side of [-1, 1] as const) {
+              const doorway = side < 0 ? 'west' : 'east'
+              if (
+                doors.includes(doorway) &&
+                Math.abs(z - centerZ) < 3.2
+              ) {
+                continue
+              }
               const rotationY = side < 0 ? Math.PI / 2 : -Math.PI / 2
               const useWindow = bay % 3 === 1 && Boolean(archedWindow)
               const template = useWindow ? archedWindow : wallPanel
               if (template) {
                 placeLibraryAsset(
                   template,
-                  side * wallX,
+                  centerX + side * wallX,
                   baseY + .08,
                   z,
                   1,
@@ -1465,10 +1563,10 @@ export default function OutdoorLibrary3D({
         if (wallCorner) {
           const cornerInset = .12
           const corners = [
-            {x: -wallX, z: frontZ - cornerInset, r: Math.PI / 2},
-            {x: wallX, z: frontZ - cornerInset, r: Math.PI},
-            {x: wallX, z: backZ + cornerInset, r: -Math.PI / 2},
-            {x: -wallX, z: backZ + cornerInset, r: 0},
+            {x: centerX - wallX, z: frontZ - cornerInset, r: Math.PI / 2},
+            {x: centerX + wallX, z: frontZ - cornerInset, r: Math.PI},
+            {x: centerX + wallX, z: backZ + cornerInset, r: -Math.PI / 2},
+            {x: centerX - wallX, z: backZ + cornerInset, r: 0},
           ]
           corners.forEach((corner) =>
             placeLibraryAsset(
@@ -1486,7 +1584,7 @@ export default function OutdoorLibrary3D({
           for (let z = frontZ - 7; z > backZ + 5; z -= 10.5) {
             placeLibraryAsset(
               pendantLight,
-              0,
+              centerX,
               baseY + (floor === 0 ? 6.25 : 5.8),
               z,
             )
@@ -1499,7 +1597,7 @@ export default function OutdoorLibrary3D({
           let stackIndex = 0
           for (let z = frontZ - 8; z > backZ + 7; z -= 10.2) {
             for (const side of [-1, 1] as const) {
-              const x = side * 5.9
+              const x = centerX + side * 5.9
               const rotationY = side < 0 ? Math.PI : 0
               placeLibraryAsset(stackShelf, x, baseY + .04, z, 1, rotationY)
 
@@ -1558,9 +1656,9 @@ export default function OutdoorLibrary3D({
       if (displayCase) {
         placeLibraryAsset(
           displayCase,
-          5.35,
+          24,
           publicY + .04,
-          -7.2,
+          -7,
           1,
           -Math.PI / 2,
           0,
@@ -1570,9 +1668,9 @@ export default function OutdoorLibrary3D({
       if (periodicalRack) {
         placeLibraryAsset(
           periodicalRack,
-          5.45,
+          3,
           publicY + .04,
-          -18.6,
+          -24,
           1,
           -Math.PI / 2,
           0,
@@ -1582,9 +1680,9 @@ export default function OutdoorLibrary3D({
       if (cardCatalogue) {
         placeLibraryAsset(
           cardCatalogue,
-          5.25,
+          -24,
           publicY + .04,
-          -29.2,
+          -7,
           .95,
           -Math.PI / 2,
           0,
@@ -1592,11 +1690,11 @@ export default function OutdoorLibrary3D({
         )
       }
 
-      // Two furnished reading rooms keep the central nave navigable while
-      // making the building feel genuinely occupied.
+      // These are quiet, furnished rooms off the public circulation rather
+      // than furniture squeezed into the main route.
       const readingZones = [
-        {x: -2.75, z: -12.6, rotation: .08},
-        {x: 2.75, z: -39.2, rotation: -Math.PI + .08},
+        {x: 3, z: -25, rotation: .08},
+        {x: -23, z: -31, rotation: -Math.PI + .08},
       ]
       readingZones.forEach((zone, zoneIndex) => {
         if (readingRug) {
@@ -1648,15 +1746,15 @@ export default function OutdoorLibrary3D({
         }
       })
 
-      // A few decorative stack islands in the grand hall imply more archive
-      // depth without interfering with the actual article shelves on the wall.
+      // A small stack island gives the entry hall depth without competing with
+      // the dedicated archive chambers farther up the terraces.
       if (stackShelf) {
-        for (const z of [-51.5, -57.4]) {
+        for (const z of [2, 12]) {
           for (const x of [-4.9, 4.9]) {
             const side = x < 0 ? -1 : 1
             const rotationY = side < 0 ? Math.PI : 0
             placeLibraryAsset(stackShelf, x, publicY + .04, z, .96, rotationY)
-            const filler = z < -55 ? bookLeaning : bookPacked
+            const filler = z > 8 ? bookLeaning : bookPacked
             if (filler) {
               placeLibraryAsset(
                 filler,
@@ -1719,7 +1817,8 @@ export default function OutdoorLibrary3D({
       const target = placement.position.clone()
       const side = placement.side
       if (node.kind === 'article' && side !== 0) {
-        target.x = side * 3.7
+        // Article shelves are anchored to their room, not the world origin.
+        target.x = placement.position.x - side * 3
       } else {
         target.z += 2.1
       }
@@ -1927,7 +2026,7 @@ export default function OutdoorLibrary3D({
         currentFloorRef.current = terrace
         floorChangeRef.current(terrace)
       }
-      const section = sectionForPosition(camera.position.z, terrace)
+      const section = sectionForPosition(camera.position.x, camera.position.z, terrace)
       if (section !== previousSection) {
         previousSection = section
         zoneRef.current(section)
