@@ -3,6 +3,7 @@
 import {useEffect, useRef} from 'react'
 import * as THREE from 'three'
 import {FBXLoader} from 'three/examples/jsm/loaders/FBXLoader.js'
+import {GLTFLoader} from 'three/examples/jsm/loaders/GLTFLoader.js'
 import type {LibrarySection, SurfEdge, SurfNode} from './types'
 import styles from './surf.module.css'
 
@@ -117,6 +118,27 @@ const PACK_ASSETS = {
   rock: '/assets/lowpoly-environment/Rock_1.fbx',
   mountain: '/assets/lowpoly-environment/Mounting_3.fbx',
   log: '/assets/lowpoly-environment/Log_1.fbx',
+} as const
+
+const LIBRARY_ASSETS = {
+  wallPanel: '/assets/library-kit/library-wall-panel.glb',
+  wallCorner: '/assets/library-kit/library-wall-corner.glb',
+  floorParquet: '/assets/library-kit/library-floor-parquet.glb',
+  stackShelf: '/assets/library-kit/stack-shelf.glb',
+  bookPacked: '/assets/library-kit/book-row-packed.glb',
+  bookLeaning: '/assets/library-kit/book-row-leaning.glb',
+  chair: '/assets/library-kit/library-chair.glb',
+  issueDesk: '/assets/library-kit/issue-desk.glb',
+  cardCatalogue: '/assets/library-kit/card-catalogue.glb',
+  displayCase: '/assets/library-kit/display-case.glb',
+  periodicalRack: '/assets/library-kit/periodical-rack.glb',
+  pendantLight: '/assets/library-kit/library-pendant-light.glb',
+  archedWindow: '/assets/library-kit/arched-window.glb',
+  readingRug: '/assets/library-kit/reading-rug.glb',
+  rollingLadder: '/assets/library-kit/rolling-ladder.glb',
+  floorLamp: '/assets/library-kit/library-floor-lamp.glb',
+  readingTable: '/assets/library-kit/reading-table.glb',
+  summerClouds: '/assets/library-kit/summer-clouds.glb',
 } as const
 
 function terraceBaseHeight(floor: number) {
@@ -1102,14 +1124,88 @@ export default function OutdoorLibrary3D({
     scene.add(fireflies)
 
     const loader = new FBXLoader()
+    const gltfLoader = new GLTFLoader()
     let disposed = false
     const environmentRoots: THREE.Object3D[] = []
+    const libraryRoots: THREE.Object3D[] = []
+    const movingClouds: Array<{
+      root: THREE.Object3D
+      speed: number
+      minX: number
+      maxX: number
+    }> = []
+    const importedGeometries = new Set<THREE.BufferGeometry>()
+    const importedMaterials = new Set<THREE.Material>()
 
-    const loadTemplate = async (path: string, target: number, mode: 'height' | 'span') => {
+    const trackImportedResources = (root: THREE.Object3D) => {
+      root.traverse((child) => {
+        if (!(child instanceof THREE.Mesh)) return
+        importedGeometries.add(child.geometry)
+        const source = child.material
+        const childMaterials = Array.isArray(source) ? source : [source]
+        childMaterials.forEach((material) => importedMaterials.add(material))
+      })
+    }
+
+    const loadTemplate = async (
+      path: string,
+      target: number,
+      mode: 'height' | 'span',
+    ) => {
       const group = await loader.loadAsync(path)
       fitTemplate(group, target, mode)
       markEnvironment(group)
+      trackImportedResources(group)
       return group
+    }
+
+    const loadLibraryTemplate = async (
+      path: string,
+      target: number,
+      mode: 'height' | 'span',
+    ) => {
+      const gltf = await gltfLoader.loadAsync(path)
+      const group = gltf.scene
+      fitTemplate(group, target, mode)
+      group.traverse((child) => {
+        if (!(child instanceof THREE.Mesh)) return
+        child.castShadow = true
+        child.receiveShadow = true
+        child.frustumCulled = true
+      })
+      trackImportedResources(group)
+      return group
+    }
+
+    const placeLibraryAsset = (
+      template: THREE.Group,
+      x: number,
+      y: number,
+      z: number,
+      scale = 1,
+      rotationY = 0,
+      rotationX = 0,
+      nodeId?: string,
+    ) => {
+      const clone = template.clone(true)
+      clone.position.x += x
+      clone.position.y += y
+      clone.position.z += z
+      clone.scale.multiplyScalar(scale)
+      clone.rotation.y += rotationY
+      clone.rotation.x += rotationX
+      scene.add(clone)
+      libraryRoots.push(clone)
+
+      if (nodeId && nodeById.has(nodeId)) {
+        clone.traverse((child) => {
+          if (!(child instanceof THREE.Mesh)) return
+          child.userData.nodeId = nodeId
+          interactive.push(child)
+        })
+      }
+
+      return clone
     }
 
     Promise.allSettled([
@@ -1197,6 +1293,333 @@ export default function OutdoorLibrary3D({
           const z = 15 - Math.floor(index / 2) * 62
           const clone = cloneAt(mountain, scene, side * (43 + seeded(index, 61) * 18), z, .9 + seeded(index, 62) * .55, seeded(index, 63) * Math.PI * 2, -4.5)
           addRoot(clone)
+        }
+      }
+    })
+
+    Promise.allSettled([
+      loadLibraryTemplate(LIBRARY_ASSETS.wallPanel, 4.7, 'height'),
+      loadLibraryTemplate(LIBRARY_ASSETS.wallCorner, 4.7, 'height'),
+      loadLibraryTemplate(LIBRARY_ASSETS.floorParquet, 6.2, 'span'),
+      loadLibraryTemplate(LIBRARY_ASSETS.stackShelf, 3.5, 'height'),
+      loadLibraryTemplate(LIBRARY_ASSETS.bookPacked, 2.45, 'span'),
+      loadLibraryTemplate(LIBRARY_ASSETS.bookLeaning, 2.35, 'span'),
+      loadLibraryTemplate(LIBRARY_ASSETS.chair, 1.05, 'height'),
+      loadLibraryTemplate(LIBRARY_ASSETS.issueDesk, 1.45, 'height'),
+      loadLibraryTemplate(LIBRARY_ASSETS.cardCatalogue, 1.85, 'height'),
+      loadLibraryTemplate(LIBRARY_ASSETS.displayCase, 1.45, 'height'),
+      loadLibraryTemplate(LIBRARY_ASSETS.periodicalRack, 1.75, 'height'),
+      loadLibraryTemplate(LIBRARY_ASSETS.pendantLight, 1.05, 'height'),
+      loadLibraryTemplate(LIBRARY_ASSETS.archedWindow, 3.25, 'height'),
+      loadLibraryTemplate(LIBRARY_ASSETS.readingRug, 3.8, 'span'),
+      loadLibraryTemplate(LIBRARY_ASSETS.rollingLadder, 2.8, 'height'),
+      loadLibraryTemplate(LIBRARY_ASSETS.floorLamp, 1.65, 'height'),
+      loadLibraryTemplate(LIBRARY_ASSETS.readingTable, 1.25, 'height'),
+      loadLibraryTemplate(LIBRARY_ASSETS.summerClouds, 13.5, 'span'),
+    ]).then((results) => {
+      if (disposed) return
+
+      const [
+        wallPanel,
+        wallCorner,
+        floorParquet,
+        stackShelf,
+        bookPacked,
+        bookLeaning,
+        chair,
+        issueDesk,
+        cardCatalogue,
+        displayCase,
+        periodicalRack,
+        pendantLight,
+        archedWindow,
+        readingRug,
+        rollingLadder,
+        floorLamp,
+        readingTable,
+        summerClouds,
+      ] = results.map((result) =>
+        result.status === 'fulfilled' ? result.value : null,
+      )
+
+      const halls = [
+        {floor: 0, centerZ: -24, depth: 78, width: 24.6, grand: true},
+        {floor: 1, centerZ: -99, depth: 54, width: 23.2, grand: false},
+        {floor: 2, centerZ: -161, depth: 54, width: 23.2, grand: false},
+        {floor: 3, centerZ: -223, depth: 50, width: 23.2, grand: false},
+      ] as const
+
+      // Skin the procedural halls with the authored kit. The primitive shell
+      // still handles collision and silhouette; these modules provide the
+      // readable architecture and material detail.
+      halls.forEach(({floor, centerZ, depth, width}) => {
+        const baseY = terraceBaseHeight(floor)
+        const halfWidth = width / 2
+        const wallX = halfWidth - .62
+        const frontZ = centerZ + depth / 2
+        const backZ = centerZ - depth / 2
+
+        if (floorParquet) {
+          for (let z = frontZ - 3.1; z > backZ + 2.7; z -= 6.05) {
+            for (const x of [-6.05, 0, 6.05]) {
+              placeLibraryAsset(floorParquet, x, baseY + .015, z)
+            }
+          }
+        }
+
+        if (wallPanel || archedWindow) {
+          let bay = 0
+          for (let z = frontZ - 4.2; z > backZ + 3.8; z -= 5.65) {
+            for (const side of [-1, 1] as const) {
+              const rotationY = side < 0 ? Math.PI / 2 : -Math.PI / 2
+              const useWindow = bay % 3 === 1 && Boolean(archedWindow)
+              const template = useWindow ? archedWindow : wallPanel
+              if (template) {
+                placeLibraryAsset(
+                  template,
+                  side * wallX,
+                  baseY + .08,
+                  z,
+                  1,
+                  rotationY,
+                )
+              }
+            }
+            bay += 1
+          }
+        }
+
+        if (wallCorner) {
+          const cornerInset = .12
+          const corners = [
+            {x: -wallX, z: frontZ - cornerInset, r: Math.PI / 2},
+            {x: wallX, z: frontZ - cornerInset, r: Math.PI},
+            {x: wallX, z: backZ + cornerInset, r: -Math.PI / 2},
+            {x: -wallX, z: backZ + cornerInset, r: 0},
+          ]
+          corners.forEach((corner) =>
+            placeLibraryAsset(
+              wallCorner,
+              corner.x,
+              baseY + .08,
+              corner.z,
+              1,
+              corner.r,
+            ),
+          )
+        }
+
+        if (pendantLight) {
+          for (let z = frontZ - 7; z > backZ + 5; z -= 10.5) {
+            placeLibraryAsset(
+              pendantLight,
+              0,
+              baseY + (floor === 0 ? 6.25 : 5.8),
+              z,
+            )
+          }
+        }
+
+        // Archive terraces become much denser than the public hall, with
+        // free-standing stack rows, ladders, and visible filler books.
+        if (floor > 0 && stackShelf) {
+          let stackIndex = 0
+          for (let z = frontZ - 8; z > backZ + 7; z -= 10.2) {
+            for (const side of [-1, 1] as const) {
+              const x = side * 5.9
+              const rotationY = side < 0 ? Math.PI : 0
+              placeLibraryAsset(stackShelf, x, baseY + .04, z, 1, rotationY)
+
+              const filler = stackIndex % 2 === 0 ? bookPacked : bookLeaning
+              if (filler) {
+                placeLibraryAsset(
+                  filler,
+                  x - side * .2,
+                  baseY + 1.08,
+                  z,
+                  .88,
+                  rotationY,
+                )
+                placeLibraryAsset(
+                  filler,
+                  x - side * .2,
+                  baseY + 1.78,
+                  z + .08,
+                  .82,
+                  rotationY,
+                )
+              }
+
+              if (rollingLadder && stackIndex % 3 === 1) {
+                placeLibraryAsset(
+                  rollingLadder,
+                  x - side * .85,
+                  baseY + .03,
+                  z + 1.25,
+                  .9,
+                  rotationY,
+                )
+              }
+              stackIndex += 1
+            }
+          }
+        }
+      })
+
+      // The front hall now has distinct functional zones. These props share
+      // the same node ids as the UI landmarks, so E / click on the objects
+      // opens the corresponding part of the DEV library.
+      const publicY = terraceBaseHeight(0)
+      if (issueDesk) {
+        placeLibraryAsset(
+          issueDesk,
+          -5.1,
+          publicY + .04,
+          5.6,
+          1,
+          Math.PI / 2,
+          0,
+          'dev-home',
+        )
+      }
+      if (displayCase) {
+        placeLibraryAsset(
+          displayCase,
+          5.35,
+          publicY + .04,
+          -7.2,
+          1,
+          -Math.PI / 2,
+          0,
+          'section:featured',
+        )
+      }
+      if (periodicalRack) {
+        placeLibraryAsset(
+          periodicalRack,
+          5.45,
+          publicY + .04,
+          -18.6,
+          1,
+          -Math.PI / 2,
+          0,
+          'section:latest',
+        )
+      }
+      if (cardCatalogue) {
+        placeLibraryAsset(
+          cardCatalogue,
+          5.25,
+          publicY + .04,
+          -29.2,
+          .95,
+          -Math.PI / 2,
+          0,
+          'section:topics',
+        )
+      }
+
+      // Two furnished reading rooms keep the central nave navigable while
+      // making the building feel genuinely occupied.
+      const readingZones = [
+        {x: -2.75, z: -12.6, rotation: .08},
+        {x: 2.75, z: -39.2, rotation: -Math.PI + .08},
+      ]
+      readingZones.forEach((zone, zoneIndex) => {
+        if (readingRug) {
+          placeLibraryAsset(
+            readingRug,
+            zone.x,
+            publicY + .025,
+            zone.z,
+            .92,
+            zone.rotation,
+          )
+        }
+        if (readingTable) {
+          placeLibraryAsset(
+            readingTable,
+            zone.x,
+            publicY + .04,
+            zone.z,
+            1,
+            zone.rotation,
+          )
+        }
+        if (chair) {
+          const chairs = [
+            {dx: -1.25, dz: 0, r: Math.PI / 2},
+            {dx: 1.25, dz: 0, r: -Math.PI / 2},
+            {dx: 0, dz: -1.35, r: 0},
+            {dx: 0, dz: 1.35, r: Math.PI},
+          ]
+          chairs.forEach((seat) =>
+            placeLibraryAsset(
+              chair,
+              zone.x + seat.dx,
+              publicY + .04,
+              zone.z + seat.dz,
+              .96,
+              seat.r + zone.rotation,
+            ),
+          )
+        }
+        if (floorLamp) {
+          placeLibraryAsset(
+            floorLamp,
+            zone.x + (zoneIndex === 0 ? -1.85 : 1.85),
+            publicY + .04,
+            zone.z + 1.7,
+            .96,
+          )
+        }
+      })
+
+      // A few decorative stack islands in the grand hall imply more archive
+      // depth without interfering with the actual article shelves on the wall.
+      if (stackShelf) {
+        for (const z of [-51.5, -57.4]) {
+          for (const x of [-4.9, 4.9]) {
+            const side = x < 0 ? -1 : 1
+            const rotationY = side < 0 ? Math.PI : 0
+            placeLibraryAsset(stackShelf, x, publicY + .04, z, .96, rotationY)
+            const filler = z < -55 ? bookLeaning : bookPacked
+            if (filler) {
+              placeLibraryAsset(
+                filler,
+                x - side * .18,
+                publicY + 1.12,
+                z,
+                .82,
+                rotationY,
+              )
+            }
+          }
+        }
+      }
+
+      // Cloud clusters move independently above the terraces. They wrap far
+      // outside the playable width so the motion reads as weather, not UI.
+      if (summerClouds) {
+        for (let index = 0; index < 14; index += 1) {
+          const z = 12 - index * 20.5
+          const x = -44 + seeded(index, 301) * 88
+          const y = 18 + seeded(index, 302) * 9
+          const scale = .7 + seeded(index, 303) * 1.15
+          const cloud = placeLibraryAsset(
+            summerClouds,
+            x,
+            y,
+            z,
+            scale,
+            seeded(index, 304) * Math.PI * 2,
+          )
+          movingClouds.push({
+            root: cloud,
+            speed: .22 + seeded(index, 305) * .32,
+            minX: -52 - seeded(index, 306) * 10,
+            maxX: 52 + seeded(index, 307) * 10,
+          })
         }
       }
     })
@@ -1477,6 +1900,12 @@ export default function OutdoorLibrary3D({
       }
 
       fireflies.rotation.y += delta * .006
+      movingClouds.forEach((cloud) => {
+        cloud.root.position.x += cloud.speed * delta
+        if (cloud.root.position.x > cloud.maxX) {
+          cloud.root.position.x = cloud.minX
+        }
+      })
       renderer.render(scene, camera)
     }
 
@@ -1494,6 +1923,9 @@ export default function OutdoorLibrary3D({
       if (document.pointerLockElement === renderer.domElement) document.exitPointerLock?.()
       hoverRef.current(null)
       environmentRoots.forEach((root) => scene.remove(root))
+      libraryRoots.forEach((root) => scene.remove(root))
+      importedGeometries.forEach((geometry) => geometry.dispose())
+      importedMaterials.forEach((material) => material.dispose())
       geometries.forEach((geometry) => geometry.dispose())
       materials.forEach((material) => material.dispose())
       textures.forEach((texture) => texture.dispose())
