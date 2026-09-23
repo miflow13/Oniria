@@ -81,36 +81,6 @@ function prepareAsset(
   return root
 }
 
-const loadChunkedBookcaseTall = async () => {
-  const chunks = await Promise.all(
-    Array.from({length: 9}, async (_, index) => {
-      const suffix = String(index).padStart(2, '0')
-      const response = await fetch(
-        `/assets/library-kit/bookcase-tall.glb.b64.${suffix}`,
-      )
-      if (!response.ok) {
-        throw new Error(
-          `Tall bookcase chunk ${suffix} failed: ${response.status}`,
-        )
-      }
-      return (await response.text()).trim()
-    }),
-  )
-
-  const encoded = chunks.join('')
-  const decoded = atob(encoded)
-  const bytes = new Uint8Array(decoded.length)
-  for (let index = 0; index < decoded.length; index += 1) {
-    bytes[index] = decoded.charCodeAt(index)
-  }
-
-  const gltf = await loader.parseAsync(
-    bytes.buffer,
-    '/assets/library-kit/',
-  )
-  return gltf.scene
-}
-
 export function loadLibraryAsset(
   key: LibraryAssetKey,
   targetSize: number,
@@ -119,16 +89,13 @@ export function loadLibraryAsset(
   const path = LIBRARY_ASSETS[key]
   const cacheKey = `${path}:${targetSize}:${mode}`
   if (!cache.has(cacheKey)) {
-    const source =
-      key === 'bookcaseTall'
-        ? loadChunkedBookcaseTall()
-        : loader.loadAsync(path).then(({scene}) => scene)
-
     cache.set(
       cacheKey,
-      source.then((scene) =>
-        prepareAsset(scene, targetSize, mode),
-      ),
+      loader
+        .loadAsync(path)
+        .then(({scene}) =>
+          prepareAsset(scene, targetSize, mode),
+        ),
     )
   }
   return cache.get(cacheKey)!
