@@ -113,6 +113,35 @@ export const libraryDistrictType = defineType({
       },
     }),
     defineField({
+      name: 'sourceMode',
+      title: 'Room content source',
+      type: 'string',
+      description:
+        'Controls which live DEV query populates this physical room.',
+      initialValue: 'tagged',
+      options: {
+        list: [
+          {title: 'Featured / trending', value: 'featured'},
+          {title: 'Latest / new arrivals', value: 'latest'},
+          {title: 'Topics / tags', value: 'topics'},
+          {title: 'Creators', value: 'creators'},
+          {title: 'Search', value: 'search'},
+          {title: 'Archive / catalogue', value: 'catalog'},
+          {title: 'Tag-matched district', value: 'tagged'},
+        ],
+      },
+      validation: (rule) => rule.required(),
+    }),
+    defineField({
+      name: 'roomSlot',
+      title: 'Physical room slot',
+      type: 'number',
+      description:
+        '0–5 maps the district into the six-room library floor plan.',
+      initialValue: 0,
+      validation: (rule) => rule.required().integer().min(0).max(5),
+    }),
+    defineField({
       name: 'enabled',
       title: 'Enabled',
       type: 'boolean',
