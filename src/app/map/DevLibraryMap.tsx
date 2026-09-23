@@ -983,6 +983,7 @@ export default function DevLibraryMap() {
               alongJitterScale: 0,
               lookAheadScale: 0,
               yawJitterScale: 0,
+              orientationBay: district.bay,
             },
             districts,
           ),
