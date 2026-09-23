@@ -93,6 +93,7 @@ import {
   LIBRARY_EYE_HEIGHT,
   LIBRARY_SPAWN,
   clampLibraryWalkPosition,
+  libraryRoomContainsPoint,
   roomForDistrict,
 } from './libraryRoomLayout'
 
@@ -798,31 +799,45 @@ export default function DreamWorld3D({
         ? activeLibraryConfig.districts
         : DEFAULT_LIBRARY_WORLD_CONFIG.districts
     const roomDistrictEntries = activeDistricts.map(
-      (district, index) => ({
-        district,
-        center: roomForDistrict(district, index).center,
-      }),
+      (district, index) => {
+        const room = roomForDistrict(district, index)
+        return {
+          district,
+          room,
+          center: room.center,
+        }
+      },
     )
     const nearestRoomEntry = (x: number, z: number) => {
-      let nearest = roomDistrictEntries[0] ?? null
-      let nearestDistance = Infinity
+      const containingRooms = roomDistrictEntries.filter(
+        (entry) =>
+          libraryRoomContainsPoint(
+            entry.room,
+            x,
+            z,
+            .18,
+          ),
+      )
 
-      roomDistrictEntries.forEach((entry) => {
-        const dx = x - entry.center[0]
-        const dz = z - entry.center[1]
-        const distance = dx * dx + dz * dz
-        if (distance < nearestDistance) {
-          nearest = entry
-          nearestDistance = distance
-        }
-      })
+      if (containingRooms.length === 0) {
+        return null
+      }
 
-      // The atrium and central circulation spine belong to the global
-      // library ambience. A room only owns the mood once the visitor has
-      // actually crossed into its physical neighborhood.
-      return nearestDistance <= 12.75 * 12.75
-        ? nearest
-        : null
+      // Boundary margins can make adjacent room rectangles overlap by a tiny
+      // amount. Resolve that edge case by choosing the physically nearest
+      // room center, while still requiring the point to be inside a real
+      // rectangular room footprint.
+      return containingRooms.sort((a, b) => {
+        const aDx = x - a.center[0]
+        const aDz = z - a.center[1]
+        const bDx = x - b.center[0]
+        const bDz = z - b.center[1]
+        return (
+          aDx * aDx +
+          aDz * aDz -
+          (bDx * bDx + bDz * bDz)
+        )
+      })[0] ?? null
     }
     const libraryMode = nodeRef.current.some(
       (node) => node.libraryKind === 'shelf',
