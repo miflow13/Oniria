@@ -666,7 +666,7 @@ export default function DevWebSurf() {
   const [visited, setVisited] = useState<
     Array<{id: string; title: string}>
   >([{id: 'dev-home', title: 'Atrium'}])
-  const [directoryOpen, setDirectoryOpen] = useState(true)
+  const [directoryOpen, setDirectoryOpen] = useState(false)
   const [readingOrigin, setReadingOrigin] = useState<SurfNode | null>(null)
   const [currentFloor, setCurrentFloor] = useState(0)
   const [floorNonce, setFloorNonce] = useState(0)
