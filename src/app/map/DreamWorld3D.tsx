@@ -82,6 +82,7 @@ import {
   getLibraryAtmosphereVisualPreset,
 } from './libraryAtmosphere'
 import {createLibraryBuilding} from './libraryBuilding'
+import {loadLibraryAsset} from './libraryAssets'
 import {
   LIBRARY_BUILDING_BOUNDS,
   LIBRARY_EYE_HEIGHT,
@@ -331,7 +332,7 @@ function createLabelTexture(node: DreamWorldNode) {
   context.font = '600 18px system-ui, sans-serif'
   context.fillText(
     node.libraryKind === 'shelf'
-      ? `${node.articleCount ?? node.frequency} articles · ${node.subtitle ?? 'floating shelf'}`
+      ? `${node.articleCount ?? node.frequency} articles · ${node.subtitle ?? 'DEV shelf'}`
       : `${node.frequency} dream${node.frequency === 1 ? '' : 's'} · ${node.category}`,
     110,
     92,
@@ -485,7 +486,7 @@ function createLibraryWelcomeTexture(config: LibraryWorldConfig) {
       accent: 'rgba(140, 124, 255, .18)',
       body: [
         'Next.js + React + TypeScript + Three.js.',
-        'DEV API data is streamed into seeded districts, shelves, paths, covers, and atmosphere.',
+        'DEV API data is streamed into Sanity-authored rooms, physical shelves, covers, and atmosphere.',
       ],
     },
     {
@@ -498,8 +499,7 @@ function createLibraryWelcomeTexture(config: LibraryWorldConfig) {
         ['Mouse', 'look'],
         ['E', 'inspect / close'],
         ['G', 'toggle WALK / FLY'],
-        ['R', 'auto-route while flying'],
-        ['Click book', 'open article'],
+                ['Click book', 'open article'],
         ['Esc', 'release mouse'],
       ],
     },
@@ -562,7 +562,7 @@ function createLibraryWelcomeTexture(config: LibraryWorldConfig) {
   context.font = '700 25px ui-monospace, monospace'
   context.fillText(
     config.archiveStatus +
-      ' · follow the holographic boulevard · district signs float overhead',
+      ' · follow the central corridor · room signs mark each collection',
     100,
     846,
   )
@@ -779,6 +779,7 @@ export default function DreamWorld3D({
     const host = hostRef.current
     if (!host) return
     const container: HTMLDivElement = host
+    let sceneDisposed = false
 
     const settings = getQualitySettings(qualityRef.current)
     const activeLibraryConfig =
@@ -1664,13 +1665,13 @@ export default function DreamWorld3D({
     let hoveredBook: LibraryBookVisual | null = null
 
     // Reusable shelf kit for cinematic library mode.
-    const shelfSideGeometry = new THREE.BoxGeometry(.18, 2.65, .56)
-    const shelfBoardGeometry = new THREE.BoxGeometry(3.45, .12, .62)
-    const shelfBackGeometry = new THREE.BoxGeometry(3.45, 2.65, .1)
+    const shelfSideGeometry = new THREE.BoxGeometry(.16, 3.56, .66)
+    const shelfBoardGeometry = new THREE.BoxGeometry(4.5, .1, .66)
+    const shelfBackGeometry = new THREE.BoxGeometry(4.5, 3.46, .055)
     const shelfBookGeometry = new THREE.BoxGeometry(.78, .54, .1)
     const shelfCoverGeometry = new THREE.PlaneGeometry(.7, .46)
-    const shelfAccentGeometry = new THREE.BoxGeometry(3.34, .035, .68)
-    const shelfPickGeometry = new THREE.BoxGeometry(3.8, 2.9, .95)
+    const shelfAccentGeometry = new THREE.BoxGeometry(4.26, .024, .032)
+    const shelfPickGeometry = new THREE.BoxGeometry(4.8, 3.8, 1.1)
     const shelfBookmarkGeometry = new THREE.PlaneGeometry(.12, .34)
     const shelfBookmarkMaterial = new THREE.MeshBasicMaterial({
       color: 0xd782e8,
@@ -1768,6 +1769,18 @@ export default function DreamWorld3D({
       opacity: 0,
       depthWrite: false,
     })
+
+    const physicalShelfTemplatePromise = libraryMode
+      ? loadLibraryAsset('stackShelf', 3.5, 'height').catch(
+          (error) => {
+            console.warn(
+              '[DEV Library] Authored shelf failed; keeping procedural fallback.',
+              error,
+            )
+            return null
+          },
+        )
+      : Promise.resolve<THREE.Group | null>(null)
 
     const libraryShelfLight = libraryMode
       ? new THREE.PointLight(0x8fe9f3, 0, 13, 2)
@@ -1959,6 +1972,11 @@ export default function DreamWorld3D({
         const shelf = new THREE.Group()
         shelf.rotation.y = 0
 
+        // Render a correctly-sized procedural frame immediately, then swap it
+        // for the authored stack-shelf GLB as soon as the cached model loads.
+        const fallbackFrame = new THREE.Group()
+        shelf.add(fallbackFrame)
+
         const reactiveFrameMaterial =
           shelfFrameMaterial.clone()
         reactiveFrameMaterial.emissive.copy(color)
@@ -1988,30 +2006,37 @@ export default function DreamWorld3D({
         group.userData.libraryShelfAccentMaterial =
           reactiveAccentMaterial
 
-        ;[-1.64, 1.64].forEach((x) => {
+        ;[-2.25, 2.25].forEach((x) => {
           const side = new THREE.Mesh(
             shelfSideGeometry,
             reactiveFrameMaterial,
           )
-          side.position.set(x, 0, 0)
-          shelf.add(side)
+          side.position.set(x, 1.76, 0)
+          fallbackFrame.add(side)
         })
 
         const back = new THREE.Mesh(
           shelfBackGeometry,
           reactiveFrameMaterial,
         )
-        back.position.z = .28
-        shelf.add(back)
+        back.position.set(0, 1.74, -.3)
+        fallbackFrame.add(back)
 
-        ;[-1.28, -.43, .42, 1.27].forEach((y) => {
+        ;[.18, 1.28, 2.38].forEach((y) => {
           const board = new THREE.Mesh(
             shelfBoardGeometry,
             reactiveBoardMaterial,
           )
           board.position.set(0, y, 0)
-          shelf.add(board)
+          fallbackFrame.add(board)
         })
+
+        const topBoard = new THREE.Mesh(
+          shelfBoardGeometry,
+          reactiveFrameMaterial,
+        )
+        topBoard.position.set(0, 3.48, 0)
+        fallbackFrame.add(topBoard)
 
         ;(node.libraryBooks ?? []).slice(0, 9).forEach(
           (bookData, index) => {
@@ -2019,9 +2044,9 @@ export default function DreamWorld3D({
             const column = index % 3
             const bookGroup = new THREE.Group()
             const basePosition = new THREE.Vector3(
-              -.98 + column * .98,
-              -.84 + row * .84,
-              -.255,
+              -.9 + column * .9,
+              .73 + row * 1.1,
+              .4,
             )
             bookGroup.position.copy(basePosition)
 
@@ -2042,7 +2067,7 @@ export default function DreamWorld3D({
             bookInteractives.push(backing)
 
             const coverHinge = new THREE.Group()
-            coverHinge.position.set(-.39, 0, -.056)
+            coverHinge.position.set(-.39, 0, .056)
             bookGroup.add(coverHinge)
 
             const coverMaterial = new THREE.MeshStandardMaterial({
@@ -2088,8 +2113,8 @@ export default function DreamWorld3D({
               shelfCoverGeometry,
               coverMaterial,
             )
-            cover.position.set(.35, 0, -.002)
-            cover.rotation.y = Math.PI
+            cover.position.set(.35, 0, .002)
+            cover.rotation.y = 0
             cover.renderOrder = 5
             cover.userData.bookNodeId = node._id
             cover.userData.bookIndex = index
@@ -2100,8 +2125,8 @@ export default function DreamWorld3D({
               shelfBookmarkGeometry,
               shelfBookmarkMaterial,
             )
-            bookmark.position.set(.28, .34, -.072)
-            bookmark.rotation.y = Math.PI
+            bookmark.position.set(.28, .34, .072)
+            bookmark.rotation.y = 0
             bookmark.visible = false
             bookmark.renderOrder = 6
             bookGroup.add(bookmark)
@@ -2116,7 +2141,7 @@ export default function DreamWorld3D({
               activityMarker.position.set(
                 .33,
                 0,
-                -.073,
+                .073,
               )
               activityMarker.scale.y =
                 .7 + (bookData.activity ?? 0) * .55
@@ -2142,22 +2167,60 @@ export default function DreamWorld3D({
           shelfAccentGeometry,
           reactiveAccentMaterial,
         )
-        accentRail.position.set(0, 1.34, -.02)
+        accentRail.position.set(0, 3.5, .35)
         shelf.add(accentRail)
 
         const pick = new THREE.Mesh(
           shelfPickGeometry,
           shelfPickMaterial,
         )
+        pick.position.set(0, 1.75, .16)
         pick.userData.nodeId = node._id
         shelf.add(pick)
         interactive.push(pick)
 
+        void physicalShelfTemplatePromise.then((template) => {
+          if (!template || sceneDisposed) return
+
+          const authoredShelf = template.clone(true)
+          const size = new THREE.Box3()
+            .setFromObject(authoredShelf)
+            .getSize(new THREE.Vector3())
+          const widthRunsOnX = size.x >= size.z
+          const sourceWidth = Math.max(
+            .001,
+            widthRunsOnX ? size.x : size.z,
+          )
+          const sourceDepth = Math.max(
+            .001,
+            widthRunsOnX ? size.z : size.x,
+          )
+
+          authoredShelf.rotation.y +=
+            widthRunsOnX ? 0 : Math.PI / 2
+          if (widthRunsOnX) {
+            authoredShelf.scale.x *= 4.5 / sourceWidth
+            authoredShelf.scale.z *= .72 / sourceDepth
+          } else {
+            authoredShelf.scale.z *= 4.5 / sourceWidth
+            authoredShelf.scale.x *= .72 / sourceDepth
+          }
+          authoredShelf.traverse((child) => {
+            if (!(child instanceof THREE.Mesh)) return
+            child.castShadow = renderer.shadowMap.enabled
+            child.receiveShadow = true
+            child.frustumCulled = true
+          })
+
+          fallbackFrame.visible = false
+          shelf.add(authoredShelf)
+        })
+
         shelf.scale.setScalar(1)
         group.add(shelf)
         const labelStagger =
-          seededUnit(seed, 141) > .5 ? .12 : -.08
-        label.position.set(0, -1.82 + labelStagger, .2)
+          seededUnit(seed, 141) > .5 ? .08 : -.04
+        label.position.set(0, 3.92 + labelStagger, .2)
         label.scale.set(3.08, .7, 1)
       }
 
@@ -2177,7 +2240,7 @@ export default function DreamWorld3D({
 
       const baseScale =
         node.libraryKind === 'shelf'
-          ? 1.22
+          ? 1
           : .72 +
             Math.min(node.frequency, 6) * .095 +
             Math.min(
@@ -3684,6 +3747,12 @@ export default function DreamWorld3D({
       .filter(
         (value): value is NonNullable<typeof value> => value !== null,
       )
+
+    if (libraryMode) {
+      categoryNebulae.forEach(({sprite}) => {
+        sprite.visible = false
+      })
+    }
 
     const lucidDreamIds = new Set(
       dreamsRef.current
@@ -6819,6 +6888,7 @@ export default function DreamWorld3D({
     animationFrame = requestAnimationFrame(animate)
 
     return () => {
+      sceneDisposed = true
       if (libraryMode && flightModeRef.current) {
         libraryFlightStateRef.current = {
           position: [
