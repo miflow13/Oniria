@@ -664,7 +664,10 @@ export default function DevLibraryMap() {
     async function populateDistricts() {
       const entries = await Promise.all(
         taggedDistricts.map(async (district) => {
-          const seedTags = district.devTags.slice(0, 2)
+          // Seed the room with one lightweight topic request. Additional
+          // topic searches remain user-driven instead of hydrating the whole
+          // Topics room before the first frame settles.
+          const seedTags = district.devTags.slice(0, 1)
           if (seedTags.length === 0) {
             return [district.id, []] as const
           }
@@ -673,7 +676,7 @@ export default function DevLibraryMap() {
             const responses = await Promise.all(
               seedTags.map((tag) =>
                 fetch(
-                  '/api/devto?mode=tag&tag=' +
+                  '/api/devto?mode=tag&per_page=40&tag=' +
                     encodeURIComponent(tag),
                 ),
               ),
