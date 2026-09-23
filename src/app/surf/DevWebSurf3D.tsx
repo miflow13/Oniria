@@ -1336,6 +1336,9 @@ export default function DevWebSurf3D({
       ['roofTile', 5.2, 'span'],
       ['skyDome', 190, 'span'],
       ['stackShelf', SHELF_HEIGHT, 'height'],
+      ['decoyBookshelf', 3.15, 'height'],
+      ['areaRug', 4.2, 'span'],
+      ['armchair', .9, 'height'],
       ['chair', 1.05, 'height'],
       ['issueDesk', 1.45, 'height'],
       ['cardCatalogue', 1.85, 'height'],
@@ -1382,6 +1385,9 @@ export default function DevWebSurf3D({
       const roofTile = loaded.roofTile
       const skyDome = loaded.skyDome
       const stackShelf = loaded.stackShelf
+      const decoyBookshelf = loaded.decoyBookshelf
+      const areaRug = loaded.areaRug
+      const armchair = loaded.armchair
       const chair = loaded.chair
       const issueDesk = loaded.issueDesk
       const cardCatalogue = loaded.cardCatalogue
@@ -1622,6 +1628,88 @@ export default function DevWebSurf3D({
             instance.scale.z *= SHELF_WIDTH / sourceWidth
             instance.scale.x *= SHELF_DEPTH / sourceDepth
           }
+        })
+      }
+
+      // Dense background shelving makes the collection feel much larger
+      // without turning decorative books into interactive DEV nodes. These
+      // shallow banks sit against the solid room-divider walls, leaving the
+      // perimeter windows and the central navigation spine unobstructed.
+      if (decoyBookshelf) {
+        const decoySize = new THREE.Box3()
+          .setFromObject(decoyBookshelf)
+          .getSize(new THREE.Vector3())
+        const decoyWidthRunsOnX = decoySize.x >= decoySize.z
+        const decoyAxisCorrection =
+          decoyWidthRunsOnX ? 0 : Math.PI / 2
+        const leftXs = [-22.6, -20.6, -18.6, -16.6, -14.6, -12.6, -10.6]
+        const rightXs = leftXs.map((x) => -x).reverse()
+        const decoyBanks = [
+          {z: -21.55, rotationY: 0},
+          {z: -22.45, rotationY: Math.PI},
+          {z: -41.55, rotationY: 0},
+          {z: -42.45, rotationY: Math.PI},
+          {z: -61.55, rotationY: 0},
+        ]
+
+        decoyBanks.forEach((bank) => {
+          ;[leftXs, rightXs].forEach((xs) => {
+            xs.forEach((x, index) => {
+              const instance = placeAsset(
+                decoyBookshelf,
+                x,
+                .02,
+                bank.z,
+                1,
+                bank.rotationY + decoyAxisCorrection,
+              )
+              // Tiny deterministic variation keeps the repeated modules from
+              // reading like a copied wall texture.
+              const variation = 1 + ((index % 3) - 1) * .018
+              instance.scale.x *= variation
+              instance.traverse((child) => {
+                if (!(child instanceof THREE.Mesh)) return
+                child.castShadow = false
+                child.receiveShadow = true
+              })
+            })
+
+            const centerX = xs.reduce((sum, x) => sum + x, 0) / xs.length
+            addPropCollider(
+              centerX,
+              bank.z,
+              Math.abs(xs[xs.length - 1] - xs[0]) + 1.8,
+              .72,
+              3.2,
+            )
+          })
+        })
+      }
+
+      // A few intentionally quiet reading nooks break up the shelf rhythm.
+      // Rugs are walkable; only the armchairs get small collision bounds.
+      if (areaRug) {
+        const nooks = [
+          {x: -20.8, z: -5.2, rotationY: 0},
+          {x: 20.8, z: -5.2, rotationY: Math.PI},
+          {x: -20.8, z: -25.3, rotationY: 0},
+          {x: 20.8, z: -45.3, rotationY: Math.PI},
+        ]
+        nooks.forEach(({x, z, rotationY}) => {
+          placeAsset(areaRug, x, .022, z, 1, rotationY)
+        })
+      }
+
+      if (armchair) {
+        const chairs = [
+          {x: -22.05, z: -5.2, rotationY: Math.PI / 2},
+          {x: 22.05, z: -5.2, rotationY: -Math.PI / 2},
+          {x: -22.05, z: -25.3, rotationY: Math.PI / 2},
+          {x: 22.05, z: -45.3, rotationY: -Math.PI / 2},
+        ]
+        chairs.forEach(({x, z, rotationY}) => {
+          placeAsset(armchair, x, .025, z, 1, rotationY)
+          addPropCollider(x, z, 1.18, 1.06, 1)
         })
       }
 
