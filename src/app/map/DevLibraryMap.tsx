@@ -1346,8 +1346,8 @@ export default function DevLibraryMap() {
           'shelf:hallway:' + sourceMode + ':' + shelfIndex,
           title + ' ' + shelfNumber,
           sourceMode === 'featured'
-            ? 'curated + trending DEV writing'
-            : 'freshly published on DEV',
+            ? `${shelfDateRange(articles)} · curated + trending DEV writing`
+            : `${shelfDateRange(articles)} · freshly published on DEV`,
           kind,
           placement,
           articles,
