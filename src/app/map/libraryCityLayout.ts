@@ -1,6 +1,7 @@
 import type {LibraryDistrictConfig} from '@/lib/libraryWorldConfig'
 
 export const CITY_GROUND_Y = -2.08
+export const CITY_SHELF_CENTER_Y = CITY_GROUND_Y + 1.62
 export const CITY_ROAD_HALF_WIDTH = 1.72
 export const CITY_INTERSECTION_HALF_WIDTH = 2.08
 
@@ -331,7 +332,11 @@ export function cityDistrictShelfPlacement(
       (block.depth * .5 - insetZ)
 
   return {
-    world: [x, block.elevation, z],
+    world: [
+      x,
+      CITY_SHELF_CENTER_Y + block.elevation,
+      z,
+    ],
     yaw: faceTargetYaw(
       x,
       z,
@@ -365,7 +370,8 @@ export function cityArrivalShelfPlacement(
   return {
     world: [
       slot.x,
-      CITY_ARRIVAL.elevation,
+      CITY_SHELF_CENTER_Y +
+        CITY_ARRIVAL.elevation,
       slot.z,
     ],
     yaw: faceTargetYaw(
