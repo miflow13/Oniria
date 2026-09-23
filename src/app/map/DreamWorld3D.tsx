@@ -929,6 +929,7 @@ export default function DreamWorld3D({
         ? Math.max(.82, settings.bloomThreshold)
         : settings.bloomThreshold,
     )
+    bloom.enabled = !libraryMode
     composer.addPass(bloom)
 
     const dreamPost = new ShaderPass(DreamPostShader)
