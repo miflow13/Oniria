@@ -332,6 +332,17 @@ function sanitizeDistrict(
     return null
   }
 
+  // Legacy cinematic-district documents predate the six-room model. Until
+  // the migration seed is run, ignore those documents instead of collapsing
+  // all of them into room slot 0.
+  if (
+    !fallback &&
+    typeof district.sourceMode !== 'string' &&
+    typeof district.roomSlot !== 'number'
+  ) {
+    return null
+  }
+
   return {
     id: district.id,
     label: resolvedLabel,
@@ -488,7 +499,10 @@ export function mergeLibraryWorldConfig(
     liveDevUpdates: config.liveDevUpdates !== false,
     deepStacksEnabled: config.deepStacksEnabled !== false,
     featuredDistrictId:
-      typeof config.featuredDistrictId === 'string'
+      typeof config.featuredDistrictId === 'string' &&
+      districts.some(
+        (district) => district.id === config.featuredDistrictId,
+      )
         ? config.featuredDistrictId
         : DEFAULT_LIBRARY_WORLD_CONFIG.featuredDistrictId,
     districts,
