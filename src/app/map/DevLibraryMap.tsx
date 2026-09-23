@@ -975,9 +975,14 @@ export default function DevLibraryMap() {
             bay,
             side,
             {
-              laneBias: -.35,
-              alongJitterScale: .04,
-              yawJitterScale: .14,
+              // District bookcases are architecture, not debris: keep each
+              // pair level, mirrored, and square to the boulevard.
+              laneDistance: 8.45,
+              heightJitterScale: 0,
+              lateralJitterScale: 0,
+              alongJitterScale: 0,
+              lookAheadScale: 0,
+              yawJitterScale: 0,
             },
             districts,
           ),
