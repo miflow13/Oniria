@@ -724,6 +724,13 @@
   border-color: rgba(94, 220, 255, .4);
 }
 
+.layoutAuthoringHudActions .layoutAuthoringExport {
+  grid-column: 1 / -1;
+  color: #dff9ff;
+  background: rgba(47, 183, 255, .12);
+  border-color: rgba(94, 220, 255, .34);
+}
+
 .layoutAuthoringHud small {
   display: block;
   color: #7894a7;
