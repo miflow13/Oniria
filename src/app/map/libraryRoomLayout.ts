@@ -152,7 +152,22 @@ const wallRect = (
   maxZ: z + depth / 2,
 })
 
+const LIBRARY_SHELF_COLLIDERS: WalkCollisionRect[] =
+  LIBRARY_ROOMS.flatMap((room) => {
+    const [x, z] = room.center
+    const outerX = x < 0 ? x - 3.4 : x + 3.4
+    const innerX = x < 0 ? x + 2.5 : x - 2.5
+
+    return [
+      wallRect(outerX, z - 2.9, 4.7, .88),
+      wallRect(innerX, z - 2.9, 4.7, .88),
+      wallRect(outerX, z + 2.9, 4.7, .88),
+      wallRect(innerX, z + 2.9, 4.7, .88),
+    ]
+  })
+
 export const LIBRARY_WALK_COLLIDERS: WalkCollisionRect[] = [
+  ...LIBRARY_SHELF_COLLIDERS,
   ...[-22, -42, -62].flatMap((z) => [
     wallRect(-16.2, z, 16, .38),
     wallRect(16.2, z, 16, .38),
