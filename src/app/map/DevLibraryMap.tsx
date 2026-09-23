@@ -1131,13 +1131,21 @@ export default function DevLibraryMap() {
         .some((item) => item.id === shelf.id)
 
     if (
-      (deepStacksApproach ||
-        isLastVisibleCatalogShelf) &&
-      lastCatalogLoadTriggerRef.current !== candidate
+      deepStacksApproach ||
+      isLastVisibleCatalogShelf
     ) {
-      lastCatalogLoadTriggerRef.current = candidate
-      void loadMoreCatalog()
+      if (
+        lastCatalogLoadTriggerRef.current !== candidate
+      ) {
+        lastCatalogLoadTriggerRef.current = candidate
+        void loadMoreCatalog()
+      }
+      return
     }
+
+    // Moving away from a loading edge arms the trigger again, so returning
+    // to Deep Stacks fetches the next page without polling continuously.
+    lastCatalogLoadTriggerRef.current = null
   }, [
     catalogHasMore,
     catalogLoading,
