@@ -719,7 +719,13 @@ export default function DevLibraryMap() {
         'Featured',
         'popular this week',
         'featured',
-        archiveShelfPlacement('shelf:featured', 0, -1, {}, districts),
+        archiveShelfPlacement(
+          'shelf:featured',
+          -.45,
+          -1,
+          {laneBias: 2.2, alongJitterScale: .04},
+          districts,
+        ),
         featured,
       ),
       makeShelf(
@@ -727,7 +733,13 @@ export default function DevLibraryMap() {
         'New',
         'freshly published',
         'latest',
-        archiveShelfPlacement('shelf:new', 0, 1, {}, districts),
+        archiveShelfPlacement(
+          'shelf:new',
+          -.45,
+          1,
+          {laneBias: 2.2, alongJitterScale: .04},
+          districts,
+        ),
         latest,
       ),
       makeShelf(
@@ -737,7 +749,13 @@ export default function DevLibraryMap() {
           : 'My DEV',
         'creator shelf',
         'mine',
-        archiveShelfPlacement('shelf:mine', 1, -1, {}, districts),
+        archiveShelfPlacement(
+          'shelf:mine',
+          .05,
+          -1,
+          {laneBias: 2.75, alongJitterScale: .04},
+          districts,
+        ),
         mine,
       ),
       makeShelf(
@@ -745,7 +763,13 @@ export default function DevLibraryMap() {
         'Topics',
         'choose a DEV tag',
         'topics',
-        archiveShelfPlacement('shelf:topics', 1, 1, {}, districts),
+        archiveShelfPlacement(
+          'shelf:topics',
+          .05,
+          1,
+          {laneBias: 2.75, alongJitterScale: .04},
+          districts,
+        ),
         dynamicTitle?.startsWith('#') ? dynamicArticles : [],
       ),
       makeShelf(
@@ -753,7 +777,13 @@ export default function DevLibraryMap() {
         'Creators',
         'browse author shelves',
         'creators',
-        archiveShelfPlacement('shelf:creators', 2, -1, {}, districts),
+        archiveShelfPlacement(
+          'shelf:creators',
+          .52,
+          -1,
+          {laneBias: 3.1, alongJitterScale: .04},
+          districts,
+        ),
         dynamicTitle?.startsWith('@')
           ? dynamicArticles
           : creatorPreview,
@@ -767,7 +797,13 @@ export default function DevLibraryMap() {
           'Search',
           query || 'search results',
           'search',
-          archiveShelfPlacement('shelf:search', 2, 1, {}, districts),
+          archiveShelfPlacement(
+            'shelf:search',
+            .52,
+            1,
+            {laneBias: 3.1, alongJitterScale: .04},
+            districts,
+          ),
           searchResults.slice(0, CATALOG_BOOKS_PER_SHELF),
         ),
       )
@@ -831,37 +867,22 @@ export default function DevLibraryMap() {
       }
     })
 
-    // Deep Stacks is the archive reservoir, not just the "no tag matched"
-    // bucket. Include semantic-district overflow so it is always populated
-    // and keeps gaining material as more DEV pages are fetched, without
-    // expanding its physical shelf count.
+    // Deep Stacks is the chronological tail of the streamed DEV catalog.
+    // Keep it independent from taxonomy matching: page 1 populates it
+    // immediately, and every later catalog page pushes the visible window
+    // deeper/older without ever changing the physical shelf count.
     const deepStacksDistrict = districts.find(
       (district) => district.id === 'deep-stacks',
     )
     if (deepStacksDistrict) {
-      const existingDeepStacks =
-        articlesByDistrict.get(deepStacksDistrict.id) ?? []
-      const overflow = districts
-        .filter(
-          (district) =>
-            district.id !== 'front-page' &&
-            district.id !== 'deep-stacks',
-        )
-        .flatMap((district) =>
-          (
-            articlesByDistrict.get(district.id) ?? []
-          ).slice(DISTRICT_VISIBLE_ARTICLE_CAPACITY),
-        )
-
-      const reservoir = uniqueArticles(
-        existingDeepStacks,
-        overflow,
-        remaining,
+      const deepCatalog = uniqueArticles(
+        catalog,
+        bootstrap.latest,
+        bootstrap.feed,
       )
-
       articlesByDistrict.set(
         deepStacksDistrict.id,
-        reservoir,
+        deepCatalog,
       )
     }
 
@@ -1073,6 +1094,7 @@ export default function DevLibraryMap() {
     (shelf) => shelf.kind === 'catalog',
   ).length
   const lastCatalogLoadTriggerRef = useRef<string | null>(null)
+  const lastDeepStacksCatalogLengthRef = useRef(0)
 
   useEffect(() => {
     if (!catalogHasMore || catalogLoading || catalogShelfCount === 0) {
@@ -1098,9 +1120,20 @@ export default function DevLibraryMap() {
         .slice(-3)
         .some((item) => item.id === shelf.id)
 
+    if (deepStacksApproach) {
+      if (
+        lastDeepStacksCatalogLengthRef.current !==
+        catalog.length
+      ) {
+        lastDeepStacksCatalogLengthRef.current =
+          catalog.length
+        void loadMoreCatalog()
+      }
+      return
+    }
+
     if (
-      (deepStacksApproach ||
-        isLastVisibleCatalogShelf) &&
+      isLastVisibleCatalogShelf &&
       lastCatalogLoadTriggerRef.current !== candidate
     ) {
       lastCatalogLoadTriggerRef.current = candidate
@@ -1110,6 +1143,7 @@ export default function DevLibraryMap() {
     catalogHasMore,
     catalogLoading,
     catalogShelfCount,
+    catalog.length,
     loadMoreCatalog,
     navigation.nearestId,
     navigation.routeTargetId,
