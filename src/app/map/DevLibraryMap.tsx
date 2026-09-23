@@ -996,8 +996,8 @@ export default function DevLibraryMap() {
                 archiveDistrictGridLaneOffset(
                   districtIndex,
                 ) === 0
-                  ? 7.2
-                  : 6.35,
+                  ? 6.5
+                  : 5.15,
               centerLateralOffset:
                 archiveDistrictGridLaneOffset(
                   districtIndex,
