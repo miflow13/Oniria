@@ -36,6 +36,7 @@ type LayoutAuthoring = {
     z: number,
     maxDistance?: number,
   ) => Promise<LibraryLayoutMarker | null>
+  clearAll: () => Promise<number>
   markers: () => readonly LibraryLayoutMarker[]
   dispose: () => void
 }
@@ -520,6 +521,47 @@ export function createLibraryLayoutAuthoring(
     return marker
   }
 
+  const clearAll = async () => {
+    const markers = [...markerById.values()]
+    markers.forEach((marker) => {
+      markerById.delete(marker.id)
+      removeVisual(marker.id)
+    })
+    saveLocalMarkers([])
+
+    const persisted = markers.filter(
+      (marker) =>
+        marker.persistence === 'sanity' ||
+        marker.id.startsWith('libraryLayoutMarker.'),
+    )
+
+    if (persisted.length > 0) {
+      await Promise.allSettled(
+        persisted.map((marker) =>
+          fetch(
+            `/api/library-layout-markers?id=${encodeURIComponent(marker.id)}`,
+            {
+              method: 'DELETE',
+              headers: authoringKey
+                ? {'x-oniria-layout-key': authoringKey}
+                : undefined,
+            },
+          ),
+        ),
+      )
+    }
+
+    showToast(
+      `CLEARED ${markers.length} PIN${markers.length === 1 ? '' : 'S'}`,
+      'warn',
+    )
+    console.info(
+      '[DEV Library layout] cleared all pins',
+      markers.length,
+    )
+    return markers.length
+  }
+
   const removeNearest = async (
     x: number,
     z: number,
@@ -578,6 +620,7 @@ export function createLibraryLayoutAuthoring(
     ready,
     dropMarker,
     removeNearest,
+    clearAll,
     markers: () => [...markerById.values()],
     dispose: () => {
       scene.remove(group)
