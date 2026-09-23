@@ -1,9 +1,9 @@
 import DevWebSurf from './DevWebSurf'
 
 export const metadata = {
-  title: 'DEV Library',
+  title: 'DEV Infinite Stacks',
   description:
-    'Walk through DEV Community as a spatial library of articles, creators, topics, and live search aisles.',
+    'Walk through DEV Community as a dense vertical archive of live articles, creators, topics, and searchable stacks.',
 }
 
 export default function SurfPage() {
