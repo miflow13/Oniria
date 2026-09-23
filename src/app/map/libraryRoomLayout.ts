@@ -72,8 +72,8 @@ export const LIBRARY_ROOM_SHELF_SLOTS: readonly LibraryRoomShelfSlot[] = [
   // wall more cleanly than four compressed cases. These are normalized from
   // Mika's z≈-62 pin run and mirrored across every room for consistency.
   {id: 'B1', zone: 'divider-wall', inward: 2.5, lateral: -9.45, facing: 'north', doubleSided: false},
-  {id: 'B2', zone: 'divider-wall', inward: 8.25, lateral: -9.45, facing: 'north', doubleSided: false},
-  {id: 'B3', zone: 'divider-wall', inward: 14, lateral: -9.45, facing: 'north', doubleSided: false},
+  {id: 'B2', zone: 'divider-wall', inward: 8, lateral: -9.45, facing: 'north', doubleSided: false},
+  {id: 'B3', zone: 'divider-wall', inward: 13.5, lateral: -9.45, facing: 'north', doubleSided: false},
 
   {id: 'E1', zone: 'entry-wall', inward: .55, lateral: -5.6, facing: 'entry', doubleSided: false},
   {id: 'E2', zone: 'entry-wall', inward: .55, lateral: 5.6, facing: 'entry', doubleSided: false},
