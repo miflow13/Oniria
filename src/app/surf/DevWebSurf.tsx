@@ -308,7 +308,19 @@ function buildLibraryGraph(
     })
   })
 
-  const featured = bootstrap.feed.slice(0, 14)
+  const javascriptPool = [
+    ...bootstrap.feed,
+    ...bootstrap.latest,
+    ...catalogArticles,
+  ].filter(
+    (article, index, collection) =>
+      articleTags(article)
+        .map((tag) => tag.toLowerCase())
+        .includes('javascript') &&
+      collection.findIndex((candidate) => candidate.id === article.id) === index,
+  )
+
+  const featured = javascriptPool.slice(0, 32)
   featured.forEach((article, index) => {
     const id = 'article:' + article.id
     addNode({
@@ -319,7 +331,7 @@ function buildLibraryGraph(
         '@' +
         article.user.username +
         ' · ' +
-        (article.readable_publish_date ?? 'featured'),
+        (article.readable_publish_date ?? '#javascript'),
       href: article.url,
       articleId: article.id,
       username: article.user.username,
