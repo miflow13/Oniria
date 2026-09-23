@@ -661,12 +661,22 @@ export function createLibraryBuilding(
   backupCeiling.position.set(0, 5.03, -30.15)
   group.add(backupCeiling)
 
-  const skylightFrameMaterial =
-    new THREE.MeshStandardMaterial({
-      color: 0x2e2924,
-      roughness: .72,
-      metalness: .16,
-      envMapIntensity: .12,
+  const skylightGlassMaterial =
+    new THREE.MeshPhysicalMaterial({
+      color: 0xeaf7ff,
+      transmission: .97,
+      transparent: true,
+      opacity: .18,
+      roughness: .055,
+      metalness: 0,
+      ior: 1.46,
+      thickness: .018,
+      clearcoat: .18,
+      clearcoatRoughness: .08,
+      envMapIntensity: .42,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      toneMapped: true,
     })
   const skyRockMaterial = new THREE.MeshStandardMaterial({
     color: 0x343536,
@@ -691,16 +701,14 @@ export function createLibraryBuilding(
     toneMapped: false,
   })
   localMaterials.push(
-    skylightFrameMaterial,
+    skylightGlassMaterial,
     skyRockMaterial,
     skyDebrisMaterial,
     skyParticleMaterial,
   )
 
-  const skylightFrameLongGeometry =
-    new THREE.BoxGeometry(.2, .14, 6.05)
-  const skylightFrameShortGeometry =
-    new THREE.BoxGeometry(5.55, .14, .2)
+  const skylightGlassGeometry =
+    new THREE.PlaneGeometry(5.45, 5.9)
   const skyRockLargeGeometry =
     new THREE.IcosahedronGeometry(.44, 1)
   const skyRockSmallGeometry =
@@ -708,8 +716,7 @@ export function createLibraryBuilding(
   const skyDebrisGeometry =
     new THREE.TetrahedronGeometry(.15, 0)
   localGeometries.push(
-    skylightFrameLongGeometry,
-    skylightFrameShortGeometry,
+    skylightGlassGeometry,
     skyRockLargeGeometry,
     skyRockSmallGeometry,
     skyDebrisGeometry,
@@ -1609,24 +1616,20 @@ export function createLibraryBuilding(
       })
 
       LIBRARY_SKYLIGHT_CENTERS.forEach((z, index) => {
-        // Only a perimeter lip remains. There is intentionally no glass and
-        // no mullion grid: the scene beyond is the actual visible exterior.
-        ;[-2.72, 2.72].forEach((x) => {
-          const frame = new THREE.Mesh(
-            skylightFrameLongGeometry,
-            skylightFrameMaterial,
-          )
-          frame.position.set(x, 5.1, z)
-          group.add(frame)
-        })
-        ;[-3, 3].forEach((dz) => {
-          const frame = new THREE.Mesh(
-            skylightFrameShortGeometry,
-            skylightFrameMaterial,
-          )
-          frame.position.set(0, 5.1, z + dz)
-          group.add(frame)
-        })
+        // Frameless clear pane: preserve the open view into Oniria while
+        // making the roof opening read as an intentional skylight rather than
+        // unfinished construction. No beams or mullion grid remain.
+        const glass = new THREE.Mesh(
+          skylightGlassGeometry,
+          skylightGlassMaterial,
+        )
+        glass.rotation.x = Math.PI / 2
+        glass.position.set(0, 5.115, z)
+        glass.renderOrder = 2
+        glass.castShadow = false
+        glass.receiveShadow = false
+        glass.name = `library-skylight-glass-${index}`
+        group.add(glass)
 
         // Daylight exists physically, but the old visible cone mesh is gone.
         const daylight = new THREE.SpotLight(
