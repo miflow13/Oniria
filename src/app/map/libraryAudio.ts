@@ -12,6 +12,7 @@ type LibraryAudioUpdate = {
   speed: number
   elapsed: number
   currentBay: number
+  activeAudioProfile?: LibraryAudioProfile
   districts: Pick<
     LibraryDistrictConfig,
     'bay' | 'audioProfile'
@@ -207,6 +208,7 @@ export function createLibraryAudio(
       speed,
       elapsed,
       currentBay,
+      activeAudioProfile,
       districts,
     }) {
       if (disposed) return
@@ -247,16 +249,18 @@ export function createLibraryAudio(
         .28,
       )
 
-      if (districts.length > 0) {
-        const district = districts.reduce(
-          (nearest, candidate) =>
-            Math.abs(candidate.bay - currentBay) <
-            Math.abs(nearest.bay - currentBay)
-              ? candidate
-              : nearest,
-        )
+      if (activeAudioProfile || districts.length > 0) {
+        const profile =
+          activeAudioProfile ??
+          districts.reduce(
+            (nearest, candidate) =>
+              Math.abs(candidate.bay - currentBay) <
+              Math.abs(nearest.bay - currentBay)
+                ? candidate
+                : nearest,
+          ).audioProfile
         const frequencies =
-          PROFILE_FREQUENCIES[district.audioProfile]
+          PROFILE_FREQUENCIES[profile]
 
         droneOscillator.frequency.setTargetAtTime(
           frequencies.drone,
