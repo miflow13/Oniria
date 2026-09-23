@@ -506,8 +506,10 @@ export default function DevLibraryMap() {
         setDevRefreshTick((current) => current + 1)
 
         if (initial && !catalogInitializedRef.current) {
+          // Do not compete with first render by pulling the Archive up front.
+          // The bootstrap already provides enough fallback books for the
+          // Archive facade; real catalogue pages stream in on approach.
           catalogInitializedRef.current = true
-          void loadMoreCatalog(3)
         }
       } catch (caught) {
         if (initial) {
