@@ -4,7 +4,18 @@ import {useEffect, useRef} from 'react'
 import * as THREE from 'three'
 import type {LibrarySection, SurfEdge, SurfNode, SurfNodeKind} from './types'
 import styles from './surf.module.css'
-import {EYE_HEIGHT, FLOOR_COUNT, LANDMARK, ROOMS, ROOM_ORDER, SPAWN, WALK_BOUNDS} from './libraryLayout'
+import {
+  EYE_HEIGHT,
+  FLOOR_COUNT,
+  LANDMARK,
+  ROOMS,
+  ROOM_ORDER,
+  SHELF_DEPTH,
+  SHELF_HEIGHT,
+  SHELF_WIDTH,
+  SPAWN,
+  WALK_BOUNDS,
+} from './libraryLayout'
 import {LIBRARY_ASSETS, loadLibraryAsset} from './libraryAssets'
 
 type TravelRequest = {
@@ -1243,7 +1254,7 @@ export default function DevWebSurf3D({
     shelfUnits.forEach((shelf) => {
       fallbackShelves.set(
         shelf.key,
-        addShelf(shelf.x, shelf.z, 4.5, shelf.rotationY),
+        addShelf(shelf.x, shelf.z, SHELF_WIDTH, shelf.rotationY),
       )
     })
 
@@ -1324,7 +1335,7 @@ export default function DevWebSurf3D({
       ['floorParquet', 5.8, 'span'],
       ['roofTile', 5.2, 'span'],
       ['skyDome', 190, 'span'],
-      ['stackShelf', 3.5, 'height'],
+      ['stackShelf', SHELF_HEIGHT, 'height'],
       ['chair', 1.05, 'height'],
       ['issueDesk', 1.45, 'height'],
       ['cardCatalogue', 1.85, 'height'],
@@ -1520,6 +1531,14 @@ export default function DevWebSurf3D({
       }
 
       if (roofTile) {
+        const ceilingMaterial = new THREE.MeshStandardMaterial({
+          color: 0xe4e0d8,
+          roughness: .78,
+          metalness: .02,
+          side: THREE.DoubleSide,
+        })
+        architecturalMaterials.push(ceilingMaterial)
+
         const roofSize = new THREE.Box3()
           .setFromObject(roofTile)
           .getSize(new THREE.Vector3())
@@ -1556,6 +1575,7 @@ export default function DevWebSurf3D({
             tile.scale.z *= (cellZ / roofSize.z) * 1.015
             tile.traverse((child) => {
               if (!(child instanceof THREE.Mesh)) return
+              child.material = ceilingMaterial
               child.castShadow = true
               child.receiveShadow = false
             })
@@ -1564,16 +1584,38 @@ export default function DevWebSurf3D({
       }
 
       if (stackShelf) {
+        const shelfSize = new THREE.Box3()
+          .setFromObject(stackShelf)
+          .getSize(new THREE.Vector3())
+        const widthRunsOnX = shelfSize.x >= shelfSize.z
+        const sourceWidth = Math.max(
+          .001,
+          widthRunsOnX ? shelfSize.x : shelfSize.z,
+        )
+        const sourceDepth = Math.max(
+          .001,
+          widthRunsOnX ? shelfSize.z : shelfSize.x,
+        )
+        const axisCorrection = widthRunsOnX ? 0 : Math.PI / 2
+
         shelfUnits.forEach((shelf) => {
           fallbackShelves.get(shelf.key)!.visible = false
-          placeAsset(
+          const instance = placeAsset(
             stackShelf,
             shelf.x,
             .02,
             shelf.z,
             1,
-            shelf.rotationY,
+            shelf.rotationY + axisCorrection,
           )
+
+          if (widthRunsOnX) {
+            instance.scale.x *= SHELF_WIDTH / sourceWidth
+            instance.scale.z *= SHELF_DEPTH / sourceDepth
+          } else {
+            instance.scale.z *= SHELF_WIDTH / sourceWidth
+            instance.scale.x *= SHELF_DEPTH / sourceDepth
+          }
         })
       }
 
