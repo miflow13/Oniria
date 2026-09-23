@@ -671,14 +671,18 @@ export default function OutdoorLibrary3D({
 
     const buildLibraryRoom = (room: LibraryRoom) => {
       const baseY = terraceBaseHeight(room.floor)
-      const wallHeight = 4.7
-      const roofY = baseY + wallHeight + .65
+      // Grand rooms use a second clerestory tier assembled from the authored
+      // wall/window kit. Their roofs therefore sit materially higher than the
+      // one-storey reading rooms instead of flattening the whole complex into
+      // one long pavilion.
+      const wallHeight = room.grand ? 7.15 : 4.7
+      const roofY = baseY + wallHeight + .42
       const halfWidth = room.width / 2
       const halfDepth = room.depth / 2
       const opening = 4.8
       const addWall = (x: number, z: number, width: number, depth: number) => {
-        // Visible walls are supplied later by the authored GLB wall kit.
-        // This rectangle exists only in the lightweight collision model.
+        // Visible masonry is supplied later by the authored GLB kit. Keep the
+        // collision representation simple so doorway openings remain reliable.
         addLibraryCollider(x, z, width, depth)
       }
       const addNorthSouthWall = (z: number, open: boolean) => {
@@ -694,20 +698,61 @@ export default function OutdoorLibrary3D({
         addWall(x, room.z + (opening + span) / 2, .56, span)
       }
 
-      addLibraryBox(libraryStoneDarkMaterial, room.x, baseY - .17, room.z, room.width + .7, .34, room.depth + .7)
+      addLibraryBox(
+        libraryStoneDarkMaterial,
+        room.x,
+        baseY - .17,
+        room.z,
+        room.width + .7,
+        .34,
+        room.depth + .7,
+      )
       addNorthSouthWall(room.z + halfDepth, room.doors.includes('north'))
       addNorthSouthWall(room.z - halfDepth, room.doors.includes('south'))
       addEastWestWall(room.x - halfWidth, room.doors.includes('west'))
       addEastWestWall(room.x + halfWidth, room.doors.includes('east'))
 
-      // Varied room-by-room roof volumes create a readable silhouette from
-      // the landscape while preserving clerestory light within each chamber.
-      addLibraryBox(libraryRoofMaterial, room.x - room.width * .22, roofY, room.z, room.width * .58, .48, room.depth + .9, room.grand ? .34 : .28)
-      addLibraryBox(libraryRoofMaterial, room.x + room.width * .22, roofY, room.z, room.width * .58, .48, room.depth + .9, room.grand ? -.34 : -.28)
-      addLibraryBox(libraryGoldMaterial, room.x, roofY + .7, room.z, .26, .26, room.depth * .72)
+      // The kit does not include roof meshes, so only the roof shell remains
+      // procedural. It is deliberately compact and pitched; the actual facade,
+      // corners, windows, floors and interior stacks all come from repo assets.
+      const roofPitch = room.grand ? .25 : .2
+      addLibraryBox(
+        libraryRoofMaterial,
+        room.x - room.width * .235,
+        roofY,
+        room.z,
+        room.width * .55,
+        .42,
+        room.depth + .75,
+        roofPitch,
+      )
+      addLibraryBox(
+        libraryRoofMaterial,
+        room.x + room.width * .235,
+        roofY,
+        room.z,
+        room.width * .55,
+        .42,
+        room.depth + .75,
+        -roofPitch,
+      )
+      addLibraryBox(
+        libraryGoldMaterial,
+        room.x,
+        roofY + (room.grand ? .64 : .5),
+        room.z,
+        .22,
+        .2,
+        room.depth * .7,
+      )
 
-      const light = new THREE.PointLight(room.grand ? 0xffd694 : 0xe9dfb6, room.grand ? 3.7 : 2.3, 19, 2)
-      light.position.set(room.x, baseY + wallHeight - .7, room.z)
+      const light = new THREE.PointLight(
+        room.grand ? 0xffd694 : 0xe9dfb6,
+        room.grand ? 3.7 : 2.3,
+        19,
+        2,
+      )
+      light.position.set(room.x, baseY + wallHeight - .85, room.z)
       scene.add(light)
     }
 
@@ -1192,7 +1237,7 @@ export default function OutdoorLibrary3D({
       [LIBRARY_ASSETS.displayCase, 1.45, 'height'],
       [LIBRARY_ASSETS.periodicalRack, 1.75, 'height'],
       [LIBRARY_ASSETS.pendantLight, 1.05, 'height'],
-      [LIBRARY_ASSETS.archedWindow, 3.25, 'height'],
+      [LIBRARY_ASSETS.archedWindow, 4.7, 'height'],
       [LIBRARY_ASSETS.readingRug, 3.8, 'span'],
       [LIBRARY_ASSETS.rollingLadder, 2.8, 'height'],
       [LIBRARY_ASSETS.floorLamp, 1.65, 'height'],
@@ -1250,81 +1295,169 @@ export default function OutdoorLibrary3D({
       const primaryWall = wallPanel ?? archedWindow
       const wallBounds = primaryWall
         ? new THREE.Box3().setFromObject(primaryWall).getSize(new THREE.Vector3())
-        : new THREE.Vector3(4.2, 4.7, .3)
-      const wallBaySpan = THREE.MathUtils.clamp(wallBounds.x, 3.2, 5.4)
+        : new THREE.Vector3(2.05, 4.7, .38)
+      // The authored wall panel is roughly 2m wide after fitting it to 4.7m
+      // tall. The previous 3.2m minimum spacing was literally leaving daylight
+      // between every bay. Use the real asset width and a slight overlap so
+      // wall runs read as continuous masonry from every camera angle.
+      const wallBaySpan = Math.max(.9, wallBounds.x * .94)
 
-      const wallBayPositions = (center: number, length: number) => {
-        const count = Math.max(1, Math.floor((length - .8) / wallBaySpan))
-        const spacing = (length - .8) / count
+      const wallBayPositions = (
+        center: number,
+        length: number,
+        targetSpan = wallBaySpan,
+      ) => {
+        const edgeInset = Math.min(targetSpan * .52, length * .09)
+        const usable = Math.max(targetSpan, length - edgeInset * 2)
+        const count = Math.max(1, Math.ceil(usable / targetSpan))
+        const spacing = usable / count
         return Array.from(
           {length: count},
-          (_, index) => center - (length - .8) / 2 + spacing * (index + .5),
+          (_, index) => center - usable / 2 + spacing * (index + .5),
         )
       }
 
-      // Every visible wall is assembled from the authored wall/window/corner
-      // GLBs. The procedural room pass contributes collision only.
-      libraryRooms.forEach(({floor, x: centerX, z: centerZ, depth, width, doors}) => {
+      const floorBounds = floorParquet
+        ? new THREE.Box3().setFromObject(floorParquet).getSize(new THREE.Vector3())
+        : new THREE.Vector3(6.2, .1, 6.2)
+      const floorTileX = Math.max(2.2, floorBounds.x * .97)
+      const floorTileZ = Math.max(2.2, floorBounds.z * .97)
+
+      const tileRoomFloor = (
+        centerX: number,
+        centerZ: number,
+        width: number,
+        depth: number,
+        baseY: number,
+      ) => {
+        if (!floorParquet) return
+        const usableWidth = Math.max(2, width - .75)
+        const usableDepth = Math.max(2, depth - .75)
+        const countX = Math.max(1, Math.ceil(usableWidth / floorTileX))
+        const countZ = Math.max(1, Math.ceil(usableDepth / floorTileZ))
+        const spacingX = usableWidth / countX
+        const spacingZ = usableDepth / countZ
+
+        for (let ix = 0; ix < countX; ix += 1) {
+          const x = centerX - usableWidth / 2 + spacingX * (ix + .5)
+          for (let iz = 0; iz < countZ; iz += 1) {
+            const z = centerZ - usableDepth / 2 + spacingZ * (iz + .5)
+            placeLibraryAsset(floorParquet, x, baseY + .015, z)
+          }
+        }
+      }
+
+      // Build each room as an actual enclosed library volume. Wall panels and
+      // arched windows are alternated inside continuous runs, wall-corner GLBs
+      // terminate every facade, and the grand halls receive a second tier of
+      // scaled clerestory windows. Door declarations cut real openings instead
+      // of turning the entire structure into an open-sided pavilion.
+      libraryRooms.forEach((room) => {
+        const {
+          floor,
+          x: centerX,
+          z: centerZ,
+          depth,
+          width,
+          doors,
+          grand,
+        } = room
         const baseY = terraceBaseHeight(floor)
         const halfWidth = width / 2
         const halfDepth = depth / 2
-        const frontZ = centerZ + depth / 2
-        const backZ = centerZ - depth / 2
+        const frontZ = centerZ + halfDepth
+        const backZ = centerZ - halfDepth
 
-        if (floorParquet) {
-          for (let z = frontZ - 3.1; z > backZ + 2.7; z -= 6.05) {
-            for (const x of [-6.05, 0, 6.05]) {
-              placeLibraryAsset(floorParquet, centerX + x, baseY + .015, z)
-            }
-          }
-        }
+        tileRoomFloor(centerX, centerZ, width, depth, baseY)
 
         if (primaryWall) {
           let bay = 0
+          const chooseBay = () => {
+            const template =
+              archedWindow && bay % 4 === 1 ? archedWindow : primaryWall
+            bay += 1
+            return template
+          }
+
+          // West/east walls: local wall X becomes world Z after the quarter turn.
           for (const side of [-1, 1] as const) {
             const doorway = side < 0 ? 'west' : 'east'
             for (const z of wallBayPositions(centerZ, depth)) {
-              if (doors.includes(doorway) && Math.abs(z - centerZ) < 2.8) continue
-              const template = bay % 3 === 1 && archedWindow ? archedWindow : primaryWall
+              if (doors.includes(doorway) && Math.abs(z - centerZ) < 2.55) {
+                continue
+              }
               placeLibraryAsset(
-                template,
+                chooseBay(),
                 centerX + side * halfWidth,
                 baseY + .08,
                 z,
                 1,
                 side < 0 ? Math.PI / 2 : -Math.PI / 2,
               )
-              bay += 1
             }
           }
 
+          // South/north walls.
           for (const side of [-1, 1] as const) {
             const doorway = side < 0 ? 'south' : 'north'
             for (const x of wallBayPositions(centerX, width)) {
-              if (doors.includes(doorway) && Math.abs(x - centerX) < 2.8) continue
-              const template = bay % 3 === 1 && archedWindow ? archedWindow : primaryWall
+              if (doors.includes(doorway) && Math.abs(x - centerX) < 2.55) {
+                continue
+              }
               placeLibraryAsset(
-                template,
+                chooseBay(),
                 x,
                 baseY + .08,
                 centerZ + side * halfDepth,
                 1,
                 side < 0 ? 0 : Math.PI,
               )
-              bay += 1
+            }
+          }
+
+          // Grand halls rise above the wings with an honest second facade tier.
+          // Using the window asset at half scale creates a clerestory band while
+          // retaining the exact architectural language of the supplied kit.
+          if (grand) {
+            const clerestory = archedWindow ?? primaryWall
+            const upperScale = .52
+            const upperY = baseY + 4.56
+            const upperSpan = Math.max(.7, wallBaySpan * upperScale * .94)
+
+            for (const side of [-1, 1] as const) {
+              for (const z of wallBayPositions(centerZ, depth, upperSpan)) {
+                placeLibraryAsset(
+                  clerestory,
+                  centerX + side * halfWidth,
+                  upperY,
+                  z,
+                  upperScale,
+                  side < 0 ? Math.PI / 2 : -Math.PI / 2,
+                )
+              }
+              for (const x of wallBayPositions(centerX, width, upperSpan)) {
+                placeLibraryAsset(
+                  clerestory,
+                  x,
+                  upperY,
+                  centerZ + side * halfDepth,
+                  upperScale,
+                  side < 0 ? 0 : Math.PI,
+                )
+              }
             }
           }
         }
 
         if (wallCorner) {
-          const cornerInset = .12
+          const cornerInset = .08
           const corners = [
             {x: centerX - halfWidth, z: frontZ - cornerInset, r: Math.PI / 2},
             {x: centerX + halfWidth, z: frontZ - cornerInset, r: Math.PI},
             {x: centerX + halfWidth, z: backZ + cornerInset, r: -Math.PI / 2},
             {x: centerX - halfWidth, z: backZ + cornerInset, r: 0},
           ]
-          corners.forEach((corner) =>
+          corners.forEach((corner) => {
             placeLibraryAsset(
               wallCorner,
               corner.x,
@@ -1332,58 +1465,88 @@ export default function OutdoorLibrary3D({
               corner.z,
               1,
               corner.r,
-            ),
-          )
+            )
+            if (grand) {
+              placeLibraryAsset(
+                wallCorner,
+                corner.x,
+                baseY + 4.56,
+                corner.z,
+                .52,
+                corner.r,
+              )
+            }
+          })
         }
 
         if (pendantLight) {
-          for (let z = frontZ - 7; z > backZ + 5; z -= 10.5) {
-            placeLibraryAsset(
-              pendantLight,
-              centerX,
-              baseY + (floor === 0 ? 6.25 : 5.8),
-              z,
-            )
+          const lightY = baseY + (grand ? 6.35 : 4.15)
+          const rows = grand ? [-3.5, 3.5] : [0]
+          const zStep = grand ? 8.5 : 9.5
+          for (let z = frontZ - 5; z > backZ + 4; z -= zStep) {
+            for (const xOffset of rows) {
+              placeLibraryAsset(
+                pendantLight,
+                centerX + xOffset,
+                lightY,
+                z,
+                grand ? 1.08 : .95,
+              )
+            }
           }
         }
 
-        // Archive terraces become much denser than the public hall, with
-        // free-standing stack rows, ladders, and visible filler books.
+        // Archive rooms use the actual stack-shelf and book-row models to make
+        // their interiors read as library stacks, not empty architectural shells.
         if (floor > 0 && stackShelf) {
           let stackIndex = 0
-          for (let z = frontZ - 8; z > backZ + 7; z -= 10.2) {
-            for (const side of [-1, 1] as const) {
-              const x = centerX + side * 5.9
-              const rotationY = side < 0 ? Math.PI : 0
-              placeLibraryAsset(stackShelf, x, baseY + .04, z, 1, rotationY)
+          const innerHalfWidth = Math.max(2.8, halfWidth - 2.4)
+          const rowXs =
+            width >= 24
+              ? [-innerHalfWidth * .58, 0, innerHalfWidth * .58]
+              : [-innerHalfWidth * .58, innerHalfWidth * .58]
 
-              const filler = stackIndex % 2 === 0 ? bookPacked : bookLeaning
+          for (let z = frontZ - 5.6; z > backZ + 5; z -= 6.8) {
+            for (const xOffset of rowXs) {
+              const rotationY = stackIndex % 2 === 0 ? 0 : Math.PI
+              const x = centerX + xOffset
+              placeLibraryAsset(
+                stackShelf,
+                x,
+                baseY + .04,
+                z,
+                1,
+                rotationY,
+              )
+
+              const filler =
+                stackIndex % 2 === 0 ? bookPacked : bookLeaning
               if (filler) {
                 placeLibraryAsset(
                   filler,
-                  x - side * .2,
+                  x,
                   baseY + 1.08,
                   z,
-                  .88,
+                  .86,
                   rotationY,
                 )
                 placeLibraryAsset(
                   filler,
-                  x - side * .2,
-                  baseY + 1.78,
-                  z + .08,
-                  .82,
+                  x,
+                  baseY + 1.8,
+                  z + .06,
+                  .8,
                   rotationY,
                 )
               }
 
-              if (rollingLadder && stackIndex % 3 === 1) {
+              if (rollingLadder && stackIndex % 4 === 1) {
                 placeLibraryAsset(
                   rollingLadder,
-                  x - side * .85,
+                  x + .7,
                   baseY + .03,
-                  z + 1.25,
-                  .9,
+                  z + .95,
+                  .88,
                   rotationY,
                 )
               }
