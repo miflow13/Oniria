@@ -31,6 +31,7 @@ import type {
 } from './libraryTypes'
 import styles from './library.module.css'
 import {
+  archiveDistrictGridLaneOffset,
   archivePathFrame,
   archivePathPoint,
   archiveShelfPlacement,
@@ -911,7 +912,7 @@ export default function DevLibraryMap() {
       )
     }
 
-    districts.forEach((district) => {
+    districts.forEach((district, districtIndex) => {
       const allDistrictArticles =
         articlesByDistrict.get(district.id) ?? []
       const districtArticles =
@@ -991,7 +992,16 @@ export default function DevLibraryMap() {
             {
               // District bookcases are architecture, not debris: keep each
               // pair level, mirrored, and square to the boulevard.
-              laneDistance: 7.7,
+              laneDistance:
+                archiveDistrictGridLaneOffset(
+                  districtIndex,
+                ) === 0
+                  ? 7.2
+                  : 6.35,
+              centerLateralOffset:
+                archiveDistrictGridLaneOffset(
+                  districtIndex,
+                ),
               heightJitterScale: 0,
               lateralJitterScale: 0,
               alongJitterScale: 0,
