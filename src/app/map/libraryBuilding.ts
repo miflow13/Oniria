@@ -6,6 +6,7 @@ import {
   LIBRARY_HALL_READING_Z,
   LIBRARY_ROOMS,
   LIBRARY_SHELF_WIDTH,
+  hallwayShelfPlacements,
   roomCrossAisleRect,
   roomDoorwayClearanceRect,
   roomShelfBlueprintPlacements,
@@ -2086,99 +2087,129 @@ export function createLibraryBuilding(
       const mockTemplateSize = new THREE.Box3()
         .setFromObject(bookcaseTall)
         .getSize(new THREE.Vector3())
-      const fillerZones = [
-        'divider-wall',
-        'outer-wall',
-        'rear-wall',
-      ] as const
 
-      roomDistricts.forEach((district, districtIndex) => {
-        const realWallShelves = [
-          ...roomShelfBlueprintPlacements(
-            district,
-            districtIndex,
-          ),
-          ...surveyedRoomShelfPlacements(
-            district,
-            districtIndex,
-          ),
-        ]
+      const hallCollections = [
+        {
+          side: 'left' as const,
+          sourceMode: 'featured' as const,
+        },
+        {
+          side: 'right' as const,
+          sourceMode: 'latest' as const,
+        },
+      ]
 
-        fillerZones.forEach((zone) => {
-          const zoneShelves = realWallShelves
-            .filter((placement) => placement.zone === zone)
-            .sort((a, b) =>
-              zone === 'outer-wall'
-                ? a.world[2] - b.world[2]
-                : a.world[0] - b.world[0],
-            )
+      hallCollections.forEach(({side, sourceMode}) => {
+        const district = roomDistricts.find(
+          (candidate) =>
+            candidate.sourceMode === sourceMode,
+        )
+        if (!district) return
 
-          for (
-            let index = 0;
-            index < zoneShelves.length - 1;
-            index += 1
-          ) {
-            const current = zoneShelves[index]
-            const next = zoneShelves[index + 1]
-            if (Math.abs(current.yaw - next.yaw) > .08) continue
+        const realHallShelves = hallwayShelfPlacements(
+          district,
+          side,
+        ).sort((a, b) => a.world[2] - b.world[2])
 
-            const dx = next.world[0] - current.world[0]
-            const dz = next.world[2] - current.world[2]
-            const centerDistance = Math.hypot(dx, dz)
-            const realShelfSpan =
-              LIBRARY_SHELF_WIDTH *
-              Math.max(
-                current.widthScale ?? 1,
-                next.widthScale ?? 1,
+        for (
+          let index = 0;
+          index < realHallShelves.length - 1;
+          index += 1
+        ) {
+          const current = realHallShelves[index]
+          const next = realHallShelves[index + 1]
+          if (!current || !next) continue
+
+          const centerX =
+            (current.world[0] + next.world[0]) / 2
+          const centerZ =
+            (current.world[2] + next.world[2]) / 2
+
+          // The larger gaps in the hall align with room doorways. Never fill
+          // those: decorative cases belong only on the uninterrupted wall
+          // spans between interactive DEV shelves.
+          const blocksDoorway = LIBRARY_ROOMS.some(
+            (room) => {
+              const sameSide =
+                Math.sign(room.doorway[0]) ===
+                Math.sign(centerX)
+              return (
+                sameSide &&
+                Math.abs(room.doorway[1] - centerZ) <
+                  3.8
               )
-            const freeGap = centerDistance - realShelfSpan
+            },
+          )
+          if (blocksDoorway) continue
 
-            // Tiny gaps read better as molding. Only insert a filler case when
-            // there is enough visual breathing room to keep the DEV shelves
-            // recognizable as the interactive collection.
-            if (freeGap < .42) continue
-
-            const scale = THREE.MathUtils.clamp(
-              (freeGap + .42) /
-                Math.max(.1, mockTemplateSize.x),
-              .62,
-              .88,
+          const centerDistance = Math.hypot(
+            next.world[0] - current.world[0],
+            next.world[2] - current.world[2],
+          )
+          const realShelfSpan =
+            LIBRARY_SHELF_WIDTH *
+            Math.max(
+              current.widthScale ?? 1,
+              next.widthScale ?? 1,
             )
-            const mock = placeAsset(
-              bookcaseTall,
-              (current.world[0] + next.world[0]) / 2,
-              floorSurfaceY + .04,
-              (current.world[2] + next.world[2]) / 2,
-              scale,
-              current.yaw,
-            )
-            mock.name =
-              `library-mock-bookcase-${district.roomSlot}-${zone}-${index}`
-            mock.userData.libraryDecorative = true
-            mock.userData.libraryMockShelf = true
+          const freeGap = centerDistance - realShelfSpan
+          if (freeGap < 1.1) continue
 
-            mock.updateMatrixWorld(true)
-            const bounds = new THREE.Box3().setFromObject(mock)
-            mock.position.y +=
-              floorSurfaceY + .08 - bounds.min.y
-            mock.updateMatrixWorld(true)
+          // Keep the filler visibly narrower than a real DEV shelf so users
+          // can read it as architectural book storage, not another clickable
+          // collection.
+          const targetWidth = THREE.MathUtils.clamp(
+            freeGap - .9,
+            1.05,
+            1.55,
+          )
+          const scale = THREE.MathUtils.clamp(
+            targetWidth /
+              Math.max(.1, mockTemplateSize.x),
+            .88,
+            1.48,
+          )
 
-            floatingProps.register(mock, {
-              phase: floatingPhase(mock.name),
-              hoverAmplitude: .055,
-              hoverSpeed: .12 + index * .008,
-              secondaryHoverAmplitude: .014,
-              secondaryHoverSpeed: .21,
-              tiltX: .012,
-              tiltY: .01,
-              tiltZ: .014,
-              driftSide: .075,
-              driftForward: .008,
-              driftSpeedSide: .14,
-              driftSpeedForward: .075,
-            })
-          }
-        })
+          const mock = placeAsset(
+            bookcaseTall,
+            centerX,
+            floorSurfaceY + .36,
+            centerZ,
+            scale,
+            current.yaw,
+          )
+          mock.name =
+            `library-hall-mock-bookcase-${side}-${index}`
+          mock.userData.libraryDecorative = true
+          mock.userData.libraryMockShelf = true
+          mock.userData.libraryHallFiller = true
+
+          // Normalize from the asset's true bounds, then leave a visible
+          // zero-gravity gap beneath it before animation begins.
+          mock.updateMatrixWorld(true)
+          const bounds = new THREE.Box3().setFromObject(mock)
+          mock.position.y +=
+            floorSurfaceY + .38 - bounds.min.y
+          mock.updateMatrixWorld(true)
+
+          // These filler cases are intentionally much livelier than the real
+          // DEV shelves: they share the floating-pavilion language used by
+          // columns/light furniture while remaining non-interactive.
+          floatingProps.register(mock, {
+            phase: floatingPhase(mock.name),
+            hoverAmplitude: .24,
+            hoverSpeed: .19 + index * .012,
+            secondaryHoverAmplitude: .075,
+            secondaryHoverSpeed: .34,
+            tiltX: .055,
+            tiltY: .09,
+            tiltZ: .064,
+            driftSide: .34,
+            driftForward: .19,
+            driftSpeedSide: .21,
+            driftSpeedForward: .16,
+          })
+        }
       })
     }
 
