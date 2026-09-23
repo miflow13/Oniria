@@ -162,6 +162,94 @@ export function createLibraryAtmosphere({
   const archiveFog: THREE.Sprite[] = []
   const localHaze: THREE.Sprite[] = []
 
+  // Soft dust motes give the enclosed rooms scale and air without adding
+  // geometry-heavy volumetrics. One tiny Points cloud covers the whole
+  // building and drifts upward slowly.
+  const dustCanvas = document.createElement('canvas')
+  dustCanvas.width = 32
+  dustCanvas.height = 32
+  const dustContext = dustCanvas.getContext('2d')
+  if (dustContext) {
+    const gradient = dustContext.createRadialGradient(
+      16,
+      16,
+      0,
+      16,
+      16,
+      16,
+    )
+    gradient.addColorStop(0, 'rgba(255,244,222,.95)')
+    gradient.addColorStop(.36, 'rgba(255,231,196,.48)')
+    gradient.addColorStop(1, 'rgba(255,231,196,0)')
+    dustContext.fillStyle = gradient
+    dustContext.fillRect(0, 0, 32, 32)
+  }
+  const dustTexture = new THREE.CanvasTexture(dustCanvas)
+  const dustCount =
+    quality === 'cinematic'
+      ? 220
+      : quality === 'high'
+        ? 160
+        : quality === 'medium'
+          ? 105
+          : 60
+  const dustGeometry = new THREE.BufferGeometry()
+  const dustPositions = new Float32Array(dustCount * 3)
+  const dustBaseX = new Float32Array(dustCount)
+  const dustBaseY = new Float32Array(dustCount)
+  const dustPhase = new Float32Array(dustCount)
+  const dustSpeed = new Float32Array(dustCount)
+
+  for (let index = 0; index < dustCount; index += 1) {
+    const seed = index + 1701
+    const offset = index * 3
+    const x = THREE.MathUtils.lerp(
+      -23.2,
+      23.2,
+      seededUnit(seed, 1),
+    )
+    const y = THREE.MathUtils.lerp(
+      .38,
+      4.72,
+      seededUnit(seed, 2),
+    )
+    const z = THREE.MathUtils.lerp(
+      -73.4,
+      13.2,
+      seededUnit(seed, 3),
+    )
+    dustPositions[offset] = x
+    dustPositions[offset + 1] = y
+    dustPositions[offset + 2] = z
+    dustBaseX[index] = x
+    dustBaseY[index] = y
+    dustPhase[index] = seededUnit(seed, 4) * Math.PI * 2
+    dustSpeed[index] = .035 + seededUnit(seed, 5) * .055
+  }
+
+  dustGeometry.setAttribute(
+    'position',
+    new THREE.BufferAttribute(dustPositions, 3),
+  )
+  const dustMaterial = new THREE.PointsMaterial({
+    map: dustTexture,
+    color: 0xffe8c7,
+    size: .065,
+    transparent: true,
+    opacity: .24,
+    depthWrite: false,
+    alphaTest: .025,
+    sizeAttenuation: true,
+    blending: THREE.AdditiveBlending,
+    toneMapped: true,
+  })
+  const dustMotes = new THREE.Points(
+    dustGeometry,
+    dustMaterial,
+  )
+  dustMotes.renderOrder = 2
+  world.add(dustMotes)
+
   const fogTextureColors: string[] = []
 
   const fogTextures = fogTextureColors.map((color) => {
@@ -309,6 +397,25 @@ export function createLibraryAtmosphere({
       districts,
     }) {
       if (disposed) return
+
+      const dustPositionAttribute =
+        dustGeometry.getAttribute('position') as THREE.BufferAttribute
+      for (let index = 0; index < dustCount; index += 1) {
+        const offset = index * 3
+        const phase = dustPhase[index]
+        const rise =
+          ((dustBaseY[index] - .38 + elapsed * dustSpeed[index]) %
+            4.34) +
+          .38
+        dustPositions[offset] =
+          dustBaseX[index] +
+          Math.sin(elapsed * .075 + phase) * .085
+        dustPositions[offset + 1] =
+          rise + Math.sin(elapsed * .11 + phase) * .055
+      }
+      dustPositionAttribute.needsUpdate = true
+      dustMaterial.opacity =
+        .19 + Math.sin(elapsed * .17) * .025
 
       hazePlanes.forEach((plane, index) => {
         const material =
@@ -542,7 +649,11 @@ export function createLibraryAtmosphere({
       archiveFog.forEach((sprite) => world.remove(sprite))
       localHaze.forEach((sprite) => world.remove(sprite))
       world.remove(districtLight)
+      world.remove(dustMotes)
 
+      dustGeometry.dispose()
+      dustMaterial.dispose()
+      dustTexture.dispose()
       hazeGeometry.dispose()
       hazeMaterials.forEach((material) => material.dispose())
       hazeTextures.forEach((texture) => texture.dispose())
