@@ -620,6 +620,162 @@ export default function Stackwell3D({
     trench.position.set(0, .005, -59)
     scene.add(trench)
 
+    // THE WELL — primary Stackwell landmark. The hard floor remains for
+    // collision, while a dark cap + open shaft geometry creates the visual
+    // illusion that the archive continues infinitely above and below.
+    const wellCenterZ = 6
+    const wellMouthGeometry = new THREE.CircleGeometry(2.42, 64)
+    const wellMouthMaterial = new THREE.MeshBasicMaterial({
+      color: 0x010205,
+      side: THREE.DoubleSide,
+      depthWrite: true,
+    })
+    geometries.push(wellMouthGeometry)
+    materials.push(wellMouthMaterial)
+    const wellMouth = new THREE.Mesh(wellMouthGeometry, wellMouthMaterial)
+    wellMouth.rotation.x = -Math.PI / 2
+    wellMouth.position.set(0, .032, wellCenterZ)
+    scene.add(wellMouth)
+
+    const wellShaftGeometry = new THREE.CylinderGeometry(
+      2.34,
+      2.34,
+      84,
+      48,
+      1,
+      true,
+    )
+    const wellShaftMaterial = new THREE.MeshBasicMaterial({
+      color: 0x07101a,
+      transparent: true,
+      opacity: .34,
+      side: THREE.BackSide,
+      depthWrite: false,
+    })
+    geometries.push(wellShaftGeometry)
+    materials.push(wellShaftMaterial)
+    const wellShaft = new THREE.Mesh(wellShaftGeometry, wellShaftMaterial)
+    wellShaft.position.set(0, 8, wellCenterZ)
+    scene.add(wellShaft)
+
+    const wellLightGeometry = new THREE.CylinderGeometry(
+      .46,
+      .72,
+      96,
+      28,
+      1,
+      true,
+    )
+    const wellLightMaterial = new THREE.MeshBasicMaterial({
+      color: 0x86dcff,
+      transparent: true,
+      opacity: .105,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    })
+    geometries.push(wellLightGeometry)
+    materials.push(wellLightMaterial)
+    const wellLightColumn = new THREE.Mesh(
+      wellLightGeometry,
+      wellLightMaterial,
+    )
+    wellLightColumn.position.set(0, 8, wellCenterZ)
+    scene.add(wellLightColumn)
+
+    const wellRingGeometry = new THREE.TorusGeometry(2.72, .065, 8, 64)
+    geometries.push(wellRingGeometry)
+    for (let ringIndex = -2; ringIndex <= FLOOR_COUNT + 2; ringIndex += 1) {
+      const ringMaterial = new THREE.MeshBasicMaterial({
+        color: ringIndex % 2 === 0 ? 0x70d9ff : 0x7d82ff,
+        transparent: true,
+        opacity: ringIndex >= 0 && ringIndex < FLOOR_COUNT ? .42 : .14,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })
+      materials.push(ringMaterial)
+      const ring = new THREE.Mesh(wellRingGeometry, ringMaterial)
+      ring.rotation.x = Math.PI / 2
+      ring.position.set(
+        0,
+        ringIndex * FLOOR_HEIGHT + .16,
+        wellCenterZ,
+      )
+      scene.add(ring)
+    }
+
+    const wellMoteCount = 260
+    const wellMotePositions = new Float32Array(wellMoteCount * 3)
+    for (let index = 0; index < wellMoteCount; index += 1) {
+      const angle = ((index * 137.5) * Math.PI) / 180
+      const radius = .35 + ((index * 29) % 180) / 100
+      wellMotePositions[index * 3] = Math.cos(angle) * radius
+      wellMotePositions[index * 3 + 1] = -18 + ((index * 73) % 580) / 10
+      wellMotePositions[index * 3 + 2] =
+        wellCenterZ + Math.sin(angle) * radius
+    }
+    const wellMoteGeometry = new THREE.BufferGeometry()
+    wellMoteGeometry.setAttribute(
+      'position',
+      new THREE.BufferAttribute(wellMotePositions, 3),
+    )
+    const wellMoteMaterial = new THREE.PointsMaterial({
+      color: 0xc2efff,
+      size: .038,
+      transparent: true,
+      opacity: .58,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    })
+    geometries.push(wellMoteGeometry)
+    materials.push(wellMoteMaterial)
+    const wellMotes = new THREE.Points(wellMoteGeometry, wellMoteMaterial)
+    scene.add(wellMotes)
+
+    // First real district: #javascript. Warm light distinguishes it from the
+    // cool Well before text is readable.
+    for (const side of [-1, 1] as const) {
+      const districtLight = new THREE.PointLight(
+        0xf7df1e,
+        8.5,
+        20,
+        2,
+      )
+      districtLight.position.set(side * 4.4, 2.6, SECTION_Z.featured)
+      scene.add(districtLight)
+    }
+
+    const districtBridgeCurve = new THREE.CatmullRomCurve3(
+      [
+        new THREE.Vector3(0, .08, 3.25),
+        new THREE.Vector3(-1.05, .16, -.5),
+        new THREE.Vector3(.85, .12, -6.2),
+        new THREE.Vector3(0, .08, SECTION_Z.featured + 2.6),
+      ],
+      false,
+      'centripetal',
+      .35,
+    )
+    const districtBridgeGeometry = new THREE.TubeGeometry(
+      districtBridgeCurve,
+      36,
+      .045,
+      7,
+      false,
+    )
+    const districtBridgeMaterial = new THREE.MeshBasicMaterial({
+      color: 0xf7df1e,
+      transparent: true,
+      opacity: .34,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+    geometries.push(districtBridgeGeometry)
+    materials.push(districtBridgeMaterial)
+    scene.add(
+      new THREE.Mesh(districtBridgeGeometry, districtBridgeMaterial),
+    )
+
     const indexLineMaterial = new THREE.MeshBasicMaterial({
       color: 0x6dbde6,
       transparent: true,
@@ -903,7 +1059,7 @@ export default function Stackwell3D({
     const devPlaneGeometry = new THREE.PlaneGeometry(5.5, 1.8)
     geometries.push(devPlaneGeometry)
     const devPlane = new THREE.Mesh(devPlaneGeometry, devMaterial)
-    devPlane.position.set(0, 3.8, 9.2)
+    devPlane.position.set(0, FLOOR_HEIGHT * 3 + 3.2, 6.02)
     scene.add(devPlane)
 
     const sectionMarkerGeometry = new THREE.PlaneGeometry(4.7, 1.08)
@@ -951,7 +1107,7 @@ export default function Stackwell3D({
 
     for (let floorIndex = 1; floorIndex < FLOOR_COUNT; floorIndex += 1) {
       const texture = makeLabelTexture(
-        'DEEP ARCHIVE · LEVEL 0' + (floorIndex + 1),
+        'STACKWELL STRATUM 0' + (floorIndex + 1),
         'LIVE DEV CATALOG',
         floorIndex % 2 === 0 ? '#7e74ff' : '#5fe1ff',
       )
