@@ -274,6 +274,102 @@ export function createLibraryCityScene(
       block.elevation,
       district.accent,
     )
+
+    // A smaller raised inner pad gives each neighborhood a readable center
+    // without turning every district into a giant landmark plaza.
+    const innerGeometry = new THREE.BoxGeometry(
+      block.width * .42,
+      .12,
+      block.depth * .36,
+    )
+    geometries.push(innerGeometry)
+    const innerMaterial = new THREE.MeshBasicMaterial({
+      color:
+        district.id === 'deep-stacks'
+          ? 0x080311
+          : new THREE.Color(district.accent).multiplyScalar(.16),
+      transparent: true,
+      opacity:
+        district.id === 'deep-stacks'
+          ? .76
+          : .42,
+      depthWrite: true,
+      toneMapped: true,
+    })
+    materials.push(innerMaterial)
+    const innerPad = new THREE.Mesh(
+      innerGeometry,
+      innerMaterial,
+    )
+    innerPad.position.set(
+      block.x,
+      CITY_GROUND_Y +
+        block.elevation +
+        .08,
+      block.z,
+    )
+    innerPad.userData.libraryDecorative = true
+    world.add(innerPad)
+    objects.push(innerPad)
+
+    if (district.id === 'deep-stacks') {
+      // Deep Stacks should feel like the city is being swallowed by the
+      // archive. These low walls create a dark perimeter and hide shelves
+      // until the player actually enters the neighborhood.
+      const wallMaterial = new THREE.MeshBasicMaterial({
+        color: 0x050208,
+        transparent: true,
+        opacity: .9,
+        depthWrite: true,
+        toneMapped: true,
+      })
+      materials.push(wallMaterial)
+
+      const wallSpecs = [
+        {
+          width: block.width,
+          depth: .5,
+          x: block.x,
+          z: block.z - block.depth * .5 + .25,
+        },
+        {
+          width: block.width,
+          depth: .5,
+          x: block.x,
+          z: block.z + block.depth * .5 - .25,
+        },
+        {
+          width: .5,
+          depth: block.depth,
+          x: block.x - block.width * .5 + .25,
+          z: block.z,
+        },
+      ]
+
+      wallSpecs.forEach((wall, wallIndex) => {
+        const wallGeometry = new THREE.BoxGeometry(
+          wall.width,
+          2.2 + wallIndex * .28,
+          wall.depth,
+        )
+        geometries.push(wallGeometry)
+        const wallMesh = new THREE.Mesh(
+          wallGeometry,
+          wallMaterial,
+        )
+        wallMesh.position.set(
+          wall.x,
+          CITY_GROUND_Y +
+            block.elevation +
+            1.08 +
+            wallIndex * .14,
+          wall.z,
+        )
+        wallMesh.userData.libraryDecorative = true
+        world.add(wallMesh)
+        objects.push(wallMesh)
+      })
+    }
   })
 
   CITY_EMPTY_BLOCKS.forEach((block) => {
