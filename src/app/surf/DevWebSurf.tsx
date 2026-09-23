@@ -544,7 +544,7 @@ function buildLibraryGraph(
         subtitle:
           '@' +
           article.user.username +
-          ' · floor ' +
+          ' · level ' +
           ((placement.floorIndex ?? 0) + 1),
         href: article.url,
         articleId: article.id,
@@ -1160,7 +1160,7 @@ export default function DevWebSurf() {
         : 'section:featured'
 
   const breadcrumb = [
-    'DEV Library',
+    'DEV // Infinite Stacks',
     SECTION_COPY[currentSection].title,
     activeNode?.title,
   ].filter(Boolean)
@@ -1216,7 +1216,7 @@ export default function DevWebSurf() {
           }}
         >
           <b>DEV</b>
-          <span>Library</span>
+          <span>Infinite Stacks</span>
         </button>
 
         <form className={styles.addressBar} onSubmit={submitSearch}>
@@ -1237,7 +1237,7 @@ export default function DevWebSurf() {
         </div>
       </header>
 
-      <nav className={styles.breadcrumb} aria-label="Library location">
+      <nav className={styles.breadcrumb} aria-label="Stack location">
         {breadcrumb.map((item, index) => (
           <span key={item + ':' + index}>
             {index > 0 && <i>›</i>}
@@ -1275,8 +1275,8 @@ export default function DevWebSurf() {
         </nav>
       )}
 
-      <nav className={styles.floorRail} aria-label="Library floors">
-        <span>Floor</span>
+      <nav className={styles.floorRail} aria-label="Archive levels">
+        <span>Level</span>
         {Array.from({length: LIBRARY_FLOOR_COUNT}, (_, floor) => (
           <button
             type="button"
