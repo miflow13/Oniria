@@ -5274,8 +5274,23 @@ export default function DreamWorld3D({
 
       const request = event as CustomEvent<{
         remove?: boolean
+        clearAll?: boolean
         source?: string
       }>
+
+      if (request.detail?.clearAll) {
+        void libraryLayoutAuthoring
+          .clearAll()
+          .then((count) => {
+            emitLayoutAuthoringResult({
+              ok: true,
+              action: 'cleared-all',
+              count,
+              message: `CLEARED ${count} PIN${count === 1 ? '' : 'S'}`,
+            })
+          })
+        return
+      }
 
       if (request.detail?.remove) {
         void libraryLayoutAuthoring
