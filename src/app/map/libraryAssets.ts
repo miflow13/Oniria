@@ -7,7 +7,6 @@ export const LIBRARY_ASSETS = {
   wallCorner: '/assets/library-kit/library-wall-corner.glb',
   floorParquet: '/assets/library-kit/library-floor-parquet.glb',
   roofTile: '/assets/library-kit/bath-floor-tile.glb',
-  skyDome: '/assets/library-kit/day-sky-dome.glb',
   stackShelf: '/assets/library-kit/stack-shelf.glb',
   stackShelfEnd: '/assets/library-kit/stack-shelf-end.glb',
   column: '/assets/library-kit/column.glb',
