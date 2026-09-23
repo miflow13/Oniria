@@ -39,6 +39,41 @@ export function createLibraryBuilding(
   const localGeometries: THREE.BufferGeometry[] = []
   const localTextures: THREE.Texture[] = []
 
+  // Cheap contact grounding for floating rugs/tables. These are deliberately
+  // unlit transparent planes rather than real shadow casters, so the library
+  // gets soft floor contact without multiplying shadow-map work.
+  const contactShadowGeometry = new THREE.PlaneGeometry(1, 1)
+  const contactShadowMaterial = new THREE.MeshBasicMaterial({
+    color: 0x050509,
+    transparent: true,
+    opacity: .17,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    toneMapped: true,
+  })
+  localGeometries.push(contactShadowGeometry)
+  localMaterials.push(contactShadowMaterial)
+
+  const addContactShadow = (
+    x: number,
+    z: number,
+    width: number,
+    depth: number,
+    yaw = 0,
+  ) => {
+    const shadow = new THREE.Mesh(
+      contactShadowGeometry,
+      contactShadowMaterial,
+    )
+    shadow.rotation.x = -Math.PI / 2
+    shadow.rotation.z = -yaw
+    shadow.position.set(x, .014, z)
+    shadow.scale.set(width, depth, 1)
+    shadow.renderOrder = 1
+    group.add(shadow)
+    return shadow
+  }
+
   const createSignTexture = (
     title: string,
     subtitle: string,
@@ -348,21 +383,28 @@ export function createLibraryBuilding(
     accentLight.position.set(x, 3.05, z)
     group.add(accentLight)
 
-    const warmFill = new THREE.PointLight(
-      sourceMode === 'catalog' ? 0xd6d7e6 : 0xffddb8,
-      sourceMode === 'featured' ? .82 : sourceMode === 'catalog' ? .32 : .56,
-      9,
+    // One physically-localized warm pool per hanging fixture. Distance and
+    // inverse-square decay keep neighboring rooms from washing into each
+    // other, which makes the hallway read as alternating pools of light.
+    const pendantGlow = new THREE.PointLight(
+      sourceMode === 'catalog' ? 0xe6dfd5 : 0xffd3a0,
+      sourceMode === 'featured' ? 1.08 : sourceMode === 'catalog' ? .58 : .86,
+      10.5,
       2,
     )
-    warmFill.position.set(x, 3.55, z)
-    group.add(warmFill)
+    pendantGlow.position.set(x, 3.82, z)
+    pendantGlow.castShadow = false
+    pendantGlow.name = `library-pendant-light-room-${room.slot}`
+    group.add(pendantGlow)
 
+    // Keep a restrained downward spot for shape, but let the pendant point
+    // light do most of the illumination instead of flattening the whole room.
     const roomSpot = new THREE.SpotLight(
       sourceMode === 'catalog' ? 0xb9c8e8 : 0xffe6c9,
-      sourceMode === 'featured' ? 1.05 : sourceMode === 'catalog' ? .44 : .72,
-      12,
-      Math.PI / 3.4,
-      .72,
+      sourceMode === 'featured' ? .42 : sourceMode === 'catalog' ? .18 : .3,
+      10,
+      Math.PI / 3.6,
+      .78,
       2,
     )
     roomSpot.position.set(x, 4.72, z)
@@ -375,12 +417,14 @@ export function createLibraryBuilding(
   // whole building. These match the pendant-model positions below.
   ;[6, -8, -28, -48, -68].forEach((z, index) => {
     const corridorLight = new THREE.PointLight(
-      index === 4 ? 0xd5d9eb : 0xffdfb8,
-      index === 4 ? .38 : .58,
-      12,
+      index === 4 ? 0xe2e0dd : 0xffd3a0,
+      index === 4 ? .62 : .82,
+      11,
       2,
     )
-    corridorLight.position.set(0, 3.85, z)
+    corridorLight.position.set(0, 3.92, z)
+    corridorLight.castShadow = false
+    corridorLight.name = `library-pendant-light-hall-${index}`
     group.add(corridorLight)
   })
 
@@ -423,6 +467,56 @@ export function createLibraryBuilding(
       windows: false,
     },
   )
+
+  // Small architectural edges do a lot of work in a low-poly room. A dark
+  // baseboard and matching crown line break the giant flat wall surfaces and
+  // make each room read as intentionally constructed rather than boxed-in.
+  const trimMaterial = new THREE.MeshStandardMaterial({
+    color: 0x2a211d,
+    roughness: .78,
+    metalness: .03,
+    envMapIntensity: .24,
+  })
+  const ventMaterial = new THREE.MeshStandardMaterial({
+    color: 0x171a20,
+    roughness: .68,
+    metalness: .32,
+    envMapIntensity: .3,
+  })
+  localMaterials.push(trimMaterial, ventMaterial)
+
+  const addTrimRun = (run: WallRun, y: number, height: number) => {
+    const geometry =
+      run.axis === 'x'
+        ? new THREE.BoxGeometry(run.length, height, .11)
+        : new THREE.BoxGeometry(.11, height, run.length)
+    localGeometries.push(geometry)
+    const trim = new THREE.Mesh(geometry, trimMaterial)
+    trim.position.set(run.x, y, run.z)
+    trim.receiveShadow = true
+    group.add(trim)
+  }
+
+  wallRuns.forEach((run) => {
+    addTrimRun(run, .09, .18)
+    addTrimRun(run, 4.91, .12)
+  })
+
+  // Sparse corridor vents add believable scale/detail without introducing a
+  // new asset dependency. Each uses one plate and three shallow slots.
+  const ventPlateGeometry = new THREE.BoxGeometry(1.15, .022, .42)
+  const ventSlotGeometry = new THREE.BoxGeometry(.82, .016, .045)
+  localGeometries.push(ventPlateGeometry, ventSlotGeometry)
+  ;[-3, -24, -44, -64].forEach((z) => {
+    const plate = new THREE.Mesh(ventPlateGeometry, ventMaterial)
+    plate.position.set(2.25, .018, z)
+    group.add(plate)
+    ;[-.11, 0, .11].forEach((offset) => {
+      const slot = new THREE.Mesh(ventSlotGeometry, contactShadowMaterial)
+      slot.position.set(2.25, .034, z + offset)
+      group.add(slot)
+    })
+  })
 
   const placeAsset = (
     template: THREE.Group,
@@ -676,6 +770,25 @@ export function createLibraryBuilding(
         placement.castsShadow ?? false,
       )
       instance.name = `library-furnishing-${placement.id}`
+
+      if (placement.asset === 'readingRug') {
+        addContactShadow(
+          placement.position[0],
+          placement.position[2],
+          4.35 * (placement.scale ?? 1),
+          3.15 * (placement.scale ?? 1),
+          placement.yaw ?? 0,
+        )
+      } else if (placement.asset === 'readingTable') {
+        addContactShadow(
+          placement.position[0],
+          placement.position[2],
+          2.35 * (placement.scale ?? 1),
+          1.45 * (placement.scale ?? 1),
+          placement.yaw ?? 0,
+        )
+      }
+
       if (placement.floats !== false) {
         const motionProfile =
           placement.asset === 'readingRug'
