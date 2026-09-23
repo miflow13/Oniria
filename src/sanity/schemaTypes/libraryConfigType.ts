@@ -79,13 +79,13 @@ export const libraryConfigType = defineType({
     }),
     defineField({
       name: 'deepStacksEnabled',
-      title: 'Deep Stacks enabled',
+      title: 'Archive streaming enabled',
       type: 'boolean',
       initialValue: true,
     }),
     defineField({
       name: 'featuredDistrict',
-      title: 'Featured district',
+      title: 'Featured room',
       type: 'reference',
       to: [{type: 'libraryDistrict'}],
     }),
@@ -94,7 +94,7 @@ export const libraryConfigType = defineType({
     prepare() {
       return {
         title: 'Oniria Library Control',
-        subtitle: 'Global spatial archive settings',
+        subtitle: 'Global six-room DEV Library settings',
       }
     },
   },
