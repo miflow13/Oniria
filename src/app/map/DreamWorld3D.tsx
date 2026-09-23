@@ -839,6 +839,71 @@ export default function DreamWorld3D({
         )
       })[0] ?? null
     }
+
+    const nearestAuthoringRoomEntry = (
+      x: number,
+      z: number,
+    ) => {
+      // Authoring must be more forgiving than gameplay detection. Measure
+      // distance to each room's architectural rectangle and choose the
+      // closest room even when the camera is touching/slightly beyond an
+      // inferred wall edge.
+      let nearest =
+        roomDistrictEntries[0] ?? null
+      let nearestDistance = Infinity
+
+      roomDistrictEntries.forEach((entry) => {
+        const bounds = {
+          minX: Math.min(
+            entry.room.doorway[0],
+            entry.room.center[0] < 0
+              ? LIBRARY_BUILDING_BOUNDS.minX
+              : LIBRARY_BUILDING_BOUNDS.maxX,
+          ),
+          maxX: Math.max(
+            entry.room.doorway[0],
+            entry.room.center[0] < 0
+              ? LIBRARY_BUILDING_BOUNDS.minX
+              : LIBRARY_BUILDING_BOUNDS.maxX,
+          ),
+          minZ: entry.room.center[1] - 10.6,
+          maxZ: entry.room.center[1] + 10.6,
+        }
+
+        const dx =
+          x < bounds.minX
+            ? bounds.minX - x
+            : x > bounds.maxX
+              ? x - bounds.maxX
+              : 0
+        const dz =
+          z < bounds.minZ
+            ? bounds.minZ - z
+            : z > bounds.maxZ
+              ? z - bounds.maxZ
+              : 0
+        const distance = dx * dx + dz * dz
+
+        if (
+          distance < nearestDistance ||
+          (distance === nearestDistance &&
+            nearest &&
+            Math.hypot(
+              x - entry.center[0],
+              z - entry.center[1],
+            ) <
+              Math.hypot(
+                x - nearest.center[0],
+                z - nearest.center[1],
+              ))
+        ) {
+          nearest = entry
+          nearestDistance = distance
+        }
+      })
+
+      return nearest
+    }
     const libraryMode = nodeRef.current.some(
       (node) => node.libraryKind === 'shelf',
     )
@@ -5223,18 +5288,15 @@ export default function DreamWorld3D({
         return
       }
 
-      const roomEntry = nearestRoomEntry(
+      const roomEntry = nearestAuthoringRoomEntry(
         camera.position.x,
         camera.position.z,
       )
       if (!roomEntry) {
-        console.info(
-          '[DEV Library layout] stand inside a room before dropping a pin',
-        )
         emitLayoutAuthoringResult({
           ok: false,
-          action: 'outside-room',
-          message: 'STAND INSIDE A ROOM',
+          action: 'no-room',
+          message: 'NO ROOM AVAILABLE',
         })
         return
       }
@@ -5266,26 +5328,14 @@ export default function DreamWorld3D({
       }
       markerForward.normalize()
 
-      let markerX = camera.position.x
-      let markerZ = camera.position.z
-      for (const distance of [2.2, 1.6, 1, .45]) {
-        const candidateX =
-          camera.position.x + markerForward.x * distance
-        const candidateZ =
-          camera.position.z + markerForward.z * distance
-        const candidateRoom = nearestRoomEntry(
-          candidateX,
-          candidateZ,
-        )
-        if (
-          candidateRoom?.district.id ===
-          roomEntry.district.id
-        ) {
-          markerX = candidateX
-          markerZ = candidateZ
-          break
-        }
-      }
+      // Once the authoring room has been resolved, do not apply gameplay
+      // room-boundary rejection to the marker itself. This lets Mika map
+      // shelf centers right against walls/corners even when the authored
+      // architecture and our inferred rectangle differ by a small amount.
+      const markerX =
+        camera.position.x + markerForward.x * 2.2
+      const markerZ =
+        camera.position.z + markerForward.z * 2.2
 
       void libraryLayoutAuthoring
         .dropMarker({
