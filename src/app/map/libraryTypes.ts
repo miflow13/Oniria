@@ -72,5 +72,6 @@ export type LibraryShelf = {
   floatId: string
   pathBay: number
   districtId: string
+  widthScale: number
   articles: DevArticleSummary[]
 }
