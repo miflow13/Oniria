@@ -72,6 +72,14 @@ import {
   archiveWalkSurfaceAtPosition,
   archiveWalkwayHalfWidthAtBay,
 } from './libraryLayout'
+import {
+  CITY_ARRIVAL,
+  CITY_GROUND_Y,
+  cityDistrictBlock,
+  cityNearestDistrict,
+  cityWalkSurfaceAtPosition,
+} from './libraryCityLayout'
+import {createLibraryCityScene} from './libraryCityScene'
 import {createLibraryAudio} from './libraryAudio'
 import {
   createLibraryReadingRitual,
@@ -782,6 +790,7 @@ export default function DreamWorld3D({
     const libraryMode = nodeRef.current.some(
       (node) => node.libraryKind === 'shelf',
     )
+    const useCityLibraryLayout = libraryMode
     const libraryGridSegments = libraryMode
       ? archiveGridRoadSegments(activeDistricts)
       : []
@@ -823,11 +832,12 @@ export default function DreamWorld3D({
       camera.position.fromArray(savedLibraryFlightState.position)
       camera.quaternion.fromArray(savedLibraryFlightState.quaternion)
     } else if (libraryMode) {
-      const arrival = archivePathPoint(0)
       camera.position.set(
-        arrival[0],
-        arrival[1] + ARCHIVE_WALKWAY_Y_OFFSET + 1.64,
-        arrival[2],
+        CITY_ARRIVAL.x,
+        CITY_GROUND_Y +
+          CITY_ARRIVAL.elevation +
+          1.64,
+        CITY_ARRIVAL.z + 3.8,
       )
     } else {
       camera.position.set(0, 0, 10.8)
@@ -1105,7 +1115,7 @@ export default function DreamWorld3D({
     const librarySkywayGeometries: THREE.BufferGeometry[] = []
     const librarySkywayMaterials: THREE.Material[] = []
 
-    if (libraryMode) {
+    if (libraryMode && !useCityLibraryLayout) {
       // Replace the old archive skyscrapers with unreachable floating
       // expressways. They are deliberately placed in farWorld only, so they
       // never become walkable surfaces, raycast targets, or collision bodies.
@@ -2145,6 +2155,9 @@ export default function DreamWorld3D({
       })
     }
 
+    let libraryCityScene:
+      | ReturnType<typeof createLibraryCityScene>
+      | null = null
     let libraryWalkwayGeometry: THREE.BufferGeometry | null = null
     let libraryWalkwayRailGeometry: THREE.BufferGeometry | null = null
     let libraryWalkwayPanelMaterial: THREE.MeshBasicMaterial | null = null
@@ -2181,7 +2194,7 @@ export default function DreamWorld3D({
     let libraryRouteDots: THREE.Points | null = null
     const libraryRouteDotCount = 54
 
-    if (libraryMode) {
+    if (libraryMode && !useCityLibraryLayout) {
       const subdivisionsPerBay = 4
       const sampleCount =
         ARCHIVE_PATH_RENDER_BAYS * subdivisionsPerBay + 1
@@ -3349,6 +3362,347 @@ export default function DreamWorld3D({
       libraryRouteDots.userData.libraryDecorative = true
       world.add(libraryRouteDots)
 
+    }
+
+
+    if (libraryMode && useCityLibraryLayout) {
+      libraryCityScene = createLibraryCityScene(
+        world,
+        activeDistricts,
+      )
+
+      // The mockup treats districts as real city blocks. Signs live above
+      // each plaza, shelves occupy fixed perimeter slots, and only alternating
+      // districts receive a hero landmark so sightlines stay readable.
+      activeDistricts.forEach((district, index) => {
+        const block = cityDistrictBlock(
+          district.id,
+          index,
+        )
+        const hasLandmark = index % 2 === 0
+        const signPosition = new THREE.Vector3(
+          block.x,
+          CITY_GROUND_Y +
+            block.elevation +
+            (hasLandmark ? 5.6 : 4.35),
+          block.z,
+        )
+
+        const texture = createLibraryRouteLabelTexture(
+          district.label,
+          district.code,
+          district.accent,
+        )
+        const material = new THREE.SpriteMaterial({
+          map: texture,
+          transparent: true,
+          opacity: .9,
+          depthWrite: false,
+          blending: THREE.NormalBlending,
+          toneMapped: true,
+        })
+        const marker = new THREE.Sprite(material)
+        marker.position.copy(signPosition)
+        marker.scale.set(5.6, 1.4, 1)
+        marker.renderOrder = 6
+        marker.userData.libraryDecorative = true
+        marker.userData.routeMarkerBaseY =
+          signPosition.y
+        marker.userData.routeMarkerPhase =
+          index * 1.31
+        marker.userData.routeMarkerBay =
+          district.bay
+        marker.userData.routeMarkerBaseScale = 5.6
+        world.add(marker)
+        libraryRouteTextures.push(texture)
+        libraryRouteMaterials.push(material)
+        libraryRouteObjects.push(marker)
+
+        if (!hasLandmark) return
+
+        const expectedLandmarkHeight =
+          district.landmarkType === 'archive-tower'
+            ? 4.4
+            : district.landmarkType === 'syntax-tree'
+              ? 3.9
+              : district.landmarkType === 'neural-lattice'
+                ? 3.5
+                : district.landmarkType === 'terminal-wall'
+                  ? 2.8
+                  : district.landmarkType === 'dev-monument'
+                    ? 2.45
+                    : 3
+
+        let geometry: THREE.BufferGeometry
+        switch (district.landmarkType) {
+          case 'neural-lattice':
+            geometry =
+              new THREE.IcosahedronGeometry(1.75, 1)
+            break
+          case 'terminal-wall':
+            geometry =
+              new THREE.BoxGeometry(2.8, 2.8, .42)
+            break
+          case 'syntax-tree':
+            geometry =
+              new THREE.ConeGeometry(1.5, 3.9, 6)
+            break
+          case 'archive-tower':
+            geometry =
+              new THREE.CylinderGeometry(
+                1,
+                1.38,
+                4.4,
+                8,
+              )
+            break
+          case 'dev-monument':
+            geometry =
+              new THREE.BoxGeometry(4.1, 2.45, .5)
+            break
+          case 'index':
+          default:
+            geometry =
+              new THREE.TorusGeometry(
+                1.45,
+                .22,
+                10,
+                48,
+              )
+            break
+        }
+
+        const coreMaterial =
+          new THREE.MeshBasicMaterial({
+            color: district.accent,
+            transparent: true,
+            opacity:
+              district.landmarkType ===
+              'dev-monument'
+                ? .72
+                : .2,
+            depthWrite: false,
+            blending: THREE.NormalBlending,
+            toneMapped: false,
+            side: THREE.DoubleSide,
+          })
+        const wireMaterial =
+          new THREE.MeshBasicMaterial({
+            color: district.accent,
+            transparent: true,
+            opacity: .9,
+            wireframe:
+              district.landmarkType !==
+              'dev-monument',
+            depthWrite: false,
+            blending: THREE.AdditiveBlending,
+            toneMapped: false,
+          })
+
+        const group = new THREE.Group()
+        group.position.set(
+          block.x,
+          CITY_GROUND_Y +
+            block.elevation +
+            .26 +
+            expectedLandmarkHeight * .5,
+          block.z,
+        )
+        group.userData.libraryLandmark = true
+        group.userData.libraryLandmarkBaseY =
+          group.position.y
+        group.userData.libraryLandmarkBaseRotationY = 0
+        group.userData.libraryLandmarkPhase =
+          index * 1.37
+        group.userData.libraryLandmarkHeight =
+          expectedLandmarkHeight
+        group.userData.libraryLandmarkBay =
+          district.bay
+        group.userData.libraryLandmarkBaseScale =
+          block.landmarkScale ?? 1
+        group.scale.setScalar(
+          block.landmarkScale ?? 1,
+        )
+
+        const core = new THREE.Mesh(
+          geometry,
+          coreMaterial,
+        )
+        core.userData.libraryDecorative = true
+        core.userData.libraryLandmarkCore = true
+        group.add(core)
+
+        const wire = new THREE.Mesh(
+          geometry,
+          wireMaterial,
+        )
+        wire.scale.setScalar(1.035)
+        wire.userData.libraryDecorative = true
+        wire.userData.libraryLandmarkWire = true
+        group.add(wire)
+
+        const haloGeometry =
+          new THREE.RingGeometry(2, 2.45, 48)
+        const haloMaterial =
+          new THREE.MeshBasicMaterial({
+            color: district.accent,
+            transparent: true,
+            opacity: .1,
+            side: THREE.DoubleSide,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending,
+            toneMapped: false,
+          })
+        const halo = new THREE.Mesh(
+          haloGeometry,
+          haloMaterial,
+        )
+        halo.position.y =
+          -expectedLandmarkHeight * .5 + .08
+        halo.rotation.x = -Math.PI / 2
+        halo.userData.libraryDecorative = true
+        halo.userData.libraryLandmarkHalo = true
+        group.add(halo)
+
+        world.add(group)
+        libraryRouteObjects.push(group)
+        libraryDistrictLandmarkGeometries.push(
+          geometry,
+          haloGeometry,
+        )
+        libraryDistrictLandmarkMaterials.push(
+          coreMaterial,
+          wireMaterial,
+          haloMaterial,
+        )
+      })
+
+      // The onboarding board belongs to the arrival plaza rather than the
+      // FRONT PAGE landmark, matching the mockup's separate foyer.
+      const welcomeTexture =
+        createLibraryWelcomeTexture(
+          activeLibraryConfig,
+        )
+      const welcomeMaterial =
+        new THREE.SpriteMaterial({
+          map: welcomeTexture,
+          transparent: true,
+          opacity: .94,
+          depthWrite: false,
+          blending: THREE.NormalBlending,
+          toneMapped: true,
+        })
+      const welcomeBoard =
+        new THREE.Sprite(welcomeMaterial)
+      welcomeBoard.position.set(
+        CITY_ARRIVAL.x - 5.2,
+        CITY_GROUND_Y +
+          CITY_ARRIVAL.elevation +
+          3.1,
+        CITY_ARRIVAL.z + 1.4,
+      )
+      welcomeBoard.scale.set(6.1, 3.5, 1)
+      welcomeBoard.renderOrder = 7
+      welcomeBoard.userData.libraryDecorative =
+        true
+      welcomeBoard.userData.libraryWelcome = true
+      welcomeBoard.userData.routeMarkerBaseY =
+        welcomeBoard.position.y
+      welcomeBoard.userData.routeMarkerPhase =
+        -1.2
+      world.add(welcomeBoard)
+      libraryRouteTextures.push(welcomeTexture)
+      libraryRouteMaterials.push(welcomeMaterial)
+      libraryRouteObjects.push(welcomeBoard)
+
+      // Widely spaced unreachable skyways echo the concept art without
+      // becoming walkable geometry.
+      const skywayRoutes = [
+        [
+          new THREE.Vector3(-36, 15, 15),
+          new THREE.Vector3(-10, 17, -10),
+          new THREE.Vector3(20, 18, -28),
+          new THREE.Vector3(42, 17, -52),
+        ],
+        [
+          new THREE.Vector3(38, 22, 12),
+          new THREE.Vector3(14, 20, -6),
+          new THREE.Vector3(-18, 21, -24),
+          new THREE.Vector3(-38, 23, -48),
+        ],
+        [
+          new THREE.Vector3(-30, 28, -4),
+          new THREE.Vector3(-5, 26, -18),
+          new THREE.Vector3(23, 27, -16),
+          new THREE.Vector3(40, 29, -35),
+        ],
+        [
+          new THREE.Vector3(32, 12, -2),
+          new THREE.Vector3(20, 14, -24),
+          new THREE.Vector3(-4, 13, -42),
+          new THREE.Vector3(-30, 15, -55),
+        ],
+      ]
+
+      skywayRoutes.forEach(
+        (points, index) => {
+          const curve =
+            new THREE.CatmullRomCurve3(
+              points,
+              false,
+              'catmullrom',
+              .36,
+            )
+          const geometry =
+            new THREE.BufferGeometry().setFromPoints(
+              curve.getPoints(72),
+            )
+          const edgeMaterial =
+            new THREE.LineBasicMaterial({
+              color:
+                index % 2 === 0
+                  ? 0x66dce8
+                  : 0x9b7fea,
+              transparent: true,
+              opacity: .48,
+              depthWrite: false,
+              blending: THREE.AdditiveBlending,
+              toneMapped: false,
+            })
+          const laneMaterial =
+            new THREE.LineBasicMaterial({
+              color:
+                index % 2 === 0
+                  ? 0x8df5f1
+                  : 0xc48bea,
+              transparent: true,
+              opacity: .16,
+              depthWrite: false,
+              blending: THREE.AdditiveBlending,
+              toneMapped: false,
+            })
+          const group = new THREE.Group()
+          const edge = new THREE.Line(
+            geometry,
+            edgeMaterial,
+          )
+          group.add(edge)
+          farWorld.add(group)
+          librarySkyways.push({
+            group,
+            phase: index * 1.4,
+            laneMaterial,
+            edgeMaterial,
+          })
+          librarySkywayGeometries.push(
+            geometry,
+          )
+          librarySkywayMaterials.push(
+            edgeMaterial,
+            laneMaterial,
+          )
+        },
+      )
     }
 
     const nodeDataById = new Map(nodeRef.current.map((node) => [node._id, node]))
