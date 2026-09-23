@@ -689,6 +689,23 @@ export type LibraryFurnishingAsset =
   | 'rollingLadder'
   | 'issueDesk'
 
+export const LIBRARY_HALL_READING_Z = [
+  -1.6,
+  -6.3,
+  -10.65,
+  -15.25,
+  -20.45,
+  -25.3,
+  -29.85,
+  -34.55,
+  -39.45,
+  -47.8,
+  -53.05,
+  -58,
+  -63.7,
+  -69.55,
+] as const
+
 export type LibraryFurnishingPlacement = {
   id: string
   asset: LibraryFurnishingAsset
@@ -798,6 +815,26 @@ export const LIBRARY_FURNISHINGS: LibraryFurnishingPlacement[] = [
   {id: 'archive-ladder-north-west', asset: 'rollingLadder', position: [11.5, .52, -56.72], hoverAmplitude: .018, hoverSpeed: .075, tiltZ: .0025, collider: [1.3, .78]},
   {id: 'archive-ladder-north-east', asset: 'rollingLadder', position: [20.5, .68, -56.72], hoverAmplitude: .02, hoverSpeed: .08, tiltZ: .003, collider: [1.3, .78]},
   {id: 'archive-ladder-south', asset: 'rollingLadder', position: [20.5, .6, -47.28], yaw: Math.PI, hoverAmplitude: .022, hoverSpeed: .085, tiltZ: .003, collider: [1.3, .78]},
+
+  // Central reading desks: one suspended desk above each surveyed corridor rug.
+  // The rugs establish the cadence; the desks give the hall a real reading-room
+  // rhythm while keeping wide walkable lanes on both sides.
+  ...LIBRARY_HALL_READING_Z.map(
+    (z, index): LibraryFurnishingPlacement => ({
+      id: `hall-reading-desk-${index + 1}`,
+      asset: 'readingTable',
+      position: [0, .24, z],
+      yaw: index % 2 === 0 ? 0 : Math.PI,
+      scale: .72,
+      hoverAmplitude: .11,
+      hoverSpeed: .14 + (index % 3) * .012,
+      tiltX: .014,
+      tiltY: .01,
+      tiltZ: .013,
+      collider: [1.95, 1.35],
+      castsShadow: true,
+    }),
+  ),
 ]
 
 type WalkCollisionRect = {
