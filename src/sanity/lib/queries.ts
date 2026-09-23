@@ -55,6 +55,14 @@ export const DREAM_BY_ID_QUERY = defineQuery(`
 
 export const LIBRARY_WORLD_QUERY = defineQuery(`
 {
+  "revision": *[
+    _type in [
+      "libraryConfig",
+      "libraryDistrict",
+      "curatedArticle",
+      "archiveJourney"
+    ]
+  ] | order(_updatedAt desc)[0]._updatedAt,
   "config": *[_type == "libraryConfig"][0] {
     welcomeTitle,
     welcomeSubtitle,
