@@ -406,6 +406,17 @@ export function createLibraryBuilding(
       loadLibraryAsset('cardCatalogue', 1.55, 'height'),
       loadLibraryAsset('pendantLight', 1.05, 'height'),
       loadLibraryAsset('archedWindow', 5, 'height'),
+      loadLibraryAsset('chairWingback', 1.15, 'height'),
+      loadLibraryAsset('clockMantel', .55, 'height'),
+      loadLibraryAsset('quietSign', .9, 'height'),
+      loadLibraryAsset('pottedPlant', 1.05, 'height'),
+      loadLibraryAsset('wallSconce', .52, 'height'),
+      loadLibraryAsset('rollingLadder', 2.65, 'height'),
+      loadLibraryAsset(
+        'cardCatalogueSecondary',
+        1.55,
+        'height',
+      ),
     ])
 
     if (disposed) return
@@ -429,6 +440,13 @@ export function createLibraryBuilding(
     const cardCatalogue = value(9)
     const pendantLight = value(10)
     const archedWindow = value(11)
+    const chairWingback = value(12)
+    const clockMantel = value(13)
+    const quietSign = value(14)
+    const pottedPlant = value(15)
+    const wallSconce = value(16)
+    const rollingLadder = value(17)
+    const cardCatalogueSecondary = value(18)
 
     if (skyDome) {
       const dome = placeAsset(skyDome, 0, -8, -30)
@@ -583,9 +601,28 @@ export function createLibraryBuilding(
       column,
       readingRug,
       libraryChair,
+      chairWingback,
       readingTable,
       cardCatalogue,
+      cardCatalogueSecondary,
+      clockMantel,
+      quietSign,
+      pottedPlant,
+      wallSconce,
+      rollingLadder,
     }
+
+    wallSconce?.traverse((child) => {
+      if (!(child instanceof THREE.Mesh)) return
+      const materials = Array.isArray(child.material)
+        ? child.material
+        : [child.material]
+      materials.forEach((material) => {
+        if (!(material instanceof THREE.MeshStandardMaterial)) return
+        material.emissive.setHex(0xffb36b)
+        material.emissiveIntensity = .32
+      })
+    })
 
     LIBRARY_FURNISHINGS.forEach((placement) => {
       const template = furnishingTemplates[placement.asset]
@@ -601,14 +638,16 @@ export function createLibraryBuilding(
         0,
         placement.castsShadow ?? false,
       )
-      instance.name = `library-floating-${placement.id}`
-      floatingProps.register(instance, {
-        phase: floatingPhase(placement.id),
-        hoverAmplitude: placement.hoverAmplitude,
-        hoverSpeed: placement.hoverSpeed,
-        tiltX: placement.tiltX,
-        tiltZ: placement.tiltZ,
-      })
+      instance.name = `library-furnishing-${placement.id}`
+      if (placement.floats !== false) {
+        floatingProps.register(instance, {
+          phase: floatingPhase(placement.id),
+          hoverAmplitude: placement.hoverAmplitude,
+          hoverSpeed: placement.hoverSpeed,
+          tiltX: placement.tiltX,
+          tiltZ: placement.tiltZ,
+        })
+      }
     })
 
     if (pendantLight) {
