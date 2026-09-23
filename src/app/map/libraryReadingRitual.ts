@@ -238,8 +238,12 @@ export function createLibraryReadingRitual(
           (targetPitch - bookVisual.group.rotation.x) * .18
         bookVisual.group.rotation.z *= .84
 
+        // The book group itself is already rotated 180° for the rear face.
+        // The cover hinge therefore always opens toward local +Z with the
+        // same negative Y rotation. Multiplying by facing made one-sided
+        // wall/rear shelves swing their covers back into the shelf.
         const targetCoverAngle = isOpening
-          ? Math.PI * .74 * ritualAmount * bookVisual.facing
+          ? -Math.PI * .74 * ritualAmount
           : 0
         bookVisual.coverHinge.rotation.y +=
           (
