@@ -82,6 +82,7 @@ import {
   getLibraryAtmosphereVisualPreset,
 } from './libraryAtmosphere'
 import {createLibraryBuilding} from './libraryBuilding'
+import {createLibraryLayoutAuthoring} from './libraryLayoutAuthoring'
 import {loadLibraryAsset} from './libraryAssets'
 import {
   createFloatingPropRegistry,
@@ -1016,6 +1017,15 @@ export default function DreamWorld3D({
           libraryFloatingProps,
         )
       : null
+    const layoutAuthoringEnabled =
+      libraryMode &&
+      new URLSearchParams(window.location.search).get(
+        'layoutDebug',
+      ) === '1'
+    const libraryLayoutAuthoring =
+      layoutAuthoringEnabled
+        ? createLibraryLayoutAuthoring(scene)
+        : null
 
     const starCount = settings.starCount
     const starPositions = new Float32Array(starCount * 3)
@@ -5171,6 +5181,70 @@ export default function DreamWorld3D({
         return
       }
 
+      if (
+        libraryMode &&
+        layoutAuthoringEnabled &&
+        libraryLayoutAuthoring &&
+        event.code === 'KeyP'
+      ) {
+        event.preventDefault()
+
+        if (event.shiftKey) {
+          void libraryLayoutAuthoring
+            .removeNearest(
+              camera.position.x,
+              camera.position.z,
+            )
+            .then((removed) => {
+              if (!removed) {
+                console.info(
+                  '[DEV Library layout] no nearby pin to remove',
+                )
+              }
+            })
+          return
+        }
+
+        const roomEntry = nearestRoomEntry(
+          camera.position.x,
+          camera.position.z,
+        )
+        if (!roomEntry) {
+          console.info(
+            '[DEV Library layout] stand inside a room before dropping a pin',
+          )
+          return
+        }
+
+        const districtIndex = activeDistricts.indexOf(
+          roomEntry.district,
+        )
+        const room = roomForDistrict(
+          roomEntry.district,
+          Math.max(0, districtIndex),
+        )
+        const cameraEuler = new THREE.Euler().setFromQuaternion(
+          camera.quaternion,
+          'YXZ',
+        )
+
+        void libraryLayoutAuthoring
+          .dropMarker({
+            roomSlot: room.slot,
+            districtId: roomEntry.district.id,
+            x: camera.position.x,
+            z: camera.position.z,
+            yaw: cameraEuler.y,
+          })
+          .then((marker) => {
+            console.info(
+              '[DEV Library layout] pin dropped',
+              marker,
+            )
+          })
+        return
+      }
+
       flightKeys.add(event.code)
 
       if (
@@ -7356,6 +7430,7 @@ export default function DreamWorld3D({
 
       libraryAudio?.dispose()
       libraryBuilding?.dispose()
+      libraryLayoutAuthoring?.dispose()
       libraryFloatingProps.clear()
 
       camera.remove(listener)
