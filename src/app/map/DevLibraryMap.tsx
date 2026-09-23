@@ -17,8 +17,7 @@ import DreamWorld3D, {
 import type {DreamQuality} from './dreamworld/quality'
 import {
   DEFAULT_LIBRARY_WORLD_CONFIG,
-  districtForTags,
-  packLibraryDistricts,
+  type LibraryContentSource,
   type LibraryDistrictConfig,
   type LibraryWorldConfig,
 } from '@/lib/libraryWorldConfig'
@@ -31,21 +30,20 @@ import type {
 } from './libraryTypes'
 import styles from './library.module.css'
 import {
-  archiveDistrictGridLaneOffset,
-  archivePathFrame,
-  archivePathPoint,
-  archiveShelfPlacement,
-  resolveArchiveShelfClearance,
-  type ArchiveShelfPlacement,
-} from './libraryLayout'
+  hallwayShelfPlacements,
+  LIBRARY_MAX_ROOM_SHELF_COUNT,
+  roomShelfPlacements,
+  type RoomShelfPlacement,
+} from './libraryRoomLayout'
 
 const DEFAULT_USERNAME = 'mikachu'
 const QUALITY: DreamQuality = 'cinematic'
 const CATALOG_PAGE_SIZE = 100
 const CATALOG_BOOKS_PER_SHELF = 9
-const DISTRICT_RENDERED_SHELF_LIMIT = 4
+const DISTRICT_RENDERED_SHELF_LIMIT =
+  LIBRARY_MAX_ROOM_SHELF_COUNT
 const DISTRICT_VISIBLE_ARTICLE_CAPACITY =
-  DISTRICT_RENDERED_SHELF_LIMIT * CATALOG_BOOKS_PER_SHELF
+  DISTRICT_RENDERED_SHELF_LIMIT * CATALOG_BOOKS_PER_SHELF * 2
 const DISTRICT_SHELF_PAIR_OFFSETS = [-.68, .68] as const
 
 const SHELF_ACCENTS: Record<LibraryShelfKind, string> = {
@@ -74,7 +72,7 @@ function makeShelf(
   title: string,
   subtitle: string,
   kind: LibraryShelfKind,
-  placement: ArchiveShelfPlacement,
+  placement: RoomShelfPlacement,
   articles: DevArticleSummary[],
 ): LibraryShelf {
   return {
@@ -85,44 +83,25 @@ function makeShelf(
     accent: SHELF_ACCENTS[kind],
     world: placement.world,
     yaw: placement.yaw,
+    doubleSided: placement.doubleSided,
+    endCaps: placement.endCaps,
+    floatId: placement.floatId,
     pathBay: placement.pathBay,
     districtId: placement.districtId,
+    widthScale: placement.widthScale,
     articles,
   }
 }
 
-function arrivalShelfPlacement(
-  id: string,
-  row: 0 | 1 | 2,
-  side: -1 | 1,
-): ArchiveShelfPlacement {
-  const rowBays = [-.18, .16, .5] as const
-  const laneDistances = [9.2, 10.35, 11.5] as const
-  const bay = rowBays[row]
-  const center = archivePathPoint(bay)
-  const frame = archivePathFrame(.15)
-  const laneDistance = laneDistances[row]
-
-  const world: [number, number, number] = [
-    center[0] + frame.normalX * side * laneDistance,
-    center[1] + .12,
-    center[2] + frame.normalZ * side * laneDistance,
-  ]
-
-  // Face all foyer shelves toward the same arrival-axis center instead of
-  // following the curve independently. This keeps Featured / My DEV /
-  // Creators readable and prevents them from visually hiding behind the
-  // FRONT PAGE district bookcases.
-  const inwardX = -frame.normalX * side
-  const inwardZ = -frame.normalZ * side
-  const yaw = Math.atan2(inwardX, inwardZ) + Math.PI
-
-  return {
-    world,
-    yaw,
-    pathBay: bay,
-    districtId: 'arrival',
-  }
+function shelfKindForSource(
+  source: LibraryContentSource,
+): LibraryShelfKind {
+  if (source === 'featured') return 'featured'
+  if (source === 'latest') return 'latest'
+  if (source === 'topics' || source === 'tagged') return 'topics'
+  if (source === 'creators') return 'creators'
+  if (source === 'search') return 'search'
+  return 'catalog'
 }
 
 function nodeCategory(kind: LibraryShelfKind) {
@@ -331,6 +310,9 @@ export default function DevLibraryMap() {
   const catalogNextPageRef = useRef(1)
   const catalogLoadingRef = useRef(false)
   const catalogHasMoreRef = useRef(true)
+  const catalogInitializedRef = useRef(false)
+  const bootstrapRefreshingRef = useRef(false)
+  const [devRefreshTick, setDevRefreshTick] = useState(0)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const [article, setArticle] = useState<DevArticle | null>(null)
@@ -351,8 +333,15 @@ export default function DevLibraryMap() {
   const [districtSamples, setDistrictSamples] = useState<
     Record<string, DevArticleSummary[]>
   >({})
+  const [curatedLiveArticles, setCuratedLiveArticles] = useState<
+    DevArticleSummary[]
+  >([])
   const [readingBook, setReadingBook] =
     useState<LibraryReadingBook | null>(null)
+  const [layoutHudVisible, setLayoutHudVisible] =
+    useState(false)
+  const [layoutHudStatus, setLayoutHudStatus] =
+    useState('READY · P DROP · SHIFT+P REMOVE')
   const sanitizedArticleHtml = useMemo(
     () =>
       sanitizeArticleHtml(
@@ -378,19 +367,247 @@ export default function DevLibraryMap() {
     routeTargetId: null,
   })
 
-  const packedWorldConfig = useMemo<LibraryWorldConfig>(
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('layoutDebug') === '1') {
+      setLayoutHudVisible(true)
+    }
+
+    const sendLayoutRequest = (
+      remove: boolean,
+      source: string,
+    ) => {
+      setLayoutHudVisible(true)
+      setLayoutHudStatus(
+        remove
+          ? `${source} CAPTURED · REMOVE REQUEST SENT`
+          : `${source} CAPTURED · DROP REQUEST SENT`,
+      )
+      window.dispatchEvent(
+        new CustomEvent('oniria:layout-pin-request', {
+          detail: {remove, source},
+        }),
+      )
+    }
+
+    const handleLayoutKey = (event: KeyboardEvent) => {
+      if (
+        event.repeat ||
+        (event.code !== 'KeyP' && event.code !== 'F8')
+      ) {
+        return
+      }
+
+      const target = event.target
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        (target instanceof HTMLElement &&
+          target.isContentEditable)
+      ) {
+        return
+      }
+
+      event.preventDefault()
+      event.stopPropagation()
+      sendLayoutRequest(
+        event.shiftKey,
+        event.code === 'KeyP' ? 'P' : 'F8',
+      )
+    }
+
+    const handleLayoutResult = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{
+          ok?: boolean
+          message?: string
+          roomSlot?: number
+        }>
+      ).detail
+      setLayoutHudVisible(true)
+      setLayoutHudStatus(
+        detail?.message ??
+          (detail?.ok ? 'PIN ACTION COMPLETE' : 'PIN ACTION FAILED'),
+      )
+    }
+
+    const handleLayoutRendered = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{
+          label?: string
+          x?: number
+          z?: number
+          visualCount?: number
+        }>
+      ).detail
+      const x =
+        typeof detail?.x === 'number'
+          ? detail.x.toFixed(2)
+          : '?'
+      const z =
+        typeof detail?.z === 'number'
+          ? detail.z.toFixed(2)
+          : '?'
+      setLayoutHudVisible(true)
+      setLayoutHudStatus(
+        `RENDERED ${detail?.label ?? 'PIN'} @ ${x}, ${z} · ${detail?.visualCount ?? 0} VISIBLE`,
+      )
+    }
+
+    const handleLayoutButton = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{
+          remove?: boolean
+          clearAll?: boolean
+        }>
+      ).detail
+
+      if (detail?.clearAll) {
+        setLayoutHudVisible(true)
+        setLayoutHudStatus('CLEARING ALL PINS…')
+        window.dispatchEvent(
+          new CustomEvent('oniria:layout-pin-request', {
+            detail: {
+              clearAll: true,
+              source: 'BUTTON',
+            },
+          }),
+        )
+        return
+      }
+
+      sendLayoutRequest(
+        Boolean(detail?.remove),
+        'BUTTON',
+      )
+    }
+
+    const copyLayoutExport = async (text: string) => {
+      try {
+        await navigator.clipboard.writeText(text)
+        return true
+      } catch {
+        try {
+          const textarea = document.createElement('textarea')
+          textarea.value = text
+          textarea.style.position = 'fixed'
+          textarea.style.left = '-9999px'
+          document.body.appendChild(textarea)
+          textarea.select()
+          const copied = document.execCommand('copy')
+          textarea.remove()
+          return copied
+        } catch {
+          return false
+        }
+      }
+    }
+
+    const handleLayoutExport = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{
+          markers?: Array<{
+            id: string
+            label: string
+            roomSlot: number
+            districtId: string
+            x: number
+            y: number
+            z: number
+            yaw: number
+            width: number
+            depth: number
+            createdAt: string
+            persistence?: string
+          }>
+          count?: number
+        }>
+      ).detail
+
+      const markers = [...(detail?.markers ?? [])].sort(
+        (a, b) =>
+          a.roomSlot - b.roomSlot ||
+          a.label.localeCompare(b.label),
+      )
+      const payload = JSON.stringify(
+        {
+          format: 'oniria-library-layout-pins-v1',
+          exportedAt: new Date().toISOString(),
+          count: markers.length,
+          markers,
+        },
+        null,
+        2,
+      )
+
+      void copyLayoutExport(payload).then((copied) => {
+        setLayoutHudVisible(true)
+        setLayoutHudStatus(
+          copied
+            ? `COPIED ${markers.length} PINS · PASTE INTO CHAT`
+            : `COPY FAILED · ${markers.length} PINS READY`,
+        )
+      })
+    }
+
+    window.addEventListener('keydown', handleLayoutKey, true)
+    window.addEventListener(
+      'oniria:layout-pin-result',
+      handleLayoutResult,
+    )
+    window.addEventListener(
+      'oniria:layout-pin-rendered',
+      handleLayoutRendered,
+    )
+    window.addEventListener(
+      'oniria:layout-pin-button',
+      handleLayoutButton,
+    )
+    window.addEventListener(
+      'oniria:layout-pin-export',
+      handleLayoutExport,
+    )
+
+    return () => {
+      window.removeEventListener(
+        'keydown',
+        handleLayoutKey,
+        true,
+      )
+      window.removeEventListener(
+        'oniria:layout-pin-result',
+        handleLayoutResult,
+      )
+      window.removeEventListener(
+        'oniria:layout-pin-rendered',
+        handleLayoutRendered,
+      )
+      window.removeEventListener(
+        'oniria:layout-pin-button',
+        handleLayoutButton,
+      )
+      window.removeEventListener(
+        'oniria:layout-pin-export',
+        handleLayoutExport,
+      )
+    }
+  }, [])
+
+  const roomWorldConfig = useMemo<LibraryWorldConfig>(
     () => ({
       ...worldConfig,
-      districts: packLibraryDistricts(
+      districts: [...(
         worldConfig.districts.length > 0
           ? worldConfig.districts
-          : DEFAULT_LIBRARY_WORLD_CONFIG.districts,
-      ),
+          : DEFAULT_LIBRARY_WORLD_CONFIG.districts
+      )]
+        .filter((district) => district.enabled)
+        .sort((a, b) => a.roomSlot - b.roomSlot),
     }),
     [worldConfig],
   )
 
-  const loadMoreCatalog = useCallback(async () => {
+  const loadMoreCatalog = useCallback(async (pages = 1) => {
     if (
       catalogLoadingRef.current ||
       !catalogHasMoreRef.current
@@ -406,7 +623,9 @@ export default function DevLibraryMap() {
       const response = await fetch(
         '/api/devto?mode=catalog&start_page=' +
           page +
-          '&pages=1&per_page=' +
+          '&pages=' +
+          Math.max(1, Math.min(4, pages)) +
+          '&per_page=' +
           CATALOG_PAGE_SIZE,
       )
       if (!response.ok) {
@@ -493,53 +712,65 @@ export default function DevLibraryMap() {
     [],
   )
 
-  useEffect(() => {
-    let cancelled = false
+  const refreshDevBootstrap = useCallback(
+    async (initial = false) => {
+      if (bootstrapRefreshingRef.current) return
+      bootstrapRefreshingRef.current = true
 
-    void refreshWorldConfig(true)
-
-    async function load() {
       try {
-        setLoading(true)
-        const bootstrapResponse = await fetch(
+        if (initial) setLoading(true)
+        const response = await fetch(
           '/api/devto?mode=bootstrap&username=' +
-            encodeURIComponent(DEFAULT_USERNAME),
+            encodeURIComponent(DEFAULT_USERNAME) +
+            '&_=' +
+            Date.now(),
+          {
+            cache: 'no-store',
+            headers: {'cache-control': 'no-cache'},
+          },
         )
 
-        if (!bootstrapResponse.ok) {
+        if (!response.ok) {
           throw new Error('Could not load DEV library')
         }
 
-        const bootstrapPayload =
-          (await bootstrapResponse.json()) as DevBootstrap
+        const payload = (await response.json()) as DevBootstrap
+        setBootstrap(payload)
+        setDevRefreshTick((current) => current + 1)
 
-        if (cancelled) return
-        setBootstrap(bootstrapPayload)
-        void loadMoreCatalog()
+        if (initial && !catalogInitializedRef.current) {
+          // Do not compete with first render by pulling the Archive up front.
+          // The bootstrap already provides enough fallback books for the
+          // Archive facade; real catalogue pages stream in on approach.
+          catalogInitializedRef.current = true
+        }
       } catch (caught) {
-        if (cancelled) return
-        setError(
-          caught instanceof Error
-            ? caught.message
-            : 'Could not load DEV library',
-        )
+        if (initial) {
+          setError(
+            caught instanceof Error
+              ? caught.message
+              : 'Could not load DEV library',
+          )
+        }
       } finally {
-        if (!cancelled) setLoading(false)
+        bootstrapRefreshingRef.current = false
+        if (initial) setLoading(false)
       }
-    }
+    },
+    [loadMoreCatalog],
+  )
 
-    void load()
-    return () => {
-      cancelled = true
-    }
-  }, [loadMoreCatalog, refreshWorldConfig])
+  useEffect(() => {
+    void refreshWorldConfig(true)
+    void refreshDevBootstrap(true)
+  }, [refreshDevBootstrap, refreshWorldConfig])
 
   useEffect(() => {
     const interval = window.setInterval(() => {
       if (document.visibilityState === 'visible') {
         void refreshWorldConfig(false, true)
       }
-    }, 4000)
+    }, 15_000)
 
     const refreshOnFocus = () => {
       void refreshWorldConfig(false, true)
@@ -562,12 +793,97 @@ export default function DevLibraryMap() {
   }, [refreshWorldConfig])
 
   useEffect(() => {
+    if (!worldConfig.liveDevUpdates) return
+
+    const refreshIfVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshDevBootstrap(false)
+      }
+    }
+    const interval = window.setInterval(
+      refreshIfVisible,
+      90_000,
+    )
+
+    const refreshOnVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshDevBootstrap(false)
+      }
+    }
+
+    window.addEventListener('focus', refreshIfVisible)
+    document.addEventListener(
+      'visibilitychange',
+      refreshOnVisibility,
+    )
+
+    return () => {
+      window.clearInterval(interval)
+      window.removeEventListener('focus', refreshIfVisible)
+      document.removeEventListener(
+        'visibilitychange',
+        refreshOnVisibility,
+      )
+    }
+  }, [refreshDevBootstrap, worldConfig.liveDevUpdates])
+
+  useEffect(() => {
+    let cancelled = false
+    const ids = [...new Set(
+      worldConfig.curatedArticles
+        .filter((item) => item.featured)
+        .map((item) => item.devArticleId),
+    )]
+
+    if (ids.length === 0) {
+      setCuratedLiveArticles([])
+      return () => {
+        cancelled = true
+      }
+    }
+
+    async function loadCuratedArticles() {
+      const articles = await Promise.all(
+        ids.map(async (id) => {
+          try {
+            const response = await fetch(
+              '/api/devto?mode=article&id=' + id,
+            )
+            if (!response.ok) return null
+            const payload = (await response.json()) as {
+              article?: DevArticle
+            }
+            return payload.article ?? null
+          } catch {
+            return null
+          }
+        }),
+      )
+
+      if (cancelled) return
+      setCuratedLiveArticles(
+        articles.filter(
+          (article): article is DevArticle =>
+            Boolean(article),
+        ),
+      )
+    }
+
+    void loadCuratedArticles()
+
+    return () => {
+      cancelled = true
+    }
+  }, [devRefreshTick, worldConfig.curatedArticles])
+
+  useEffect(() => {
     let cancelled = false
 
     const taggedDistricts = worldConfig.districts.filter(
       (district) =>
         district.enabled &&
-        district.id !== 'front-page' &&
+        (district.sourceMode === 'topics' ||
+          district.sourceMode === 'tagged') &&
         district.devTags.length > 0,
     )
 
@@ -581,7 +897,10 @@ export default function DevLibraryMap() {
     async function populateDistricts() {
       const entries = await Promise.all(
         taggedDistricts.map(async (district) => {
-          const seedTags = district.devTags.slice(0, 2)
+          // Preload the configured topic categories so each physical Topic
+          // shelf can correspond to real DEV tags instead of a cosmetic label.
+          // Keep requests modest; shelf hydration remains progressive.
+          const seedTags = district.devTags.slice(0, 6)
           if (seedTags.length === 0) {
             return [district.id, []] as const
           }
@@ -590,7 +909,7 @@ export default function DevLibraryMap() {
             const responses = await Promise.all(
               seedTags.map((tag) =>
                 fetch(
-                  '/api/devto?mode=tag&tag=' +
+                  '/api/devto?mode=tag&per_page=24&tag=' +
                     encodeURIComponent(tag),
                 ),
               ),
@@ -624,7 +943,7 @@ export default function DevLibraryMap() {
     return () => {
       cancelled = true
     }
-  }, [worldConfig.districts])
+  }, [devRefreshTick, worldConfig.districts])
 
   const resumeFirstPersonControls = useCallback(() => {
     const canvas = document.querySelector<HTMLCanvasElement>(
@@ -701,356 +1020,356 @@ export default function DevLibraryMap() {
       bootstrap.profileArticles,
       catalog,
     )
-    const creatorPreview = creators
-      .map((creator) =>
-        creatorCandidates.find(
-          (article) => article.user.username === creator.username,
-        ),
-      )
-      .filter(
-        (article): article is DevArticleSummary => Boolean(article),
-      )
-      .slice(0, CATALOG_BOOKS_PER_SHELF)
+    // Every DEV article is also a creator artifact. Use the full diverse
+    // author pool by default so the expanded Creators stacks stay populated;
+    // choosing a specific @creator still replaces this with that profile.
+    const creatorPreview = creatorCandidates
 
-    const used = new Set<number>()
-    const takeFresh = (
-      source: DevArticleSummary[],
-      count: number,
-    ) => {
-      const picked: DevArticleSummary[] = []
-      for (const item of source) {
-        if (used.has(item.id)) continue
-        used.add(item.id)
-        picked.push(item)
-        if (picked.length >= count) break
-      }
-      return picked
-    }
-
+    const allKnownArticles = uniqueArticles(
+      curatedLiveArticles,
+      bootstrap.feed,
+      bootstrap.latest,
+      bootstrap.profileArticles,
+      catalog,
+      dynamicArticles,
+      searchResults,
+    )
     const curatorIds = new Set(
       worldConfig.curatedArticles
         .filter((item) => item.featured)
         .map((item) => item.devArticleId),
     )
-    const allKnownArticles = uniqueArticles(
-      bootstrap.feed,
-      bootstrap.latest,
-      bootstrap.profileArticles,
-      catalog,
-    )
-    const curatorPicks = allKnownArticles.filter((item) =>
-      curatorIds.has(item.id),
+    const curatorPicks = uniqueArticles(
+      curatedLiveArticles,
+      allKnownArticles.filter((article) =>
+        curatorIds.has(article.id),
+      ),
     )
 
-    const featured = takeFresh(
-      [...curatorPicks, ...bootstrap.feed],
-      9,
-    )
-    const latest = takeFresh(bootstrap.latest, 9)
-    const mine = takeFresh(bootstrap.profileArticles, 9)
-    const remaining = catalog.filter((item) => !used.has(item.id))
-    const districts = packedWorldConfig.districts
+    const shelfArticles = (
+      source: DevArticleSummary[],
+      offset: number,
+      count: number,
+    ) => {
+      if (source.length === 0 || count <= 0) return []
+      if (offset + count <= source.length) {
+        return source.slice(offset, offset + count)
+      }
 
-    const result: LibraryShelf[] = [
-      makeShelf(
-        'shelf:featured',
-        'Featured',
-        'popular this week',
-        'featured',
-        arrivalShelfPlacement(
-          'shelf:featured',
-          0,
-          -1,
-        ),
-        featured,
-      ),
-      makeShelf(
-        'shelf:new',
-        'New',
-        'freshly published',
-        'latest',
-        arrivalShelfPlacement(
-          'shelf:new',
-          0,
-          1,
-        ),
-        latest,
-      ),
-      makeShelf(
-        'shelf:mine',
-        bootstrap.profile
-          ? '@' + bootstrap.profile.username
-          : 'My DEV',
-        'creator shelf',
-        'mine',
-        arrivalShelfPlacement(
-          'shelf:mine',
-          1,
-          -1,
-        ),
-        mine,
-      ),
-      makeShelf(
-        'shelf:topics',
-        'Topics',
-        'choose a DEV tag',
-        'topics',
-        arrivalShelfPlacement(
-          'shelf:topics',
-          1,
-          1,
-        ),
-        dynamicTitle?.startsWith('#') ? dynamicArticles : [],
-      ),
-      makeShelf(
-        'shelf:creators',
-        'Creators',
-        'browse author shelves',
-        'creators',
-        arrivalShelfPlacement(
-          'shelf:creators',
-          2,
-          -1,
-        ),
-        dynamicTitle?.startsWith('@')
-          ? dynamicArticles
-          : creatorPreview,
-      ),
+      // Keep every physical shelf visually populated while the deeper DEV
+      // pages are still streaming. We only wrap once the currently loaded
+      // unique pool has been exhausted.
+      return Array.from({length: count}, (_, index) =>
+        source[(offset + index) % source.length],
+      ).filter(
+        (article): article is DevArticleSummary =>
+          Boolean(article),
+      )
+    }
+
+    const articlesForDistrict = (
+      district: LibraryDistrictConfig,
+    ): DevArticleSummary[] => {
+      switch (district.sourceMode) {
+        case 'featured':
+          return uniqueArticles(curatorPicks, bootstrap.feed)
+        case 'latest':
+          return bootstrap.latest
+        case 'topics':
+          return dynamicTitle?.startsWith('#')
+            ? dynamicArticles
+            : districtSamples[district.id] ?? []
+        case 'creators':
+          return dynamicTitle?.startsWith('@')
+            ? dynamicArticles
+            : creatorPreview
+        case 'search':
+          return searchResults
+        case 'catalog': {
+          const source = uniqueArticles(
+            catalog,
+            bootstrap.latest,
+            bootstrap.feed,
+          )
+          const capacity =
+            DISTRICT_VISIBLE_ARTICLE_CAPACITY
+          return source.length > capacity
+            ? source.slice(-capacity)
+            : source
+        }
+        case 'tagged': {
+          const tags = new Set(
+            district.devTags.map((tag) => tag.toLowerCase()),
+          )
+          return uniqueArticles(
+            districtSamples[district.id] ?? [],
+            catalog.filter((article) =>
+              (article.tag_list ?? []).some((tag) =>
+                tags.has(tag.toLowerCase()),
+              ),
+            ),
+          )
+        }
+      }
+
+      return []
+    }
+
+    const articleTimestamp = (
+      article: DevArticleSummary,
+    ) => {
+      if (!article.published_at) return null
+      const value = Date.parse(article.published_at)
+      return Number.isFinite(value) ? value : null
+    }
+
+    const shelfDateRange = (
+      articles: readonly DevArticleSummary[],
+    ) => {
+      const values = articles
+        .map(articleTimestamp)
+        .filter((value): value is number => value !== null)
+        .sort((a, b) => a - b)
+
+      if (values.length === 0) return 'DATE UNCATALOGUED'
+
+      const first = new Date(values[0])
+      const last = new Date(values[values.length - 1])
+      const short = new Intl.DateTimeFormat('en-US', {
+        month: 'short',
+        day: 'numeric',
+      })
+      const sameDay =
+        first.getFullYear() === last.getFullYear() &&
+        first.getMonth() === last.getMonth() &&
+        first.getDate() === last.getDate()
+
+      return sameDay
+        ? `${short.format(last).toUpperCase()} · ${last.getFullYear()}`
+        : `${short.format(first).toUpperCase()}–${short.format(last).toUpperCase()} · ${last.getFullYear()}`
+    }
+
+    const dominantTag = (
+      articles: readonly DevArticleSummary[],
+    ) => {
+      const counts = new Map<string, number>()
+      articles.forEach((article) => {
+        ;(article.tag_list ?? []).forEach((tag) => {
+          const key = tag.toLowerCase()
+          counts.set(key, (counts.get(key) ?? 0) + 1)
+        })
+      })
+      return [...counts.entries()].sort(
+        (a, b) => b[1] - a[1],
+      )[0]?.[0]
+    }
+
+    const dominantCreator = (
+      articles: readonly DevArticleSummary[],
+    ) => {
+      const counts = new Map<
+        string,
+        {username: string; name: string; count: number}
+      >()
+      articles.forEach((article) => {
+        const username = article.user.username
+        const current = counts.get(username)
+        if (current) {
+          current.count += 1
+        } else {
+          counts.set(username, {
+            username,
+            name: article.user.name,
+            count: 1,
+          })
+        }
+      })
+      return [...counts.values()].sort(
+        (a, b) =>
+          b.count - a.count ||
+          a.username.localeCompare(b.username),
+      )[0]
+    }
+
+    const result: LibraryShelf[] = []
+
+    roomWorldConfig.districts.forEach(
+      (district, districtIndex) => {
+        const placements = roomShelfPlacements(
+          district,
+          districtIndex,
+        )
+        const source = articlesForDistrict(district)
+        const kind = shelfKindForSource(district.sourceMode)
+
+        let articleOffset = 0
+        placements.forEach((placement, shelfIndex) => {
+          const shelfCapacity =
+            CATALOG_BOOKS_PER_SHELF *
+            (placement.doubleSided ? 2 : 1)
+          const shelfNumber = String(shelfIndex + 1).padStart(2, '0')
+
+          let shelfSource = source
+          let sourceOffset = articleOffset
+
+          if (
+            (district.sourceMode === 'topics' ||
+              district.sourceMode === 'tagged') &&
+            district.devTags.length > 0
+          ) {
+            const tag =
+              district.devTags[
+                shelfIndex % district.devTags.length
+              ]
+            const tagged = source.filter((article) =>
+              (article.tag_list ?? []).some(
+                (articleTag) =>
+                  articleTag.toLowerCase() === tag.toLowerCase(),
+              ),
+            )
+            if (tagged.length > 0) {
+              shelfSource = tagged
+              sourceOffset =
+                Math.floor(
+                  shelfIndex / district.devTags.length,
+                ) * shelfCapacity
+            }
+          }
+
+          const articles = shelfArticles(
+            shelfSource,
+            sourceOffset,
+            shelfCapacity,
+          )
+          articleOffset += shelfCapacity
+
+          let title = district.label + ' ' + shelfNumber
+          let functionLabel =
+            district.description ?? 'LIVE DEV COLLECTION'
+
+          if (
+            district.sourceMode === 'topics' ||
+            district.sourceMode === 'tagged'
+          ) {
+            const tag =
+              district.devTags[
+                shelfIndex % Math.max(1, district.devTags.length)
+              ]
+            title = tag
+              ? `#${tag.toUpperCase()} · ${shelfNumber}`
+              : `TOPICS · ${shelfNumber}`
+            functionLabel = 'TAG INDEX'
+          } else if (district.sourceMode === 'creators') {
+            const creator = dominantCreator(articles)
+            title = creator
+              ? `@${creator.username} · ${shelfNumber}`
+              : `CREATORS · ${shelfNumber}`
+            functionLabel = creator
+              ? `${creator.name} · AUTHOR INDEX`
+              : 'AUTHOR INDEX'
+          } else if (district.sourceMode === 'featured') {
+            title = `CURATED PICKS · ${shelfNumber}`
+            functionLabel = 'FEATURED COLLECTION'
+          } else if (district.sourceMode === 'latest') {
+            title = `NEW ARRIVALS · ${shelfNumber}`
+            functionLabel = 'NEWLY PUBLISHED'
+          } else if (district.sourceMode === 'search') {
+            const tag = dominantTag(articles)
+            title = tag
+              ? `SEARCH · #${tag.toUpperCase()}`
+              : `SEARCH RESULTS · ${shelfNumber}`
+            functionLabel = query.trim()
+              ? `QUERY “${query.trim().slice(0, 28)}”`
+              : 'LIVE CARD CATALOGUE'
+          } else if (district.sourceMode === 'catalog') {
+            title = `ARCHIVE · ${shelfNumber}`
+            functionLabel = 'LONG-TAIL DEV CATALOGUE'
+          }
+
+          const subtitle =
+            `${functionLabel} · ${shelfDateRange(articles)} · ${articles.length} VOLUMES`
+
+          const shelf = makeShelf(
+            'shelf:room:' + district.id + ':' + shelfIndex,
+            title,
+            subtitle,
+            kind,
+            placement,
+            articles,
+          )
+          shelf.accent = district.accent
+          result.push(shelf)
+        })
+      },
+    )
+
+    const hallwayCollections = [
+      {
+        sourceMode: 'featured' as const,
+        side: 'left' as const,
+        title: 'FEATURED HALL',
+      },
+      {
+        sourceMode: 'latest' as const,
+        side: 'right' as const,
+        title: 'RECENT HALL',
+      },
     ]
 
-    if (searchResults.length) {
-      result.push(
-        makeShelf(
-          'shelf:search',
-          'Search',
-          query || 'search results',
-          'search',
-          arrivalShelfPlacement(
-            'shelf:search',
-            2,
-            1,
-          ),
-          searchResults.slice(0, CATALOG_BOOKS_PER_SHELF),
-        ),
+    hallwayCollections.forEach(({sourceMode, side, title}) => {
+      const district = roomWorldConfig.districts.find(
+        (candidate) => candidate.sourceMode === sourceMode,
       )
-    }
+      if (!district) return
 
-    const fallbackDistrict =
-      districts.find((district) => district.id === 'deep-stacks') ??
-      districts.find((district) => district.id === 'archive-2026') ??
-      districts.at(-1) ??
-      DEFAULT_LIBRARY_WORLD_CONFIG.districts[0]
-
-    const articlesByDistrict = new Map<
-      string,
-      DevArticleSummary[]
-    >()
-    districts.forEach((district) => {
-      articlesByDistrict.set(district.id, [])
-    })
-
-    // FRONT PAGE is a large virtual collection, but its physical
-    // footprint is intentionally fixed just like every other district.
-    // The 3D plaza must not expand as the streamed catalogue grows.
-    const frontPageDistrict = districts.find(
-      (district) => district.id === 'front-page',
-    )
-    if (frontPageDistrict) {
-      articlesByDistrict.set(
-        frontPageDistrict.id,
-        uniqueArticles(
-          bootstrap.feed,
-          bootstrap.latest,
-          catalog,
-        ),
+      const source = articlesForDistrict(district)
+      const placements = hallwayShelfPlacements(
+        district,
+        side,
       )
-    }
+      const kind = shelfKindForSource(sourceMode)
 
-    // Seed every semantic district from its Sanity-authored primary DEV tag.
-    // The generic catalogue stream below can then deepen those districts.
-    districts.forEach((district) => {
-      if (district.id === 'front-page') return
-      const samples = districtSamples[district.id] ?? []
-      if (samples.length === 0) return
-      articlesByDistrict.set(
-        district.id,
-        uniqueArticles(
-          articlesByDistrict.get(district.id) ?? [],
-          samples,
-        ),
-      )
-    })
-
-    remaining.forEach((article) => {
-      const district =
-        districtForTags(article.tag_list ?? [], districts) ??
-        fallbackDistrict
-      const bucket = articlesByDistrict.get(district.id)
-      if (!bucket) return
-
-      if (!bucket.some((item) => item.id === article.id)) {
-        bucket.push(article)
-      }
-    })
-
-    // Deep Stacks is the chronological tail of the streamed DEV catalog.
-    // Keep it independent from taxonomy matching: page 1 populates it
-    // immediately, and every later catalog page pushes the visible window
-    // deeper/older without ever changing the physical shelf count.
-    const deepStacksDistrict = districts.find(
-      (district) => district.id === 'deep-stacks',
-    )
-    if (deepStacksDistrict) {
-      const deepCatalog = uniqueArticles(
-        catalog,
-        bootstrap.latest,
-        bootstrap.feed,
-      )
-      articlesByDistrict.set(
-        deepStacksDistrict.id,
-        deepCatalog,
-      )
-    }
-
-    districts.forEach((district, districtIndex) => {
-      const allDistrictArticles =
-        articlesByDistrict.get(district.id) ?? []
-      const districtArticles =
-        (district.id === 'deep-stacks' ||
-          district.id === 'front-page') &&
-        allDistrictArticles.length >
-          DISTRICT_VISIBLE_ARTICLE_CAPACITY
-          ? district.id === 'deep-stacks'
-            ? allDistrictArticles.slice(
-                -DISTRICT_VISIBLE_ARTICLE_CAPACITY,
-              )
-            : allDistrictArticles.slice(
-                0,
-                DISTRICT_VISIBLE_ARTICLE_CAPACITY,
-              )
-          : allDistrictArticles
-      const availableShelfCount = Math.ceil(
-        districtArticles.length / CATALOG_BOOKS_PER_SHELF,
-      )
-      const renderedShelfCount = Math.min(
-        availableShelfCount,
-        DISTRICT_RENDERED_SHELF_LIMIT,
-      )
-
-      for (
-        let localIndex = 0;
-        localIndex < renderedShelfCount;
-        localIndex += 1
-      ) {
+      placements.forEach((placement, shelfIndex) => {
+        // Start the corridor on a later part of the pool so the doorway view
+        // does not mirror room shelf #1, but wrap only when the lightweight
+        // startup pool runs out.
         const offset =
-          localIndex * CATALOG_BOOKS_PER_SHELF
-        const shelfArticles = districtArticles.slice(
+          CATALOG_BOOKS_PER_SHELF * 2 +
+          shelfIndex * CATALOG_BOOKS_PER_SHELF
+        const articles = shelfArticles(
+          source,
           offset,
-          offset + CATALOG_BOOKS_PER_SHELF,
+          CATALOG_BOOKS_PER_SHELF,
         )
-        const side: -1 | 1 =
-          localIndex % 2 === 0 ? -1 : 1
-        const pairIndex = Math.floor(localIndex / 2)
-        const bay =
-          district.bay +
-          (DISTRICT_SHELF_PAIR_OFFSETS[
-            Math.min(
-              pairIndex,
-              DISTRICT_SHELF_PAIR_OFFSETS.length - 1,
-            )
-          ] ?? 0)
-        const shelfId =
-          'shelf:catalog:' +
-          district.id +
-          ':' +
-          localIndex
-        const totalLoaded = allDistrictArticles.length
+        const shelfNumber = String(shelfIndex + 1).padStart(2, '0')
         const shelf = makeShelf(
-          shelfId,
-          district.label +
-            ' ' +
-            String(localIndex + 1).padStart(2, '0'),
-          'DEV district · ' +
-            (district.devTags.length
-              ? district.devTags
-                  .slice(0, 3)
-                  .map((tag) => '#' + tag)
-                  .join(' · ')
-              : 'long-tail archive') +
-            (totalLoaded >
-            renderedShelfCount *
-              CATALOG_BOOKS_PER_SHELF
-              ? ' · ' +
-                totalLoaded +
-                ' loaded'
-              : ''),
-          'catalog',
-          archiveShelfPlacement(
-            shelfId,
-            bay,
-            side,
-            {
-              // District bookcases are architecture, not debris: keep each
-              // pair level, mirrored, and square to the boulevard.
-              laneDistance:
-                archiveDistrictGridLaneOffset(
-                  districtIndex,
-                ) === 0
-                  ? 6.5
-                  : 5.15,
-              centerLateralOffset:
-                archiveDistrictGridLaneOffset(
-                  districtIndex,
-                ),
-              heightJitterScale: 0,
-              lateralJitterScale: 0,
-              alongJitterScale: 0,
-              lookAheadScale: 0,
-              yawJitterScale: 0,
-              orientationBay: district.bay,
-            },
-            districts,
-          ),
-          shelfArticles,
+          'shelf:hallway:' + sourceMode + ':' + shelfIndex,
+          title + ' ' + shelfNumber,
+          sourceMode === 'featured'
+            ? `${shelfDateRange(articles)} · curated + trending DEV writing`
+            : `${shelfDateRange(articles)} · freshly published on DEV`,
+          kind,
+          placement,
+          articles,
         )
         shelf.accent = district.accent
-        shelf.districtId = district.id
         result.push(shelf)
-      }
+      })
     })
 
-    const resolvedPlacements = resolveArchiveShelfClearance(
-      result.map((shelf) => ({
-        world: shelf.world,
-        yaw: shelf.yaw,
-        pathBay: shelf.pathBay,
-        districtId: shelf.districtId,
-      })),
-      districts,
-    )
-
-    return result.map((shelf, index) => {
-      const placement = resolvedPlacements[index]
-      if (!placement) return shelf
-
-      return {
-        ...shelf,
-        world: placement.world,
-        yaw: placement.yaw,
-        pathBay: placement.pathBay,
-        districtId: placement.districtId,
-      }
-    })
+    return result
   }, [
     bootstrap,
     catalog,
     creators,
+    curatedLiveArticles,
     dynamicArticles,
     dynamicTitle,
     query,
+    roomWorldConfig,
     searchResults,
-    packedWorldConfig,
     districtSamples,
+    worldConfig.curatedArticles,
   ])
 
   const nodes = useMemo<DreamWorldNode[]>(
@@ -1075,9 +1394,15 @@ export default function DevLibraryMap() {
         accent: shelf.accent,
         world: shelf.world,
         libraryYaw: shelf.yaw,
+        libraryDoubleSided: shelf.doubleSided,
+        libraryShelfEndCaps: shelf.endCaps,
+        libraryFloatId: shelf.floatId,
         libraryPathBay: shelf.pathBay,
         libraryDistrictId: shelf.districtId,
-        libraryBooks: shelf.articles.slice(0, 9).map((article) => {
+        libraryWidthScale: shelf.widthScale,
+        libraryBooks: shelf.articles
+          .slice(0, shelf.doubleSided ? 18 : 9)
+          .map((article) => {
           const engagement =
             (article.public_reactions_count ?? 0) +
             (article.comments_count ?? 0) * 2
@@ -1094,6 +1419,7 @@ export default function DevLibraryMap() {
           return {
             id: String(article.id),
             title: article.title,
+            author: article.user.name || article.user.username,
             coverUrl: devImageProxyUrl(
               article.cover_image,
               article.social_image,
@@ -1110,18 +1436,11 @@ export default function DevLibraryMap() {
     [bootstrap?.tags.length, creators.length, shelves],
   )
 
-  const edges = useMemo<DreamWorldEdge[]>(() => {
-    if (nodes.length < 2) return []
-    return nodes.map((node, index) => {
-      const target = nodes[(index + 1) % nodes.length]
-      return {
-        id: 'route:' + node._id + ':' + target._id,
-        source: node._id,
-        target: target._id,
-        weight: 2,
-      }
-    })
-  }, [nodes])
+  // The six-room building is navigated spatially rather than as a graph.
+  // Leaving relationship edges empty prevents cinematic connection lines
+  // and free-space routes from cutting through interior walls.
+  const edges = useMemo<DreamWorldEdge[]>(() => [], [])
+
 
   const selectedShelf =
     shelves.find((shelf) => shelf.id === selectedId) ?? null
@@ -1143,46 +1462,57 @@ export default function DevLibraryMap() {
 
     const candidate =
       navigation.routeTargetId ?? navigation.nearestId
-    if (!candidate?.startsWith('shelf:catalog:')) {
-      lastCatalogLoadTriggerRef.current = null
-      return
-    }
-
     const shelf = shelves.find(
       (item) => item.id === candidate,
     )
-    const deepStacksApproach =
-      shelf?.districtId === 'deep-stacks'
+    const archiveDistrict = shelf
+      ? roomWorldConfig.districts.find(
+          (district) => district.id === shelf.districtId,
+        )
+      : null
+    const archiveApproach =
+      shelf?.kind === 'catalog' &&
+      archiveDistrict?.sourceMode === 'catalog'
     const isLastVisibleCatalogShelf =
+      archiveApproach &&
       shelf &&
       shelves
         .filter((item) => item.kind === 'catalog')
-        .slice(-3)
+        .slice(-2)
         .some((item) => item.id === shelf.id)
 
-    if (
-      deepStacksApproach ||
-      isLastVisibleCatalogShelf
-    ) {
+    if (archiveApproach && catalog.length === 0) {
       if (
-        lastCatalogLoadTriggerRef.current !== candidate
+        lastCatalogLoadTriggerRef.current !== 'archive:first-page'
       ) {
-        lastCatalogLoadTriggerRef.current = candidate
-        void loadMoreCatalog()
+        lastCatalogLoadTriggerRef.current = 'archive:first-page'
+        void loadMoreCatalog(1)
       }
       return
     }
 
-    // Moving away from a loading edge arms the trigger again, so returning
-    // to Deep Stacks fetches the next page without polling continuously.
+    if (archiveApproach && isLastVisibleCatalogShelf) {
+      if (
+        lastCatalogLoadTriggerRef.current !== candidate
+      ) {
+        lastCatalogLoadTriggerRef.current = candidate
+        void loadMoreCatalog(1)
+      }
+      return
+    }
+
+    // Moving away from the Archive edge arms the trigger again, so returning
+    // to its last shelf fetches the next page without polling continuously.
     lastCatalogLoadTriggerRef.current = null
   }, [
+    catalog.length,
     catalogHasMore,
     catalogLoading,
     catalogShelfCount,
     loadMoreCatalog,
     navigation.nearestId,
     navigation.routeTargetId,
+    roomWorldConfig.districts,
     shelves,
   ])
 
@@ -1220,7 +1550,9 @@ export default function DevLibraryMap() {
       }
       setDynamicTitle('#' + tag)
       setDynamicArticles(payload.articles ?? [])
-      setSelectedId('shelf:topics')
+      setSelectedId(
+        shelves.find((shelf) => shelf.kind === 'topics')?.id ?? null,
+      )
     } catch {
       setError('Could not load topic shelf')
     } finally {
@@ -1241,7 +1573,9 @@ export default function DevLibraryMap() {
       }
       setDynamicTitle('@' + username)
       setDynamicArticles(payload.articles ?? [])
-      setSelectedId('shelf:creators')
+      setSelectedId(
+        shelves.find((shelf) => shelf.kind === 'creators')?.id ?? null,
+      )
     } catch {
       setError('Could not load creator shelf')
     } finally {
@@ -1265,7 +1599,9 @@ export default function DevLibraryMap() {
         articles: DevArticleSummary[]
       }
       setSearchResults(payload.articles ?? [])
-      setSelectedId('shelf:search')
+      setSelectedId(
+        shelves.find((shelf) => shelf.kind === 'search')?.id ?? null,
+      )
       document.exitPointerLock?.()
     } catch {
       setError('Could not search DEV')
@@ -1303,7 +1639,7 @@ export default function DevLibraryMap() {
         observatoryMode={false}
         flightMode={flightMode}
         libraryMovementMode={movementMode}
-        libraryWorldConfig={packedWorldConfig}
+        libraryWorldConfig={roomWorldConfig}
         libraryReadingBook={readingBook}
         inputBlocked={Boolean(article) || Boolean(readingBook)}
         onZoomChange={() => {}}
@@ -1330,11 +1666,87 @@ export default function DevLibraryMap() {
         onLibraryMovementModeChange={setMovementMode}
       />
 
+      {layoutHudVisible && (
+        <aside
+          className={styles.layoutAuthoringHud}
+          aria-live="polite"
+        >
+          <div className={styles.layoutAuthoringHudHeader}>
+            <strong>LAYOUT PIN MODE</strong>
+            <span>P / F8</span>
+          </div>
+          <p>{layoutHudStatus}</p>
+          <div className={styles.layoutAuthoringHudActions}>
+            <button
+              type="button"
+              onClick={() =>
+                window.dispatchEvent(
+                  new CustomEvent('oniria:layout-pin-button', {
+                    detail: {remove: false},
+                  }),
+                )
+              }
+            >
+              Drop pin
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                window.dispatchEvent(
+                  new CustomEvent('oniria:layout-pin-button', {
+                    detail: {remove: true},
+                  }),
+                )
+              }
+            >
+              Remove nearest
+            </button>
+            <button
+              type="button"
+              className={styles.layoutAuthoringExport}
+              onClick={() => {
+                setLayoutHudStatus('EXPORTING PINS…')
+                window.dispatchEvent(
+                  new CustomEvent(
+                    'oniria:layout-pin-export-request',
+                  ),
+                )
+              }}
+            >
+              Copy pins JSON
+            </button>
+            <button
+              type="button"
+              className={styles.layoutAuthoringDanger}
+              onClick={() => {
+                if (
+                  !window.confirm(
+                    'Clear every layout pin? The normalized shelf layout will remain.',
+                  )
+                ) {
+                  return
+                }
+                window.dispatchEvent(
+                  new CustomEvent('oniria:layout-pin-button', {
+                    detail: {clearAll: true},
+                  }),
+                )
+              }}
+            >
+              Clear all pins
+            </button>
+          </div>
+          <small>
+            Stand in a room · face shelf direction · P drops · Shift+P removes
+          </small>
+        </aside>
+      )}
+
       <header className={styles.topbar}>
         <div className={styles.brand}>
           <span>DEV</span>
           <strong>Library</strong>
-          <small>cinematic webspace</small>
+          <small>Sanity-powered spatial archive</small>
         </div>
 
         <form className={styles.search} onSubmit={submitSearch}>
@@ -1414,33 +1826,24 @@ export default function DevLibraryMap() {
               nearestShelf?.title ??
               'Open space'}
           </strong>
-          {routeShelf ? (
-            <small className={styles.routeActive}>
-              {movementMode === 'fly'
-                ? 'R ROUTE → ' + routeShelf.title
-                : 'G · WALK · switch to FLY for auto-route'}
-            </small>
-          ) : (
-            <small>
-              G · {movementMode === 'walk' ? 'WALK' : 'FLY'} · WASD move
-              · E inspect / close book
-              {movementMode === 'fly' ? ' · R auto-route' : ''}
-              {catalogLoading
-                ? ' · extending catalogue…'
-                : catalogHasMore
-                  ? ' · ' +
-                    catalog.length +
-                    ' catalogue articles loaded'
-                  : ' · catalogue end reached'}
-            </small>
-          )}
+          <small>
+            G · {movementMode === 'walk' ? 'WALK' : 'FLY'} · WASD move
+            · E inspect / close book
+            {catalogLoading
+              ? ' · extending catalogue…'
+              : catalogHasMore
+                ? ' · ' +
+                  catalog.length +
+                  ' catalogue articles loaded'
+                : ' · catalogue end reached'}
+          </small>
         </div>
       </header>
 
       {loading && (
         <div className={styles.loading}>
           <span>✦</span>
-          <strong>Building the floating library…</strong>
+          <strong>Opening the DEV Library…</strong>
         </div>
       )}
 
@@ -1463,7 +1866,7 @@ export default function DevLibraryMap() {
             ×
           </button>
 
-          <p className={styles.eyebrow}>Floating shelf</p>
+          <p className={styles.eyebrow}>DEV room shelf</p>
           <h1>{selectedShelf.title}</h1>
           <p className={styles.subtitle}>
             {dynamicTitle &&

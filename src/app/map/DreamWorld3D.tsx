@@ -81,6 +81,21 @@ import {
   createLibraryAtmosphere,
   getLibraryAtmosphereVisualPreset,
 } from './libraryAtmosphere'
+import {createLibraryBuilding} from './libraryBuilding'
+import {createLibraryLayoutAuthoring} from './libraryLayoutAuthoring'
+import {loadLibraryAsset} from './libraryAssets'
+import {
+  createFloatingPropRegistry,
+  floatingPhase,
+} from './libraryFloating'
+import {
+  LIBRARY_BUILDING_BOUNDS,
+  LIBRARY_EYE_HEIGHT,
+  LIBRARY_SPAWN,
+  clampLibraryWalkPosition,
+  libraryRoomContainsPoint,
+  roomForDistrict,
+} from './libraryRoomLayout'
 
 export type DreamWorldNode = {
   _id: string
@@ -97,11 +112,16 @@ export type DreamWorldNode = {
   accent?: string
   world?: [number, number, number]
   libraryYaw?: number
+  libraryDoubleSided?: boolean
+  libraryShelfEndCaps?: 'none' | 'left' | 'right'
+  libraryFloatId?: string
   libraryPathBay?: number
   libraryDistrictId?: string
+  libraryWidthScale?: number
   libraryBooks?: Array<{
     id: string
     title: string
+    author?: string
     coverUrl?: string
     activity?: number
     fresh?: boolean
@@ -323,7 +343,7 @@ function createLabelTexture(node: DreamWorldNode) {
   context.font = '600 18px system-ui, sans-serif'
   context.fillText(
     node.libraryKind === 'shelf'
-      ? `${node.articleCount ?? node.frequency} articles · ${node.subtitle ?? 'floating shelf'}`
+      ? `${node.articleCount ?? node.frequency} articles · ${node.subtitle ?? 'DEV shelf'}`
       : `${node.frequency} dream${node.frequency === 1 ? '' : 's'} · ${node.category}`,
     110,
     92,
@@ -477,7 +497,7 @@ function createLibraryWelcomeTexture(config: LibraryWorldConfig) {
       accent: 'rgba(140, 124, 255, .18)',
       body: [
         'Next.js + React + TypeScript + Three.js.',
-        'DEV API data is streamed into seeded districts, shelves, paths, covers, and atmosphere.',
+        'DEV API data is streamed into Sanity-authored rooms, physical shelves, covers, and atmosphere.',
       ],
     },
     {
@@ -490,8 +510,7 @@ function createLibraryWelcomeTexture(config: LibraryWorldConfig) {
         ['Mouse', 'look'],
         ['E', 'inspect / close'],
         ['G', 'toggle WALK / FLY'],
-        ['R', 'auto-route while flying'],
-        ['Click book', 'open article'],
+                ['Click book', 'open article'],
         ['Esc', 'release mouse'],
       ],
     },
@@ -554,7 +573,7 @@ function createLibraryWelcomeTexture(config: LibraryWorldConfig) {
   context.font = '700 25px ui-monospace, monospace'
   context.fillText(
     config.archiveStatus +
-      ' · follow the holographic boulevard · district signs float overhead',
+      ' · follow the central corridor · room signs mark each collection',
     100,
     846,
   )
@@ -743,7 +762,7 @@ export default function DreamWorld3D({
       `${quality}::${nodes
         .map(
           (node) =>
-            `${node._id}:${node.articleCount ?? 0}:${node.libraryBooks?.map((book) => book.id + ':' + (book.coverUrl ?? '')).join('|') ?? ''}:${node.world?.join(',') ?? ''}:${node.libraryYaw ?? ''}:${node.libraryPathBay ?? ''}`,
+            `${node._id}:${node.articleCount ?? 0}:${node.libraryBooks?.map((book) => book.id + ':' + (book.coverUrl ?? '')).join('|') ?? ''}:${node.world?.join(',') ?? ''}:${node.libraryYaw ?? ''}:${node.libraryDoubleSided ? 1 : 0}:${node.libraryShelfEndCaps ?? ''}:${node.libraryFloatId ?? ''}:${node.libraryPathBay ?? ''}:${node.libraryWidthScale ?? 1}`,
         )
         .join('|')}::${edges
         .map((edge) => `${edge.id}:${edge.weight}`)
@@ -771,6 +790,7 @@ export default function DreamWorld3D({
     const host = hostRef.current
     if (!host) return
     const container: HTMLDivElement = host
+    let sceneDisposed = false
 
     const settings = getQualitySettings(qualityRef.current)
     const activeLibraryConfig =
@@ -779,12 +799,123 @@ export default function DreamWorld3D({
       activeLibraryConfig.districts.length > 0
         ? activeLibraryConfig.districts
         : DEFAULT_LIBRARY_WORLD_CONFIG.districts
+    const roomDistrictEntries = activeDistricts.map(
+      (district, index) => {
+        const room = roomForDistrict(district, index)
+        return {
+          district,
+          room,
+          center: room.center,
+        }
+      },
+    )
+    const nearestRoomEntry = (x: number, z: number) => {
+      const containingRooms = roomDistrictEntries.filter(
+        (entry) =>
+          libraryRoomContainsPoint(
+            entry.room,
+            x,
+            z,
+            .18,
+          ),
+      )
+
+      if (containingRooms.length === 0) {
+        return null
+      }
+
+      // Boundary margins can make adjacent room rectangles overlap by a tiny
+      // amount. Resolve that edge case by choosing the physically nearest
+      // room center, while still requiring the point to be inside a real
+      // rectangular room footprint.
+      return containingRooms.sort((a, b) => {
+        const aDx = x - a.center[0]
+        const aDz = z - a.center[1]
+        const bDx = x - b.center[0]
+        const bDz = z - b.center[1]
+        return (
+          aDx * aDx +
+          aDz * aDz -
+          (bDx * bDx + bDz * bDz)
+        )
+      })[0] ?? null
+    }
+
+    const nearestAuthoringRoomEntry = (
+      x: number,
+      z: number,
+    ) => {
+      // Authoring must be more forgiving than gameplay detection. Measure
+      // distance to each room's architectural rectangle and choose the
+      // closest room even when the camera is touching/slightly beyond an
+      // inferred wall edge.
+      let nearest =
+        roomDistrictEntries[0] ?? null
+      let nearestDistance = Infinity
+
+      roomDistrictEntries.forEach((entry) => {
+        const bounds = {
+          minX: Math.min(
+            entry.room.doorway[0],
+            entry.room.center[0] < 0
+              ? LIBRARY_BUILDING_BOUNDS.minX
+              : LIBRARY_BUILDING_BOUNDS.maxX,
+          ),
+          maxX: Math.max(
+            entry.room.doorway[0],
+            entry.room.center[0] < 0
+              ? LIBRARY_BUILDING_BOUNDS.minX
+              : LIBRARY_BUILDING_BOUNDS.maxX,
+          ),
+          minZ: entry.room.center[1] - 10.6,
+          maxZ: entry.room.center[1] + 10.6,
+        }
+
+        const dx =
+          x < bounds.minX
+            ? bounds.minX - x
+            : x > bounds.maxX
+              ? x - bounds.maxX
+              : 0
+        const dz =
+          z < bounds.minZ
+            ? bounds.minZ - z
+            : z > bounds.maxZ
+              ? z - bounds.maxZ
+              : 0
+        const distance = dx * dx + dz * dz
+
+        if (
+          distance < nearestDistance ||
+          (distance === nearestDistance &&
+            nearest &&
+            Math.hypot(
+              x - entry.center[0],
+              z - entry.center[1],
+            ) <
+              Math.hypot(
+                x - nearest.center[0],
+                z - nearest.center[1],
+              ))
+        ) {
+          nearest = entry
+          nearestDistance = distance
+        }
+      })
+
+      return nearest
+    }
     const libraryMode = nodeRef.current.some(
       (node) => node.libraryKind === 'shelf',
     )
-    const libraryGridSegments = libraryMode
-      ? archiveGridRoadSegments(activeDistricts)
-      : []
+    // The cinematic renderer is now the engine for an enclosed physical
+    // library. Keep its lighting, post-processing, audio and reading ritual,
+    // but do not instantiate the previous infinite-boulevard road network.
+    const archiveBoulevardVisuals = false
+    const libraryGridSegments =
+      libraryMode && archiveBoulevardVisuals
+        ? archiveGridRoadSegments(activeDistricts)
+        : []
 
     const scene = new THREE.Scene()
     const globalAtmospherePreset =
@@ -792,24 +923,21 @@ export default function DreamWorld3D({
         activeLibraryConfig.atmosphere,
       )
     const sceneBackgroundColor = new THREE.Color(
-      libraryMode
-        ? globalAtmospherePreset.background
-        : 0x030611,
+      libraryMode ? 0x01020a : 0x030611,
     )
     const atmosphereBackgroundTarget = new THREE.Color()
     const atmosphereFogTarget = new THREE.Color()
     const atmosphereLightTarget = new THREE.Color()
     scene.background = sceneBackgroundColor
-    scene.fog = new THREE.FogExp2(
-      libraryMode
-        ? globalAtmospherePreset.fog
-        : 0x07101f,
-      settings.fogDensity *
-        (libraryMode
-          ? globalAtmospherePreset.fogScale *
-            (.55 + activeLibraryConfig.hazeIntensity * .85)
-          : 1),
-    )
+    scene.fog = libraryMode
+      ? new THREE.FogExp2(
+          globalAtmospherePreset.fog,
+          settings.fogDensity * .14,
+        )
+      : new THREE.FogExp2(
+          0x07101f,
+          settings.fogDensity,
+        )
 
     const camera = new THREE.PerspectiveCamera(
       43,
@@ -823,12 +951,7 @@ export default function DreamWorld3D({
       camera.position.fromArray(savedLibraryFlightState.position)
       camera.quaternion.fromArray(savedLibraryFlightState.quaternion)
     } else if (libraryMode) {
-      const arrival = archivePathPoint(0)
-      camera.position.set(
-        arrival[0],
-        arrival[1] + ARCHIVE_WALKWAY_Y_OFFSET + 1.64,
-        arrival[2],
-      )
+      camera.position.fromArray(LIBRARY_SPAWN)
     } else {
       camera.position.set(0, 0, 10.8)
     }
@@ -850,7 +973,7 @@ export default function DreamWorld3D({
     )
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = libraryMode ? .84 : .94
+    renderer.toneMappingExposure = libraryMode ? .51 : .94
     renderer.shadowMap.enabled = settings.miniWorldDetail > 0
     renderer.shadowMap.type = THREE.PCFShadowMap
     renderer.domElement.className = styles.webglCanvas
@@ -858,14 +981,20 @@ export default function DreamWorld3D({
 
     const cinematicEnvironment = createCinematicEnvironment(renderer)
     scene.environment = cinematicEnvironment.texture
-    scene.environmentIntensity = settings.environmentIntensity
+    scene.environmentIntensity = libraryMode
+      ? settings.environmentIntensity * .4
+      : settings.environmentIntensity
 
     const composer = new EffectComposer(renderer)
     const renderPass = new RenderPass(scene, camera)
     composer.addPass(renderPass)
 
     const ssao = new SSAOPass(scene, camera, 1, 1)
-    ssao.enabled = settings.ssao
+    // Keep library SSAO disabled. Thin book covers, wall trim and bright
+    // panels produce unstable crawling halos in screen space; the library
+    // already uses deliberate contact-shadow/AO geometry at the places that
+    // matter visually.
+    ssao.enabled = settings.ssao && !libraryMode
     ssao.kernelRadius = settings.ssaoKernelRadius
     ssao.minDistance = 0.002
     ssao.maxDistance = 0.12
@@ -881,12 +1010,14 @@ export default function DreamWorld3D({
 
     const bloom = new UnrealBloomPass(
       new THREE.Vector2(1, 1),
-      settings.bloomStrength * (libraryMode ? .44 : 1),
-      settings.bloomRadius * (libraryMode ? .72 : 1),
-      libraryMode
-        ? Math.max(.82, settings.bloomThreshold)
-        : settings.bloomThreshold,
+      libraryMode ? .075 : settings.bloomStrength,
+      libraryMode ? .14 : settings.bloomRadius,
+      libraryMode ? 1.16 : settings.bloomThreshold,
     )
+    // High-threshold library bloom is intentionally lamp-only. Pale walls and
+    // book covers sit below threshold, while the emissive bulbs pick up a
+    // restrained warm halo.
+    bloom.enabled = true
     composer.addPass(bloom)
 
     const dreamPost = new ShaderPass(DreamPostShader)
@@ -903,19 +1034,27 @@ export default function DreamWorld3D({
     composer.addPass(dreamPost)
     composer.addPass(new OutputPass())
 
-    scene.add(
-      new THREE.AmbientLight(
-        0x7182b6,
-        libraryMode ? .46 : .75,
-      ),
-    )
+    if (libraryMode) {
+      // Low-level hemispheric fill preserves readable shadow detail while the
+      // authored pendant/sconce point lights provide the actual room shape.
+      scene.add(
+        new THREE.HemisphereLight(
+          0xd8c8b0,
+          0x05070b,
+          .24,
+        ),
+      )
+    } else {
+      scene.add(new THREE.AmbientLight(0x7182b6, .75))
+    }
 
     const keyLight = new THREE.DirectionalLight(
-      0xd4e5ff,
-      libraryMode ? 1.22 : 2.1,
+      libraryMode ? 0xfff3df : 0xd4e5ff,
+      libraryMode ? .025 : 2.1,
     )
     keyLight.position.set(-5, 6, 8)
-    keyLight.castShadow = renderer.shadowMap.enabled
+    keyLight.castShadow =
+      renderer.shadowMap.enabled && !libraryMode
     keyLight.shadow.mapSize.set(
       qualityRef.current === 'cinematic' ? 2048 : 1024,
       qualityRef.current === 'cinematic' ? 2048 : 1024,
@@ -926,7 +1065,7 @@ export default function DreamWorld3D({
 
     const violetLight = new THREE.PointLight(
       0xb791ff,
-      libraryMode ? 7 : 12,
+      libraryMode ? .075 : 12,
       20,
       2,
     )
@@ -935,7 +1074,7 @@ export default function DreamWorld3D({
 
     const cyanLight = new THREE.PointLight(
       0x72e2df,
-      libraryMode ? 6.5 : 11,
+      libraryMode ? .055 : 11,
       20,
       2,
     )
@@ -948,23 +1087,142 @@ export default function DreamWorld3D({
     const farWorld = new THREE.Group()
     scene.add(farWorld)
 
+    // The DEV Library now uses the enclosed six-room building from the
+    // neighborhoods prototype while retaining the cinematic renderer,
+    // reading ritual, audio, and Sanity-driven content model.
+    const libraryFloatingProps = createFloatingPropRegistry()
+    const libraryBuilding = libraryMode
+      ? createLibraryBuilding(
+          scene,
+          activeLibraryConfig,
+          libraryFloatingProps,
+        )
+      : null
+    const layoutAuthoringEnabled = libraryMode
+    const libraryLayoutAuthoring =
+      layoutAuthoringEnabled
+        ? createLibraryLayoutAuthoring(scene)
+        : null
+
+    let librarySkyDomeGeometry: THREE.SphereGeometry | null =
+      null
+    let librarySkyDomeMaterial: THREE.ShaderMaterial | null =
+      null
+    let librarySkyDome: THREE.Mesh | null = null
+
+    if (libraryMode) {
+      // A real exterior backdrop keeps the skylights from reading as black
+      // rectangular holes. Stars, particles and floating debris render in
+      // front of this distant gradient, so the roof opens into a coherent
+      // Oniria night sky instead of the scene clear color.
+      librarySkyDomeGeometry =
+        new THREE.SphereGeometry(260, 40, 24)
+      librarySkyDomeMaterial =
+        new THREE.ShaderMaterial({
+          side: THREE.BackSide,
+          depthWrite: false,
+          depthTest: true,
+          toneMapped: false,
+          transparent: false,
+          uniforms: {
+            zenithColor: {
+              value: new THREE.Color(0x02040c),
+            },
+            upperColor: {
+              value: new THREE.Color(0x091326),
+            },
+            horizonColor: {
+              value: new THREE.Color(0x2b1c32),
+            },
+            warmHaze: {
+              value: new THREE.Color(0x513426),
+            },
+          },
+          vertexShader: `
+            varying vec3 vLocalPosition;
+
+            void main() {
+              vLocalPosition = position;
+              gl_Position = projectionMatrix *
+                modelViewMatrix *
+                vec4(position, 1.0);
+            }
+          `,
+          fragmentShader: `
+            varying vec3 vLocalPosition;
+            uniform vec3 zenithColor;
+            uniform vec3 upperColor;
+            uniform vec3 horizonColor;
+            uniform vec3 warmHaze;
+
+            void main() {
+              vec3 direction = normalize(vLocalPosition);
+              float height = direction.y * 0.5 + 0.5;
+              float upperMix = smoothstep(0.42, 0.9, height);
+              vec3 sky = mix(horizonColor, upperColor, upperMix);
+              sky = mix(
+                sky,
+                zenithColor,
+                smoothstep(0.72, 1.0, height)
+              );
+
+              float horizonBand =
+                exp(-pow((height - 0.5) * 7.5, 2.0));
+              sky += warmHaze * horizonBand * 0.12;
+
+              gl_FragColor = vec4(sky, 1.0);
+            }
+          `,
+        })
+      librarySkyDome = new THREE.Mesh(
+        librarySkyDomeGeometry,
+        librarySkyDomeMaterial,
+      )
+      librarySkyDome.position.set(0, 8, -30)
+      librarySkyDome.renderOrder = -20
+      librarySkyDome.frustumCulled = false
+      librarySkyDome.name = 'library-exterior-sky-dome'
+      farWorld.add(librarySkyDome)
+    }
+
     const starCount = settings.starCount
     const starPositions = new Float32Array(starCount * 3)
     const starSizes = new Float32Array(starCount)
     for (let index = 0; index < starCount; index += 1) {
       const i = index * 3
-      starPositions[i] = (Math.random() - .5) * 34
-      starPositions[i + 1] = (Math.random() - .5) * 22
-      starPositions[i + 2] = -4 - Math.random() * 22
-      starSizes[index] = .4 + Math.random() * 1.4
+      if (libraryMode) {
+        // Reuse the old cosmic star field as a true exterior sky. Keep every
+        // star well outside the building shell so the windows read as views
+        // into space rather than interior particles.
+        const seed = index + 901
+        const u = seededUnit(seed, 1)
+        const v = seededUnit(seed, 2)
+        const theta = u * Math.PI * 2
+        const phi = Math.acos(2 * v - 1)
+        const radius = 130 + seededUnit(seed, 3) * 95
+        const sinPhi = Math.sin(phi)
+        starPositions[i] =
+          Math.cos(theta) * sinPhi * radius
+        starPositions[i + 1] =
+          Math.cos(phi) * radius
+        starPositions[i + 2] =
+          -30 + Math.sin(theta) * sinPhi * radius
+        starSizes[index] =
+          .7 + seededUnit(seed, 4) * 1.8
+      } else {
+        starPositions[i] = (Math.random() - .5) * 34
+        starPositions[i + 1] = (Math.random() - .5) * 22
+        starPositions[i + 2] = -4 - Math.random() * 22
+        starSizes[index] = .4 + Math.random() * 1.4
+      }
     }
     const starGeometry = new THREE.BufferGeometry()
     starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3))
     const starMaterial = new THREE.PointsMaterial({
       color: 0xcfe5ff,
-      size: .035,
+      size: libraryMode ? .16 : .035,
       transparent: true,
-      opacity: .86,
+      opacity: libraryMode ? .96 : .86,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     })
@@ -1004,11 +1262,18 @@ export default function DreamWorld3D({
         const offset = index * 3
         const seed = index + 1703
         const isMote = index >= tinyParticleCount
-        const depth = Math.pow(seededUnit(seed, 3), .58)
+        const theta = seededUnit(seed, 1) * Math.PI * 2
+        const phi = Math.acos(2 * seededUnit(seed, 2) - 1)
+        const radius =
+          112 + seededUnit(seed, 3) * 118
+        const sinPhi = Math.sin(phi)
 
-        positions[offset] = (seededUnit(seed, 1) - .5) * 180
-        positions[offset + 1] = (seededUnit(seed, 2) - .5) * 88
-        positions[offset + 2] = -42 - depth * 215
+        positions[offset] =
+          Math.cos(theta) * sinPhi * radius
+        positions[offset + 1] =
+          Math.cos(phi) * radius
+        positions[offset + 2] =
+          -30 + Math.sin(theta) * sinPhi * radius
 
         const color =
           palette[Math.floor(seededUnit(seed, 4) * palette.length)] ??
@@ -1105,7 +1370,7 @@ export default function DreamWorld3D({
     const librarySkywayGeometries: THREE.BufferGeometry[] = []
     const librarySkywayMaterials: THREE.Material[] = []
 
-    if (libraryMode) {
+    if (libraryMode && archiveBoulevardVisuals) {
       // Replace the old archive skyscrapers with unreachable floating
       // expressways. They are deliberately placed in farWorld only, so they
       // never become walkable surfaces, raycast targets, or collision bodies.
@@ -1378,13 +1643,31 @@ export default function DreamWorld3D({
         depthWrite: false,
       })
       const sprite = new THREE.Sprite(material)
-      sprite.position.set(
-        [-6, 4.8, 1.8, -2.4][index],
-        [3, 2.2, -3.5, -1.2][index],
-        -5 - index * 1.7,
-      )
-      const scale = 9 + index * 2.2
-      sprite.scale.set(scale * 1.55, scale, 1)
+      if (libraryMode) {
+        const positions = [
+          [-115, 34, -45],
+          [118, -18, -66],
+          [-22, 62, -178],
+          [26, -46, 112],
+        ] as const
+        const position = positions[index] ?? positions[0]
+        sprite.position.set(
+          position[0],
+          position[1],
+          position[2],
+        )
+        const scale = 72 + index * 18
+        sprite.scale.set(scale * 1.7, scale, 1)
+        material.opacity = .16
+      } else {
+        sprite.position.set(
+          [-6, 4.8, 1.8, -2.4][index],
+          [3, 2.2, -3.5, -1.2][index],
+          -5 - index * 1.7,
+        )
+        const scale = 9 + index * 2.2
+        sprite.scale.set(scale * 1.55, scale, 1)
+      }
       farWorld.add(sprite)
       nebulae.push(sprite)
     })
@@ -1512,6 +1795,23 @@ export default function DreamWorld3D({
       return sprite
     })
 
+    if (libraryMode) {
+      // Keep only the old galaxy treatment as distant exterior sky. Dream
+      // debris and fog remain disabled inside the physical library.
+      nebulae.forEach((sprite) => {
+        sprite.visible = true
+      })
+      fragments.forEach((fragment) => {
+        fragment.visible = false
+      })
+      landmarks.forEach((landmark) => {
+        landmark.visible = false
+      })
+      foregroundFog.forEach((sprite) => {
+        sprite.visible = false
+      })
+    }
+
     const libraryAtmosphere = libraryMode
       ? createLibraryAtmosphere({
           world,
@@ -1602,16 +1902,62 @@ export default function DreamWorld3D({
     const libraryBookVisuals: LibraryBookVisual[] = []
     const bookInteractives: THREE.Object3D[] = []
     let hoveredBook: LibraryBookVisual | null = null
+    const BOOK_INTERACTION_DISTANCE = 2.65
 
     // Reusable shelf kit for cinematic library mode.
-    const shelfSideGeometry = new THREE.BoxGeometry(.18, 2.65, .56)
-    const shelfBoardGeometry = new THREE.BoxGeometry(3.45, .12, .62)
-    const shelfBackGeometry = new THREE.BoxGeometry(3.45, 2.65, .1)
+    const shelfSideGeometry = new THREE.BoxGeometry(.16, 3.56, .66)
+    const shelfBoardGeometry = new THREE.BoxGeometry(4.5, .1, .66)
+    const shelfBackGeometry = new THREE.BoxGeometry(4.5, 3.46, .055)
     const shelfBookGeometry = new THREE.BoxGeometry(.78, .54, .1)
     const shelfCoverGeometry = new THREE.PlaneGeometry(.7, .46)
-    const shelfAccentGeometry = new THREE.BoxGeometry(3.34, .035, .68)
-    const shelfPickGeometry = new THREE.BoxGeometry(3.8, 2.9, .95)
+    const shelfHoverGlowGeometry = new THREE.PlaneGeometry(.94, .68)
+    const shelfAccentGeometry = new THREE.BoxGeometry(4.26, .024, .032)
+    const shelfPickGeometry = new THREE.BoxGeometry(4.8, 3.8, 1.1)
     const shelfBookmarkGeometry = new THREE.PlaneGeometry(.12, .34)
+    const shelfHoverGlowCanvas = document.createElement('canvas')
+    shelfHoverGlowCanvas.width = 128
+    shelfHoverGlowCanvas.height = 96
+    const shelfHoverGlowContext =
+      shelfHoverGlowCanvas.getContext('2d')
+    if (shelfHoverGlowContext) {
+      shelfHoverGlowContext.clearRect(0, 0, 128, 96)
+      shelfHoverGlowContext.save()
+      shelfHoverGlowContext.shadowColor =
+        'rgba(255, 191, 112, .95)'
+      shelfHoverGlowContext.shadowBlur = 22
+      shelfHoverGlowContext.strokeStyle =
+        'rgba(255, 218, 164, .92)'
+      shelfHoverGlowContext.lineWidth = 5
+      roundedRect(
+        shelfHoverGlowContext,
+        13,
+        12,
+        102,
+        72,
+        10,
+      )
+      shelfHoverGlowContext.stroke()
+      shelfHoverGlowContext.restore()
+    }
+    const shelfHoverGlowTexture =
+      new THREE.CanvasTexture(shelfHoverGlowCanvas)
+    shelfHoverGlowTexture.colorSpace = THREE.SRGBColorSpace
+    shelfHoverGlowTexture.minFilter = THREE.LinearFilter
+    shelfHoverGlowTexture.magFilter = THREE.LinearFilter
+    shelfHoverGlowTexture.generateMipmaps = false
+    shelfHoverGlowTexture.needsUpdate = true
+    const shelfHoverGlowMaterial =
+      new THREE.MeshBasicMaterial({
+        map: shelfHoverGlowTexture,
+        transparent: true,
+        opacity: .92,
+        depthWrite: false,
+        depthTest: true,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+        toneMapped: false,
+      })
+
     const shelfBookmarkMaterial = new THREE.MeshBasicMaterial({
       color: 0xd782e8,
       transparent: true,
@@ -1658,6 +2004,57 @@ export default function DreamWorld3D({
       metalness: .06,
       envMapIntensity: settings.environmentIntensity * .38,
     })
+    const shelfContactShadowGeometry =
+      new THREE.PlaneGeometry(4.95, 1.18)
+    const shelfContactShadowMaterial =
+      new THREE.MeshBasicMaterial({
+        color: 0x050509,
+        transparent: true,
+        opacity: .15,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        toneMapped: true,
+      })
+    const shelfContactShadows: THREE.Mesh[] = []
+
+    const shelfBacklightCanvas = document.createElement('canvas')
+    shelfBacklightCanvas.width = 128
+    shelfBacklightCanvas.height = 128
+    const shelfBacklightContext =
+      shelfBacklightCanvas.getContext('2d')
+    if (shelfBacklightContext) {
+      const gradient =
+        shelfBacklightContext.createRadialGradient(
+          64,
+          64,
+          8,
+          64,
+          64,
+          62,
+        )
+      gradient.addColorStop(0, 'rgba(255, 182, 105, .32)')
+      gradient.addColorStop(.5, 'rgba(218, 118, 58, .11)')
+      gradient.addColorStop(1, 'rgba(110, 52, 28, 0)')
+      shelfBacklightContext.fillStyle = gradient
+      shelfBacklightContext.fillRect(0, 0, 128, 128)
+    }
+    const shelfBacklightTexture =
+      new THREE.CanvasTexture(shelfBacklightCanvas)
+    shelfBacklightTexture.colorSpace = THREE.SRGBColorSpace
+    shelfBacklightTexture.needsUpdate = true
+    const shelfBacklightGeometry =
+      new THREE.PlaneGeometry(3.9, 2.7)
+    const shelfBacklightMaterial =
+      new THREE.MeshBasicMaterial({
+        map: shelfBacklightTexture,
+        transparent: true,
+        opacity: .17,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+        toneMapped: false,
+      })
+
     const shelfBookMaterials = [
       new THREE.MeshStandardMaterial({
         color: 0x26336f,
@@ -1689,6 +2086,24 @@ export default function DreamWorld3D({
         emissiveIntensity: .01,
         roughness: .92,
       }),
+      new THREE.MeshStandardMaterial({
+        color: 0x6a3f32,
+        emissive: 0x0b0503,
+        emissiveIntensity: .008,
+        roughness: .91,
+      }),
+      new THREE.MeshStandardMaterial({
+        color: 0x6d5b2f,
+        emissive: 0x090703,
+        emissiveIntensity: .008,
+        roughness: .9,
+      }),
+      new THREE.MeshStandardMaterial({
+        color: 0x48543a,
+        emissive: 0x040603,
+        emissiveIntensity: .008,
+        roughness: .92,
+      }),
     ]
     const shelfAccentMaterial = new THREE.MeshBasicMaterial({
       color: 0x5263c8,
@@ -1701,13 +2116,213 @@ export default function DreamWorld3D({
     const shelfReactiveMaterials: THREE.Material[] = []
     const shelfCoverMaterials: THREE.MeshStandardMaterial[] = []
     const shelfCoverTextures: THREE.Texture[] = []
+    const shelfBookLabelTextures: THREE.Texture[] = []
+    const shelfBookLabelMaterials: THREE.SpriteMaterial[] = []
+    const shelfBookLabelLayers: Array<{
+      shelfRoot: THREE.Group
+      layer: THREE.Group
+    }> = []
     const shelfTextureLoader = new THREE.TextureLoader()
     shelfTextureLoader.setCrossOrigin('anonymous')
+    const shelfCoverTextureCache = new Map<string, THREE.Texture>()
+    const shelfCoverWaiters = new Map<
+      string,
+      THREE.MeshStandardMaterial[]
+    >()
+    const shelfCoverQueue: string[] = []
+    let shelfCoverLoadsInFlight = 0
+    const MAX_SHELF_COVER_LOADS = 4
+
+    const applyShelfCoverTexture = (
+      material: THREE.MeshStandardMaterial,
+      texture: THREE.Texture,
+    ) => {
+      material.map = texture
+      material.color.setHex(0xffffff)
+      material.emissive.setHex(0x000000)
+      material.emissiveIntensity = 0
+      material.roughness = .9
+      material.metalness = 0
+      material.envMapIntensity =
+        settings.environmentIntensity * .26
+      material.needsUpdate = true
+    }
+
+    const pumpShelfCoverQueue = () => {
+      if (sceneDisposed) return
+      while (
+        shelfCoverLoadsInFlight < MAX_SHELF_COVER_LOADS &&
+        shelfCoverQueue.length > 0
+      ) {
+        const url = shelfCoverQueue.shift()
+        if (!url) break
+
+        shelfCoverLoadsInFlight += 1
+        shelfTextureLoader.load(
+          url,
+          (texture) => {
+            shelfCoverLoadsInFlight -= 1
+            if (sceneDisposed) {
+              texture.dispose()
+              return
+            }
+
+            texture.colorSpace = THREE.SRGBColorSpace
+            texture.minFilter = THREE.LinearFilter
+            texture.magFilter = THREE.LinearFilter
+            texture.anisotropy = Math.min(
+              4,
+              renderer.capabilities.getMaxAnisotropy(),
+            )
+            shelfCoverTextures.push(texture)
+            shelfCoverTextureCache.set(url, texture)
+
+            const waiting =
+              shelfCoverWaiters.get(url) ?? []
+            waiting.forEach((material) =>
+              applyShelfCoverTexture(material, texture),
+            )
+            shelfCoverWaiters.delete(url)
+            pumpShelfCoverQueue()
+          },
+          undefined,
+          () => {
+            shelfCoverLoadsInFlight -= 1
+            const waiting =
+              shelfCoverWaiters.get(url) ?? []
+            waiting.forEach((material) => {
+              material.color.setHex(0x303746)
+            })
+            shelfCoverWaiters.delete(url)
+            pumpShelfCoverQueue()
+          },
+        )
+      }
+    }
+
+    const queueShelfCover = (
+      url: string,
+      material: THREE.MeshStandardMaterial,
+    ) => {
+      const cached = shelfCoverTextureCache.get(url)
+      if (cached) {
+        applyShelfCoverTexture(material, cached)
+        return
+      }
+
+      const waiting = shelfCoverWaiters.get(url)
+      if (waiting) {
+        waiting.push(material)
+        return
+      }
+
+      shelfCoverWaiters.set(url, [material])
+      shelfCoverQueue.push(url)
+      pumpShelfCoverQueue()
+    }
+
+    const compactBookLabel = (
+      value: string,
+      maxLength: number,
+    ) =>
+      value.length > maxLength
+        ? value.slice(0, Math.max(1, maxLength - 1)).trimEnd() + '…'
+        : value
+
+    const createShelfBookLabel = (
+      bookData: NonNullable<DreamWorldNode['libraryBooks']>[number],
+    ) => {
+      const canvas = document.createElement('canvas')
+      canvas.width = 256
+      canvas.height = 80
+      const context = canvas.getContext('2d')
+
+      if (context) {
+        context.clearRect(0, 0, canvas.width, canvas.height)
+        roundedRect(context, 4, 4, 248, 72, 10)
+        context.fillStyle = 'rgba(18, 13, 10, .86)'
+        context.fill()
+        context.strokeStyle = 'rgba(190, 151, 93, .66)'
+        context.lineWidth = 2
+        context.stroke()
+
+        context.textAlign = 'center'
+        context.textBaseline = 'middle'
+        context.fillStyle = '#f4e7d2'
+        context.font =
+          '600 15px Georgia, "Times New Roman", serif'
+        context.fillText(
+          compactBookLabel(bookData.title, 28),
+          128,
+          30,
+        )
+
+        context.fillStyle = '#baa68b'
+        context.font = '500 12px system-ui, sans-serif'
+        context.fillText(
+          compactBookLabel(
+            bookData.author ?? 'DEV Community',
+            24,
+          ),
+          128,
+          53,
+        )
+      }
+
+      const texture = new THREE.CanvasTexture(canvas)
+      texture.colorSpace = THREE.SRGBColorSpace
+      texture.minFilter = THREE.LinearFilter
+      texture.magFilter = THREE.LinearFilter
+      texture.generateMipmaps = false
+      texture.needsUpdate = true
+      shelfBookLabelTextures.push(texture)
+
+      const material = new THREE.SpriteMaterial({
+        map: texture,
+        transparent: true,
+        opacity: .94,
+        depthWrite: false,
+        depthTest: true,
+        toneMapped: false,
+      })
+      shelfBookLabelMaterials.push(material)
+
+      const sprite = new THREE.Sprite(material)
+      sprite.scale.set(.9, .28, 1)
+      sprite.renderOrder = 7
+      sprite.userData.libraryDecorative = true
+      return sprite
+    }
+
     const shelfPickMaterial = new THREE.MeshBasicMaterial({
       transparent: true,
       opacity: 0,
       depthWrite: false,
     })
+
+    const physicalShelfTemplatePromise = libraryMode
+      ? loadLibraryAsset('stackShelf', 3.5, 'height').catch(
+          (error) => {
+            console.warn(
+              '[DEV Library] Authored shelf failed; keeping procedural fallback.',
+              error,
+            )
+            return null
+          },
+        )
+      : Promise.resolve<THREE.Group | null>(null)
+
+    const physicalShelfEndTemplatePromise = libraryMode
+      ? loadLibraryAsset('stackShelfEnd', 3.5, 'height').catch(
+          (error) => {
+            console.warn(
+              '[DEV Library] Shelf end failed; leaving row uncapped.',
+              error,
+            )
+            return null
+          },
+        )
+      : Promise.resolve<THREE.Group | null>(null)
 
     const libraryShelfLight = libraryMode
       ? new THREE.PointLight(0x8fe9f3, 0, 13, 2)
@@ -1762,6 +2377,13 @@ export default function DreamWorld3D({
       world.add(libraryShelfSparkles)
     }
 
+    const pendingShelfHydrators = new Map<
+      string,
+      () => void
+    >()
+    const hydratedShelfIds = new Set<string>()
+    let lastShelfHydrationAt = -Infinity
+
     for (const node of nodeRef.current) {
       const seed = hashString(node._id)
       const color = new THREE.Color(
@@ -1770,9 +2392,15 @@ export default function DreamWorld3D({
       const group = new THREE.Group()
       group.userData.nodeId = node._id
       group.userData.libraryKind = node.libraryKind
+      const shelfNode = node.libraryKind === 'shelf'
 
       const shellMaterial = createLivingOrbMaterial(color, node.category)
-      const shell = new THREE.Mesh(nodeGeometry(node.category), shellMaterial)
+      const shell = new THREE.Mesh(
+        shelfNode
+          ? new THREE.BufferGeometry()
+          : nodeGeometry(node.category),
+        shellMaterial,
+      )
       shell.userData.nodeId = node._id
       shell.castShadow = renderer.shadowMap.enabled
       shell.receiveShadow = renderer.shadowMap.enabled
@@ -1796,19 +2424,27 @@ export default function DreamWorld3D({
         depthWrite: false,
       })
       const reflectionShell = new THREE.Mesh(
-        nodeGeometry(node.category),
+        shelfNode
+          ? new THREE.BufferGeometry()
+          : nodeGeometry(node.category),
         reflectionMaterial,
       )
       reflectionShell.scale.setScalar(1.035)
       reflectionShell.renderOrder = 4
       group.add(reflectionShell)
 
-      const miniWorld = createMiniWorld(
-        node.category,
-        color,
-        settings,
-        seed,
-      )
+      const miniWorld: MiniWorld = shelfNode
+        ? {
+            group: new THREE.Group(),
+            update: () => {},
+            dispose: () => {},
+          }
+        : createMiniWorld(
+            node.category,
+            color,
+            settings,
+            seed,
+          )
       miniWorld.group.position.z = 0.02
       group.add(miniWorld.group)
 
@@ -1820,7 +2456,12 @@ export default function DreamWorld3D({
         depthWrite: false,
         side: THREE.BackSide,
       })
-      const glow = new THREE.Mesh(nodeGeometry(node.category), glowMaterial)
+      const glow = new THREE.Mesh(
+        shelfNode
+          ? new THREE.BufferGeometry()
+          : nodeGeometry(node.category),
+        glowMaterial,
+      )
       glow.scale.setScalar(1.28)
       glow.userData.nodeId = node._id
       group.add(glow)
@@ -1838,7 +2479,12 @@ export default function DreamWorld3D({
         envMapIntensity: settings.environmentIntensity,
       })
       const core = new THREE.Mesh(
-        new THREE.IcosahedronGeometry(.22 + Math.min(node.frequency, 5) * .025, 2),
+        shelfNode
+          ? new THREE.BufferGeometry()
+          : new THREE.IcosahedronGeometry(
+              .22 + Math.min(node.frequency, 5) * .025,
+              2,
+            ),
         coreMaterial,
       )
       core.userData.nodeId = node._id
@@ -1854,7 +2500,9 @@ export default function DreamWorld3D({
         depthWrite: false,
       })
       const orbit = new THREE.Mesh(
-        new THREE.TorusGeometry(.79, .008, 6, 80),
+        shelfNode
+          ? new THREE.BufferGeometry()
+          : new THREE.TorusGeometry(.79, .008, 6, 80),
         orbitMaterial,
       )
       orbit.rotation.x = Math.PI * .54
@@ -1869,7 +2517,9 @@ export default function DreamWorld3D({
         depthWrite: false,
       })
       const shockwave = new THREE.Mesh(
-        new THREE.RingGeometry(.7, .735, 72),
+        shelfNode
+          ? new THREE.BufferGeometry()
+          : new THREE.RingGeometry(.7, .735, 72),
         shockwaveMaterial,
       )
       shockwave.visible = false
@@ -1899,22 +2549,42 @@ export default function DreamWorld3D({
         const shelf = new THREE.Group()
         shelf.rotation.y = 0
 
+        const shelfBookLabels = new THREE.Group()
+        shelfBookLabels.name = `library-book-labels-${node._id}`
+        shelfBookLabels.visible = false
+        shelf.add(shelfBookLabels)
+        shelfBookLabelLayers.push({
+          shelfRoot: group,
+          layer: shelfBookLabels,
+        })
+
+        // Render a correctly-sized procedural frame immediately, then swap it
+        // for the authored stack-shelf GLB as soon as the cached model loads.
+        const fallbackFrame = new THREE.Group()
+        shelf.add(fallbackFrame)
+
         const reactiveFrameMaterial =
           shelfFrameMaterial.clone()
-        reactiveFrameMaterial.emissive.copy(color)
-        reactiveFrameMaterial.emissiveIntensity = .018
+        // Unhydrated shelves should still read as library furniture, not
+        // glowing district-colored placeholders at long range.
+        reactiveFrameMaterial.color.setHex(0x2c2119)
+        reactiveFrameMaterial.emissive.setHex(0x000000)
+        reactiveFrameMaterial.emissiveIntensity = 0
+        reactiveFrameMaterial.roughness = .9
         reactiveFrameMaterial.envMapIntensity =
-          settings.environmentIntensity * .4
+          settings.environmentIntensity * .2
 
         const reactiveBoardMaterial =
           shelfBoardMaterial.clone()
-        reactiveBoardMaterial.emissive.copy(color)
-        reactiveBoardMaterial.emissiveIntensity = .016
+        reactiveBoardMaterial.color.setHex(0x3b2b20)
+        reactiveBoardMaterial.emissive.setHex(0x000000)
+        reactiveBoardMaterial.emissiveIntensity = 0
+        reactiveBoardMaterial.roughness = .88
 
         const reactiveAccentMaterial =
           shelfAccentMaterial.clone()
-        reactiveAccentMaterial.color.copy(color)
-        reactiveAccentMaterial.opacity = .11
+        reactiveAccentMaterial.color.setHex(0x6d5135)
+        reactiveAccentMaterial.opacity = .045
 
         shelfReactiveMaterials.push(
           reactiveFrameMaterial,
@@ -1928,176 +2598,357 @@ export default function DreamWorld3D({
         group.userData.libraryShelfAccentMaterial =
           reactiveAccentMaterial
 
-        ;[-1.64, 1.64].forEach((x) => {
+        ;[-2.25, 2.25].forEach((x) => {
           const side = new THREE.Mesh(
             shelfSideGeometry,
             reactiveFrameMaterial,
           )
-          side.position.set(x, 0, 0)
-          shelf.add(side)
+          side.position.set(x, 1.76, 0)
+          fallbackFrame.add(side)
         })
 
         const back = new THREE.Mesh(
           shelfBackGeometry,
           reactiveFrameMaterial,
         )
-        back.position.z = .28
-        shelf.add(back)
+        back.position.set(
+          0,
+          1.74,
+          node.libraryDoubleSided ? 0 : -.3,
+        )
+        fallbackFrame.add(back)
 
-        ;[-1.28, -.43, .42, 1.27].forEach((y) => {
+        ;[.18, 1.28, 2.38].forEach((y) => {
           const board = new THREE.Mesh(
             shelfBoardGeometry,
             reactiveBoardMaterial,
           )
           board.position.set(0, y, 0)
-          shelf.add(board)
+          fallbackFrame.add(board)
         })
 
-        ;(node.libraryBooks ?? []).slice(0, 9).forEach(
-          (bookData, index) => {
-            const row = Math.floor(index / 3)
-            const column = index % 3
-            const bookGroup = new THREE.Group()
-            const basePosition = new THREE.Vector3(
-              -.98 + column * .98,
-              -.84 + row * .84,
-              -.255,
-            )
-            bookGroup.position.copy(basePosition)
+        const topBoard = new THREE.Mesh(
+          shelfBoardGeometry,
+          reactiveFrameMaterial,
+        )
+        topBoard.position.set(0, 3.48, 0)
+        fallbackFrame.add(topBoard)
 
-            const backing = new THREE.Mesh(
-              shelfBookGeometry,
-              shelfBookMaterials[
-                (seed + index * 7) % shelfBookMaterials.length
-              ],
-            )
-            backing.scale.set(
-              1,
-              .94 + seededUnit(seed, index + 90) * .06,
-              1,
-            )
-            backing.userData.bookNodeId = node._id
-            backing.userData.bookIndex = index
-            bookGroup.add(backing)
-            bookInteractives.push(backing)
+        const shelfBooks = (node.libraryBooks ?? []).slice(
+          0,
+          node.libraryDoubleSided ? 18 : 9,
+        )
+        const addShelfBook = (
+          bookData: NonNullable<DreamWorldNode['libraryBooks']>[number],
+          index: number,
+          facing: 1 | -1,
+        ) => {
+          const faceIndex = index % 9
+          const row = Math.floor(faceIndex / 3)
+          const column = faceIndex % 3
+          const bookGroup = new THREE.Group()
+          const baseRotationY = facing === 1 ? 0 : Math.PI
+          const basePosition = new THREE.Vector3(
+            -.9 + column * .9,
+            .73 + row * 1.1,
+            .4 * facing,
+          )
+          bookGroup.position.copy(basePosition)
+          bookGroup.rotation.y = baseRotationY
 
-            const coverHinge = new THREE.Group()
-            coverHinge.position.set(-.39, 0, -.056)
-            bookGroup.add(coverHinge)
+          const backing = new THREE.Mesh(
+            shelfBookGeometry,
+            shelfBookMaterials[
+              (seed + index * 7) % shelfBookMaterials.length
+            ],
+          )
+          const bookWidthScale =
+            .64 + seededUnit(seed, index + 89) * .34
+          const bookHeightScale =
+            .82 + seededUnit(seed, index + 90) * .28
+          backing.scale.set(
+            bookWidthScale,
+            bookHeightScale,
+            .82 + seededUnit(seed, index + 91) * .22,
+          )
+          bookGroup.rotation.z =
+            (seededUnit(seed, index + 92) - .5) * .12
+          bookGroup.position.x +=
+            (seededUnit(seed, index + 93) - .5) * .16
+          bookGroup.position.y +=
+            (seededUnit(seed, index + 94) - .5) * .045
+          bookGroup.position.z +=
+            (seededUnit(seed, index + 95) - .5) * .025 * facing
+          backing.userData.bookNodeId = node._id
+          backing.userData.bookIndex = index
+          bookGroup.add(backing)
+          bookInteractives.push(backing)
 
-            const coverMaterial = new THREE.MeshStandardMaterial({
-              color: 0x555b67,
-              roughness: .98,
-              metalness: 0,
-              emissive: 0x000000,
-              emissiveIntensity: 0,
-              side: THREE.DoubleSide,
-              toneMapped: true,
-            })
-            shelfCoverMaterials.push(coverMaterial)
+          const bookLabel = createShelfBookLabel(bookData)
+          bookLabel.position.set(
+            bookGroup.position.x,
+            bookGroup.position.y - .43,
+            .5 * facing,
+          )
+          shelfBookLabels.add(bookLabel)
 
-            if (bookData.coverUrl) {
-              shelfTextureLoader.load(
-                bookData.coverUrl,
-                (texture) => {
-                  texture.colorSpace = THREE.SRGBColorSpace
-                  texture.minFilter = THREE.LinearFilter
-                  texture.magFilter = THREE.LinearFilter
-                  texture.anisotropy = Math.min(
-                    4,
-                    renderer.capabilities.getMaxAnisotropy(),
-                  )
-                  shelfCoverTextures.push(texture)
-                  coverMaterial.map = texture
-                  // Texture color is multiplied by the material color.
-                  // Keep it white so real DEV covers are not crushed into
-                  // near-black rectangles under the shelf lighting.
-                  coverMaterial.color.setHex(0xffffff)
-                  coverMaterial.emissive.setHex(0x080b10)
-                  coverMaterial.emissiveIntensity = .055
-                  coverMaterial.needsUpdate = true
-                },
-                undefined,
-                () => {
-                  coverMaterial.color.setHex(0x303746)
-                },
-              )
-            }
+          const coverHinge = new THREE.Group()
+          coverHinge.position.set(-.39, 0, .056)
+          bookGroup.add(coverHinge)
 
-            const cover = new THREE.Mesh(
-              shelfCoverGeometry,
+          const coverMaterial = new THREE.MeshStandardMaterial({
+            color: 0x555b67,
+            roughness: .9,
+            metalness: 0,
+            emissive: 0x000000,
+            emissiveIntensity: 0,
+            envMapIntensity:
+              settings.environmentIntensity * .26,
+            side: THREE.DoubleSide,
+            toneMapped: true,
+          })
+          shelfCoverMaterials.push(coverMaterial)
+
+          if (bookData.coverUrl) {
+            queueShelfCover(
+              bookData.coverUrl,
               coverMaterial,
             )
-            cover.position.set(.35, 0, -.002)
-            cover.rotation.y = Math.PI
-            cover.renderOrder = 5
-            cover.userData.bookNodeId = node._id
-            cover.userData.bookIndex = index
-            coverHinge.add(cover)
-            bookInteractives.push(cover)
+          }
 
-            const bookmark = new THREE.Mesh(
-              shelfBookmarkGeometry,
-              shelfBookmarkMaterial,
+          const cover = new THREE.Mesh(
+            shelfCoverGeometry,
+            coverMaterial,
+          )
+          cover.position.set(.35, 0, .002)
+          cover.rotation.y = 0
+          cover.scale.set(
+            .88 + (bookWidthScale - .64) * .36,
+            .9 + (bookHeightScale - .82) * .24,
+            1,
+          )
+          cover.renderOrder = 5
+          cover.userData.bookNodeId = node._id
+          cover.userData.bookIndex = index
+          coverHinge.add(cover)
+          bookInteractives.push(cover)
+
+          const hoverGlow = new THREE.Mesh(
+            shelfHoverGlowGeometry,
+            shelfHoverGlowMaterial,
+          )
+          hoverGlow.position.set(.35, 0, -.012)
+          hoverGlow.scale.copy(cover.scale).multiplyScalar(1.08)
+          hoverGlow.visible = false
+          hoverGlow.renderOrder = 4
+          hoverGlow.userData.libraryDecorative = true
+          coverHinge.add(hoverGlow)
+
+          const bookmark = new THREE.Mesh(
+            shelfBookmarkGeometry,
+            shelfBookmarkMaterial,
+          )
+          bookmark.position.set(.28, .34, .072)
+          bookmark.rotation.y = 0
+          bookmark.visible = false
+          bookmark.renderOrder = 6
+          bookGroup.add(bookmark)
+
+          if (bookData.fresh || (bookData.activity ?? 0) >= .16) {
+            const activityMarker = new THREE.Mesh(
+              shelfActivityGeometry,
+              bookData.fresh
+                ? shelfFreshMaterial
+                : shelfActiveMaterial,
             )
-            bookmark.position.set(.28, .34, -.072)
-            bookmark.rotation.y = Math.PI
-            bookmark.visible = false
-            bookmark.renderOrder = 6
-            bookGroup.add(bookmark)
+            activityMarker.position.set(.33, 0, .073)
+            activityMarker.scale.y =
+              .7 + (bookData.activity ?? 0) * .55
+            activityMarker.renderOrder = 6
+            activityMarker.userData.libraryDecorative = true
+            bookGroup.add(activityMarker)
+          }
 
-            if (bookData.fresh || (bookData.activity ?? 0) >= .16) {
-              const activityMarker = new THREE.Mesh(
-                shelfActivityGeometry,
-                bookData.fresh
-                  ? shelfFreshMaterial
-                  : shelfActiveMaterial,
-              )
-              activityMarker.position.set(
-                .33,
-                0,
-                -.073,
-              )
-              activityMarker.scale.y =
-                .7 + (bookData.activity ?? 0) * .55
-              activityMarker.renderOrder = 6
-              activityMarker.userData.libraryDecorative = true
-              bookGroup.add(activityMarker)
+          shelf.add(bookGroup)
+          libraryBookVisuals.push({
+            nodeId: node._id,
+            index,
+            group: bookGroup,
+            coverHinge,
+            coverMaterial,
+            hoverGlow,
+            bookmark,
+            basePosition,
+            baseRotationY,
+            facing,
+          })
+        }
+
+        // One or two non-interactive books lie flat on otherwise perfect
+        // shelves. They are intentionally cheap geometry reuse, but break the
+        // repeated upright rhythm enough to stop the rows reading as filler.
+        ;[0, 1].forEach((decorIndex) => {
+          if (seededUnit(seed, 210 + decorIndex) < .42) return
+          const flatBook = new THREE.Mesh(
+            shelfBookGeometry,
+            shelfBookMaterials[
+              (seed + 13 + decorIndex * 3) %
+                shelfBookMaterials.length
+            ],
+          )
+          const flatRow =
+            seededUnit(seed, 220 + decorIndex) > .5 ? 1 : 2
+          flatBook.scale.set(
+            .72 + seededUnit(seed, 230 + decorIndex) * .18,
+            .42,
+            1.15,
+          )
+          flatBook.rotation.x = Math.PI / 2
+          flatBook.rotation.z =
+            (seededUnit(seed, 240 + decorIndex) - .5) * .12
+          flatBook.position.set(
+            (decorIndex === 0 ? -1 : 1) *
+              (1.35 + seededUnit(seed, 250 + decorIndex) * .3),
+            .26 + flatRow * 1.1,
+            node.libraryDoubleSided ? .18 : .35,
+          )
+          flatBook.userData.libraryDecorative = true
+          shelf.add(flatBook)
+        })
+
+        let authoredShelfHydrated = false
+        const hydrateAuthoredShelf = () => {
+          if (authoredShelfHydrated || sceneDisposed) return
+          authoredShelfHydrated = true
+
+          void physicalShelfTemplatePromise.then((template) => {
+            if (!template || sceneDisposed) return
+
+            const authoredShelf = template.clone(true)
+            const size = new THREE.Box3()
+              .setFromObject(authoredShelf)
+              .getSize(new THREE.Vector3())
+            const widthRunsOnX = size.x >= size.z
+            const sourceWidth = Math.max(
+              .001,
+              widthRunsOnX ? size.x : size.z,
+            )
+            const sourceDepth = Math.max(
+              .001,
+              widthRunsOnX ? size.z : size.x,
+            )
+
+            authoredShelf.rotation.y +=
+              widthRunsOnX ? 0 : Math.PI / 2
+            if (widthRunsOnX) {
+              authoredShelf.scale.x *= 4.5 / sourceWidth
+              authoredShelf.scale.z *= .72 / sourceDepth
+            } else {
+              authoredShelf.scale.z *= 4.5 / sourceWidth
+              authoredShelf.scale.x *= .72 / sourceDepth
             }
+            authoredShelf.traverse((child) => {
+              if (!(child instanceof THREE.Mesh)) return
+              child.castShadow = false
+              child.receiveShadow = true
+              child.frustumCulled = true
+            })
 
-            shelf.add(bookGroup)
-            libraryBookVisuals.push({
-              nodeId: node._id,
+            fallbackFrame.visible = false
+            shelf.add(authoredShelf)
+          })
+
+          if (
+            node.libraryShelfEndCaps &&
+            node.libraryShelfEndCaps !== 'none'
+          ) {
+            void physicalShelfEndTemplatePromise.then((template) => {
+              if (!template || sceneDisposed) return
+
+              const shelfEnd = template.clone(true)
+              shelfEnd.position.x =
+                node.libraryShelfEndCaps === 'left'
+                  ? -2.3
+                  : 2.3
+              shelfEnd.rotation.y =
+                node.libraryShelfEndCaps === 'right'
+                  ? Math.PI
+                  : 0
+              shelfEnd.traverse((child) => {
+                if (!(child instanceof THREE.Mesh)) return
+                child.castShadow = false
+                child.receiveShadow = true
+                child.frustumCulled = true
+              })
+              shelf.add(shelfEnd)
+            })
+          }
+        }
+
+        const hydrateShelfBooks = () => {
+          if (
+            hydratedShelfIds.has(node._id) ||
+            sceneDisposed
+          ) {
+            return
+          }
+
+          hydratedShelfIds.add(node._id)
+          pendingShelfHydrators.delete(node._id)
+          hydrateAuthoredShelf()
+          shelfBooks.forEach((bookData, index) => {
+            addShelfBook(
+              bookData,
               index,
-              group: bookGroup,
-              coverHinge,
-              coverMaterial,
-              bookmark,
-              basePosition,
-            })
-          },
+              node.libraryDoubleSided && index >= 9
+                ? -1
+                : 1,
+            )
+          })
+        }
+
+        pendingShelfHydrators.set(
+          node._id,
+          hydrateShelfBooks,
         )
 
         const accentRail = new THREE.Mesh(
           shelfAccentGeometry,
           reactiveAccentMaterial,
         )
-        accentRail.position.set(0, 1.34, -.02)
+        accentRail.position.set(0, 3.5, .35)
         shelf.add(accentRail)
+
+        if (node.libraryDoubleSided) {
+          const rearAccentRail = new THREE.Mesh(
+            shelfAccentGeometry,
+            reactiveAccentMaterial,
+          )
+          rearAccentRail.position.set(0, 3.5, -.35)
+          rearAccentRail.rotation.y = Math.PI
+          shelf.add(rearAccentRail)
+        }
 
         const pick = new THREE.Mesh(
           shelfPickGeometry,
           shelfPickMaterial,
         )
+        pick.position.set(
+          0,
+          1.75,
+          node.libraryDoubleSided ? 0 : .16,
+        )
         pick.userData.nodeId = node._id
         shelf.add(pick)
         interactive.push(pick)
 
-        shelf.scale.setScalar(1)
+        const shelfWidthScale =
+          node.libraryWidthScale ?? 1
+        shelf.scale.set(shelfWidthScale, 1, 1)
         group.add(shelf)
         const labelStagger =
-          seededUnit(seed, 141) > .5 ? .12 : -.08
-        label.position.set(0, -1.82 + labelStagger, .2)
+          seededUnit(seed, 141) > .5 ? .08 : -.04
+        label.position.set(0, 3.72 + labelStagger, .2)
         label.scale.set(3.08, .7, 1)
       }
 
@@ -2107,17 +2958,101 @@ export default function DreamWorld3D({
         const baseYaw =
           typeof node.libraryYaw === 'number'
             ? node.libraryYaw
-            : Math.atan2(
-                camera.position.x - start.x,
-                camera.position.z - start.z,
-              ) + Math.PI
-        group.userData.libraryBaseYaw = baseYaw
+            : 0
         group.rotation.y = baseYaw
+
+        const shelfContactShadow = new THREE.Mesh(
+          shelfContactShadowGeometry,
+          shelfContactShadowMaterial,
+        )
+        shelfContactShadow.position.set(start.x, .014, start.z)
+        shelfContactShadow.rotation.set(
+          -Math.PI / 2,
+          0,
+          -baseYaw,
+        )
+        shelfContactShadow.scale.x =
+          node.libraryWidthScale ?? 1
+        shelfContactShadow.renderOrder = 1
+        shelfContactShadow.userData.libraryDecorative = true
+        world.add(shelfContactShadow)
+        shelfContactShadows.push(shelfContactShadow)
+        const shelfFloatId = node.libraryFloatId ?? node._id
+        const shelfFloatSeed = hashString(shelfFloatId)
+        const wallBoundShelf =
+          shelfFloatId.includes(':divider-wall:') ||
+          shelfFloatId.includes(':entry-wall:') ||
+          shelfFloatId.includes(':outer-wall:') ||
+          shelfFloatId.includes(':rear-wall:') ||
+          shelfFloatId.startsWith('hallway:')
+
+        const shelfBacklight = new THREE.Mesh(
+          shelfBacklightGeometry,
+          shelfBacklightMaterial,
+        )
+        shelfBacklight.position.set(
+          0,
+          1.2,
+          wallBoundShelf ? -.29 : -.36,
+        )
+        shelfBacklight.scale.set(
+          (node.libraryWidthScale ?? 1) *
+            (wallBoundShelf ? .78 : 1),
+          wallBoundShelf ? .76 : 1,
+          1,
+        )
+        shelfBacklight.renderOrder = 0
+        shelfBacklight.userData.libraryDecorative = true
+        group.add(shelfBacklight)
+
+        libraryFloatingProps.register(group, {
+          phase: floatingPhase(shelfFloatId),
+          hoverAmplitude: wallBoundShelf
+            ? .035 + seededUnit(shelfFloatSeed, 143) * .022
+            : .11 + seededUnit(shelfFloatSeed, 143) * .065,
+          hoverSpeed: wallBoundShelf
+            ? .09 + seededUnit(shelfFloatSeed, 144) * .035
+            : .105 + seededUnit(shelfFloatSeed, 144) * .045,
+          secondaryHoverAmplitude: wallBoundShelf
+            ? .008 + seededUnit(shelfFloatSeed, 150) * .008
+            : .022 + seededUnit(shelfFloatSeed, 150) * .026,
+          secondaryHoverSpeed: wallBoundShelf
+            ? .18 + seededUnit(shelfFloatSeed, 151) * .05
+            : .22 + seededUnit(shelfFloatSeed, 151) * .08,
+          // Wall-bound shelves slide primarily along the wall. Freestanding
+          // shelves get a larger sideways arc plus a smaller fore/aft drift
+          // so the whole object reads as suspended rather than vibrating.
+          tiltX: wallBoundShelf
+            ? .009 + seededUnit(shelfFloatSeed, 145) * .007
+            : .05 + seededUnit(shelfFloatSeed, 145) * .035,
+          tiltY: wallBoundShelf
+            ? .006 + seededUnit(shelfFloatSeed, 147) * .005
+            : .035 + seededUnit(shelfFloatSeed, 147) * .028,
+          tiltZ: wallBoundShelf
+            ? .008 + seededUnit(shelfFloatSeed, 146) * .006
+            : .042 + seededUnit(shelfFloatSeed, 146) * .03,
+          driftX: wallBoundShelf ? 0 : .025,
+          driftZ: wallBoundShelf ? 0 : .018,
+          driftSide: wallBoundShelf
+            ? .055 + seededUnit(shelfFloatSeed, 148) * .045
+            : .18 + seededUnit(shelfFloatSeed, 148) * .13,
+          driftForward: wallBoundShelf
+            ? .004 + seededUnit(shelfFloatSeed, 149) * .005
+            : .055 + seededUnit(shelfFloatSeed, 149) * .05,
+          driftSpeedSide: wallBoundShelf
+            ? .12 + seededUnit(shelfFloatSeed, 152) * .055
+            : .15 + seededUnit(shelfFloatSeed, 152) * .09,
+          driftSpeedForward: wallBoundShelf
+            ? .075 + seededUnit(shelfFloatSeed, 153) * .03
+            : .095 + seededUnit(shelfFloatSeed, 153) * .045,
+          driftSpeedX: .13,
+          driftSpeedZ: .1,
+        })
       }
 
       const baseScale =
         node.libraryKind === 'shelf'
-          ? 1.22
+          ? 1
           : .72 +
             Math.min(node.frequency, 6) * .095 +
             Math.min(
@@ -2181,7 +3116,7 @@ export default function DreamWorld3D({
     let libraryRouteDots: THREE.Points | null = null
     const libraryRouteDotCount = 54
 
-    if (libraryMode) {
+    if (libraryMode && archiveBoulevardVisuals) {
       const subdivisionsPerBay = 4
       const sampleCount =
         ARCHIVE_PATH_RENDER_BAYS * subdivisionsPerBay + 1
@@ -3625,6 +4560,12 @@ export default function DreamWorld3D({
         (value): value is NonNullable<typeof value> => value !== null,
       )
 
+    if (libraryMode) {
+      categoryNebulae.forEach(({sprite}) => {
+        sprite.visible = false
+      })
+    }
+
     const lucidDreamIds = new Set(
       dreamsRef.current
         .filter((dream) => dream.lucid)
@@ -3708,7 +4649,9 @@ export default function DreamWorld3D({
         (value): value is NonNullable<typeof value> => value !== null,
       )
 
-    const clusterAudios = [...nodeRef.current]
+    const clusterAudios = (libraryMode
+      ? []
+      : [...nodeRef.current])
       .filter((node) => node.frequency >= 2)
       .sort((a, b) => b.frequency - a.frequency)
       .slice(0, 3)
@@ -4134,7 +5077,7 @@ export default function DreamWorld3D({
       diveComposer.addPass(diveRenderPass)
 
       diveSsao = new SSAOPass(activeDive.scene, activeDive.camera, 1, 1)
-      diveSsao.enabled = settings.ssao
+      diveSsao.enabled = settings.ssao && !libraryMode
       diveSsao.kernelRadius = Math.max(4, settings.ssaoKernelRadius * .8)
       diveSsao.minDistance = 0.002
       diveSsao.maxDistance = 0.1
@@ -4347,8 +5290,12 @@ export default function DreamWorld3D({
         bookInteractives,
         false,
       )
-      if (!intersections.length) return null
-      return bookVisualFromObject(intersections[0].object)
+      const hit = intersections.find(
+        (intersection) =>
+          intersection.distance <= BOOK_INTERACTION_DISTANCE,
+      )
+      if (!hit) return null
+      return bookVisualFromObject(hit.object)
     }
 
     function pickCenterBook() {
@@ -4358,8 +5305,12 @@ export default function DreamWorld3D({
         bookInteractives,
         false,
       )
-      if (!intersections.length) return null
-      return bookVisualFromObject(intersections[0].object)
+      const hit = intersections.find(
+        (intersection) =>
+          intersection.distance <= BOOK_INTERACTION_DISTANCE,
+      )
+      if (!hit) return null
+      return bookVisualFromObject(hit.object)
     }
 
     function beginBookOpen(visual: LibraryBookVisual) {
@@ -4645,6 +5596,172 @@ export default function DreamWorld3D({
       )
     }
 
+    function emitLayoutAuthoringResult(
+      detail: Record<string, unknown>,
+    ) {
+      window.dispatchEvent(
+        new CustomEvent('oniria:layout-pin-result', {
+          detail,
+        }),
+      )
+    }
+
+    function handleLibraryLayoutExportRequest() {
+      const markers =
+        libraryLayoutAuthoring?.markers() ?? []
+      window.dispatchEvent(
+        new CustomEvent('oniria:layout-pin-export', {
+          detail: {
+            markers,
+            count: markers.length,
+          },
+        }),
+      )
+    }
+
+    function handleLibraryLayoutRequest(event: Event) {
+      if (
+        !libraryMode ||
+        !libraryLayoutAuthoring ||
+        diveMode !== 'none' ||
+        inputBlockedRef.current
+      ) {
+        emitLayoutAuthoringResult({
+          ok: false,
+          action: 'blocked',
+          message: 'LAYOUT PIN BLOCKED',
+        })
+        return
+      }
+
+      const request = event as CustomEvent<{
+        remove?: boolean
+        clearAll?: boolean
+        source?: string
+      }>
+
+      if (request.detail?.clearAll) {
+        void libraryLayoutAuthoring
+          .clearAll()
+          .then((count) => {
+            emitLayoutAuthoringResult({
+              ok: true,
+              action: 'cleared-all',
+              count,
+              message: `CLEARED ${count} PIN${count === 1 ? '' : 'S'}`,
+            })
+          })
+        return
+      }
+
+      if (request.detail?.remove) {
+        void libraryLayoutAuthoring
+          .removeNearest(
+            camera.position.x,
+            camera.position.z,
+          )
+          .then((removed) => {
+            emitLayoutAuthoringResult(
+              removed
+                ? {
+                    ok: true,
+                    action: 'removed',
+                    marker: removed,
+                    message: `PIN ${removed.label} REMOVED`,
+                  }
+                : {
+                    ok: false,
+                    action: 'remove-miss',
+                    message: 'NO PIN NEARBY',
+                  },
+            )
+          })
+        return
+      }
+
+      const roomEntry = nearestAuthoringRoomEntry(
+        camera.position.x,
+        camera.position.z,
+      )
+      if (!roomEntry) {
+        emitLayoutAuthoringResult({
+          ok: false,
+          action: 'no-room',
+          message: 'NO ROOM AVAILABLE',
+        })
+        return
+      }
+
+      const districtIndex = activeDistricts.indexOf(
+        roomEntry.district,
+      )
+      const room = roomForDistrict(
+        roomEntry.district,
+        Math.max(0, districtIndex),
+      )
+      const cameraEuler = new THREE.Euler().setFromQuaternion(
+        camera.quaternion,
+        'YXZ',
+      )
+
+      const markerForward = new THREE.Vector3(
+        0,
+        0,
+        -1,
+      ).applyQuaternion(camera.quaternion)
+      markerForward.y = 0
+      if (markerForward.lengthSq() < .0001) {
+        markerForward.set(
+          -Math.sin(cameraEuler.y),
+          0,
+          -Math.cos(cameraEuler.y),
+        )
+      }
+      markerForward.normalize()
+
+      // Once the authoring room has been resolved, do not apply gameplay
+      // room-boundary rejection to the marker itself. This lets Mika map
+      // shelf centers right against walls/corners even when the authored
+      // architecture and our inferred rectangle differ by a small amount.
+      const markerX =
+        camera.position.x + markerForward.x * 2.2
+      const markerZ =
+        camera.position.z + markerForward.z * 2.2
+
+      void libraryLayoutAuthoring
+        .dropMarker({
+          roomSlot: room.slot,
+          districtId: roomEntry.district.id,
+          x: markerX,
+          z: markerZ,
+          yaw: cameraEuler.y,
+        })
+        .then((marker) => {
+          console.info(
+            '[DEV Library layout] pin dropped',
+            marker,
+          )
+          emitLayoutAuthoringResult({
+            ok: true,
+            action: 'placed',
+            marker,
+            roomSlot: room.slot,
+            message: `PIN ${marker.label} PLACED`,
+          })
+        })
+        .catch((error) => {
+          console.error(
+            '[DEV Library layout] pin drop failed',
+            error,
+          )
+          emitLayoutAuthoringResult({
+            ok: false,
+            action: 'failed',
+            message: 'PIN DROP FAILED',
+          })
+        })
+    }
+
     function handleFlightKeyDown(event: KeyboardEvent) {
       if (
         !flightModeRef.current ||
@@ -4688,10 +5805,11 @@ export default function DreamWorld3D({
 
       if (event.code === 'KeyR') {
         event.preventDefault()
-        if (
-          libraryMode &&
-          libraryMovementModeRef.current === 'walk'
-        ) {
+        // The old cinematic route is a free-space Bezier curve. In the
+        // enclosed six-room library it can cut through walls, so room mode
+        // intentionally leaves auto-route disabled until a corridor-aware
+        // pathfinder replaces it.
+        if (libraryMode) {
           return
         }
         const sourceNode = nearestFlightNode(12)
@@ -4776,6 +5894,14 @@ export default function DreamWorld3D({
     }
 
     document.addEventListener('mousemove', handleFlightMouse)
+    window.addEventListener(
+      'oniria:layout-pin-request',
+      handleLibraryLayoutRequest,
+    )
+    window.addEventListener(
+      'oniria:layout-pin-export-request',
+      handleLibraryLayoutExportRequest,
+    )
     window.addEventListener('keydown', handleFlightKeyDown)
     window.addEventListener('keyup', handleFlightKeyUp)
 
@@ -4844,6 +5970,13 @@ export default function DreamWorld3D({
         flightModeRef.current &&
         diveMode === 'none' &&
         !observatoryModeRef.current
+
+      const currentRoomEntry = libraryMode
+        ? nearestRoomEntry(
+            camera.position.x,
+            camera.position.z,
+          )
+        : null
 
       if (flightActive && !previousFlightMode) {
         flightPosition.copy(camera.position)
@@ -5147,6 +6280,11 @@ export default function DreamWorld3D({
       libraryAtmosphere?.update({
         elapsed,
         camera,
+        activeDistrictId:
+          currentRoomEntry?.district.id,
+        activeRoomCenter:
+          currentRoomEntry?.center,
+        roomSelectionMode: true,
         districts: activeDistricts,
       })
 
@@ -5199,6 +6337,8 @@ export default function DreamWorld3D({
         ),
         elapsed,
         currentBay: currentArchiveBay,
+        activeAudioProfile:
+          currentRoomEntry?.district.audioProfile ?? 'ambient',
         districts: activeDistricts,
       })
 
@@ -5598,6 +6738,36 @@ export default function DreamWorld3D({
         }
       }
 
+      if (
+        libraryMode &&
+        pendingShelfHydrators.size > 0 &&
+        elapsed - lastShelfHydrationAt > .07
+      ) {
+        let hydrateId: string | null = null
+        let hydrateDistance = Infinity
+
+        pendingShelfHydrators.forEach((_, nodeId) => {
+          const visual = nodeVisuals.get(nodeId)
+          if (!visual) return
+          const distance =
+            camera.position.distanceTo(
+              visual.group.position,
+            )
+          if (distance < hydrateDistance) {
+            hydrateDistance = distance
+            hydrateId = nodeId
+          }
+        })
+
+        // Only hydrate shelves near the player's current zone. Shelf frames
+        // remain visible everywhere, while books and covers stream in as the
+        // player approaches instead of all being built during first paint.
+        if (hydrateId && hydrateDistance < 46) {
+          pendingShelfHydrators.get(hydrateId)?.()
+          lastShelfHydrationAt = elapsed
+        }
+      }
+
       libraryReadingRitual?.update({
         nowSeconds: now / 1000,
         books: libraryBookVisuals,
@@ -5682,13 +6852,33 @@ export default function DreamWorld3D({
               : 0
           const presented =
             libraryReadingRitual?.isPresenting(bookVisual) ?? false
+          // pickBook/pickCenterBook already enforce the short
+          // interaction radius using the actual ray-hit distance. Do not
+          // re-check against the shelf group's center here: wall shelves can
+          // have a center farther away than the book the ray actually hit.
+          const directlyHovered =
+            hoveredBook === bookVisual
+
+          bookVisual.hoverGlow.visible =
+            directlyHovered && !presented
+          if (bookVisual.hoverGlow.visible) {
+            const hoverPulse =
+              1.05 + Math.sin(elapsed * 4.6) * .035
+            bookVisual.hoverGlow.scale.set(
+              hoverPulse,
+              hoverPulse,
+              1,
+            )
+          }
 
           bookVisual.coverMaterial.emissive.setHex(
             presented ? 0x6d2f73 : 0x163744,
           )
           const targetEmissive = presented
             ? 1.35
-            : awake * .5
+            : directlyHovered
+              ? .82
+              : awake * .5
           bookVisual.coverMaterial.emissiveIntensity +=
             (targetEmissive -
               bookVisual.coverMaterial.emissiveIntensity) *
@@ -5733,16 +6923,9 @@ export default function DreamWorld3D({
         const visual = nodeVisuals.get(node._id)
         if (!visual) continue
 
-        const target = worldPosition(node, positionsRef.current)
-        const memoryAge = nodeMemoryAge.get(node._id) ?? 0
-        if (node.libraryKind === 'shelf') {
-          target.y +=
-            Math.sin(elapsed * .18 + visual.phase) * .075
-          target.x +=
-            Math.cos(elapsed * .12 + visual.phase) * .012
-          target.z +=
-            Math.sin(elapsed * .1 + visual.phase) * .012
-        } else {
+        if (node.libraryKind !== 'shelf') {
+          const target = worldPosition(node, positionsRef.current)
+          const memoryAge = nodeMemoryAge.get(node._id) ?? 0
           target.z =
             visual.z -
             memoryAge * (node.frequency <= 1 ? 1.35 : .48) +
@@ -5753,32 +6936,34 @@ export default function DreamWorld3D({
           target.x +=
             Math.cos(elapsed * .29 + visual.phase) * .05 +
             Math.sin(elapsed * .12) * .07
-        }
-
-        const gravity =
-          node.libraryKind === 'shelf'
-            ? undefined
-            : gravityParents.get(node._id)
-        if (gravity) {
-          const parentVisual = nodeVisuals.get(gravity.parentId)
-          if (parentVisual) {
-            const orbitAngle =
-              elapsed * (0.035 + Math.min(node.frequency, 3) * 0.004) +
-              gravity.phase
-            const orbitTarget = parentVisual.group.position
-              .clone()
-              .add(
-                new THREE.Vector3(
-                  Math.cos(orbitAngle) * gravity.radius,
-                  Math.sin(orbitAngle * 0.73) * gravity.radius * 0.58,
-                  Math.sin(orbitAngle) * gravity.radius * 0.34,
-                ),
-              )
-            target.lerp(orbitTarget, gravity.influence)
+          const gravity = gravityParents.get(node._id)
+          if (gravity) {
+            const parentVisual = nodeVisuals.get(gravity.parentId)
+            if (parentVisual) {
+              const orbitAngle =
+                elapsed *
+                  (0.035 +
+                    Math.min(node.frequency, 3) * 0.004) +
+                gravity.phase
+              const orbitTarget = parentVisual.group.position
+                .clone()
+                .add(
+                  new THREE.Vector3(
+                    Math.cos(orbitAngle) * gravity.radius,
+                    Math.sin(orbitAngle * 0.73) *
+                      gravity.radius *
+                      0.58,
+                    Math.sin(orbitAngle) *
+                      gravity.radius *
+                      0.34,
+                  ),
+                )
+              target.lerp(orbitTarget, gravity.influence)
+            }
           }
-        }
 
-        visual.group.position.lerp(target, .08)
+          visual.group.position.lerp(target, .08)
+        }
 
         const selected = selectedRef.current === node._id
         const active = activeRef.current
@@ -5824,27 +7009,22 @@ export default function DreamWorld3D({
           node.libraryKind === 'shelf' &&
           nearestLibraryShelfDistance < 16
 
-        const scaleBoost =
-          node.libraryKind === 'shelf'
-            ? selected
-              ? 1.045
-              : hoveredId === node._id
-                ? 1.025
-                : isNearestLibraryShelf
-                  ? 1.035
-                  : nearbyShelfFocusActive && shelfDistance < 30
-                    ? .965
-                    : 1
-            : selected
-              ? 1.32
-              : hoveredId === node._id
-                ? 1.14
-                : 1
-        const desiredScale = visual.baseScale * scaleBoost
-        visual.group.scale.lerp(
-          new THREE.Vector3(desiredScale, desiredScale, desiredScale),
-          selected ? .13 : .08,
-        )
+        if (node.libraryKind !== 'shelf') {
+          const scaleBoost = selected
+            ? 1.32
+            : hoveredId === node._id
+              ? 1.14
+              : 1
+          const desiredScale = visual.baseScale * scaleBoost
+          visual.group.scale.lerp(
+            new THREE.Vector3(
+              desiredScale,
+              desiredScale,
+              desiredScale,
+            ),
+            selected ? .13 : .08,
+          )
+        }
 
         if (node.libraryKind === 'shelf') {
           const frameMaterial =
@@ -5912,38 +7092,47 @@ export default function DreamWorld3D({
                 accentMaterial.opacity) *
               .11
           }
+
+          const shelfLabelMaterial =
+            visual.label.material as THREE.SpriteMaterial
+          const labelDistance =
+            camera.position.distanceTo(
+              visual.group.position,
+            )
+          const shelfDistanceOpacity =
+            labelDistance < 24
+              ? .96
+              : labelDistance < 50
+                ? THREE.MathUtils.lerp(
+                    .58,
+                    .14,
+                    (labelDistance - 24) / 26,
+                  )
+                : labelDistance < 78
+                  ? .045
+                  : .012
+          visual.label.visible =
+            labelDistance < 88 ||
+            selected ||
+            hoveredId === node._id
+          const shelfLabelTarget =
+            selected || hoveredId === node._id
+              ? 1
+              : shelfDistanceOpacity
+          shelfLabelMaterial.opacity +=
+            (((visible ? shelfLabelTarget : .04) *
+              introVisibility) -
+              shelfLabelMaterial.opacity) *
+            .08
+
+          // Shelf nodes intentionally skip the original Dream Map orb,
+          // mini-world, reflection and orbit animation path. Those objects
+          // are hidden for library shelves and updating them every frame is
+          // pure overhead when dozens of shelves are present.
+          continue
         }
 
-        if (node.libraryKind === 'shelf') {
-          const baseYaw =
-            typeof visual.group.userData.libraryBaseYaw === 'number'
-              ? visual.group.userData.libraryBaseYaw
-              : Math.PI
-          const cameraFacingYaw =
-            Math.atan2(
-              camera.position.x - visual.group.position.x,
-              camera.position.z - visual.group.position.z,
-            ) + Math.PI
-          const yawDelta = Math.atan2(
-            Math.sin(cameraFacingYaw - baseYaw),
-            Math.cos(cameraFacingYaw - baseYaw),
-          )
-          const approachStrength = isNearestLibraryShelf
-            ? THREE.MathUtils.clamp(
-                1 - (nearestLibraryShelfDistance - 6) / 12,
-                0,
-                1,
-              )
-            : 0
-          visual.group.rotation.y =
-            baseYaw +
-            yawDelta * approachStrength * .28 +
-            Math.sin(elapsed * .085 + visual.phase) * .009
-          visual.group.rotation.x =
-            Math.sin(elapsed * .07 + visual.phase) * .003
-          visual.group.rotation.z =
-            Math.cos(elapsed * .065 + visual.phase) * .002
-        } else {
+        if (node.libraryKind !== 'shelf') {
           visual.group.rotation.y += selected ? .007 : .0022
           visual.group.rotation.x =
             Math.sin(elapsed * .22 + visual.phase) * .045
@@ -6051,6 +7240,18 @@ export default function DreamWorld3D({
         visual.orbit.rotation.z += selected ? .014 : .004
         visual.core.rotation.x += .006
         visual.core.rotation.y -= .008
+      }
+
+      libraryFloatingProps.update(elapsed)
+
+      if (libraryMode) {
+        shelfBookLabelLayers.forEach(({shelfRoot, layer}) => {
+          const distanceSq =
+            camera.position.distanceToSquared(
+              shelfRoot.position,
+            )
+          layer.visible = distanceSq < 12.5 * 12.5
+        })
       }
 
       edgeVisuals.forEach((edgeVisual) => {
@@ -6181,7 +7382,7 @@ export default function DreamWorld3D({
         activeCell.update(elapsed, 1)
         activeCell.render(renderer)
 
-        if (spatialAudio) {
+        if (spatialAudio && !libraryMode) {
           spatialAudio.setFocus(1)
 
           if (soundEnabledRef.current && !spatialAudioStarted) {
@@ -6215,34 +7416,30 @@ export default function DreamWorld3D({
       let atmospherePreset =
         globalAtmospherePreset
 
-      if (libraryMode && activeDistricts.length > 0) {
-        const atmosphereBay = archiveBayFromWorldZ(
-          camera.position.z,
-        )
-        const nearestAtmosphereDistrict =
-          activeDistricts.reduce((nearest, candidate) =>
-            Math.abs(candidate.bay - atmosphereBay) <
-            Math.abs(nearest.bay - atmosphereBay)
-              ? candidate
-              : nearest,
-          )
-
+      if (libraryMode && currentRoomEntry) {
         atmospherePreset =
           getLibraryAtmosphereVisualPreset(
-            nearestAtmosphereDistrict.atmosphere,
+            currentRoomEntry.district.atmosphere,
           )
       }
+
+      const readingRitualActive =
+        libraryReadingRitual?.isActive() ?? false
 
       const libraryBloomStrength =
         settings.bloomStrength *
         (selectedVisual?.group.userData.libraryKind === 'shelf'
           ? .47
           : .55)
-      const bloomTarget =
-        (selectedVisual
-          ? libraryBloomStrength * 1.05
-          : settings.bloomStrength * .52) *
-        (libraryMode ? atmospherePreset.bloomScale : 1)
+      const bloomTarget = libraryMode
+        ? (.075 +
+            (readingRitualActive ? .012 : 0) +
+            (selectedVisual ? .008 : 0)) *
+          atmospherePreset.bloomScale
+        : (selectedVisual
+            ? libraryBloomStrength * 1.05
+            : settings.bloomStrength * .52) *
+          atmospherePreset.bloomScale
       bloom.strength +=
         (bloomTarget - bloom.strength) * .045
 
@@ -6253,10 +7450,15 @@ export default function DreamWorld3D({
           .03
       }
 
-      const readingRitualActive =
-        libraryReadingRitual?.isActive() ?? false
-      const baseExposure =
-        readingRitualActive
+      const baseExposure = libraryMode
+        ? readingRitualActive
+          ? .44
+          : selectedVisual?.group.userData.libraryKind === 'shelf'
+            ? .55
+            : selectedVisual
+              ? .57
+              : .51
+        : readingRitualActive
           ? .66
           : selectedVisual?.group.userData.libraryKind === 'shelf'
             ? .82
@@ -6264,10 +7466,10 @@ export default function DreamWorld3D({
               ? .88
               : .9
       const exposureTarget = libraryMode
-        ? Math.max(
-            .5,
-            baseExposure *
-              atmospherePreset.exposureScale,
+        ? THREE.MathUtils.clamp(
+            baseExposure * atmospherePreset.exposureScale,
+            .38,
+            .59,
           )
         : baseExposure
       renderer.toneMappingExposure +=
@@ -6276,7 +7478,8 @@ export default function DreamWorld3D({
 
       if (scene.fog instanceof THREE.FogExp2) {
         const sceneReveal = Math.min(1, elapsed / 1.7)
-        const birthFog = (1 - sceneReveal) * .072
+        const birthFog =
+          (1 - sceneReveal) * (libraryMode ? .012 : .072)
         const hazeScale = libraryMode
           ? .55 +
             activeLibraryConfig.hazeIntensity * .85
@@ -6287,7 +7490,7 @@ export default function DreamWorld3D({
         const fogTarget =
           settings.fogDensity *
             (libraryMode
-              ? atmospherePreset.fogScale * hazeScale
+              ? .2 * atmospherePreset.fogScale * hazeScale
               : 1) *
             selectedFogScale +
           birthFog
@@ -6330,20 +7533,26 @@ export default function DreamWorld3D({
       const atmosphereLightScale = libraryMode
         ? atmospherePreset.lightStrength
         : 1
+      const violetTarget =
+        (libraryMode
+          ? selectedVisual
+            ? .12
+            : .055
+          : selectedVisual
+            ? 4.7
+            : 4) * atmosphereLightScale
+      const cyanTarget =
+        (libraryMode
+          ? selectedVisual
+            ? .09
+            : .04
+          : selectedVisual
+            ? 4.3
+            : 3.6) * atmosphereLightScale
       violetLight.intensity +=
-        (
-          (selectedVisual ? 8.5 : 7) *
-            atmosphereLightScale -
-          violetLight.intensity
-        ) *
-        .035
+        (violetTarget - violetLight.intensity) * .035
       cyanLight.intensity +=
-        (
-          (selectedVisual ? 8 : 6.5) *
-            atmosphereLightScale -
-          cyanLight.intensity
-        ) *
-        .035
+        (cyanTarget - cyanLight.intensity) * .035
 
       if (flightActive && flightInitialized) {
         const routeActive = Boolean(flightRoute)
@@ -6485,79 +7694,46 @@ export default function DreamWorld3D({
             14,
           )
         } else if (libraryWalking) {
-          const walkSurface =
-            archiveWalkSurfaceAtPosition(
-              flightPosition.x,
-              flightPosition.z,
-              activeDistricts,
-              libraryGridSegments,
-            )
-
-          if (walkSurface) {
-            const offsetX =
-              flightPosition.x - walkSurface.centerX
-            const offsetZ =
-              flightPosition.z - walkSurface.centerZ
-            const distance =
-              Math.hypot(offsetX, offsetZ)
-
-            if (
-              distance >
-                walkSurface.halfWidth + .0001 &&
-              distance > .0001
-            ) {
-              const normalX = offsetX / distance
-              const normalZ = offsetZ / distance
-              const correction =
-                distance - walkSurface.halfWidth
-
-              flightPosition.x -= normalX * correction
-              flightPosition.z -= normalZ * correction
-
-              const outwardVelocity =
-                flightVelocity.x * normalX +
-                flightVelocity.z * normalZ
-              if (outwardVelocity > 0) {
-                flightVelocity.x -=
-                  normalX * outwardVelocity * .86
-                flightVelocity.z -=
-                  normalZ * outwardVelocity * .86
-              }
-            }
-
-            const eyeHeight = 1.64
-            const groundY =
-              walkSurface.groundY +
-              ARCHIVE_WALKWAY_Y_OFFSET +
-              eyeHeight
-            flightPosition.y = THREE.MathUtils.lerp(
-              flightPosition.y,
-              groundY,
-              1 - Math.exp(-delta * 11),
-            )
-          } else {
-            const fallbackBay =
-              archiveBayFromWorldZ(flightPosition.z)
-            const fallbackPoint = archivePathPoint(
-              fallbackBay,
-            )
-            flightPosition.y = THREE.MathUtils.lerp(
-              flightPosition.y,
-              fallbackPoint[1] +
-                ARCHIVE_WALKWAY_Y_OFFSET +
-                1.64,
-              1 - Math.exp(-delta * 11),
-            )
+          const clamped = clampLibraryWalkPosition(
+            flightPosition.x,
+            flightPosition.z,
+          )
+          if (
+            clamped.x !== flightPosition.x ||
+            clamped.z !== flightPosition.z
+          ) {
+            flightVelocity.x *= .35
+            flightVelocity.z *= .35
           }
-
+          flightPosition.x = clamped.x
+          flightPosition.z = clamped.z
+          flightPosition.y = THREE.MathUtils.lerp(
+            flightPosition.y,
+            LIBRARY_EYE_HEIGHT,
+            1 - Math.exp(-delta * 11),
+          )
           flightVelocity.y = 0
         } else {
-          // The DEV catalogue extends as the user explores, so free flight
-          // must not inherit the dream-map's finite spherical boundary.
+          // Free flight remains available for inspection, but the rebuilt
+          // library is still a physical interior. Reuse the X/Z collision
+          // solver so flying cannot phase through shelves or divider walls.
+          const clamped = clampLibraryWalkPosition(
+            flightPosition.x,
+            flightPosition.z,
+          )
+          if (
+            clamped.x !== flightPosition.x ||
+            clamped.z !== flightPosition.z
+          ) {
+            flightVelocity.x *= .3
+            flightVelocity.z *= .3
+          }
+          flightPosition.x = clamped.x
+          flightPosition.z = clamped.z
           flightPosition.y = THREE.MathUtils.clamp(
             flightPosition.y,
-            -48,
-            64,
+            .65,
+            4.55,
           )
         }
 
@@ -6792,6 +7968,7 @@ export default function DreamWorld3D({
     animationFrame = requestAnimationFrame(animate)
 
     return () => {
+      sceneDisposed = true
       if (libraryMode && flightModeRef.current) {
         libraryFlightStateRef.current = {
           position: [
@@ -6819,6 +7996,14 @@ export default function DreamWorld3D({
       renderer.domElement.removeEventListener('wheel', handleWheel)
       renderer.domElement.removeEventListener('dblclick', handleDoubleClick)
       document.removeEventListener('mousemove', handleFlightMouse)
+      window.removeEventListener(
+        'oniria:layout-pin-request',
+        handleLibraryLayoutRequest,
+      )
+      window.removeEventListener(
+        'oniria:layout-pin-export-request',
+        handleLibraryLayoutExportRequest,
+      )
       window.removeEventListener('keydown', handleFlightKeyDown)
       window.removeEventListener('keyup', handleFlightKeyUp)
       if (document.pointerLockElement === renderer.domElement) {
@@ -6835,6 +8020,9 @@ export default function DreamWorld3D({
       releaseDreamCell()
 
       libraryAudio?.dispose()
+      libraryBuilding?.dispose()
+      libraryLayoutAuthoring?.dispose()
+      libraryFloatingProps.clear()
 
       camera.remove(listener)
 
@@ -6843,6 +8031,15 @@ export default function DreamWorld3D({
       shelfBackGeometry.dispose()
       shelfBookGeometry.dispose()
       shelfCoverGeometry.dispose()
+      shelfHoverGlowGeometry.dispose()
+      shelfHoverGlowMaterial.dispose()
+      shelfHoverGlowTexture.dispose()
+      shelfContactShadows.forEach((shadow) => world.remove(shadow))
+      shelfContactShadowGeometry.dispose()
+      shelfContactShadowMaterial.dispose()
+      shelfBacklightGeometry.dispose()
+      shelfBacklightMaterial.dispose()
+      shelfBacklightTexture.dispose()
       shelfAccentGeometry.dispose()
       shelfPickGeometry.dispose()
       shelfBookmarkGeometry.dispose()
@@ -6856,6 +8053,8 @@ export default function DreamWorld3D({
       shelfReactiveMaterials.forEach((material) => material.dispose())
       shelfCoverMaterials.forEach((material) => material.dispose())
       shelfCoverTextures.forEach((texture) => texture.dispose())
+      shelfBookLabelMaterials.forEach((material) => material.dispose())
+      shelfBookLabelTextures.forEach((texture) => texture.dispose())
       shelfAccentMaterial.dispose()
       shelfPickMaterial.dispose()
       libraryShelfSparkleGeometry?.dispose()
@@ -6990,6 +8189,9 @@ export default function DreamWorld3D({
 
       starGeometry.dispose()
       starMaterial.dispose()
+      if (librarySkyDome) farWorld.remove(librarySkyDome)
+      librarySkyDomeGeometry?.dispose()
+      librarySkyDomeMaterial?.dispose()
       scene.environment = null
       cinematicEnvironment.dispose()
       composer.dispose()

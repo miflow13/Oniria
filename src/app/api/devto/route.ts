@@ -2,6 +2,9 @@ import {NextRequest, NextResponse} from 'next/server'
 
 const DEV_BASE = 'https://dev.to/api'
 const FOREM_ACCEPT = 'application/vnd.forem.api-v1+json'
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 const ALLOWED_IMAGE_HOSTS = new Set([
   'media.dev.to',
   'media2.dev.to',
@@ -234,23 +237,76 @@ export async function GET(request: NextRequest) {
 
     if (mode === 'bootstrap') {
       const username = safeValue(searchParams.get('username'), 'mikachu')
+      const perPage = Math.min(
+        80,
+        Math.max(30, Number(searchParams.get('per_page') ?? 60) || 60),
+      )
 
-      const [profile, profileArticles, feed, latest, tags] = await Promise.all([
+      const [
+        profile,
+        profileArticles,
+        feedPageOne,
+        latestPageOne,
+        tags,
+      ] = await Promise.all([
         devFetch(`/users/${encodeURIComponent(username)}`).catch(() => null),
         devFetch(
           `/articles?username=${encodeURIComponent(username)}&per_page=30`,
         ).catch(() => []),
-        devFetch('/articles?per_page=30&top=7').catch(() => []),
-        devFetch('/articles?per_page=30').catch(() => []),
+        devFetch(`/articles?per_page=${perPage}&page=1&top=7`).catch(() => []),
+        devFetch(`/articles?per_page=${perPage}&page=1`).catch(() => []),
         devFetch('/tags?per_page=30').catch(() => []),
       ])
 
+      return NextResponse.json(
+        {
+          profile,
+          profileArticles: normalizeArticles(profileArticles),
+          feed: normalizeArticles(feedPageOne),
+          latest: normalizeArticles(latestPageOne),
+          tags,
+        },
+        {
+          headers: {
+            'cache-control':
+              'no-store, no-cache, max-age=0, must-revalidate',
+          },
+        },
+      )
+    }
+
+    if (mode === 'collection') {
+      const collection = safeValue(
+        searchParams.get('collection'),
+        'latest',
+      )
+      if (collection !== 'featured' && collection !== 'latest') {
+        return NextResponse.json(
+          {error: 'Invalid collection'},
+          {status: 400},
+        )
+      }
+
+      const page = Math.max(
+        2,
+        Number(searchParams.get('page') ?? 2) || 2,
+      )
+      const perPage = Math.min(
+        100,
+        Math.max(30, Number(searchParams.get('per_page') ?? 80) || 80),
+      )
+      const top = collection === 'featured' ? '&top=7' : ''
+      const raw = await devFetch(
+        `/articles?per_page=${perPage}&page=${page}${top}`,
+      ).catch(() => [])
+
+      const articles = normalizeArticles(raw)
       return NextResponse.json({
-        profile,
-        profileArticles: normalizeArticles(profileArticles),
-        feed: normalizeArticles(feed),
-        latest: normalizeArticles(latest),
-        tags,
+        collection,
+        page,
+        perPage,
+        articles,
+        hasMore: Array.isArray(raw) && raw.length >= perPage,
       })
     }
 
@@ -327,7 +383,7 @@ export async function GET(request: NextRequest) {
       const [profile, articles] = await Promise.all([
         devFetch(`/users/${encodeURIComponent(username)}`),
         devFetch(
-          `/articles?username=${encodeURIComponent(username)}&per_page=30`,
+          `/articles?username=${encodeURIComponent(username)}&per_page=100`,
         ),
       ])
 
@@ -343,12 +399,26 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({error: 'Missing tag'}, {status: 400})
       }
 
-      const articles = await devFetch(
-        `/articles?tag=${encodeURIComponent(tag)}&per_page=30&top=30`,
+      const perPage = Math.min(
+        100,
+        Math.max(
+          20,
+          Number(searchParams.get('per_page') ?? 40) || 40,
+        ),
       )
+      const page = Math.max(
+        1,
+        Number(searchParams.get('page') ?? 1) || 1,
+      )
+      const raw = await devFetch(
+        `/articles?tag=${encodeURIComponent(tag)}&per_page=${perPage}&page=${page}`,
+      ).catch(() => [])
       return NextResponse.json({
         tag,
-        articles: normalizeArticles(articles),
+        page,
+        perPage,
+        articles: normalizeArticles(raw),
+        hasMore: Array.isArray(raw) && raw.length >= perPage,
       })
     }
 
@@ -359,7 +429,7 @@ export async function GET(request: NextRequest) {
       }
 
       const articles = await devFetch(
-        `/articles/search?q=${encodeURIComponent(query)}&per_page=30`,
+        `/articles/search?q=${encodeURIComponent(query)}&per_page=100`,
       )
       return NextResponse.json({
         query,

@@ -6,8 +6,11 @@ export type LibraryBookVisual = {
   group: THREE.Group
   coverHinge: THREE.Group
   coverMaterial: THREE.MeshStandardMaterial
+  hoverGlow: THREE.Mesh
   bookmark: THREE.Mesh
   basePosition: THREE.Vector3
+  baseRotationY: number
+  facing: 1 | -1
 }
 
 type OpeningBookState = {
@@ -64,7 +67,7 @@ export function createLibraryReadingRitual(
 
   const resetBook = (visual: LibraryBookVisual) => {
     visual.group.position.copy(visual.basePosition)
-    visual.group.rotation.set(0, 0, 0)
+    visual.group.rotation.set(0, visual.baseRotationY, 0)
     visual.group.scale.setScalar(1)
     visual.coverHinge.rotation.y = 0
   }
@@ -168,16 +171,17 @@ export function createLibraryReadingRitual(
         if (isOpening) {
           // Keep the physical ritual local to the authored shelf slot.
           // The React reader owns long-form reading after the handoff.
-          positionTarget.z += .34 * ritualAmount
+          positionTarget.z +=
+            .34 * ritualAmount * bookVisual.facing
           positionTarget.y += .08 * ritualAmount
           positionTarget.x += .035 * ritualAmount
         } else if (isHovered) {
-          positionTarget.z += .22
+          positionTarget.z += .22 * bookVisual.facing
         } else if (isApproachedShelf) {
           // Give the closest shelf a little breathing room at natural
           // walking distance so covers read as individual books rather than
           // one flat wall of texture.
-          positionTarget.z += .11
+          positionTarget.z += .11 * bookVisual.facing
           positionTarget.x +=
             Math.sign(bookVisual.basePosition.x) * .045
           positionTarget.y +=
@@ -216,13 +220,15 @@ export function createLibraryReadingRitual(
           isOpening ? .18 : .1,
         )
 
-        const targetYaw = isOpening
-          ? .08 * ritualAmount
-          : isHovered
-            ? .025
-            : isApproachedShelf
-              ? .012
-              : 0
+        const targetYaw =
+          bookVisual.baseRotationY +
+          (isOpening
+            ? .08 * ritualAmount * bookVisual.facing
+            : isHovered
+              ? .025 * bookVisual.facing
+              : isApproachedShelf
+                ? .012 * bookVisual.facing
+                : 0)
         const targetPitch = isOpening
           ? -.045 * ritualAmount
           : 0
@@ -233,11 +239,12 @@ export function createLibraryReadingRitual(
           (targetPitch - bookVisual.group.rotation.x) * .18
         bookVisual.group.rotation.z *= .84
 
+        // The book group itself is already rotated 180° for the rear face.
+        // The cover hinge therefore always opens toward local +Z with the
+        // same negative Y rotation. Multiplying by facing made one-sided
+        // wall/rear shelves swing their covers back into the shelf.
         const targetCoverAngle = isOpening
-          // The shelf fronts face local -Z. Positive Y rotation swings the
-          // left-hinged cover toward the reader; the old negative rotation
-          // folded it backward into the shelf.
-          ? Math.PI * .74 * ritualAmount
+          ? -Math.PI * .74 * ritualAmount
           : 0
         bookVisual.coverHinge.rotation.y +=
           (

@@ -25,9 +25,12 @@ type CreateLibraryAtmosphereArgs = {
 type LibraryAtmosphereUpdate = {
   elapsed: number
   camera: THREE.Camera
+  activeDistrictId?: string
+  activeRoomCenter?: [number, number]
+  roomSelectionMode?: boolean
   districts: Pick<
     LibraryDistrictConfig,
-    'bay' | 'accent' | 'atmosphere'
+    'id' | 'bay' | 'accent' | 'atmosphere'
   >[]
 }
 
@@ -111,29 +114,16 @@ export function createLibraryAtmosphere({
   const hazeMaterials: THREE.MeshBasicMaterial[] = []
   const hazePlanes: THREE.Mesh[] = []
 
-  const hazeSpecs = [
-    {
-      color: 'rgba(73, 132, 176, 0.36)',
-      position: [-28, 7, -72] as const,
-      scale: [92, 42] as const,
-      opacity: .036,
-      rotation: -.035,
-    },
-    {
-      color: 'rgba(111, 82, 176, 0.36)',
-      position: [32, -4, -145] as const,
-      scale: [126, 54] as const,
-      opacity: .031,
-      rotation: .045,
-    },
-    {
-      color: 'rgba(52, 153, 157, 0.36)',
-      position: [-18, 13, -228] as const,
-      scale: [158, 64] as const,
-      opacity: .027,
-      rotation: -.02,
-    },
-  ]
+  // The enclosed library uses colored light, not colored air. The old
+  // boulevard haze planes are intentionally disabled so white architecture,
+  // books and floating furniture stay crisp.
+  const hazeSpecs: Array<{
+    color: string
+    position: readonly [number, number, number]
+    scale: readonly [number, number]
+    opacity: number
+    rotation: number
+  }> = []
 
   hazeSpecs.forEach((spec, index) => {
     const texture = createNebulaTexture(spec.color)
@@ -172,14 +162,95 @@ export function createLibraryAtmosphere({
   const archiveFog: THREE.Sprite[] = []
   const localHaze: THREE.Sprite[] = []
 
-  const fogTextureColors = [
-    'rgba(224, 92, 188, 0.34)',
-    'rgba(170, 91, 214, 0.32)',
-    'rgba(235, 119, 179, 0.28)',
-    'rgba(124, 104, 205, 0.27)',
-    'rgba(83, 205, 220, 0.24)',
-    'rgba(118, 126, 232, 0.23)',
-  ]
+  // Soft dust motes give the enclosed rooms scale and air without adding
+  // geometry-heavy volumetrics. One tiny Points cloud covers the whole
+  // building and drifts upward slowly.
+  const dustCanvas = document.createElement('canvas')
+  dustCanvas.width = 32
+  dustCanvas.height = 32
+  const dustContext = dustCanvas.getContext('2d')
+  if (dustContext) {
+    const gradient = dustContext.createRadialGradient(
+      16,
+      16,
+      0,
+      16,
+      16,
+      16,
+    )
+    gradient.addColorStop(0, 'rgba(255,244,222,.95)')
+    gradient.addColorStop(.36, 'rgba(255,231,196,.48)')
+    gradient.addColorStop(1, 'rgba(255,231,196,0)')
+    dustContext.fillStyle = gradient
+    dustContext.fillRect(0, 0, 32, 32)
+  }
+  const dustTexture = new THREE.CanvasTexture(dustCanvas)
+  const dustCount =
+    quality === 'cinematic'
+      ? 220
+      : quality === 'high'
+        ? 160
+        : quality === 'medium'
+          ? 105
+          : 60
+  const dustGeometry = new THREE.BufferGeometry()
+  const dustPositions = new Float32Array(dustCount * 3)
+  const dustBaseX = new Float32Array(dustCount)
+  const dustBaseY = new Float32Array(dustCount)
+  const dustPhase = new Float32Array(dustCount)
+  const dustSpeed = new Float32Array(dustCount)
+
+  for (let index = 0; index < dustCount; index += 1) {
+    const seed = index + 1701
+    const offset = index * 3
+    const x = THREE.MathUtils.lerp(
+      -23.2,
+      23.2,
+      seededUnit(seed, 1),
+    )
+    const y = THREE.MathUtils.lerp(
+      .38,
+      4.72,
+      seededUnit(seed, 2),
+    )
+    const z = THREE.MathUtils.lerp(
+      -73.4,
+      13.2,
+      seededUnit(seed, 3),
+    )
+    dustPositions[offset] = x
+    dustPositions[offset + 1] = y
+    dustPositions[offset + 2] = z
+    dustBaseX[index] = x
+    dustBaseY[index] = y
+    dustPhase[index] = seededUnit(seed, 4) * Math.PI * 2
+    dustSpeed[index] = .035 + seededUnit(seed, 5) * .055
+  }
+
+  dustGeometry.setAttribute(
+    'position',
+    new THREE.BufferAttribute(dustPositions, 3),
+  )
+  const dustMaterial = new THREE.PointsMaterial({
+    map: dustTexture,
+    color: 0xffe8c7,
+    size: .075,
+    transparent: true,
+    opacity: .3,
+    depthWrite: false,
+    alphaTest: .025,
+    sizeAttenuation: true,
+    blending: THREE.AdditiveBlending,
+    toneMapped: true,
+  })
+  const dustMotes = new THREE.Points(
+    dustGeometry,
+    dustMaterial,
+  )
+  dustMotes.renderOrder = 2
+  world.add(dustMotes)
+
+  const fogTextureColors: string[] = []
 
   const fogTextures = fogTextureColors.map((color) => {
     const texture = createNebulaTexture(color)
@@ -207,14 +278,7 @@ export function createLibraryAtmosphere({
     return material
   })
 
-  const fogBankCount =
-    quality === 'cinematic'
-      ? 40
-      : quality === 'high'
-        ? 30
-        : quality === 'medium'
-          ? 22
-          : 14
+  const fogBankCount = 0
 
   for (let index = 0; index < fogBankCount; index += 1) {
     const t = index / (fogBankCount - 1)
@@ -265,16 +329,7 @@ export function createLibraryAtmosphere({
     archiveFog.push(sprite)
   }
 
-  const localHazeOffsets = [
-    -1.6,
-    -.7,
-    .15,
-    1,
-    1.9,
-    3,
-    4.3,
-    5.8,
-  ] as const
+  const localHazeOffsets: readonly number[] = []
 
   localHazeOffsets.forEach((bayOffset, index) => {
     const material = new THREE.SpriteMaterial({
@@ -333,8 +388,34 @@ export function createLibraryAtmosphere({
   let disposed = false
 
   return {
-    update({elapsed, camera, districts}) {
+    update({
+      elapsed,
+      camera,
+      activeDistrictId,
+      activeRoomCenter,
+      roomSelectionMode,
+      districts,
+    }) {
       if (disposed) return
+
+      const dustPositionAttribute =
+        dustGeometry.getAttribute('position') as THREE.BufferAttribute
+      for (let index = 0; index < dustCount; index += 1) {
+        const offset = index * 3
+        const phase = dustPhase[index]
+        const rise =
+          ((dustBaseY[index] - .38 + elapsed * dustSpeed[index]) %
+            4.34) +
+          .38
+        dustPositions[offset] =
+          dustBaseX[index] +
+          Math.sin(elapsed * .075 + phase) * .085
+        dustPositions[offset + 1] =
+          rise + Math.sin(elapsed * .11 + phase) * .055
+      }
+      dustPositionAttribute.needsUpdate = true
+      dustMaterial.opacity =
+        .25 + Math.sin(elapsed * .17) * .03
 
       hazePlanes.forEach((plane, index) => {
         const material =
@@ -394,15 +475,24 @@ export function createLibraryAtmosphere({
       const cameraBay = archiveBayFromWorldZ(
         camera.position.z,
       )
-      const nearestDistrict =
-        districts.length > 0
-          ? districts.reduce((nearest, candidate) =>
-              Math.abs(candidate.bay - cameraBay) <
-              Math.abs(nearest.bay - cameraBay)
-                ? candidate
-                : nearest,
-            )
+      const selectedRoomDistrict =
+        activeDistrictId
+          ? districts.find(
+              (district) => district.id === activeDistrictId,
+            ) ?? null
           : null
+      const nearestDistrict =
+        roomSelectionMode
+          ? selectedRoomDistrict
+          : selectedRoomDistrict ??
+            (districts.length > 0
+              ? districts.reduce((nearest, candidate) =>
+                  Math.abs(candidate.bay - cameraBay) <
+                  Math.abs(nearest.bay - cameraBay)
+                    ? candidate
+                    : nearest,
+                )
+              : null)
 
       let districtAtmosphereStrength = 1
 
@@ -432,9 +522,11 @@ export function createLibraryAtmosphere({
         districtAtmosphereStrength =
           visualPreset.hazeStrength
 
-        const districtPoint = archivePathPoint(
-          nearestDistrict.bay,
-        )
+        const districtPoint =
+          activeRoomCenter &&
+          nearestDistrict.id === activeDistrictId
+            ? [activeRoomCenter[0], 0, activeRoomCenter[1]]
+            : archivePathPoint(nearestDistrict.bay)
         districtLight.position.set(
           districtPoint[0],
           districtPoint[1] + 3.2,
@@ -557,7 +649,11 @@ export function createLibraryAtmosphere({
       archiveFog.forEach((sprite) => world.remove(sprite))
       localHaze.forEach((sprite) => world.remove(sprite))
       world.remove(districtLight)
+      world.remove(dustMotes)
 
+      dustGeometry.dispose()
+      dustMaterial.dispose()
+      dustTexture.dispose()
       hazeGeometry.dispose()
       hazeMaterials.forEach((material) => material.dispose())
       hazeTextures.forEach((texture) => texture.dispose())

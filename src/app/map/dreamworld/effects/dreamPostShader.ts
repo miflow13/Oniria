@@ -34,7 +34,10 @@ export const DreamPostShader = {
     void main() {
       vec2 centered = vUv - 0.5;
       float radius = length(centered);
-      float aberration = (0.00045 + uTravel * 0.0014) * uCinematic * smoothstep(0.15, 0.75, radius);
+      float aberration =
+        (0.00010 * uIntensity +
+         (0.00045 + uTravel * 0.0014) * uCinematic) *
+        smoothstep(0.15, 0.75, radius);
 
       vec2 direction = normalize(centered + vec2(0.00001));
       vec4 base = texture2D(tDiffuse, vUv);
@@ -66,7 +69,7 @@ export const DreamPostShader = {
       color *= mix(1.0, highlightCompression, 0.56 * uIntensity);
 
       float vignette = 1.0 - smoothstep(0.24, 0.92, radius);
-      color *= mix(1.0, vignette, 0.17 * uIntensity);
+      color *= mix(1.0, vignette, 0.21 * uIntensity);
 
       float grain = hash(vUv * vec2(1920.0, 1080.0) + uTime * 37.0) - 0.5;
       color += grain * 0.018 * uCinematic * uIntensity;

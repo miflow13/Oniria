@@ -18,6 +18,15 @@ export type LibraryLandmarkType =
   | 'dev-monument'
   | 'archive-tower'
 
+export type LibraryContentSource =
+  | 'featured'
+  | 'latest'
+  | 'topics'
+  | 'creators'
+  | 'search'
+  | 'catalog'
+  | 'tagged'
+
 export type LibraryDistrictConfig = {
   id: string
   label: string
@@ -29,6 +38,8 @@ export type LibraryDistrictConfig = {
   atmosphere: LibraryAtmosphere
   audioProfile: LibraryAudioProfile
   landmarkType: LibraryLandmarkType
+  sourceMode: LibraryContentSource
+  roomSlot: number
   enabled: boolean
 }
 
@@ -77,107 +88,93 @@ export type LibraryWorldConfig = {
 
 export const DEFAULT_LIBRARY_DISTRICTS: LibraryDistrictConfig[] = [
   {
-    id: 'front-page',
-    label: 'FRONT PAGE',
-    code: 'A-01',
+    id: 'featured',
+    label: 'FEATURED',
+    code: 'R-01',
     bay: 1,
-    description: 'The current pulse of the DEV Community.',
-    devTags: ['devcommunity', 'career', 'productivity'],
-    accent: '#8c7cff',
+    description: 'Popular and curator-picked DEV writing.',
+    devTags: [],
+    accent: '#3b49df',
     atmosphere: 'dream-archive',
     audioProfile: 'warm',
     landmarkType: 'dev-monument',
+    sourceMode: 'featured',
+    roomSlot: 0,
     enabled: true,
   },
   {
-    id: 'web-dev',
-    label: 'WEB DEV',
-    code: 'A-08',
-    bay: 4.4,
-    description: 'Frontend, backend, CSS, React, and the open web.',
-    devTags: ['webdev', 'frontend', 'backend', 'react', 'css', 'html'],
-    accent: '#65d4df',
+    id: 'latest',
+    label: 'NEW ARRIVALS',
+    code: 'R-02',
+    bay: 1,
+    description: 'Freshly published writing from DEV.',
+    devTags: [],
+    accent: '#7295ff',
     atmosphere: 'crystalline',
     audioProfile: 'ambient',
     landmarkType: 'index',
+    sourceMode: 'latest',
+    roomSlot: 1,
     enabled: true,
   },
   {
-    id: 'ai',
-    label: 'AI',
-    code: 'A-18',
-    bay: 7.8,
-    description: 'Machine learning, LLMs, agents, and generative systems.',
-    devTags: ['ai', 'machinelearning', 'llm', 'agents', 'openai'],
-    accent: '#b48cff',
+    id: 'topics',
+    label: 'TOPICS',
+    code: 'R-03',
+    bay: 4,
+    description: 'Browse the live collection by DEV tag.',
+    devTags: ['webdev', 'javascript', 'typescript', 'react', 'ai', 'linux'],
+    accent: '#53d3ff',
     atmosphere: 'crystalline',
     audioProfile: 'crystalline',
     landmarkType: 'neural-lattice',
+    sourceMode: 'topics',
+    roomSlot: 2,
     enabled: true,
   },
   {
-    id: 'linux',
-    label: 'LINUX',
-    code: 'A-28',
-    bay: 11.2,
-    description: 'Linux desktops, distros, terminals, kernels, and tooling.',
-    devTags: ['linux', 'fedora', 'ubuntu', 'archlinux', 'opensource'],
-    accent: '#72d9c8',
-    atmosphere: 'industrial',
-    audioProfile: 'mechanical',
-    landmarkType: 'terminal-wall',
-    enabled: true,
-  },
-  {
-    id: 'javascript',
-    label: 'JAVASCRIPT',
-    code: 'A-38',
-    bay: 14.6,
-    description: 'JavaScript, TypeScript, Node, runtimes, and frameworks.',
-    devTags: ['javascript', 'typescript', 'node', 'nextjs', 'react'],
-    accent: '#f0c96f',
-    atmosphere: 'dream-archive',
-    audioProfile: 'ambient',
-    landmarkType: 'syntax-tree',
-    enabled: true,
-  },
-  {
-    id: 'archive-2026',
-    label: 'ARCHIVE 2026',
-    code: 'A-48',
-    bay: 18,
-    description: 'The current year preserved as a navigable archive.',
+    id: 'creators',
+    label: 'CREATORS',
+    code: 'R-04',
+    bay: 4,
+    description: 'Authors and the writing connected to them.',
     devTags: [],
-    accent: '#9aa7cf',
-    atmosphere: 'dream-archive',
-    audioProfile: 'ambient',
-    landmarkType: 'archive-tower',
-    enabled: true,
-  },
-  {
-    id: 'community',
-    label: 'COMMUNITY',
-    code: 'A-58',
-    bay: 21.4,
-    description: 'People, careers, learning, collaboration, and community.',
-    devTags: ['career', 'beginners', 'learning', 'discuss', 'community'],
-    accent: '#e6a8cf',
+    accent: '#ae7bff',
     atmosphere: 'dream-archive',
     audioProfile: 'warm',
     landmarkType: 'index',
+    sourceMode: 'creators',
+    roomSlot: 3,
     enabled: true,
   },
   {
-    id: 'deep-stacks',
-    label: 'DEEP STACKS',
-    code: 'A-68',
-    bay: 24.8,
-    description: 'Long-tail and uncategorized writing deeper in the corpus.',
+    id: 'search',
+    label: 'SEARCH',
+    code: 'R-05',
+    bay: 7,
+    description: 'A live card catalogue backed by DEV search.',
     devTags: [],
-    accent: '#786da8',
+    accent: '#75b7ff',
+    atmosphere: 'industrial',
+    audioProfile: 'mechanical',
+    landmarkType: 'terminal-wall',
+    sourceMode: 'search',
+    roomSlot: 4,
+    enabled: true,
+  },
+  {
+    id: 'archive',
+    label: 'ARCHIVE',
+    code: 'R-06',
+    bay: 7,
+    description: 'A progressively streamed long-tail DEV catalogue.',
+    devTags: [],
+    accent: '#909bb4',
     atmosphere: 'deep-void',
     audioProfile: 'deep',
     landmarkType: 'archive-tower',
+    sourceMode: 'catalog',
+    roomSlot: 5,
     enabled: true,
   },
 ]
@@ -216,16 +213,16 @@ export const DEFAULT_LIBRARY_WORLD_CONFIG: LibraryWorldConfig = {
   sanityRevision: '',
   sanityPreviewAvailable: false,
   welcomeTitle: 'DEV LIBRARY',
-  welcomeSubtitle: 'An explorable archive of DEV Community writing',
+  welcomeSubtitle: 'Six rooms. One live DEV collection.',
   welcomeBody:
-    'Walk the archive, browse shelves, inspect books, and open real DEV posts.',
+    'Walk the building, browse shelves, inspect books, and open real DEV posts.',
   archiveStatus: 'LIVE ARCHIVE',
   defaultMovement: 'walk',
   atmosphere: 'dream-archive',
-  hazeIntensity: .7,
+  hazeIntensity: .45,
   liveDevUpdates: true,
   deepStacksEnabled: true,
-  featuredDistrictId: 'front-page',
+  featuredDistrictId: 'featured',
   districts: DEFAULT_LIBRARY_DISTRICTS,
   curatedArticles: [],
   journeys: [],
@@ -291,6 +288,16 @@ const landmarkValues = new Set<LibraryLandmarkType>([
   'archive-tower',
 ])
 
+const contentSourceValues = new Set<LibraryContentSource>([
+  'featured',
+  'latest',
+  'topics',
+  'creators',
+  'search',
+  'catalog',
+  'tagged',
+])
+
 function clamp01(value: unknown, fallback: number) {
   return typeof value === 'number'
     ? Math.max(0, Math.min(1, value))
@@ -321,6 +328,17 @@ function sanitizeDistrict(
     resolvedLabel.trim().length === 0 ||
     typeof district.code !== 'string' ||
     typeof district.bay !== 'number'
+  ) {
+    return null
+  }
+
+  // Legacy cinematic-district documents predate the six-room model. Until
+  // the migration seed is run, ignore those documents instead of collapsing
+  // all of them into room slot 0.
+  if (
+    !fallback &&
+    typeof district.sourceMode !== 'string' &&
+    typeof district.roomSlot !== 'number'
   ) {
     return null
   }
@@ -359,6 +377,17 @@ function sanitizeDistrict(
       )
         ? (district.landmarkType as LibraryLandmarkType)
         : fallback?.landmarkType ?? 'index',
+    sourceMode:
+      typeof district.sourceMode === 'string' &&
+      contentSourceValues.has(
+        district.sourceMode as LibraryContentSource,
+      )
+        ? (district.sourceMode as LibraryContentSource)
+        : fallback?.sourceMode ?? 'tagged',
+    roomSlot:
+      typeof district.roomSlot === 'number'
+        ? Math.max(0, Math.min(5, Math.round(district.roomSlot)))
+        : fallback?.roomSlot ?? 0,
     enabled: district.enabled !== false,
   }
 }
@@ -382,10 +411,15 @@ export function mergeLibraryWorldConfig(
     )
     .sort((a, b) => a.bay - b.bay)
 
-  const districts =
-    configuredDistricts.length > 0
-      ? configuredDistricts
-      : DEFAULT_LIBRARY_DISTRICTS
+  // The physical building always owns six room slots. During Sanity
+  // migration, merge any authored room document over its matching fallback
+  // instead of allowing a partially-published dataset to remove rooms.
+  const configuredById = new Map(
+    configuredDistricts.map((district) => [district.id, district]),
+  )
+  const districts = DEFAULT_LIBRARY_DISTRICTS.map(
+    (fallback) => configuredById.get(fallback.id) ?? fallback,
+  ).sort((a, b) => a.roomSlot - b.roomSlot)
 
   const curatedArticles = (payload.curatedArticles ?? [])
     .filter(
@@ -470,12 +504,13 @@ export function mergeLibraryWorldConfig(
     liveDevUpdates: config.liveDevUpdates !== false,
     deepStacksEnabled: config.deepStacksEnabled !== false,
     featuredDistrictId:
-      typeof config.featuredDistrictId === 'string'
+      typeof config.featuredDistrictId === 'string' &&
+      districts.some(
+        (district) => district.id === config.featuredDistrictId,
+      )
         ? config.featuredDistrictId
         : DEFAULT_LIBRARY_WORLD_CONFIG.featuredDistrictId,
-    districts: config.deepStacksEnabled === false
-      ? districts.filter((district) => district.id !== 'deep-stacks')
-      : districts,
+    districts,
     curatedArticles,
     journeys,
   }

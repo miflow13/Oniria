@@ -2,18 +2,18 @@ import {defineArrayMember, defineField, defineType} from 'sanity'
 
 export const libraryDistrictType = defineType({
   name: 'libraryDistrict',
-  title: 'Library District',
+  title: 'Library Room',
   type: 'document',
   fields: [
     defineField({
       name: 'title',
-      title: 'District name',
+      title: 'Room name',
       type: 'string',
       validation: (rule) => rule.required().max(80),
     }),
     defineField({
       name: 'slug',
-      title: 'District ID',
+      title: 'Room ID',
       type: 'slug',
       options: {source: 'title', maxLength: 64},
       validation: (rule) => rule.required(),
@@ -44,15 +44,18 @@ export const libraryDistrictType = defineType({
     }),
     defineField({
       name: 'routeBay',
-      title: 'Position on archive route',
+      title: 'Cinematic depth band',
       type: 'number',
-      description: '0 is the welcome end; 72 is the current Deep Stacks limit.',
+      description:
+        'Internal atmosphere coordinate. Defaults are 1, 4, and 7 for the three room rows.',
       validation: (rule) => rule.required().min(0).max(72),
     }),
     defineField({
       name: 'order',
-      title: 'Studio order',
+      title: 'Legacy sort order',
       type: 'number',
+      description:
+        'Compatibility field. The six-room Studio navigation now follows Physical room.',
       initialValue: 50,
       validation: (rule) => rule.integer().min(0).max(999),
     }),
@@ -113,6 +116,46 @@ export const libraryDistrictType = defineType({
       },
     }),
     defineField({
+      name: 'sourceMode',
+      title: 'Room content source',
+      type: 'string',
+      description:
+        'Controls which live DEV query populates this physical room.',
+      initialValue: 'tagged',
+      options: {
+        list: [
+          {title: 'Featured / trending', value: 'featured'},
+          {title: 'Latest / new arrivals', value: 'latest'},
+          {title: 'Topics / tags', value: 'topics'},
+          {title: 'Creators', value: 'creators'},
+          {title: 'Search', value: 'search'},
+          {title: 'Archive / catalogue', value: 'catalog'},
+          {title: 'Tag-matched district', value: 'tagged'},
+        ],
+      },
+      validation: (rule) => rule.required(),
+    }),
+    defineField({
+      name: 'roomSlot',
+      title: 'Physical room',
+      type: 'number',
+      description:
+        'Canonical six-room floor-plan position. Keep this aligned with the room identity below.',
+      initialValue: 0,
+      options: {
+        list: [
+          {title: 'R-01 · Featured', value: 0},
+          {title: 'R-02 · New Arrivals', value: 1},
+          {title: 'R-03 · Topics', value: 2},
+          {title: 'R-04 · Creators', value: 3},
+          {title: 'R-05 · Search', value: 4},
+          {title: 'R-06 · Archive', value: 5},
+        ],
+        layout: 'radio',
+      },
+      validation: (rule) => rule.required().integer().min(0).max(5),
+    }),
+    defineField({
       name: 'enabled',
       title: 'Enabled',
       type: 'boolean',
@@ -123,13 +166,19 @@ export const libraryDistrictType = defineType({
     select: {
       title: 'title',
       code: 'code',
+      sourceMode: 'sourceMode',
+      roomSlot: 'roomSlot',
       tags: 'devTags',
       enabled: 'enabled',
     },
-    prepare({title, code, tags, enabled}) {
+    prepare({title, code, sourceMode, roomSlot, tags, enabled}) {
+      const tagSummary =
+        (tags ?? []).slice(0, 2).join(', ') || 'live DEV'
       return {
-        title: `${enabled === false ? '○' : '●'} ${title ?? 'Untitled district'}`,
-        subtitle: `${code ?? 'No code'} · ${(tags ?? []).slice(0, 3).join(', ') || 'no DEV tags'}`,
+        title:
+          `${enabled === false ? '○' : '●'} R-${String(Number(roomSlot ?? 0) + 1).padStart(2, '0')} · ${title ?? 'Untitled room'}`,
+        subtitle:
+          `${code ?? 'No code'} · ${sourceMode ?? 'tagged'} · ${tagSummary}`,
       }
     },
   },

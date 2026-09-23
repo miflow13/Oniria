@@ -163,7 +163,7 @@ export async function GET(request: NextRequest) {
       revision = updated ?? ''
       syncMode = 'drafts'
     } else {
-      payload = await client
+      const published = (await client
         .withConfig({
           useCdn: false,
           perspective: 'published',
@@ -172,7 +172,15 @@ export async function GET(request: NextRequest) {
           queries.LIBRARY_WORLD_QUERY,
           {},
           {cache: 'no-store'},
-        )
+        )) as {
+        revision?: string
+        [key: string]: unknown
+      }
+      payload = published
+      revision =
+        typeof published.revision === 'string'
+          ? published.revision
+          : ''
     }
 
     const world = mergeLibraryWorldConfig(

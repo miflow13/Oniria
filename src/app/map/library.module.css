@@ -655,3 +655,97 @@
     padding: 22px 18px 24px;
   }
 }
+
+.layoutAuthoringHud {
+  position: absolute;
+  z-index: 80;
+  right: 18px;
+  bottom: 18px;
+  width: min(320px, calc(100vw - 36px));
+  padding: 12px;
+  color: #edf9ff;
+  background: rgba(3, 10, 18, .94);
+  border: 1px solid rgba(94, 220, 255, .42);
+  border-radius: 14px;
+  box-shadow:
+    0 16px 44px rgba(0, 0, 0, .38),
+    0 0 28px rgba(47, 183, 255, .12);
+  backdrop-filter: blur(16px);
+  pointer-events: auto;
+}
+
+.layoutAuthoringHudHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.layoutAuthoringHudHeader strong {
+  font: 800 .65rem/1 ui-monospace, monospace;
+  letter-spacing: .12em;
+}
+
+.layoutAuthoringHudHeader span {
+  padding: 3px 7px;
+  color: #9de9ff;
+  background: rgba(47, 183, 255, .1);
+  border: 1px solid rgba(94, 220, 255, .24);
+  border-radius: 999px;
+  font: 700 .55rem/1 ui-monospace, monospace;
+}
+
+.layoutAuthoringHud p {
+  margin: 9px 0 8px;
+  color: #8ce8ff;
+  font: 700 .62rem/1.35 ui-monospace, monospace;
+  letter-spacing: .04em;
+}
+
+.layoutAuthoringHudActions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.layoutAuthoringHudActions button {
+  min-height: 32px;
+  cursor: pointer;
+  color: #e8fbff;
+  background: rgba(36, 125, 164, .16);
+  border: 1px solid rgba(94, 220, 255, .22);
+  border-radius: 8px;
+  font: 700 .58rem/1 ui-monospace, monospace;
+}
+
+.layoutAuthoringHudActions button:hover {
+  background: rgba(36, 125, 164, .26);
+  border-color: rgba(94, 220, 255, .4);
+}
+
+.layoutAuthoringHudActions .layoutAuthoringExport {
+  grid-column: 1 / -1;
+  color: #dff9ff;
+  background: rgba(47, 183, 255, .12);
+  border-color: rgba(94, 220, 255, .34);
+}
+
+.layoutAuthoringHudActions .layoutAuthoringDanger {
+  grid-column: 1 / -1;
+  color: #ffd9d9;
+  background: rgba(166, 46, 56, .14);
+  border-color: rgba(255, 105, 118, .28);
+}
+
+.layoutAuthoringHudActions .layoutAuthoringDanger:hover {
+  background: rgba(185, 52, 63, .24);
+  border-color: rgba(255, 120, 132, .48);
+}
+
+.layoutAuthoringHud small {
+  display: block;
+  color: #7894a7;
+  font-size: .56rem;
+  line-height: 1.4;
+}
