@@ -2311,20 +2311,26 @@ export default function DreamWorld3D({
 
         const reactiveFrameMaterial =
           shelfFrameMaterial.clone()
-        reactiveFrameMaterial.emissive.copy(color)
-        reactiveFrameMaterial.emissiveIntensity = .018
+        // Unhydrated shelves should still read as library furniture, not
+        // glowing district-colored placeholders at long range.
+        reactiveFrameMaterial.color.setHex(0x2c2119)
+        reactiveFrameMaterial.emissive.setHex(0x000000)
+        reactiveFrameMaterial.emissiveIntensity = 0
+        reactiveFrameMaterial.roughness = .9
         reactiveFrameMaterial.envMapIntensity =
-          settings.environmentIntensity * .4
+          settings.environmentIntensity * .2
 
         const reactiveBoardMaterial =
           shelfBoardMaterial.clone()
-        reactiveBoardMaterial.emissive.copy(color)
-        reactiveBoardMaterial.emissiveIntensity = .016
+        reactiveBoardMaterial.color.setHex(0x3b2b20)
+        reactiveBoardMaterial.emissive.setHex(0x000000)
+        reactiveBoardMaterial.emissiveIntensity = 0
+        reactiveBoardMaterial.roughness = .88
 
         const reactiveAccentMaterial =
           shelfAccentMaterial.clone()
-        reactiveAccentMaterial.color.copy(color)
-        reactiveAccentMaterial.opacity = .11
+        reactiveAccentMaterial.color.setHex(0x6d5135)
+        reactiveAccentMaterial.opacity = .045
 
         shelfReactiveMaterials.push(
           reactiveFrameMaterial,
@@ -6416,7 +6422,7 @@ export default function DreamWorld3D({
       if (
         libraryMode &&
         pendingShelfHydrators.size > 0 &&
-        elapsed - lastShelfHydrationAt > .16
+        elapsed - lastShelfHydrationAt > .07
       ) {
         let hydrateId: string | null = null
         let hydrateDistance = Infinity
@@ -6437,7 +6443,7 @@ export default function DreamWorld3D({
         // Only hydrate shelves near the player's current zone. Shelf frames
         // remain visible everywhere, while books and covers stream in as the
         // player approaches instead of all being built during first paint.
-        if (hydrateId && hydrateDistance < 26) {
+        if (hydrateId && hydrateDistance < 46) {
           pendingShelfHydrators.get(hydrateId)?.()
           lastShelfHydrationAt = elapsed
         }
