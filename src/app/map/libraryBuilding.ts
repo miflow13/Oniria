@@ -908,6 +908,57 @@ export function createLibraryBuilding(
   localMaterials.push(pendantBulbMaterial, pendantPoolMaterial)
   localTextures.push(pendantPoolTexture)
 
+  const sconceHaloGeometry = new THREE.PlaneGeometry(1, 1)
+  const sconceHaloMaterial = new THREE.MeshBasicMaterial({
+    map: pendantPoolTexture,
+    transparent: true,
+    opacity: .42,
+    depthWrite: false,
+    depthTest: true,
+    blending: THREE.NormalBlending,
+    toneMapped: false,
+    side: THREE.DoubleSide,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
+  })
+
+  const rugBorderGeometry = new THREE.BoxGeometry(
+    3.18,
+    .026,
+    4.18,
+  )
+  const rugInsetGeometry = new THREE.BoxGeometry(
+    2.96,
+    .03,
+    3.96,
+  )
+  const rugBorderMaterial = new THREE.MeshStandardMaterial({
+    color: 0x8b6b35,
+    roughness: .86,
+    metalness: .015,
+    envMapIntensity: .1,
+    toneMapped: true,
+  })
+  const rugInsetMaterial = new THREE.MeshStandardMaterial({
+    color: 0x542f36,
+    roughness: .94,
+    metalness: 0,
+    envMapIntensity: .07,
+    toneMapped: true,
+  })
+
+  localGeometries.push(
+    sconceHaloGeometry,
+    rugBorderGeometry,
+    rugInsetGeometry,
+  )
+  localMaterials.push(
+    sconceHaloMaterial,
+    rugBorderMaterial,
+    rugInsetMaterial,
+  )
+
   const addPendantFixtureLight = (
     fixture: THREE.Group,
     id: string,
@@ -1281,49 +1332,75 @@ export function createLibraryBuilding(
       backupCeiling.visible = false
     }
 
-    // Surveyed corridor rugs: use the authored GLB's real measured footprint
-    // instead of stretching it into one continuous runner. This keeps the
-    // woven asset looking physical and preserves intentional breathing room.
+    // Surveyed corridor rugs. Always render a thin old-library rug base so
+    // layout remains visible even if the Draco GLB fails to decode locally.
+    // When the uploaded rug loads, it sits on top as the detailed surface.
+    let measuredRugLength = 4.18
+    let measuredRugWidth = 3.18
+    let rugLongAxisIsX = false
+
     if (readingRug) {
       const rugSize = new THREE.Box3()
         .setFromObject(readingRug)
         .getSize(new THREE.Vector3())
-      const longAxisIsX = rugSize.x >= rugSize.z
-      const measuredLength = Math.max(
+      rugLongAxisIsX = rugSize.x >= rugSize.z
+      measuredRugLength = Math.max(
         .001,
-        longAxisIsX ? rugSize.x : rugSize.z,
+        rugLongAxisIsX ? rugSize.x : rugSize.z,
       )
-      const measuredWidth = Math.max(
+      measuredRugWidth = Math.max(
         .001,
-        longAxisIsX ? rugSize.z : rugSize.x,
+        rugLongAxisIsX ? rugSize.z : rugSize.x,
       )
+    } else {
+      const rugRequest = requests[5]
+      console.warn(
+        '[DEV Library] Uploaded office rug did not load; using visible fallback rugs.',
+        rugRequest?.status === 'rejected'
+          ? rugRequest.reason
+          : 'unknown reason',
+      )
+    }
 
-      SURVEYED_HALL_RUG_Z.forEach((z, index) => {
+    SURVEYED_HALL_RUG_Z.forEach((z, index) => {
+      const border = new THREE.Mesh(
+        rugBorderGeometry,
+        rugBorderMaterial,
+      )
+      border.position.set(0, .034, z)
+      border.receiveShadow = true
+      border.name = `library-rug-fallback-border-${index}`
+      group.add(border)
+
+      const inset = new THREE.Mesh(
+        rugInsetGeometry,
+        rugInsetMaterial,
+      )
+      inset.position.set(0, .051, z)
+      inset.receiveShadow = true
+      inset.name = `library-rug-fallback-inset-${index}`
+      group.add(inset)
+
+      if (readingRug) {
         const rug = placeAsset(
           readingRug,
           0,
-          .045,
+          .078,
           z,
           1,
-          longAxisIsX ? Math.PI / 2 : 0,
+          rugLongAxisIsX ? Math.PI / 2 : 0,
         )
         rug.name = `library-surveyed-hall-rug-${index}`
-
-        // Loader already normalizes the longest span to 4.2. Only cap width
-        // if the source asset happens to be unusually broad.
-        if (measuredWidth > 3.2) {
-          const widthScale = 3.2 / measuredWidth
-          if (longAxisIsX) {
-            rug.scale.z *= widthScale
-          } else {
-            rug.scale.x *= widthScale
-          }
-        }
+        rug.renderOrder = 4
 
         rug.traverse((child) => {
           if (!(child instanceof THREE.Mesh)) return
           child.castShadow = false
           child.receiveShadow = true
+          child.renderOrder = 4
+          const hasVertexColor = Boolean(
+            child.geometry.getAttribute('color'),
+          )
           const materials = Array.isArray(child.material)
             ? child.material
             : [child.material]
@@ -1332,27 +1409,34 @@ export function createLibraryBuilding(
               material instanceof THREE.MeshStandardMaterial ||
               material instanceof THREE.MeshPhysicalMaterial
             ) {
+              material.vertexColors = hasVertexColor
               material.roughness = Math.max(
                 material.roughness,
-                .78,
+                .8,
+              )
+              material.metalness = Math.min(
+                material.metalness,
+                .02,
               )
               material.envMapIntensity = Math.min(
                 material.envMapIntensity,
                 .14,
               )
+              material.toneMapped = true
+              material.needsUpdate = true
             }
           })
         })
+      }
 
-        addContactShadow(
-          0,
-          z,
-          longAxisIsX ? measuredLength : measuredWidth,
-          longAxisIsX ? measuredWidth : measuredLength,
-          longAxisIsX ? Math.PI / 2 : 0,
-        )
-      })
-    }
+      addContactShadow(
+        0,
+        z,
+        Math.max(3.18, measuredRugWidth),
+        Math.max(4.18, measuredRugLength),
+        0,
+      )
+    })
 
     const furnishingTemplates = {
       column,
@@ -1378,7 +1462,8 @@ export function createLibraryBuilding(
       materials.forEach((material) => {
         if (!(material instanceof THREE.MeshStandardMaterial)) return
         material.emissive.setHex(0xffb36b)
-        material.emissiveIntensity = .16
+        material.emissiveIntensity = 1.35
+        material.roughness = Math.max(material.roughness, .42)
       })
     })
 
@@ -1397,6 +1482,70 @@ export function createLibraryBuilding(
         placement.castsShadow ?? false,
       )
       instance.name = `library-furnishing-${placement.id}`
+
+      if (placement.asset === 'wallSconce') {
+        instance.updateMatrixWorld(true)
+        const bounds = new THREE.Box3().setFromObject(instance)
+        const center = bounds.getCenter(new THREE.Vector3())
+        const yaw = placement.yaw ?? 0
+        const forward = new THREE.Vector3(
+          0,
+          0,
+          -1,
+        ).applyAxisAngle(
+          new THREE.Vector3(0, 1, 0),
+          yaw,
+        )
+
+        const lightPosition = center
+          .clone()
+          .addScaledVector(forward, .22)
+        lightPosition.y += .03
+
+        const sconcePoint = new THREE.PointLight(
+          0xffc07a,
+          34,
+          4.6,
+          2,
+        )
+        sconcePoint.position.copy(lightPosition)
+        sconcePoint.castShadow = false
+        sconcePoint.name =
+          `library-sconce-point-${placement.id}`
+        group.add(sconcePoint)
+
+        const sconceSpot = new THREE.SpotLight(
+          0xffd3a0,
+          16,
+          4.4,
+          Math.PI / 3.15,
+          .82,
+          2,
+        )
+        sconceSpot.position.copy(lightPosition)
+        sconceSpot.castShadow = false
+        sconceSpot.target.position
+          .copy(lightPosition)
+          .addScaledVector(forward, 1.55)
+        sconceSpot.target.position.y -= .72
+        sconceSpot.name =
+          `library-sconce-spot-${placement.id}`
+        group.add(sconceSpot, sconceSpot.target)
+
+        const halo = new THREE.Mesh(
+          sconceHaloGeometry,
+          sconceHaloMaterial,
+        )
+        halo.position
+          .copy(center)
+          .addScaledVector(forward, .035)
+        halo.rotation.y = yaw
+        halo.scale.set(1.28, 1.28, 1)
+        halo.renderOrder = 3
+        halo.name =
+          `library-sconce-halo-${placement.id}`
+        group.add(halo)
+      }
 
       if (placement.asset === 'readingRug') {
         addContactShadow(
