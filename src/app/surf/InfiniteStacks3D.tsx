@@ -430,7 +430,7 @@ export default function InfiniteStacks3D({
     const nodeById = new Map(nodes.map((node) => [node.id, node]))
     const scene = new THREE.Scene()
     scene.background = new THREE.Color(0x020306)
-    scene.fog = new THREE.FogExp2(0x020306, .017)
+    scene.fog = new THREE.FogExp2(0x05070c, .0125)
 
     const camera = new THREE.PerspectiveCamera(66, 1, .05, 190)
     camera.position.set(0, CAMERA_HEIGHT, 10)
@@ -441,7 +441,7 @@ export default function InfiniteStacks3D({
     })
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = .9
+    renderer.toneMappingExposure = 1.16
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.65))
     host.appendChild(renderer.domElement)
 
@@ -451,47 +451,94 @@ export default function InfiniteStacks3D({
     const interactive: THREE.Object3D[] = []
     const bookVisuals = new Map<string, BookVisual>()
 
-    const ambient = new THREE.HemisphereLight(0x8ba2c7, 0x050608, .72)
+    const ambient = new THREE.HemisphereLight(0xb8c9e8, 0x0a0c12, 1.32)
     scene.add(ambient)
 
-    const keyLight = new THREE.DirectionalLight(0xbfd8ff, 1.8)
+    const keyLight = new THREE.DirectionalLight(0xd9e6ff, 2.55)
     keyLight.position.set(2, 12, 8)
     scene.add(keyLight)
 
-    const cyanLight = new THREE.PointLight(0x5fe1ff, 10, 34, 1.9)
+    const cyanLight = new THREE.PointLight(0x7bdfff, 15, 38, 1.8)
     cyanLight.position.set(-5.3, 3.6, -16)
     scene.add(cyanLight)
 
-    const violetLight = new THREE.PointLight(0x7e74ff, 8, 38, 2)
+    const violetLight = new THREE.PointLight(0x9b8cff, 11, 42, 1.9)
     violetLight.position.set(5.2, 8.8, -58)
     scene.add(violetLight)
 
-    const deepLight = new THREE.PointLight(0x3b49df, 11, 42, 2)
+    const deepLight = new THREE.PointLight(0x5367ff, 13, 48, 1.9)
     deepLight.position.set(0, 13.8, -106)
     scene.add(deepLight)
 
+    // Repeating shelf-facing light pools keep nearby books readable while
+    // the archive still falls away into darkness.
+    for (let z = 4; z >= -116; z -= 12) {
+      for (const side of [-1, 1] as const) {
+        const shelfLight = new THREE.PointLight(
+          side < 0 ? 0xbcd7ff : 0xc8d9ff,
+          4.8,
+          12,
+          2.1,
+        )
+        shelfLight.position.set(side * 4.8, 2.8, z)
+        scene.add(shelfLight)
+      }
+    }
+
+    const shaftMaterials: THREE.MeshBasicMaterial[] = []
+    SECTION_ORDER.slice(1).forEach((section, index) => {
+      const shaftLight = new THREE.SpotLight(
+        index % 2 === 0 ? 0x9ccfff : 0xb8a4ff,
+        18,
+        30,
+        .34,
+        .78,
+        1.6,
+      )
+      shaftLight.position.set(0, 21, SECTION_Z[section] + 1)
+      shaftLight.target.position.set(0, 0, SECTION_Z[section] + 1)
+      scene.add(shaftLight, shaftLight.target)
+
+      const shaftMaterial = new THREE.MeshBasicMaterial({
+        color: index % 2 === 0 ? 0x79cfff : 0x9c8cff,
+        transparent: true,
+        opacity: .035,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      })
+      shaftMaterials.push(shaftMaterial)
+      materials.push(shaftMaterial)
+
+      const shaftGeometry = new THREE.CylinderGeometry(1.25, 3.4, 20, 18, 1, true)
+      geometries.push(shaftGeometry)
+      const shaft = new THREE.Mesh(shaftGeometry, shaftMaterial)
+      shaft.position.set(0, 10.2, SECTION_Z[section] + 1)
+      scene.add(shaft)
+    })
+
     const concrete = new THREE.MeshStandardMaterial({
-      color: 0x0a0c11,
-      roughness: .82,
+      color: 0x151922,
+      roughness: .78,
       metalness: .16,
     })
     const steel = new THREE.MeshStandardMaterial({
-      color: 0x141821,
-      roughness: .43,
+      color: 0x252c38,
+      roughness: .4,
       metalness: .82,
     })
     const steelDark = new THREE.MeshStandardMaterial({
-      color: 0x090b10,
-      roughness: .56,
+      color: 0x121722,
+      roughness: .52,
       metalness: .7,
     })
     const glass = new THREE.MeshPhysicalMaterial({
-      color: 0x172334,
-      roughness: .14,
+      color: 0x29435f,
+      roughness: .12,
       metalness: .12,
       transparent: true,
-      opacity: .34,
-      transmission: .08,
+      opacity: .42,
+      transmission: .1,
       side: THREE.DoubleSide,
     })
     materials.push(concrete, steel, steelDark, glass)
@@ -514,6 +561,50 @@ export default function InfiniteStacks3D({
     trench.position.set(0, .005, -59)
     scene.add(trench)
 
+    const indexLineMaterial = new THREE.MeshBasicMaterial({
+      color: 0x6dbde6,
+      transparent: true,
+      opacity: .28,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+    const indexBoundaryMaterial = new THREE.MeshBasicMaterial({
+      color: 0x6e7cff,
+      transparent: true,
+      opacity: .24,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+    materials.push(indexLineMaterial, indexBoundaryMaterial)
+
+    const indexLineGeometry = new THREE.BoxGeometry(.035, .012, 140)
+    const indexBoundaryGeometry = new THREE.BoxGeometry(3.9, .014, .035)
+    geometries.push(indexLineGeometry, indexBoundaryGeometry)
+
+    for (const x of [-1.72, 1.72]) {
+      const line = new THREE.Mesh(indexLineGeometry, indexLineMaterial)
+      line.position.set(x, .022, -58)
+      scene.add(line)
+    }
+
+    SECTION_ORDER.forEach((section) => {
+      const marker = new THREE.Mesh(indexBoundaryGeometry, indexBoundaryMaterial)
+      marker.position.set(0, .026, SECTION_Z[section])
+      scene.add(marker)
+    })
+
+    const floorGlassGeometry = new THREE.BoxGeometry(3.15, .035, 3.4)
+    geometries.push(floorGlassGeometry)
+    ;[-22, -58, -92].forEach((z) => {
+      const panel = new THREE.Mesh(floorGlassGeometry, glass)
+      panel.position.set(0, .035, z)
+      scene.add(panel)
+
+      const underGlow = new THREE.PointLight(0x587dff, 4.2, 8, 2)
+      underGlow.position.set(0, -.75, z)
+      scene.add(underGlow)
+    })
+
     for (let floorIndex = 1; floorIndex < FLOOR_COUNT; floorIndex += 1) {
       const y = floorIndex * FLOOR_HEIGHT
       const galleryGeometry = new THREE.BoxGeometry(2.6, .16, 148)
@@ -524,6 +615,22 @@ export default function InfiniteStacks3D({
       const rightGallery = leftGallery.clone()
       rightGallery.position.x = 5
       scene.add(rightGallery)
+
+      const underStripGeometry = new THREE.BoxGeometry(.055, .025, 144)
+      geometries.push(underStripGeometry)
+      const underStripMaterial = new THREE.MeshBasicMaterial({
+        color: floorIndex % 2 === 0 ? 0x7d82ff : 0x64c9ec,
+        transparent: true,
+        opacity: .22,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })
+      materials.push(underStripMaterial)
+      for (const x of [-3.78, 3.78]) {
+        const underStrip = new THREE.Mesh(underStripGeometry, underStripMaterial)
+        underStrip.position.set(x, y - .12, -59)
+        scene.add(underStrip)
+      }
 
       BRIDGE_Z.forEach((z) => {
         const bridgeGeometry = new THREE.BoxGeometry(10.2, .09, 1.7)
@@ -611,11 +718,12 @@ export default function InfiniteStacks3D({
     const fillerGeometry = new THREE.BoxGeometry(.22, .57, .12)
     geometries.push(fillerGeometry)
     const fillerMaterial = new THREE.MeshStandardMaterial({
-      color: 0x161b25,
-      roughness: .64,
-      metalness: .14,
-      emissive: 0x07101d,
-      emissiveIntensity: .14,
+      color: 0xffffff,
+      roughness: .69,
+      metalness: .08,
+      emissive: 0x05080d,
+      emissiveIntensity: .055,
+      vertexColors: true,
     })
     materials.push(fillerMaterial)
 
@@ -627,6 +735,18 @@ export default function InfiniteStacks3D({
       fillerCount,
     )
     const fillerDummy = new THREE.Object3D()
+    const bookPalette = [
+      new THREE.Color(0x3d4a5d),
+      new THREE.Color(0x5b4d47),
+      new THREE.Color(0x384e47),
+      new THREE.Color(0x554c68),
+      new THREE.Color(0x6b5b3f),
+      new THREE.Color(0x4e5661),
+      new THREE.Color(0x334258),
+      new THREE.Color(0x684d58),
+      new THREE.Color(0x59634d),
+      new THREE.Color(0x777066),
+    ]
     let fillerIndex = 0
     for (let floorIndex = 0; floorIndex < FLOOR_COUNT; floorIndex += 1) {
       for (const side of [-1, 1] as const) {
@@ -639,15 +759,27 @@ export default function InfiniteStacks3D({
                 floorIndex * FLOOR_HEIGHT + .76 + row * .74,
                 bayCenter + 1.9 - slot * .345,
               )
-              fillerDummy.rotation.set(0, 0, 0)
-              const heightScale = .72 + ((bay + row + slot) % 5) * .065
+              fillerDummy.rotation.set(
+                0,
+                0,
+                (((bay * 7 + row * 3 + slot) % 9) - 4) * .006,
+              )
+              const heightScale = .78 + ((bay + row + slot) % 6) * .055
+              const widthScale = .84 + ((bay * 3 + slot) % 5) * .045
               fillerDummy.scale.set(
-                1,
+                widthScale,
                 heightScale,
-                .72 + ((slot + row) % 4) * .08,
+                .82 + ((slot + row) % 4) * .055,
               )
               fillerDummy.updateMatrix()
               filler.setMatrixAt(fillerIndex, fillerDummy.matrix)
+              filler.setColorAt(
+                fillerIndex,
+                bookPalette[
+                  (bay * 5 + row * 3 + slot + floorIndex) %
+                    bookPalette.length
+                ],
+              )
               fillerIndex += 1
             }
           }
@@ -655,6 +787,7 @@ export default function InfiniteStacks3D({
       }
     }
     filler.instanceMatrix.needsUpdate = true
+    if (filler.instanceColor) filler.instanceColor.needsUpdate = true
     scene.add(filler)
 
     const liftFrameMaterial = new THREE.MeshStandardMaterial({
@@ -714,11 +847,26 @@ export default function InfiniteStacks3D({
     devPlane.position.set(0, 3.8, 9.2)
     scene.add(devPlane)
 
-    const sectionMarkerGeometry = new THREE.PlaneGeometry(5.3, 1.32)
-    geometries.push(sectionMarkerGeometry)
+    const sectionMarkerGeometry = new THREE.PlaneGeometry(4.7, 1.08)
+    const signBeamGeometry = new THREE.BoxGeometry(12.5, .12, .14)
+    const signPostGeometry = new THREE.BoxGeometry(.12, 2.2, .12)
+    geometries.push(sectionMarkerGeometry, signBeamGeometry, signPostGeometry)
+
     for (const section of SECTION_ORDER.filter((item) => item !== 'atrium')) {
       const copy = SECTION_LABELS[section]
       const accent = '#' + SECTION_ACCENTS[section].toString(16).padStart(6, '0')
+      const signZ = SECTION_Z[section] + 1.8
+
+      const beam = new THREE.Mesh(signBeamGeometry, steel)
+      beam.position.set(0, 4.48, signZ)
+      scene.add(beam)
+
+      for (const x of [-3.0, 3.0]) {
+        const post = new THREE.Mesh(signPostGeometry, steel)
+        post.position.set(x, 3.38, signZ)
+        scene.add(post)
+      }
+
       const texture = makeLabelTexture(copy.title, copy.subtitle, accent)
       textures.push(texture)
       const material = new THREE.MeshBasicMaterial({
@@ -729,8 +877,17 @@ export default function InfiniteStacks3D({
       })
       materials.push(material)
       const marker = new THREE.Mesh(sectionMarkerGeometry, material)
-      marker.position.set(0, 4.05, SECTION_Z[section] + 1.8)
+      marker.position.set(0, 3.55, signZ + .08)
       scene.add(marker)
+
+      const signLight = new THREE.PointLight(
+        SECTION_ACCENTS[section],
+        2.8,
+        8,
+        2,
+      )
+      signLight.position.set(0, 3.8, signZ + .5)
+      scene.add(signLight)
     }
 
     for (let floorIndex = 1; floorIndex < FLOOR_COUNT; floorIndex += 1) {
@@ -748,7 +905,13 @@ export default function InfiniteStacks3D({
       })
       materials.push(material)
       const marker = new THREE.Mesh(sectionMarkerGeometry, material)
-      marker.position.set(0, floorIndex * FLOOR_HEIGHT + 3.9, -7)
+      marker.scale.set(.72, .72, .72)
+      marker.position.set(
+        floorIndex % 2 === 0 ? -5.55 : 5.55,
+        floorIndex * FLOOR_HEIGHT + 3.35,
+        -7,
+      )
+      marker.rotation.y = floorIndex % 2 === 0 ? Math.PI / 2 : -Math.PI / 2
       scene.add(marker)
     }
 
@@ -800,11 +963,11 @@ export default function InfiniteStacks3D({
           articleIndex % 3 === 0 ? 0x3b49df : 0x5fe1ff,
         )
         const material = new THREE.MeshStandardMaterial({
-          color: 0x202633,
-          roughness: .53,
+          color: 0x465062,
+          roughness: .61,
           metalness: .18,
           emissive: accent,
-          emissiveIntensity: .18,
+          emissiveIntensity: .095,
         })
         materials.push(material)
 
@@ -819,7 +982,7 @@ export default function InfiniteStacks3D({
         const stripeMaterial = new THREE.MeshBasicMaterial({
           color: accent,
           transparent: true,
-          opacity: .72,
+          opacity: .5,
         })
         materials.push(stripeMaterial)
         const stripe = new THREE.Mesh(bookStripeGeometry, stripeMaterial)
@@ -1223,6 +1386,12 @@ export default function InfiniteStacks3D({
       particleMaterial.opacity = reducedMotion
         ? .22
         : .27 + Math.max(0, Math.sin(now * .42)) * .12
+
+      shaftMaterials.forEach((material, index) => {
+        material.opacity = reducedMotion
+          ? .03
+          : .025 + Math.max(0, Math.sin(now * .33 + index * .7)) * .025
+      })
 
       if (floorTravel) {
         const progress = THREE.MathUtils.clamp(
