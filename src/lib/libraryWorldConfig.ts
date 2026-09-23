@@ -411,10 +411,15 @@ export function mergeLibraryWorldConfig(
     )
     .sort((a, b) => a.bay - b.bay)
 
-  const districts =
-    configuredDistricts.length > 0
-      ? configuredDistricts
-      : DEFAULT_LIBRARY_DISTRICTS
+  // The physical building always owns six room slots. During Sanity
+  // migration, merge any authored room document over its matching fallback
+  // instead of allowing a partially-published dataset to remove rooms.
+  const configuredById = new Map(
+    configuredDistricts.map((district) => [district.id, district]),
+  )
+  const districts = DEFAULT_LIBRARY_DISTRICTS.map(
+    (fallback) => configuredById.get(fallback.id) ?? fallback,
+  ).sort((a, b) => a.roomSlot - b.roomSlot)
 
   const curatedArticles = (payload.curatedArticles ?? [])
     .filter(
