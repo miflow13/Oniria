@@ -813,6 +813,27 @@ export default function DevLibraryMap() {
       ),
     )
 
+    const shelfArticles = (
+      source: DevArticleSummary[],
+      offset: number,
+      count: number,
+    ) => {
+      if (source.length === 0 || count <= 0) return []
+      if (offset + count <= source.length) {
+        return source.slice(offset, offset + count)
+      }
+
+      // Keep every physical shelf visually populated while the deeper DEV
+      // pages are still streaming. We only wrap once the currently loaded
+      // unique pool has been exhausted.
+      return Array.from({length: count}, (_, index) =>
+        source[(offset + index) % source.length],
+      ).filter(
+        (article): article is DevArticleSummary =>
+          Boolean(article),
+      )
+    }
+
     const articlesForDistrict = (
       district: LibraryDistrictConfig,
     ): DevArticleSummary[] => {
@@ -877,9 +898,10 @@ export default function DevLibraryMap() {
           const shelfCapacity =
             CATALOG_BOOKS_PER_SHELF *
             (placement.doubleSided ? 2 : 1)
-          const articles = source.slice(
+          const articles = shelfArticles(
+            source,
             articleOffset,
-            articleOffset + shelfCapacity,
+            shelfCapacity,
           )
           articleOffset += shelfCapacity
           const shelfNumber = String(shelfIndex + 1).padStart(2, '0')
@@ -927,16 +949,6 @@ export default function DevLibraryMap() {
       if (!district) return
 
       const source = articlesForDistrict(district)
-      const roomArticleOffset = roomShelfPlacements(
-        district,
-        district.roomSlot,
-      ).reduce(
-        (total, placement) =>
-          total +
-          CATALOG_BOOKS_PER_SHELF *
-            (placement.doubleSided ? 2 : 1),
-        0,
-      )
       const placements = hallwayShelfPlacements(
         district,
         side,
@@ -944,12 +956,16 @@ export default function DevLibraryMap() {
       const kind = shelfKindForSource(sourceMode)
 
       placements.forEach((placement, shelfIndex) => {
+        // Start the corridor on a later part of the pool so the doorway view
+        // does not mirror room shelf #1, but wrap only when the lightweight
+        // startup pool runs out.
         const offset =
-          roomArticleOffset +
+          CATALOG_BOOKS_PER_SHELF * 2 +
           shelfIndex * CATALOG_BOOKS_PER_SHELF
-        const articles = source.slice(
+        const articles = shelfArticles(
+          source,
           offset,
-          offset + CATALOG_BOOKS_PER_SHELF,
+          CATALOG_BOOKS_PER_SHELF,
         )
         const shelfNumber = String(shelfIndex + 1).padStart(2, '0')
         const shelf = makeShelf(
