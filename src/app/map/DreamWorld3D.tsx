@@ -81,6 +81,13 @@ import {
   createLibraryAtmosphere,
   getLibraryAtmosphereVisualPreset,
 } from './libraryAtmosphere'
+import {createLibraryBuilding} from './libraryBuilding'
+import {
+  LIBRARY_BUILDING_BOUNDS,
+  LIBRARY_EYE_HEIGHT,
+  LIBRARY_SPAWN,
+  clampLibraryWalkPosition,
+} from './libraryRoomLayout'
 
 export type DreamWorldNode = {
   _id: string
@@ -823,12 +830,7 @@ export default function DreamWorld3D({
       camera.position.fromArray(savedLibraryFlightState.position)
       camera.quaternion.fromArray(savedLibraryFlightState.quaternion)
     } else if (libraryMode) {
-      const arrival = archivePathPoint(0)
-      camera.position.set(
-        arrival[0],
-        arrival[1] + ARCHIVE_WALKWAY_Y_OFFSET + 1.64,
-        arrival[2],
-      )
+      camera.position.fromArray(LIBRARY_SPAWN)
     } else {
       camera.position.set(0, 0, 10.8)
     }
@@ -947,6 +949,13 @@ export default function DreamWorld3D({
 
     const farWorld = new THREE.Group()
     scene.add(farWorld)
+
+    // The DEV Library now uses the enclosed six-room building from the
+    // neighborhoods prototype while retaining the cinematic renderer,
+    // reading ritual, audio, and Sanity-driven content model.
+    const libraryBuilding = libraryMode
+      ? createLibraryBuilding(scene)
+      : null
 
     const starCount = settings.starCount
     const starPositions = new Float32Array(starCount * 3)
@@ -6485,79 +6494,42 @@ export default function DreamWorld3D({
             14,
           )
         } else if (libraryWalking) {
-          const walkSurface =
-            archiveWalkSurfaceAtPosition(
-              flightPosition.x,
-              flightPosition.z,
-              activeDistricts,
-              libraryGridSegments,
-            )
-
-          if (walkSurface) {
-            const offsetX =
-              flightPosition.x - walkSurface.centerX
-            const offsetZ =
-              flightPosition.z - walkSurface.centerZ
-            const distance =
-              Math.hypot(offsetX, offsetZ)
-
-            if (
-              distance >
-                walkSurface.halfWidth + .0001 &&
-              distance > .0001
-            ) {
-              const normalX = offsetX / distance
-              const normalZ = offsetZ / distance
-              const correction =
-                distance - walkSurface.halfWidth
-
-              flightPosition.x -= normalX * correction
-              flightPosition.z -= normalZ * correction
-
-              const outwardVelocity =
-                flightVelocity.x * normalX +
-                flightVelocity.z * normalZ
-              if (outwardVelocity > 0) {
-                flightVelocity.x -=
-                  normalX * outwardVelocity * .86
-                flightVelocity.z -=
-                  normalZ * outwardVelocity * .86
-              }
-            }
-
-            const eyeHeight = 1.64
-            const groundY =
-              walkSurface.groundY +
-              ARCHIVE_WALKWAY_Y_OFFSET +
-              eyeHeight
-            flightPosition.y = THREE.MathUtils.lerp(
-              flightPosition.y,
-              groundY,
-              1 - Math.exp(-delta * 11),
-            )
-          } else {
-            const fallbackBay =
-              archiveBayFromWorldZ(flightPosition.z)
-            const fallbackPoint = archivePathPoint(
-              fallbackBay,
-            )
-            flightPosition.y = THREE.MathUtils.lerp(
-              flightPosition.y,
-              fallbackPoint[1] +
-                ARCHIVE_WALKWAY_Y_OFFSET +
-                1.64,
-              1 - Math.exp(-delta * 11),
-            )
+          const clamped = clampLibraryWalkPosition(
+            flightPosition.x,
+            flightPosition.z,
+          )
+          if (
+            clamped.x !== flightPosition.x ||
+            clamped.z !== flightPosition.z
+          ) {
+            flightVelocity.x *= .35
+            flightVelocity.z *= .35
           }
-
+          flightPosition.x = clamped.x
+          flightPosition.z = clamped.z
+          flightPosition.y = THREE.MathUtils.lerp(
+            flightPosition.y,
+            LIBRARY_EYE_HEIGHT,
+            1 - Math.exp(-delta * 11),
+          )
           flightVelocity.y = 0
         } else {
-          // The DEV catalogue extends as the user explores, so free flight
-          // must not inherit the dream-map's finite spherical boundary.
+          // Free flight remains available for inspection, but the rebuilt
+          // library is an interior space rather than an infinite boulevard.
+          flightPosition.x = THREE.MathUtils.clamp(
+            flightPosition.x,
+            LIBRARY_BUILDING_BOUNDS.minX,
+            LIBRARY_BUILDING_BOUNDS.maxX,
+          )
+          flightPosition.z = THREE.MathUtils.clamp(
+            flightPosition.z,
+            LIBRARY_BUILDING_BOUNDS.minZ,
+            LIBRARY_BUILDING_BOUNDS.maxZ,
+          )
           flightPosition.y = THREE.MathUtils.clamp(
             flightPosition.y,
-            -48,
-            64,
+            .65,
+            4.55,
           )
         }
 
@@ -6835,6 +6807,7 @@ export default function DreamWorld3D({
       releaseDreamCell()
 
       libraryAudio?.dispose()
+      libraryBuilding?.dispose()
 
       camera.remove(listener)
 
