@@ -789,9 +789,14 @@ export default function DreamWorld3D({
     const libraryMode = nodeRef.current.some(
       (node) => node.libraryKind === 'shelf',
     )
-    const libraryGridSegments = libraryMode
-      ? archiveGridRoadSegments(activeDistricts)
-      : []
+    // The cinematic renderer is now the engine for an enclosed physical
+    // library. Keep its lighting, post-processing, audio and reading ritual,
+    // but do not instantiate the previous infinite-boulevard road network.
+    const archiveBoulevardVisuals = false
+    const libraryGridSegments =
+      libraryMode && archiveBoulevardVisuals
+        ? archiveGridRoadSegments(activeDistricts)
+        : []
 
     const scene = new THREE.Scene()
     const globalAtmospherePreset =
@@ -1114,7 +1119,7 @@ export default function DreamWorld3D({
     const librarySkywayGeometries: THREE.BufferGeometry[] = []
     const librarySkywayMaterials: THREE.Material[] = []
 
-    if (libraryMode) {
+    if (libraryMode && archiveBoulevardVisuals) {
       // Replace the old archive skyscrapers with unreachable floating
       // expressways. They are deliberately placed in farWorld only, so they
       // never become walkable surfaces, raycast targets, or collision bodies.
@@ -2190,7 +2195,7 @@ export default function DreamWorld3D({
     let libraryRouteDots: THREE.Points | null = null
     const libraryRouteDotCount = 54
 
-    if (libraryMode) {
+    if (libraryMode && archiveBoulevardVisuals) {
       const subdivisionsPerBay = 4
       const sampleCount =
         ARCHIVE_PATH_RENDER_BAYS * subdivisionsPerBay + 1
