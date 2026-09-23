@@ -135,8 +135,12 @@ export type ArchiveShelfPlacement = {
 
 export type ArchiveShelfPlacementOptions = {
   laneBias?: number
+  laneDistance?: number
   heightBias?: number
+  heightJitterScale?: number
+  lateralJitterScale?: number
   alongJitterScale?: number
+  lookAheadScale?: number
   yawJitterScale?: number
 }
 
@@ -159,21 +163,33 @@ export function archiveShelfPlacement(
   const center = archivePathPoint(fractionalBay)
   const frame = archivePathFrame(fractionalBay)
   const laneDistance =
-    ARCHIVE_LANE_MIN +
-    seededUnit(seed, 11) * ARCHIVE_LANE_VARIATION +
-    (options.laneBias ?? 0)
-  const lateralJitter = (seededUnit(seed, 13) - .5) * .34
-  const distance = Math.max(5.45, laneDistance + lateralJitter)
+    options.laneDistance ??
+    (ARCHIVE_LANE_MIN +
+      seededUnit(seed, 11) * ARCHIVE_LANE_VARIATION +
+      (options.laneBias ?? 0))
+  const lateralJitter =
+    (seededUnit(seed, 13) - .5) *
+    .34 *
+    (options.lateralJitterScale ?? 1)
+  const distance = Math.max(
+    5.45,
+    laneDistance + lateralJitter,
+  )
 
   const world: [number, number, number] = [
     center[0] + frame.normalX * side * distance,
     center[1] +
-      (seededUnit(seed, 17) - .5) * .9 +
+      (seededUnit(seed, 17) - .5) *
+        .9 *
+        (options.heightJitterScale ?? 1) +
       (options.heightBias ?? 0),
     center[2] + frame.normalZ * side * distance,
   ]
 
-  const lookAhead = (seededUnit(seed, 19) - .5) * 1.7
+  const lookAhead =
+    (seededUnit(seed, 19) - .5) *
+    1.7 *
+    (options.lookAheadScale ?? 1)
   const targetX = center[0] + frame.tangentX * lookAhead
   const targetZ = center[2] + frame.tangentZ * lookAhead
   const yawJitter =
