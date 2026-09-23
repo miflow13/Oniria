@@ -134,7 +134,7 @@ export function roomShelfPlacements(
     district.sourceMode === 'topics' ||
     district.sourceMode === 'catalog'
 
-  return [
+  const roomShelves: RoomShelfPlacement[] = [
     {
       world: [x - shelfOffset, heights[0], z - rowOffset],
       yaw: 0,
@@ -164,6 +164,37 @@ export function roomShelfPlacements(
       yaw: Math.PI,
       endCaps: useEndCaps ? 'right' : 'none',
       floatId: `${district.id}:row-south`,
+      pathBay: district.bay,
+      districtId: district.id,
+    },
+  ]
+
+  if (
+    district.sourceMode !== 'featured' &&
+    district.sourceMode !== 'latest'
+  ) {
+    return roomShelves
+  }
+
+  const isLeftRoom = x < 0
+  const wallX = room.doorway[0] + (isLeftRoom ? -.5 : .5)
+  const wallYaw = isLeftRoom ? Math.PI / 2 : -Math.PI / 2
+
+  return [
+    ...roomShelves,
+    {
+      world: [wallX, heights[0] + .08, z - 6],
+      yaw: wallYaw,
+      endCaps: useEndCaps ? 'left' : 'none',
+      floatId: `${district.id}:wall-north`,
+      pathBay: district.bay,
+      districtId: district.id,
+    },
+    {
+      world: [wallX, heights[2] + .04, z + 6],
+      yaw: wallYaw,
+      endCaps: useEndCaps ? 'right' : 'none',
+      floatId: `${district.id}:wall-south`,
       pathBay: district.bay,
       districtId: district.id,
     },
@@ -324,14 +355,15 @@ const LIBRARY_SHELF_COLLIDERS: WalkCollisionRect[] =
       roomSlot: room.slot,
       enabled: true,
     }
-    return roomShelfPlacements(district).map((placement) =>
-      wallRect(
+    return roomShelfPlacements(district).map((placement) => {
+      const isSideFacing = Math.abs(Math.sin(placement.yaw)) > .5
+      return wallRect(
         placement.world[0],
         placement.world[2],
-        4.7,
-        .88,
-      ),
-    )
+        isSideFacing ? .88 : 4.7,
+        isSideFacing ? 4.7 : .88,
+      )
+    })
   })
 
 const LIBRARY_FURNISHING_COLLIDERS = LIBRARY_FURNISHINGS.flatMap(
