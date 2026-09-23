@@ -900,6 +900,59 @@ export default function DevLibraryMap() {
       },
     )
 
+    const hallwayCollections = [
+      {
+        sourceMode: 'featured' as const,
+        side: 'left' as const,
+        title: 'FEATURED HALL',
+      },
+      {
+        sourceMode: 'latest' as const,
+        side: 'right' as const,
+        title: 'RECENT HALL',
+      },
+    ]
+
+    hallwayCollections.forEach(({sourceMode, side, title}) => {
+      const district = roomWorldConfig.districts.find(
+        (candidate) => candidate.sourceMode === sourceMode,
+      )
+      if (!district) return
+
+      const source = articlesForDistrict(district)
+      const roomCount = roomShelfPlacements(
+        district,
+        district.roomSlot,
+      ).length
+      const placements = hallwayShelfPlacements(
+        district,
+        side,
+      )
+      const kind = shelfKindForSource(sourceMode)
+
+      placements.forEach((placement, shelfIndex) => {
+        const offset =
+          (roomCount + shelfIndex) * CATALOG_BOOKS_PER_SHELF
+        const articles = source.slice(
+          offset,
+          offset + CATALOG_BOOKS_PER_SHELF,
+        )
+        const shelfNumber = String(shelfIndex + 1).padStart(2, '0')
+        const shelf = makeShelf(
+          'shelf:hallway:' + sourceMode + ':' + shelfIndex,
+          title + ' ' + shelfNumber,
+          sourceMode === 'featured'
+            ? 'curated + trending DEV writing'
+            : 'freshly published on DEV',
+          kind,
+          placement,
+          articles,
+        )
+        shelf.accent = district.accent
+        result.push(shelf)
+      })
+    })
+
     return result
   }, [
     bootstrap,
