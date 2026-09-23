@@ -183,7 +183,7 @@ export const DEFAULT_LIBRARY_DISTRICTS: LibraryDistrictConfig[] = [
 ]
 
 export const PACKED_DISTRICT_START_BAY = 1
-export const PACKED_DISTRICT_GAP_BAYS = 2.65
+export const PACKED_DISTRICT_GAP_BAYS = 2.25
 
 /**
  * Sanity controls district identity and ordering, while the renderer keeps the
