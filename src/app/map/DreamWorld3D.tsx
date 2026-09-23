@@ -2151,6 +2151,14 @@ export default function DreamWorld3D({
     let libraryWalkway: THREE.Mesh | null = null
     let libraryWalkwayUnderlay: THREE.Mesh | null = null
     let libraryWalkwayRails: THREE.LineSegments | null = null
+    let libraryGridRoadGeometry: THREE.BufferGeometry | null = null
+    let libraryGridRailGeometry: THREE.BufferGeometry | null = null
+    let libraryGridRoadMaterial: THREE.MeshBasicMaterial | null = null
+    let libraryGridUnderlayMaterial: THREE.MeshBasicMaterial | null = null
+    let libraryGridRailMaterial: THREE.LineBasicMaterial | null = null
+    let libraryGridRoads: THREE.Mesh | null = null
+    let libraryGridUnderlay: THREE.Mesh | null = null
+    let libraryGridRails: THREE.LineSegments | null = null
     const libraryRouteTextures: THREE.Texture[] = []
     const libraryRouteMaterials: THREE.Material[] = []
     const libraryRouteObjects: THREE.Object3D[] = []
@@ -2348,6 +2356,168 @@ export default function DreamWorld3D({
         libraryWalkwayUnderlay,
         libraryWalkway,
         libraryWalkwayRails,
+      )
+
+      // Build a real three-avenue street grid around the original archive
+      // spine. Cross streets occur at the arrival foyer and every district,
+      // so walkers can leave the center route, loop around a block, and
+      // re-enter the library from a different direction.
+      const visibleGridSegments = libraryGridSegments.filter(
+        (segment) => segment.kind !== 'main',
+      )
+      const gridPositions: number[] = []
+      const gridColors: number[] = []
+      const gridIndices: number[] = []
+      const gridRailPositions: number[] = []
+      const sideRoadColor = new THREE.Color(0x63d7e2)
+      const crossRoadColor = new THREE.Color(0xa68cff)
+
+      visibleGridSegments.forEach((segment) => {
+        const [sx, sy, sz] = segment.start
+        const [ex, ey, ez] = segment.end
+        const dx = ex - sx
+        const dz = ez - sz
+        const length = Math.hypot(dx, dz) || 1
+        const sideX = -dz / length
+        const sideZ = dx / length
+        const halfWidth = segment.halfWidth
+        const startY = sy + ARCHIVE_WALKWAY_Y_OFFSET + .012
+        const endY = ey + ARCHIVE_WALKWAY_Y_OFFSET + .012
+        const vertexBase = gridPositions.length / 3
+
+        gridPositions.push(
+          sx + sideX * halfWidth,
+          startY,
+          sz + sideZ * halfWidth,
+          sx - sideX * halfWidth,
+          startY,
+          sz - sideZ * halfWidth,
+          ex + sideX * halfWidth,
+          endY,
+          ez + sideZ * halfWidth,
+          ex - sideX * halfWidth,
+          endY,
+          ez - sideZ * halfWidth,
+        )
+        gridIndices.push(
+          vertexBase,
+          vertexBase + 1,
+          vertexBase + 2,
+          vertexBase + 1,
+          vertexBase + 3,
+          vertexBase + 2,
+        )
+
+        const roadColor =
+          segment.kind === 'cross'
+            ? crossRoadColor
+            : sideRoadColor
+        for (let slot = 0; slot < 4; slot += 1) {
+          gridColors.push(
+            roadColor.r,
+            roadColor.g,
+            roadColor.b,
+          )
+        }
+
+        // Keep side avenues visually bounded but leave the cross streets
+        // open at intersections; rails through a junction read like walls.
+        if (segment.kind === 'side') {
+          gridRailPositions.push(
+            sx + sideX * halfWidth,
+            startY + .024,
+            sz + sideZ * halfWidth,
+            ex + sideX * halfWidth,
+            endY + .024,
+            ez + sideZ * halfWidth,
+            sx - sideX * halfWidth,
+            startY + .024,
+            sz - sideZ * halfWidth,
+            ex - sideX * halfWidth,
+            endY + .024,
+            ez - sideZ * halfWidth,
+          )
+        }
+      })
+
+      libraryGridRoadGeometry = new THREE.BufferGeometry()
+      libraryGridRoadGeometry.setAttribute(
+        'position',
+        new THREE.Float32BufferAttribute(gridPositions, 3),
+      )
+      libraryGridRoadGeometry.setAttribute(
+        'color',
+        new THREE.Float32BufferAttribute(gridColors, 3),
+      )
+      libraryGridRoadGeometry.setIndex(gridIndices)
+      libraryGridRoadGeometry.computeVertexNormals()
+      libraryGridRoadGeometry.computeBoundingSphere()
+
+      libraryGridRailGeometry = new THREE.BufferGeometry()
+      libraryGridRailGeometry.setAttribute(
+        'position',
+        new THREE.Float32BufferAttribute(
+          gridRailPositions,
+          3,
+        ),
+      )
+      libraryGridRailGeometry.computeBoundingSphere()
+
+      libraryGridRoadMaterial = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        vertexColors: true,
+        transparent: true,
+        opacity: .105,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        blending: THREE.NormalBlending,
+        toneMapped: true,
+      })
+      libraryGridUnderlayMaterial = new THREE.MeshBasicMaterial({
+        color: 0x5546a7,
+        transparent: true,
+        opacity: .05,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        toneMapped: false,
+      })
+      libraryGridRailMaterial = new THREE.LineBasicMaterial({
+        color: 0x8eeaf2,
+        transparent: true,
+        opacity: .2,
+        depthWrite: false,
+        blending: THREE.NormalBlending,
+        toneMapped: true,
+      })
+
+      libraryGridUnderlay = new THREE.Mesh(
+        libraryGridRoadGeometry,
+        libraryGridUnderlayMaterial,
+      )
+      libraryGridUnderlay.position.y = -.065
+      libraryGridUnderlay.renderOrder = 0
+      libraryGridUnderlay.userData.libraryDecorative = true
+
+      libraryGridRoads = new THREE.Mesh(
+        libraryGridRoadGeometry,
+        libraryGridRoadMaterial,
+      )
+      libraryGridRoads.renderOrder = 1
+      libraryGridRoads.userData.walkableSurface = true
+      libraryGridRoads.userData.libraryDecorative = true
+
+      libraryGridRails = new THREE.LineSegments(
+        libraryGridRailGeometry,
+        libraryGridRailMaterial,
+      )
+      libraryGridRails.renderOrder = 2
+      libraryGridRails.userData.libraryDecorative = true
+
+      world.add(
+        libraryGridUnderlay,
+        libraryGridRoads,
+        libraryGridRails,
       )
 
       activeDistricts.forEach((district, index) => {
