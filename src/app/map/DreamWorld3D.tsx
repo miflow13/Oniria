@@ -847,7 +847,10 @@ export default function DreamWorld3D({
     const atmosphereLightTarget = new THREE.Color()
     scene.background = sceneBackgroundColor
     scene.fog = libraryMode
-      ? null
+      ? new THREE.FogExp2(
+          globalAtmospherePreset.fog,
+          settings.fogDensity * .14,
+        )
       : new THREE.FogExp2(
           0x07101f,
           settings.fogDensity,
@@ -924,7 +927,9 @@ export default function DreamWorld3D({
         ? Math.max(.82, settings.bloomThreshold)
         : settings.bloomThreshold,
     )
-    bloom.enabled = !libraryMode
+    // Library bloom stays restrained by the high threshold above, so only
+    // pendants/sconces and intentionally emissive details glow.
+    bloom.enabled = true
     composer.addPass(bloom)
 
     const dreamPost = new ShaderPass(DreamPostShader)
@@ -942,21 +947,22 @@ export default function DreamWorld3D({
     composer.addPass(new OutputPass())
 
     if (libraryMode) {
+      // Low-level hemispheric fill preserves readable shadow detail while the
+      // authored pendant/sconce point lights provide the actual room shape.
       scene.add(
         new THREE.HemisphereLight(
           0xf3eee4,
-          0x17202b,
-          .52,
+          0x11151d,
+          .28,
         ),
       )
-      scene.add(new THREE.AmbientLight(0xffffff, .14))
     } else {
       scene.add(new THREE.AmbientLight(0x7182b6, .75))
     }
 
     const keyLight = new THREE.DirectionalLight(
       libraryMode ? 0xfff3df : 0xd4e5ff,
-      libraryMode ? .72 : 2.1,
+      libraryMode ? .12 : 2.1,
     )
     keyLight.position.set(-5, 6, 8)
     keyLight.castShadow = renderer.shadowMap.enabled
@@ -2269,10 +2275,14 @@ export default function DreamWorld3D({
             ],
           )
           backing.scale.set(
-            1,
-            .94 + seededUnit(seed, index + 90) * .06,
-            1,
+            .92 + seededUnit(seed, index + 89) * .12,
+            .9 + seededUnit(seed, index + 90) * .14,
+            .9 + seededUnit(seed, index + 91) * .1,
           )
+          bookGroup.rotation.z =
+            (seededUnit(seed, index + 92) - .5) * .055
+          bookGroup.position.x +=
+            (seededUnit(seed, index + 93) - .5) * .08
           backing.userData.bookNodeId = node._id
           backing.userData.bookIndex = index
           bookGroup.add(backing)
@@ -2350,6 +2360,38 @@ export default function DreamWorld3D({
             facing,
           })
         }
+
+        // One or two non-interactive books lie flat on otherwise perfect
+        // shelves. They are intentionally cheap geometry reuse, but break the
+        // repeated upright rhythm enough to stop the rows reading as filler.
+        ;[0, 1].forEach((decorIndex) => {
+          if (seededUnit(seed, 210 + decorIndex) < .42) return
+          const flatBook = new THREE.Mesh(
+            shelfBookGeometry,
+            shelfBookMaterials[
+              (seed + 13 + decorIndex * 3) %
+                shelfBookMaterials.length
+            ],
+          )
+          const flatRow =
+            seededUnit(seed, 220 + decorIndex) > .5 ? 1 : 2
+          flatBook.scale.set(
+            .72 + seededUnit(seed, 230 + decorIndex) * .18,
+            .42,
+            1.15,
+          )
+          flatBook.rotation.x = Math.PI / 2
+          flatBook.rotation.z =
+            (seededUnit(seed, 240 + decorIndex) - .5) * .12
+          flatBook.position.set(
+            (decorIndex === 0 ? -1 : 1) *
+              (1.35 + seededUnit(seed, 250 + decorIndex) * .3),
+            .26 + flatRow * 1.1,
+            node.libraryDoubleSided ? .18 : .35,
+          )
+          flatBook.userData.libraryDecorative = true
+          shelf.add(flatBook)
+        })
 
         let authoredShelfHydrated = false
         const hydrateAuthoredShelf = () => {
@@ -6722,7 +6764,8 @@ export default function DreamWorld3D({
 
       if (scene.fog instanceof THREE.FogExp2) {
         const sceneReveal = Math.min(1, elapsed / 1.7)
-        const birthFog = (1 - sceneReveal) * .072
+        const birthFog =
+          (1 - sceneReveal) * (libraryMode ? .012 : .072)
         const hazeScale = libraryMode
           ? .55 +
             activeLibraryConfig.hazeIntensity * .85
@@ -6733,7 +6776,7 @@ export default function DreamWorld3D({
         const fogTarget =
           settings.fogDensity *
             (libraryMode
-              ? atmospherePreset.fogScale * hazeScale
+              ? .14 * atmospherePreset.fogScale * hazeScale
               : 1) *
             selectedFogScale +
           birthFog
