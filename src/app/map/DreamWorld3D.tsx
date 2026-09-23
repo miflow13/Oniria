@@ -1821,7 +1821,7 @@ export default function DreamWorld3D({
     const libraryBookVisuals: LibraryBookVisual[] = []
     const bookInteractives: THREE.Object3D[] = []
     let hoveredBook: LibraryBookVisual | null = null
-    const BOOK_INTERACTION_DISTANCE = 3.35
+    const BOOK_INTERACTION_DISTANCE = 2.65
 
     // Reusable shelf kit for cinematic library mode.
     const shelfSideGeometry = new THREE.BoxGeometry(.16, 3.56, .66)
@@ -6769,9 +6769,12 @@ export default function DreamWorld3D({
               : 0
           const presented =
             libraryReadingRitual?.isPresenting(bookVisual) ?? false
+          // pickBook/pickCenterBook already enforce the short
+          // interaction radius using the actual ray-hit distance. Do not
+          // re-check against the shelf group's center here: wall shelves can
+          // have a center farther away than the book the ray actually hit.
           const directlyHovered =
-            hoveredBook === bookVisual &&
-            shelfDistance <= BOOK_INTERACTION_DISTANCE
+            hoveredBook === bookVisual
 
           bookVisual.hoverGlow.visible =
             directlyHovered && !presented
