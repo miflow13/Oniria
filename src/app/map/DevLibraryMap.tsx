@@ -897,10 +897,10 @@ export default function DevLibraryMap() {
     async function populateDistricts() {
       const entries = await Promise.all(
         taggedDistricts.map(async (district) => {
-          // Seed the room with one lightweight topic request. Additional
-          // topic searches remain user-driven instead of hydrating the whole
-          // Topics room before the first frame settles.
-          const seedTags = district.devTags.slice(0, 1)
+          // Preload the configured topic categories so each physical Topic
+          // shelf can correspond to real DEV tags instead of a cosmetic label.
+          // Keep requests modest; shelf hydration remains progressive.
+          const seedTags = district.devTags.slice(0, 6)
           if (seedTags.length === 0) {
             return [district.id, []] as const
           }
@@ -909,7 +909,7 @@ export default function DevLibraryMap() {
             const responses = await Promise.all(
               seedTags.map((tag) =>
                 fetch(
-                  '/api/devto?mode=tag&per_page=40&tag=' +
+                  '/api/devto?mode=tag&per_page=24&tag=' +
                     encodeURIComponent(tag),
                 ),
               ),
@@ -1115,6 +1115,82 @@ export default function DevLibraryMap() {
       return []
     }
 
+    const articleTimestamp = (
+      article: DevArticleSummary,
+    ) => {
+      if (!article.published_at) return null
+      const value = Date.parse(article.published_at)
+      return Number.isFinite(value) ? value : null
+    }
+
+    const shelfDateRange = (
+      articles: readonly DevArticleSummary[],
+    ) => {
+      const values = articles
+        .map(articleTimestamp)
+        .filter((value): value is number => value !== null)
+        .sort((a, b) => a - b)
+
+      if (values.length === 0) return 'DATE UNCATALOGUED'
+
+      const first = new Date(values[0])
+      const last = new Date(values[values.length - 1])
+      const short = new Intl.DateTimeFormat('en-US', {
+        month: 'short',
+        day: 'numeric',
+      })
+      const sameDay =
+        first.getFullYear() === last.getFullYear() &&
+        first.getMonth() === last.getMonth() &&
+        first.getDate() === last.getDate()
+
+      return sameDay
+        ? `${short.format(last).toUpperCase()} · ${last.getFullYear()}`
+        : `${short.format(first).toUpperCase()}–${short.format(last).toUpperCase()} · ${last.getFullYear()}`
+    }
+
+    const dominantTag = (
+      articles: readonly DevArticleSummary[],
+    ) => {
+      const counts = new Map<string, number>()
+      articles.forEach((article) => {
+        ;(article.tag_list ?? []).forEach((tag) => {
+          const key = tag.toLowerCase()
+          counts.set(key, (counts.get(key) ?? 0) + 1)
+        })
+      })
+      return [...counts.entries()].sort(
+        (a, b) => b[1] - a[1],
+      )[0]?.[0]
+    }
+
+    const dominantCreator = (
+      articles: readonly DevArticleSummary[],
+    ) => {
+      const counts = new Map<
+        string,
+        {username: string; name: string; count: number}
+      >()
+      articles.forEach((article) => {
+        const username = article.user.username
+        const current = counts.get(username)
+        if (current) {
+          current.count += 1
+        } else {
+          counts.set(username, {
+            username,
+            name: article.user.name,
+            count: 1,
+          })
+        }
+      })
+      return [...counts.values()].sort(
+        (a, b) =>
+          b.count - a.count ||
+          a.username.localeCompare(b.username),
+      )[0]
+    }
+
     const result: LibraryShelf[] = []
 
     roomWorldConfig.districts.forEach(
@@ -1131,26 +1207,91 @@ export default function DevLibraryMap() {
           const shelfCapacity =
             CATALOG_BOOKS_PER_SHELF *
             (placement.doubleSided ? 2 : 1)
+          const shelfNumber = String(shelfIndex + 1).padStart(2, '0')
+
+          let shelfSource = source
+          let sourceOffset = articleOffset
+
+          if (
+            (district.sourceMode === 'topics' ||
+              district.sourceMode === 'tagged') &&
+            district.devTags.length > 0
+          ) {
+            const tag =
+              district.devTags[
+                shelfIndex % district.devTags.length
+              ]
+            const tagged = source.filter((article) =>
+              (article.tag_list ?? []).some(
+                (articleTag) =>
+                  articleTag.toLowerCase() === tag.toLowerCase(),
+              ),
+            )
+            if (tagged.length > 0) {
+              shelfSource = tagged
+              sourceOffset =
+                Math.floor(
+                  shelfIndex / district.devTags.length,
+                ) * shelfCapacity
+            }
+          }
+
           const articles = shelfArticles(
-            source,
-            articleOffset,
+            shelfSource,
+            sourceOffset,
             shelfCapacity,
           )
           articleOffset += shelfCapacity
-          const shelfNumber = String(shelfIndex + 1).padStart(2, '0')
+
+          let title = district.label + ' ' + shelfNumber
+          let functionLabel =
+            district.description ?? 'LIVE DEV COLLECTION'
+
+          if (
+            district.sourceMode === 'topics' ||
+            district.sourceMode === 'tagged'
+          ) {
+            const tag =
+              district.devTags[
+                shelfIndex % Math.max(1, district.devTags.length)
+              ]
+            title = tag
+              ? `#${tag.toUpperCase()} · ${shelfNumber}`
+              : `TOPICS · ${shelfNumber}`
+            functionLabel = 'TAG INDEX'
+          } else if (district.sourceMode === 'creators') {
+            const creator = dominantCreator(articles)
+            title = creator
+              ? `@${creator.username} · ${shelfNumber}`
+              : `CREATORS · ${shelfNumber}`
+            functionLabel = creator
+              ? `${creator.name} · AUTHOR INDEX`
+              : 'AUTHOR INDEX'
+          } else if (district.sourceMode === 'featured') {
+            title = `CURATED PICKS · ${shelfNumber}`
+            functionLabel = 'FEATURED COLLECTION'
+          } else if (district.sourceMode === 'latest') {
+            title = `NEW ARRIVALS · ${shelfNumber}`
+            functionLabel = 'NEWLY PUBLISHED'
+          } else if (district.sourceMode === 'search') {
+            const tag = dominantTag(articles)
+            title = tag
+              ? `SEARCH · #${tag.toUpperCase()}`
+              : `SEARCH RESULTS · ${shelfNumber}`
+            functionLabel = query.trim()
+              ? `QUERY “${query.trim().slice(0, 28)}”`
+              : 'LIVE CARD CATALOGUE'
+          } else if (district.sourceMode === 'catalog') {
+            title = `ARCHIVE · ${shelfNumber}`
+            functionLabel = 'LONG-TAIL DEV CATALOGUE'
+          }
+
           const subtitle =
-            district.sourceMode === 'catalog'
-              ? 'live DEV archive · ' + source.length + ' loaded'
-              : district.sourceMode === 'topics' && district.devTags.length
-                ? district.devTags
-                    .slice(0, 3)
-                    .map((tag) => '#' + tag)
-                    .join(' · ')
-                : district.description ?? 'live DEV collection'
+            `${functionLabel} · ${shelfDateRange(articles)} · ${articles.length} VOLUMES`
 
           const shelf = makeShelf(
             'shelf:room:' + district.id + ':' + shelfIndex,
-            district.label + ' ' + shelfNumber,
+            title,
             subtitle,
             kind,
             placement,
@@ -1224,6 +1365,7 @@ export default function DevLibraryMap() {
     curatedLiveArticles,
     dynamicArticles,
     dynamicTitle,
+    query,
     roomWorldConfig,
     searchResults,
     districtSamples,
