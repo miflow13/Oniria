@@ -705,7 +705,7 @@ export default function DevLibraryMap() {
 
     const articlesForDistrict = (
       district: LibraryDistrictConfig,
-    ) => {
+    ): DevArticleSummary[] => {
       switch (district.sourceMode) {
         case 'featured':
           return uniqueArticles(curatorPicks, bootstrap.feed)
@@ -748,6 +748,8 @@ export default function DevLibraryMap() {
           )
         }
       }
+
+      return []
     }
 
     const result: LibraryShelf[] = []
