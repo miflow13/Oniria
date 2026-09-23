@@ -239,10 +239,12 @@ export function createLibraryBuilding(
 
     if (disposed) return
 
-    const value = (index: number) =>
-      requests[index]?.status === 'fulfilled'
-        ? requests[index].value
+    const value = (index: number): THREE.Group | null => {
+      const request = requests[index]
+      return request?.status === 'fulfilled'
+        ? request.value
         : null
+    }
 
     const wallPanel = value(0)
     const wallCorner = value(1)
