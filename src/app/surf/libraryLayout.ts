@@ -3,6 +3,16 @@ import type {LibrarySection} from './types'
 // One metre per unit. All accessible content stays on y=0.
 export const EYE_HEIGHT = 1.65
 export const FLOOR_COUNT = 1
+
+// Canonical dimensions for the physical article shelves. The imported shelf
+// GLB is normalized to this envelope so article positions do not depend on
+// the source model's arbitrary export scale.
+export const SHELF_WIDTH = 4.5
+export const SHELF_DEPTH = .72
+export const SHELF_HEIGHT = 3.5
+export const SHELF_FRONT_OFFSET = .4
+export const SHELF_SLOT_SPACING = .9
+export const SHELF_LEVEL_Y = [.73, 1.83, 2.93] as const
 export type ShelfAnchor = {id: string; x: number; z: number; rotationY: number}
 export type RoomLayout = {
   center: [number, number]
