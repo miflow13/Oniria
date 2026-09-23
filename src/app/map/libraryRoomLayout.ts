@@ -19,6 +19,7 @@ export type LibraryRoomShelfZone =
   | 'divider-wall'
   | 'entry-wall'
   | 'outer-wall'
+  | 'rear-wall'
 
 export type LibraryRoomShelfSlotId =
   | 'S1'
@@ -28,7 +29,6 @@ export type LibraryRoomShelfSlotId =
   | 'B1'
   | 'B2'
   | 'B3'
-  | 'B4'
   | 'E1'
   | 'E2'
   | 'O1'
@@ -48,7 +48,7 @@ export type LibraryRoomShelfSlot = {
 // Visual blueprint, viewed from above:
 //
 //                  DIVIDER / BACK WALL
-//          B1      B2      B3      B4
+//             B1       B2       B3
 //
 //       O1       S1          S2       E1
 //
@@ -68,13 +68,12 @@ export const LIBRARY_ROOM_SHELF_SLOTS: readonly LibraryRoomShelfSlot[] = [
   {id: 'S3', zone: 'freestanding', inward: 5.9, lateral: 4.6, facing: 'south', doubleSided: true},
   {id: 'S4', zone: 'freestanding', inward: 11.35, lateral: 4.6, facing: 'south', doubleSided: true},
 
-  // Four slightly narrower wall cases fill the ~16-unit divider wall cleanly.
-  // Keeping them at full height but scaling only shelf width preserves the
-  // architecture while fitting more article capacity without overlap.
-  {id: 'B1', zone: 'divider-wall', inward: 2.2, lateral: -9.45, facing: 'north', doubleSided: false, widthScale: .78},
-  {id: 'B2', zone: 'divider-wall', inward: 6.15, lateral: -9.45, facing: 'north', doubleSided: false, widthScale: .78},
-  {id: 'B3', zone: 'divider-wall', inward: 10.1, lateral: -9.45, facing: 'north', doubleSided: false, widthScale: .78},
-  {id: 'B4', zone: 'divider-wall', inward: 14.05, lateral: -9.45, facing: 'north', doubleSided: false, widthScale: .78},
+  // Surveyed September 23: three full-width cases fit each 16-unit divider
+  // wall more cleanly than four compressed cases. These are normalized from
+  // Mika's z≈-62 pin run and mirrored across every room for consistency.
+  {id: 'B1', zone: 'divider-wall', inward: 2.5, lateral: -9.45, facing: 'north', doubleSided: false},
+  {id: 'B2', zone: 'divider-wall', inward: 8.25, lateral: -9.45, facing: 'north', doubleSided: false},
+  {id: 'B3', zone: 'divider-wall', inward: 14, lateral: -9.45, facing: 'north', doubleSided: false},
 
   {id: 'E1', zone: 'entry-wall', inward: .55, lateral: -5.6, facing: 'entry', doubleSided: false},
   {id: 'E2', zone: 'entry-wall', inward: .55, lateral: 5.6, facing: 'entry', doubleSided: false},
@@ -495,6 +494,118 @@ export function roomShelfBlueprintPlacements(
   })
 }
 
+const SURVEYED_FRONT_INWARD = [5.65, 11.2] as const
+const SURVEYED_FRONT_Z = [-3, .75, 4.5, 8.25, 12] as const
+const SURVEYED_REAR_X = [2.4, 7.3, 12.2, 17.1, 22] as const
+const SURVEYED_REAR_Z = -74.45
+const SURVEYED_REAR_SIDE_Z = -67.6
+const SURVEYED_OUTER_X = 23.85
+
+// These supplemental slots are normalized from Mika's in-world pin survey.
+// Raw hand-placed points are intentionally not copied literally: rows are
+// evenly spaced, left/right wings are mirrored, and wall offsets are snapped
+// safely inside the authored architecture.
+export function surveyedRoomShelfPlacements(
+  district: LibraryDistrictConfig,
+  index = 0,
+): RoomShelfPlacement[] {
+  const room = roomForDistrict(district, index)
+  const sideDirection: -1 | 1 =
+    room.center[0] < 0 ? -1 : 1
+  const heights = shelfHoverHeights(district.sourceMode)
+  const placements: RoomShelfPlacement[] = []
+
+  // The front pair of rooms is much deeper than the old room-center template
+  // implied. The survey found a repeated two-column bank extending toward
+  // the front wall. Five evenly-spaced rows make both wings match exactly.
+  if (room.slot === 0 || room.slot === 1) {
+    SURVEYED_FRONT_Z.forEach((worldZ, rowIndex) => {
+      SURVEYED_FRONT_INWARD.forEach(
+        (inward, columnIndex) => {
+          const shelfIndex =
+            rowIndex * SURVEYED_FRONT_INWARD.length +
+            columnIndex
+          placements.push({
+            world: [
+              room.doorway[0] + sideDirection * inward,
+              heights[shelfIndex % heights.length] ??
+                heights.at(-1) ??
+                .7,
+              worldZ,
+            ],
+            yaw: 0,
+            doubleSided: true,
+            endCaps: 'none',
+            floatId:
+              `${district.id}:survey-front:R${rowIndex + 1}C${columnIndex + 1}`,
+            pathBay: district.bay,
+            districtId: district.id,
+            slotId:
+              `SURVEY-FRONT-R${rowIndex + 1}C${columnIndex + 1}`,
+            zone: 'freestanding',
+            widthScale: 1,
+          })
+        },
+      )
+    })
+  }
+
+  // The final rear wall was surveyed as one continuous ten-case run. Split
+  // the symmetric halves between Search and Archive so each district owns
+  // five cases while the wall still reads as one architectural collection.
+  if (room.slot === 4 || room.slot === 5) {
+    SURVEYED_REAR_X.forEach((absoluteX, shelfIndex) => {
+      const worldX = absoluteX * sideDirection
+      placements.push({
+        world: [
+          worldX,
+          .58 + (shelfIndex % 2) * .05,
+          SURVEYED_REAR_Z,
+        ],
+        yaw: 0,
+        doubleSided: false,
+        endCaps: 'none',
+        floatId:
+          `${district.id}:rear-wall:${shelfIndex}`,
+        pathBay: district.bay,
+        districtId: district.id,
+        slotId: `SURVEY-REAR-${shelfIndex + 1}`,
+        zone: 'rear-wall',
+        widthScale: 1,
+      })
+    })
+
+    // One side-wall case was pinned at the rear-right edge. Mirror it to the
+    // left so the two terminal rooms end with the same visual cadence.
+    placements.push({
+      world: [
+        SURVEYED_OUTER_X * sideDirection,
+        .62,
+        SURVEYED_REAR_SIDE_Z,
+      ],
+      yaw:
+        sideDirection < 0
+          ? Math.PI / 2
+          : -Math.PI / 2,
+      doubleSided: false,
+      endCaps: 'none',
+      floatId: `${district.id}:outer-wall:survey-rear`,
+      pathBay: district.bay,
+      districtId: district.id,
+      slotId: 'SURVEY-REAR-SIDE',
+      zone: 'outer-wall',
+      widthScale: 1,
+    })
+  }
+
+  return placements
+}
+
+export const LIBRARY_MAX_ROOM_SHELF_COUNT =
+  LIBRARY_ROOM_SHELF_SLOTS.length +
+  SURVEYED_FRONT_Z.length *
+    SURVEYED_FRONT_INWARD.length
+
 export function roomShelfPlacements(
   district: LibraryDistrictConfig,
   index = 0,
@@ -519,9 +630,14 @@ export function roomShelfPlacements(
   const invalidSlots = new Set(
     issues.map((issue) => issue.slotId),
   )
-  return placements.filter(
+  const validBase = placements.filter(
     (placement) => !invalidSlots.has(placement.slotId),
   )
+
+  return [
+    ...validBase,
+    ...surveyedRoomShelfPlacements(district, index),
+  ]
 }
 
 const HALLWAY_SHELF_Z = [-6, -18, -26, -38, -46, -58] as const
@@ -724,11 +840,14 @@ const shelfCollider = (
   placement: RoomShelfPlacement,
 ): WalkCollisionRect => {
   const isSideFacing = Math.abs(Math.sin(placement.yaw)) > .5
+  const shelfWidth =
+    LIBRARY_SHELF_WIDTH * (placement.widthScale ?? 1) + .2
+  const shelfDepth = LIBRARY_SHELF_DEPTH + .16
   return wallRect(
     placement.world[0],
     placement.world[2],
-    isSideFacing ? .88 : 4.7,
-    isSideFacing ? 4.7 : .88,
+    isSideFacing ? shelfDepth : shelfWidth,
+    isSideFacing ? shelfWidth : shelfDepth,
   )
 }
 
