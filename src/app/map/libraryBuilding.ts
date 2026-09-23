@@ -663,17 +663,17 @@ export function createLibraryBuilding(
 
   const skylightGlassMaterial =
     new THREE.MeshPhysicalMaterial({
-      color: 0xeaf7ff,
-      transmission: .97,
+      color: 0xf2fbff,
+      transmission: .96,
       transparent: true,
-      opacity: .18,
-      roughness: .055,
+      opacity: .26,
+      roughness: .07,
       metalness: 0,
       ior: 1.46,
-      thickness: .018,
-      clearcoat: .18,
-      clearcoatRoughness: .08,
-      envMapIntensity: .42,
+      thickness: .025,
+      clearcoat: .32,
+      clearcoatRoughness: .045,
+      envMapIntensity: .55,
       side: THREE.DoubleSide,
       depthWrite: false,
       toneMapped: true,
@@ -1098,26 +1098,6 @@ export function createLibraryBuilding(
   localMaterials.push(pendantBulbMaterial, pendantPoolMaterial)
   localTextures.push(pendantPoolTexture)
 
-  const pendantShaftGeometry = new THREE.CylinderGeometry(
-    .08,
-    1.05,
-    1,
-    20,
-    1,
-    true,
-  )
-  const pendantShaftMaterial = new THREE.MeshBasicMaterial({
-    color: 0xffd5a0,
-    transparent: true,
-    opacity: .035,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-    blending: THREE.AdditiveBlending,
-    toneMapped: false,
-  })
-  localGeometries.push(pendantShaftGeometry)
-  localMaterials.push(pendantShaftMaterial)
-
   const sconceHaloGeometry = new THREE.PlaneGeometry(1, 1)
   const sconceHaloMaterial = new THREE.MeshBasicMaterial({
     map: pendantPoolTexture,
@@ -1226,20 +1206,6 @@ export function createLibraryBuilding(
     pool.name = `library-pendant-pool-${id}`
     group.add(pool)
 
-    const shaftHeight = Math.max(1.2, bulbY - .22)
-    const shaft = new THREE.Mesh(
-      pendantShaftGeometry,
-      pendantShaftMaterial,
-    )
-    shaft.scale.set(1, shaftHeight, 1)
-    shaft.position.set(
-      center.x,
-      bulbY - shaftHeight / 2,
-      center.z,
-    )
-    shaft.renderOrder = 2
-    shaft.name = `library-pendant-shaft-${id}`
-    group.add(shaft)
   }
 
   const ready = (async () => {
