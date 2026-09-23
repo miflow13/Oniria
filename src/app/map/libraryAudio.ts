@@ -33,15 +33,206 @@ export type LibraryAudioController = {
 
 const AUDIO_ENABLE_EVENT = 'oniria:library-audio-enable'
 
-const PROFILE_FREQUENCIES: Record<
+const PROFILE_MUSIC_FILTER: Record<
   LibraryAudioProfile,
-  {drone: number; tone: number}
+  number
 > = {
-  ambient: {drone: 92, tone: 184},
-  crystalline: {drone: 146, tone: 292},
-  mechanical: {drone: 72, tone: 144},
-  warm: {drone: 98, tone: 196},
-  deep: {drone: 58, tone: 116},
+  ambient: 3600,
+  crystalline: 5200,
+  mechanical: 2850,
+  warm: 3300,
+  deep: 2350,
+}
+
+const LIBRARY_MUSIC_BPM = 62
+const LIBRARY_MUSIC_BARS = 16
+const LIBRARY_MUSIC_ROOT_MIDI = 50 // D3
+
+const LIBRARY_CHORDS = [
+  [0, 3, 7, 10, 14], // Dm9
+  [-4, 0, 3, 7], // Bbmaj7
+  [3, 7, 10, 14], // Fmaj7
+  [-2, 0, 2, 5, 10], // Cadd9
+  [5, 8, 12, 15], // Gm7
+  [-4, 0, 3, 7], // Bbmaj7
+  [3, 7, 10, 14], // Fmaj7
+  [-2, 0, 5, 10], // Csus2/add9
+] as const
+
+const LIBRARY_MELODY = [
+  14,
+  10,
+  7,
+  12,
+  10,
+  7,
+  3,
+  7,
+  14,
+  15,
+  10,
+  7,
+  12,
+  10,
+  7,
+  3,
+] as const
+
+function midiToHz(midi: number) {
+  return 440 * Math.pow(2, (midi - 69) / 12)
+}
+
+function createLibraryMusicBuffer(context: AudioContext) {
+  const secondsPerBeat = 60 / LIBRARY_MUSIC_BPM
+  const secondsPerBar = secondsPerBeat * 4
+  const duration = LIBRARY_MUSIC_BARS * secondsPerBar
+  const sampleRate = context.sampleRate
+  const frameCount = Math.ceil(duration * sampleRate)
+  const buffer = context.createBuffer(
+    2,
+    frameCount,
+    sampleRate,
+  )
+  const left = buffer.getChannelData(0)
+  const right = buffer.getChannelData(1)
+
+  const addVoice = (
+    start: number,
+    noteDuration: number,
+    midi: number,
+    amplitude: number,
+    pan: number,
+    character: 'felt' | 'bell' | 'low' = 'felt',
+  ) => {
+    const startFrame = Math.max(
+      0,
+      Math.floor(start * sampleRate),
+    )
+    const endFrame = Math.min(
+      frameCount,
+      Math.ceil((start + noteDuration) * sampleRate),
+    )
+    const frequency = midiToHz(midi)
+    const leftGain = Math.cos(
+      ((pan + 1) * Math.PI) / 4,
+    )
+    const rightGain = Math.sin(
+      ((pan + 1) * Math.PI) / 4,
+    )
+
+    for (let frame = startFrame; frame < endFrame; frame += 1) {
+      const t = frame / sampleRate - start
+      const progress = THREE.MathUtils.clamp(
+        t / noteDuration,
+        0,
+        1,
+      )
+      const attackTime =
+        character === 'bell'
+          ? .018
+          : character === 'low'
+            ? .09
+            : .065
+      const attack = Math.min(1, t / attackTime)
+      const decay =
+        character === 'bell'
+          ? Math.exp(-progress * 5.2)
+          : character === 'low'
+            ? Math.exp(-progress * 2.2)
+            : Math.exp(-progress * 2.9)
+      const release =
+        progress > .82
+          ? Math.cos(
+              ((progress - .82) / .18) *
+                (Math.PI / 2),
+            )
+          : 1
+      const envelope =
+        attack * decay * Math.max(0, release)
+
+      const fundamental =
+        Math.sin(Math.PI * 2 * frequency * t)
+      const second =
+        Math.sin(
+          Math.PI * 2 * frequency * 2.002 * t + .22,
+        )
+      const third =
+        Math.sin(
+          Math.PI * 2 * frequency * 3.004 * t + .53,
+        )
+      const sample =
+        character === 'bell'
+          ? fundamental * .72 +
+            second * .22 +
+            third * .06
+          : character === 'low'
+            ? fundamental * .9 + second * .1
+            : fundamental * .82 +
+              second * .14 +
+              third * .04
+      const value = sample * envelope * amplitude
+
+      left[frame] += value * leftGain
+      right[frame] += value * rightGain
+    }
+  }
+
+  for (let bar = 0; bar < LIBRARY_MUSIC_BARS; bar += 1) {
+    const barStart = bar * secondsPerBar
+    const chord =
+      LIBRARY_CHORDS[bar % LIBRARY_CHORDS.length]
+
+    chord.forEach((offset, voiceIndex) => {
+      const octaveLift =
+        voiceIndex >= 3 ? 12 : voiceIndex === 0 ? -12 : 0
+      addVoice(
+        barStart + voiceIndex * .045,
+        secondsPerBar * .92,
+        LIBRARY_MUSIC_ROOT_MIDI + offset + octaveLift,
+        voiceIndex === 0 ? .018 : .022,
+        THREE.MathUtils.clamp(
+          (voiceIndex - 2) * .28,
+          -.7,
+          .7,
+        ),
+        voiceIndex === 0 ? 'low' : 'felt',
+      )
+    })
+
+    const melodyMidi =
+      LIBRARY_MUSIC_ROOT_MIDI +
+      LIBRARY_MELODY[bar] +
+      12
+    addVoice(
+      barStart + secondsPerBeat * 1.55,
+      secondsPerBeat * 1.2,
+      melodyMidi,
+      .024,
+      bar % 2 === 0 ? -.38 : .38,
+      'bell',
+    )
+
+    if (bar % 2 === 1) {
+      addVoice(
+        barStart + secondsPerBeat * 3.05,
+        secondsPerBeat * .72,
+        melodyMidi - (bar % 4 === 1 ? 4 : 7),
+        .014,
+        bar % 4 === 1 ? .52 : -.52,
+        'bell',
+      )
+    }
+  }
+
+  // Gentle saturation keeps overlapping chord tails musical without a hard
+  // limiter. The composition ends in silence before wrapping, so the loop
+  // point stays clean.
+  for (let frame = 0; frame < frameCount; frame += 1) {
+    left[frame] = Math.tanh(left[frame] * 1.35) * .72
+    right[frame] = Math.tanh(right[frame] * 1.35) * .72
+  }
+
+  return buffer
 }
 
 export function createLibraryAudio(
@@ -69,31 +260,28 @@ export function createLibraryAudio(
     .connect(master)
   floorOscillator.start()
 
-  const droneFilter = context.createBiquadFilter()
-  droneFilter.type = 'lowpass'
-  droneFilter.frequency.value = 420
-  droneFilter.Q.value = .8
+  // A real musical loop replaces the old continuous drone/tone pair.
+  // The one-minute phrase uses felt-piano-like chords and sparse bell notes,
+  // with a clean silent tail so it can repeat for long reading sessions.
+  const musicSource = context.createBufferSource()
+  musicSource.buffer = createLibraryMusicBuffer(context)
+  musicSource.loop = true
+  musicSource.loopStart = 0
+  musicSource.loopEnd = musicSource.buffer.duration
 
-  const droneOscillator = context.createOscillator()
-  droneOscillator.type = 'triangle'
-  droneOscillator.frequency.value = 92
-  const droneGain = context.createGain()
-  droneGain.gain.value = .007
-  droneOscillator
-    .connect(droneFilter)
-    .connect(droneGain)
-    .connect(master)
-  droneOscillator.start()
+  const musicFilter = context.createBiquadFilter()
+  musicFilter.type = 'lowpass'
+  musicFilter.frequency.value = PROFILE_MUSIC_FILTER.ambient
+  musicFilter.Q.value = .32
 
-  const toneOscillator = context.createOscillator()
-  toneOscillator.type = 'sine'
-  toneOscillator.frequency.value = 184
-  const toneGain = context.createGain()
-  toneGain.gain.value = .0022
-  toneOscillator
-    .connect(toneGain)
+  const musicGain = context.createGain()
+  musicGain.gain.value = .17
+
+  musicSource
+    .connect(musicFilter)
+    .connect(musicGain)
     .connect(master)
-  toneOscillator.start()
+  musicSource.start()
 
   const noiseBuffer = context.createBuffer(
     1,
@@ -243,10 +431,12 @@ export function createLibraryAudio(
         now,
         .2,
       )
-      droneGain.gain.setTargetAtTime(
-        .006 + (1 - speedStrength) * .003,
+      musicGain.gain.setTargetAtTime(
+        walking
+          ? .165 - speedStrength * .025
+          : .145,
         now,
-        .28,
+        .65,
       )
 
       if (activeAudioProfile || districts.length > 0) {
@@ -259,18 +449,14 @@ export function createLibraryAudio(
                 ? candidate
                 : nearest,
           ).audioProfile
-        const frequencies =
-          PROFILE_FREQUENCIES[profile]
 
-        droneOscillator.frequency.setTargetAtTime(
-          frequencies.drone,
+        // Rooms shade the same composition through timbre instead of changing
+        // key or restarting the song, so walking the library never breaks the
+        // musical phrase.
+        musicFilter.frequency.setTargetAtTime(
+          PROFILE_MUSIC_FILTER[profile],
           now,
-          .9,
-        )
-        toneOscillator.frequency.setTargetAtTime(
-          frequencies.tone,
-          now,
-          .9,
+          1.2,
         )
       }
 
@@ -309,19 +495,16 @@ export function createLibraryAudio(
 
       noiseSource.stop()
       floorOscillator.stop()
-      droneOscillator.stop()
-      toneOscillator.stop()
+      musicSource.stop()
 
       noiseSource.disconnect()
       floorOscillator.disconnect()
-      droneOscillator.disconnect()
-      toneOscillator.disconnect()
+      musicSource.disconnect()
       floorFilter.disconnect()
-      droneFilter.disconnect()
+      musicFilter.disconnect()
       windFilter.disconnect()
       floorGain.disconnect()
-      droneGain.disconnect()
-      toneGain.disconnect()
+      musicGain.disconnect()
       windGain.disconnect()
       master.disconnect()
     },
