@@ -972,7 +972,7 @@ export default function DreamWorld3D({
     )
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = libraryMode ? .56 : .94
+    renderer.toneMappingExposure = libraryMode ? .51 : .94
     renderer.shadowMap.enabled = settings.miniWorldDetail > 0
     renderer.shadowMap.type = THREE.PCFShadowMap
     renderer.domElement.className = styles.webglCanvas
@@ -1889,6 +1889,44 @@ export default function DreamWorld3D({
       })
     const shelfContactShadows: THREE.Mesh[] = []
 
+    const shelfBacklightCanvas = document.createElement('canvas')
+    shelfBacklightCanvas.width = 128
+    shelfBacklightCanvas.height = 128
+    const shelfBacklightContext =
+      shelfBacklightCanvas.getContext('2d')
+    if (shelfBacklightContext) {
+      const gradient =
+        shelfBacklightContext.createRadialGradient(
+          64,
+          64,
+          8,
+          64,
+          64,
+          62,
+        )
+      gradient.addColorStop(0, 'rgba(255, 182, 105, .32)')
+      gradient.addColorStop(.5, 'rgba(218, 118, 58, .11)')
+      gradient.addColorStop(1, 'rgba(110, 52, 28, 0)')
+      shelfBacklightContext.fillStyle = gradient
+      shelfBacklightContext.fillRect(0, 0, 128, 128)
+    }
+    const shelfBacklightTexture =
+      new THREE.CanvasTexture(shelfBacklightCanvas)
+    shelfBacklightTexture.colorSpace = THREE.SRGBColorSpace
+    shelfBacklightTexture.needsUpdate = true
+    const shelfBacklightGeometry =
+      new THREE.PlaneGeometry(3.9, 2.7)
+    const shelfBacklightMaterial =
+      new THREE.MeshBasicMaterial({
+        map: shelfBacklightTexture,
+        transparent: true,
+        opacity: .17,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+        toneMapped: false,
+      })
+
     const shelfBookMaterials = [
       new THREE.MeshStandardMaterial({
         color: 0x26336f,
@@ -2711,6 +2749,26 @@ export default function DreamWorld3D({
           shelfFloatId.includes(':outer-wall:') ||
           shelfFloatId.includes(':rear-wall:') ||
           shelfFloatId.startsWith('hallway:')
+
+        const shelfBacklight = new THREE.Mesh(
+          shelfBacklightGeometry,
+          shelfBacklightMaterial,
+        )
+        shelfBacklight.position.set(
+          0,
+          1.2,
+          wallBoundShelf ? -.29 : -.36,
+        )
+        shelfBacklight.scale.set(
+          (node.libraryWidthScale ?? 1) *
+            (wallBoundShelf ? .78 : 1),
+          wallBoundShelf ? .76 : 1,
+          1,
+        )
+        shelfBacklight.renderOrder = 0
+        shelfBacklight.userData.libraryDecorative = true
+        group.add(shelfBacklight)
+
         libraryFloatingProps.register(group, {
           phase: floatingPhase(shelfFloatId),
           hoverAmplitude: wallBoundShelf
@@ -7118,12 +7176,12 @@ export default function DreamWorld3D({
 
       const baseExposure = libraryMode
         ? readingRitualActive
-          ? .48
+          ? .44
           : selectedVisual?.group.userData.libraryKind === 'shelf'
-            ? .61
+            ? .55
             : selectedVisual
-              ? .63
-              : .56
+              ? .57
+              : .51
         : readingRitualActive
           ? .66
           : selectedVisual?.group.userData.libraryKind === 'shelf'
@@ -7134,8 +7192,8 @@ export default function DreamWorld3D({
       const exposureTarget = libraryMode
         ? THREE.MathUtils.clamp(
             baseExposure * atmospherePreset.exposureScale,
-            .4,
-            .66,
+            .38,
+            .59,
           )
         : baseExposure
       renderer.toneMappingExposure +=
@@ -7700,6 +7758,9 @@ export default function DreamWorld3D({
       shelfContactShadows.forEach((shadow) => world.remove(shadow))
       shelfContactShadowGeometry.dispose()
       shelfContactShadowMaterial.dispose()
+      shelfBacklightGeometry.dispose()
+      shelfBacklightMaterial.dispose()
+      shelfBacklightTexture.dispose()
       shelfAccentGeometry.dispose()
       shelfPickGeometry.dispose()
       shelfBookmarkGeometry.dispose()
