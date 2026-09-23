@@ -61,6 +61,7 @@ export function createLibraryBuilding(
   scene.add(group)
 
   let disposed = false
+  let floorSurfaceY = .05
   const localMaterials: THREE.Material[] = []
   const localGeometries: THREE.BufferGeometry[] = []
   const localTextures: THREE.Texture[] = []
@@ -1234,6 +1235,7 @@ export function createLibraryBuilding(
       const size = new THREE.Box3()
         .setFromObject(floorParquet)
         .getSize(new THREE.Vector3())
+      floorSurfaceY = .008 + Math.max(.02, size.y)
       const tileX = Math.max(2.4, size.x)
       const tileZ = Math.max(2.4, size.z)
       const countX = Math.ceil(48.9 / tileX)
@@ -1361,7 +1363,7 @@ export function createLibraryBuilding(
         rugBorderGeometry,
         rugBorderMaterial,
       )
-      border.position.set(0, .16, z)
+      border.position.set(0, floorSurfaceY + .028, z)
       border.renderOrder = 6
       border.name = `library-rug-fallback-border-${index}`
       group.add(border)
@@ -1370,7 +1372,7 @@ export function createLibraryBuilding(
         rugInsetGeometry,
         rugInsetMaterial,
       )
-      inset.position.set(0, .182, z)
+      inset.position.set(0, floorSurfaceY + .046, z)
       inset.renderOrder = 7
       inset.name = `library-rug-fallback-inset-${index}`
       group.add(inset)
@@ -1379,7 +1381,7 @@ export function createLibraryBuilding(
         const rug = placeAsset(
           readingRug,
           0,
-          .205,
+          floorSurfaceY + .065,
           z,
           1,
           rugLongAxisIsX ? Math.PI / 2 : 0,
