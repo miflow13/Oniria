@@ -4,13 +4,13 @@ import {
 } from '@/lib/libraryWorldConfig'
 
 export const ARCHIVE_PATH_RENDER_BAYS = 36
-export const ARCHIVE_WALKWAY_HALF_WIDTH = 4.1
+export const ARCHIVE_WALKWAY_HALF_WIDTH = 3.4
 export const ARCHIVE_WALKWAY_Y_OFFSET = -2.08
 
 export const ARCHIVE_BAY_SPACING = 6.8
-export const ARCHIVE_GRID_LANE_OFFSET = 13.25
-export const ARCHIVE_GRID_ROAD_HALF_WIDTH = 2.15
-export const ARCHIVE_GRID_CROSSROAD_HALF_WIDTH = 2.35
+export const ARCHIVE_GRID_LANE_OFFSET = 10.75
+export const ARCHIVE_GRID_ROAD_HALF_WIDTH = 1.55
+export const ARCHIVE_GRID_CROSSROAD_HALF_WIDTH = 1.35
 const ARCHIVE_LANE_MIN = 8.15
 const ARCHIVE_LANE_VARIATION = .9
 
@@ -103,7 +103,7 @@ export function archiveDistrictGridLaneOffset(
   // Keep FRONT PAGE centered, then distribute later districts across the
   // left/center/right avenues. Repeating the pattern creates city blocks
   // instead of one sequence of rooms.
-  const lanePattern = [0, -1, 1, 0, -1, 1, 0, 1] as const
+  const lanePattern = [0, -1, 1, -1, 0, 1, 0, -1] as const
   const lane =
     lanePattern[
       ((districtIndex % lanePattern.length) +
@@ -198,28 +198,84 @@ export function archiveGridRoadSegments(
     'side',
   )
 
-  const crossBays = [
-    Math.max(startBay, .15),
-    ...enabled.map((district) => district.bay),
-  ]
-
-  crossBays.forEach((bay, index) => {
+  const addCrossStreet = (
+    bay: number,
+    fromOffset: number,
+    toOffset: number,
+    id: string,
+  ) => {
     segments.push({
-      id: 'grid:cross:' + index,
+      id,
       kind: 'cross',
       start: archiveOffsetPathPoint(
         bay,
-        -ARCHIVE_GRID_LANE_OFFSET,
+        fromOffset,
       ),
       end: archiveOffsetPathPoint(
         bay,
-        ARCHIVE_GRID_LANE_OFFSET,
+        toOffset,
       ),
       halfWidth: ARCHIVE_GRID_CROSSROAD_HALF_WIDTH,
       startBay: bay,
       endBay: bay,
     })
+  }
+
+  // Arrival is the first recognizable intersection.
+  addCrossStreet(
+    Math.max(startBay, .15),
+    -ARCHIVE_GRID_LANE_OFFSET,
+    ARCHIVE_GRID_LANE_OFFSET,
+    'grid:cross:arrival',
+  )
+
+  // District streets are intentionally irregular. Side-lane districts get
+  // a T-junction from the center avenue; center-lane districts mostly keep
+  // uninterrupted blocks, with an occasional full intersection.
+  enabled.forEach((district, index) => {
+    if (index === 0) return
+
+    const laneOffset =
+      archiveDistrictGridLaneOffset(index)
+
+    if (laneOffset < 0) {
+      addCrossStreet(
+        district.bay,
+        laneOffset,
+        0,
+        'grid:cross:left:' + district.id,
+      )
+      return
+    }
+
+    if (laneOffset > 0) {
+      addCrossStreet(
+        district.bay,
+        0,
+        laneOffset,
+        'grid:cross:right:' + district.id,
+      )
+      return
+    }
+
+    if (index % 4 === 0) {
+      addCrossStreet(
+        district.bay,
+        -ARCHIVE_GRID_LANE_OFFSET,
+        ARCHIVE_GRID_LANE_OFFSET,
+        'grid:cross:hub:' + district.id,
+      )
+    }
   })
+
+  // Reconnect all three avenues beyond the final district. This guarantees
+  // that every detour becomes a loop instead of a dead-end corridor.
+  addCrossStreet(
+    Math.min(endBay, lastBay + .72),
+    -ARCHIVE_GRID_LANE_OFFSET,
+    ARCHIVE_GRID_LANE_OFFSET,
+    'grid:cross:return',
+  )
 
   return segments
 }
@@ -327,8 +383,8 @@ export function archiveWalkwayHalfWidthAtBay(
 
   return (
     ARCHIVE_WALKWAY_HALF_WIDTH +
-    archiveDistrictInfluence(bay, districts) * 1.55 +
-    welcomeInfluence * 3.15
+    archiveDistrictInfluence(bay, districts) * 1.15 +
+    welcomeInfluence * 2.55
   )
 }
 
