@@ -422,12 +422,12 @@ export function createLibraryBuilding(
     const sourceMode = district?.sourceMode ?? room.sourceMode
     const roomIntensity =
       sourceMode === 'featured'
-        ? .22
+        ? .26
         : sourceMode === 'catalog'
-          ? .07
+          ? .09
           : sourceMode === 'creators'
-            ? .14
-            : .12
+            ? .17
+            : .15
 
     const accentLight = new THREE.PointLight(
       new THREE.Color(accent),
@@ -443,8 +443,8 @@ export function createLibraryBuilding(
     // other, which makes the hallway read as alternating pools of light.
     const pendantGlow = new THREE.PointLight(
       sourceMode === 'catalog' ? 0xe6dfd5 : 0xffd3a0,
-      sourceMode === 'featured' ? .46 : sourceMode === 'catalog' ? .18 : .32,
-      6.5,
+      sourceMode === 'featured' ? .54 : sourceMode === 'catalog' ? .22 : .38,
+      7.2,
       2,
     )
     pendantGlow.position.set(x, 3.82, z)
@@ -456,8 +456,8 @@ export function createLibraryBuilding(
     // light do most of the illumination instead of flattening the whole room.
     const roomSpot = new THREE.SpotLight(
       sourceMode === 'catalog' ? 0xb9c8e8 : 0xffe6c9,
-      sourceMode === 'featured' ? .11 : sourceMode === 'catalog' ? .025 : .055,
-      5.8,
+      sourceMode === 'featured' ? .14 : sourceMode === 'catalog' ? .035 : .07,
+      6.3,
       Math.PI / 3.6,
       .78,
       2,
@@ -473,8 +473,8 @@ export function createLibraryBuilding(
   ;[6, -8, -28, -48, -68].forEach((z, index) => {
     const corridorLight = new THREE.PointLight(
       index === 4 ? 0xe2e0dd : 0xffd3a0,
-      index === 4 ? .15 : .24,
-      6.3,
+      index === 4 ? .19 : .3,
+      7,
       2,
     )
     corridorLight.position.set(0, 3.92, z)
@@ -484,14 +484,14 @@ export function createLibraryBuilding(
   })
 
   ;[
-    {position: [-18.2, 2.8, -12] as const, intensity: .18},
-    {position: [18, 2.75, -32] as const, intensity: .14},
-    {position: [-16, 2.9, -52] as const, intensity: .2},
+    {position: [-18.2, 2.8, -12] as const, intensity: .22},
+    {position: [18, 2.75, -32] as const, intensity: .17},
+    {position: [-16, 2.9, -52] as const, intensity: .24},
   ].forEach(({position, intensity}) => {
     const readingLight = new THREE.PointLight(
       0xffcf9e,
       intensity,
-      4.8,
+      5.3,
       2,
     )
     readingLight.position.set(
