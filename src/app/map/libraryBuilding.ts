@@ -4,6 +4,11 @@ import {loadLibraryAsset} from './libraryAssets'
 import {
   LIBRARY_FURNISHINGS,
   LIBRARY_ROOMS,
+  roomCrossAisleRect,
+  roomDoorwayClearanceRect,
+  roomShelfBlueprintPlacements,
+  roomShelfPlacementRect,
+  validateRoomShelfPlacements,
 } from './libraryRoomLayout'
 import {
   floatingPhase,
@@ -178,6 +183,160 @@ export function createLibraryBuilding(
   const roomDistricts = [...config.districts]
     .filter((district) => district.enabled)
     .sort((a, b) => a.roomSlot - b.roomSlot)
+
+  const layoutDebugEnabled =
+    typeof window !== 'undefined' &&
+    new URLSearchParams(window.location.search).get(
+      'layoutDebug',
+    ) === '1'
+
+  if (layoutDebugEnabled) {
+    const debugGroup = new THREE.Group()
+    debugGroup.name = 'library-layout-debug'
+    group.add(debugGroup)
+
+    const debugLabelCache = new Map<
+      string,
+      THREE.SpriteMaterial
+    >()
+
+    const addDebugRect = (
+      rect: {
+        minX: number
+        maxX: number
+        minZ: number
+        maxZ: number
+      },
+      color: number,
+      opacity: number,
+      y = .075,
+    ) => {
+      const geometry = new THREE.PlaneGeometry(
+        rect.maxX - rect.minX,
+        rect.maxZ - rect.minZ,
+      )
+      const material = new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        toneMapped: false,
+      })
+      localGeometries.push(geometry)
+      localMaterials.push(material)
+      const plane = new THREE.Mesh(geometry, material)
+      plane.rotation.x = -Math.PI / 2
+      plane.position.set(
+        (rect.minX + rect.maxX) / 2,
+        y,
+        (rect.minZ + rect.maxZ) / 2,
+      )
+      plane.renderOrder = 20
+      debugGroup.add(plane)
+    }
+
+    const addDebugLabel = (
+      text: string,
+      x: number,
+      z: number,
+      invalid: boolean,
+    ) => {
+      const cacheKey = `${text}:${invalid ? 'bad' : 'ok'}`
+      let material = debugLabelCache.get(cacheKey)
+      if (!material) {
+        const canvas = document.createElement('canvas')
+        canvas.width = 192
+        canvas.height = 64
+        const context = canvas.getContext('2d')
+        if (context) {
+          context.clearRect(0, 0, 192, 64)
+          context.fillStyle = invalid
+            ? 'rgba(88, 8, 18, .92)'
+            : 'rgba(7, 24, 48, .92)'
+          context.fillRect(2, 2, 188, 60)
+          context.strokeStyle = invalid
+            ? '#ff5d72'
+            : '#62b4ff'
+          context.lineWidth = 4
+          context.strokeRect(2, 2, 188, 60)
+          context.fillStyle = '#ffffff'
+          context.font = '700 28px system-ui, sans-serif'
+          context.textAlign = 'center'
+          context.textBaseline = 'middle'
+          context.fillText(text, 96, 32)
+        }
+        const texture = new THREE.CanvasTexture(canvas)
+        texture.colorSpace = THREE.SRGBColorSpace
+        texture.needsUpdate = true
+        localTextures.push(texture)
+        material = new THREE.SpriteMaterial({
+          map: texture,
+          transparent: true,
+          depthWrite: false,
+          toneMapped: false,
+        })
+        localMaterials.push(material)
+        debugLabelCache.set(cacheKey, material)
+      }
+
+      const sprite = new THREE.Sprite(material)
+      sprite.position.set(x, .34, z)
+      sprite.scale.set(1.35, .45, 1)
+      sprite.renderOrder = 21
+      debugGroup.add(sprite)
+    }
+
+    roomDistricts.forEach((district, index) => {
+      const room =
+        LIBRARY_ROOMS.find(
+          (candidate) =>
+            candidate.slot === district.roomSlot,
+        ) ?? LIBRARY_ROOMS[index % LIBRARY_ROOMS.length]
+      if (!room) return
+
+      const blueprint = roomShelfBlueprintPlacements(
+        district,
+        index,
+      )
+      const issues = validateRoomShelfPlacements(
+        room,
+        blueprint,
+      )
+      const invalidSlots = new Set(
+        issues.map((issue) => issue.slotId),
+      )
+
+      // Cyan = doorway safety zone. Green = mandatory walk-through aisle.
+      addDebugRect(
+        roomDoorwayClearanceRect(room),
+        0x46e5ff,
+        .22,
+      )
+      addDebugRect(
+        roomCrossAisleRect(room),
+        0x4cff91,
+        .12,
+        .07,
+      )
+
+      blueprint.forEach((placement) => {
+        const invalid = invalidSlots.has(placement.slotId)
+        addDebugRect(
+          roomShelfPlacementRect(placement),
+          invalid ? 0xff4058 : 0x388dff,
+          invalid ? .4 : .2,
+          .085,
+        )
+        addDebugLabel(
+          placement.slotId,
+          placement.world[0],
+          placement.world[2],
+          invalid,
+        )
+      })
+    })
+  }
 
   const directoryLine = roomDistricts
     .map((district, index) => {
@@ -438,50 +597,11 @@ export function createLibraryBuilding(
     accentLight.position.set(x, 3.05, z)
     group.add(accentLight)
 
-    // One physically-localized warm pool per hanging fixture. Distance and
-    // inverse-square decay keep neighboring rooms from washing into each
-    // other, which makes the hallway read as alternating pools of light.
-    const pendantGlow = new THREE.PointLight(
-      sourceMode === 'catalog' ? 0xe6dfd5 : 0xffd3a0,
-      sourceMode === 'featured' ? .54 : sourceMode === 'catalog' ? .22 : .38,
-      7.2,
-      2,
-    )
-    pendantGlow.position.set(x, 3.82, z)
-    pendantGlow.castShadow = false
-    pendantGlow.name = `library-pendant-light-room-${room.slot}`
-    group.add(pendantGlow)
-
-    // Keep a restrained downward spot for shape, but let the pendant point
-    // light do most of the illumination instead of flattening the whole room.
-    const roomSpot = new THREE.SpotLight(
-      sourceMode === 'catalog' ? 0xb9c8e8 : 0xffe6c9,
-      sourceMode === 'featured' ? .14 : sourceMode === 'catalog' ? .035 : .07,
-      6.3,
-      Math.PI / 3.6,
-      .78,
-      2,
-    )
-    roomSpot.position.set(x, 4.72, z)
-    roomSpot.castShadow = false
-    roomSpot.target.position.set(x, .8, z)
-    group.add(roomSpot, roomSpot.target)
+    // The actual pendant mesh gets its bulb, point light, and soft downward
+    // cone once the GLB finishes loading below. Keeping light generation tied
+    // to the fixture prevents decorative lamps from drifting out of sync with
+    // their illumination.
   }
-
-  // Warm pools make the long central spine readable without flattening the
-  // whole building. These match the pendant-model positions below.
-  ;[6, -8, -28, -48, -68].forEach((z, index) => {
-    const corridorLight = new THREE.PointLight(
-      index === 4 ? 0xe2e0dd : 0xffd3a0,
-      index === 4 ? .19 : .3,
-      7,
-      2,
-    )
-    corridorLight.position.set(0, 3.92, z)
-    corridorLight.castShadow = false
-    corridorLight.name = `library-pendant-light-hall-${index}`
-    group.add(corridorLight)
-  })
 
   ;[
     {position: [-18.2, 2.8, -12] as const, intensity: .22},
@@ -598,6 +718,68 @@ export function createLibraryBuilding(
     })
     group.add(instance)
     return instance
+  }
+
+  const pendantBulbGeometry =
+    new THREE.SphereGeometry(.085, 12, 10)
+  const pendantBulbMaterial =
+    new THREE.MeshStandardMaterial({
+      color: 0xffdfb5,
+      emissive: 0xffb768,
+      emissiveIntensity: .82,
+      roughness: .34,
+      metalness: 0,
+      toneMapped: true,
+    })
+  localGeometries.push(pendantBulbGeometry)
+  localMaterials.push(pendantBulbMaterial)
+
+  const addPendantFixtureLight = (
+    fixture: THREE.Group,
+    id: string,
+    pointIntensity: number,
+    distance: number,
+    spotIntensity: number,
+  ) => {
+    fixture.updateMatrixWorld(true)
+    const bounds = new THREE.Box3().setFromObject(fixture)
+    const center = bounds.getCenter(new THREE.Vector3())
+    const height = Math.max(.2, bounds.max.y - bounds.min.y)
+    const bulbY =
+      bounds.min.y + Math.min(.13, height * .14)
+
+    const bulb = new THREE.Mesh(
+      pendantBulbGeometry,
+      pendantBulbMaterial,
+    )
+    bulb.position.set(center.x, bulbY, center.z)
+    bulb.name = `library-pendant-bulb-${id}`
+    group.add(bulb)
+
+    const point = new THREE.PointLight(
+      0xffc98a,
+      pointIntensity,
+      distance,
+      2,
+    )
+    point.position.set(center.x, bulbY - .04, center.z)
+    point.castShadow = false
+    point.name = `library-pendant-point-${id}`
+    group.add(point)
+
+    const spot = new THREE.SpotLight(
+      0xffddb2,
+      spotIntensity,
+      Math.max(4.8, distance - .8),
+      Math.PI / 5.4,
+      .76,
+      2,
+    )
+    spot.position.copy(point.position)
+    spot.castShadow = false
+    spot.target.position.set(center.x, .55, center.z)
+    spot.name = `library-pendant-spot-${id}`
+    group.add(spot, spot.target)
   }
 
   const ready = (async () => {
@@ -1031,11 +1213,54 @@ export function createLibraryBuilding(
     if (pendantLight) {
       LIBRARY_ROOMS.forEach((room) => {
         const [x, z] = room.center
-        placeAsset(pendantLight, x, 4.05, z)
+        const fixture = placeAsset(
+          pendantLight,
+          x,
+          4.05,
+          z,
+        )
+        const sourceMode =
+          roomDistrictBySlot.get(room.slot)?.sourceMode ??
+          room.sourceMode
+        const pointIntensity =
+          sourceMode === 'featured'
+            ? .54
+            : sourceMode === 'catalog'
+              ? .22
+              : .38
+        const spotIntensity =
+          sourceMode === 'featured'
+            ? .14
+            : sourceMode === 'catalog'
+              ? .035
+              : .07
+        addPendantFixtureLight(
+          fixture,
+          `room-${room.slot}`,
+          pointIntensity,
+          7.2,
+          spotIntensity,
+        )
       })
-      for (const z of [6, -8, -28, -48, -68]) {
-        placeAsset(pendantLight, 0, 4.2, z, .92)
-      }
+
+      ;[6, -8, -28, -48, -68].forEach(
+        (z, index) => {
+          const fixture = placeAsset(
+            pendantLight,
+            0,
+            4.2,
+            z,
+            .92,
+          )
+          addPendantFixtureLight(
+            fixture,
+            `hall-${index}`,
+            index === 4 ? .19 : .3,
+            7,
+            index === 4 ? .04 : .065,
+          )
+        },
+      )
     }
 
   })().catch((error) => {
