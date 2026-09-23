@@ -100,22 +100,22 @@ export type RoomShelfPlacement = {
 
 const shelfHoverHeights = (
   sourceMode: LibraryContentSource,
-): [number, number, number, number] => {
+): readonly number[] => {
   switch (sourceMode) {
     case 'featured':
-      return [.84, .84, 1.02, 1.02]
+      return [.82, .9, 1.02, .94, .88, 1.06, .98, .86]
     case 'latest':
-      return [.52, .52, .66, .66]
+      return [.5, .58, .66, .54, .6, .7, .62, .52]
     case 'topics':
-      return [.68, .68, .84, .84]
+      return [.66, .74, .84, .7, .78, .9, .82, .68]
     case 'creators':
-      return [.8, .8, .94, .94]
+      return [.76, .86, .96, .8, .9, 1.02, .92, .78]
     case 'search':
-      return [.58, .58, .72, .72]
+      return [.58, .7, .66, .56]
     case 'catalog':
-      return [.92, .92, 1.12, 1.12]
+      return [.88, 1, 1.1, .94, 1.04, 1.16, 1.08, .9]
     default:
-      return [.64, .64, .8, .8]
+      return [.62, .7, .8, .66, .74, .86, .78, .64]
   }
 }
 
@@ -126,79 +126,81 @@ export function roomShelfPlacements(
   const room = roomForDistrict(district, index)
   const [x, z] = room.center
   const heights = shelfHoverHeights(district.sourceMode)
-  const rowOffset = district.sourceMode === 'search' ? 3.8 : 3.25
-  const shelfOffset =
-    district.sourceMode === 'featured' ? 2.6 : 2.28
   const useEndCaps =
     district.sourceMode === 'latest' ||
     district.sourceMode === 'topics' ||
     district.sourceMode === 'catalog'
 
-  const roomShelves: RoomShelfPlacement[] = [
-    {
-      world: [x - shelfOffset, heights[0], z - rowOffset],
-      yaw: 0,
-      endCaps: useEndCaps ? 'left' : 'none',
-      floatId: `${district.id}:row-north`,
-      pathBay: district.bay,
-      districtId: district.id,
-    },
-    {
-      world: [x + shelfOffset, heights[1], z - rowOffset],
-      yaw: 0,
-      endCaps: useEndCaps ? 'right' : 'none',
-      floatId: `${district.id}:row-north`,
-      pathBay: district.bay,
-      districtId: district.id,
-    },
-    {
-      world: [x + shelfOffset, heights[2], z + rowOffset],
-      yaw: Math.PI,
-      endCaps: useEndCaps ? 'left' : 'none',
-      floatId: `${district.id}:row-south`,
-      pathBay: district.bay,
-      districtId: district.id,
-    },
-    {
-      world: [x - shelfOffset, heights[3], z + rowOffset],
-      yaw: Math.PI,
-      endCaps: useEndCaps ? 'right' : 'none',
-      floatId: `${district.id}:row-south`,
-      pathBay: district.bay,
-      districtId: district.id,
-    },
-  ]
+  // Search intentionally stays sparse so the floating card catalogue remains
+  // the room hero. Every other collection gets eight real DEV shelves: four
+  // suspended rows with two shelves per row, leaving the room center readable.
+  const rowOffsets =
+    district.sourceMode === 'search'
+      ? [-4.25, 4.25]
+      : [-5.4, -3.2, 3.2, 5.4]
+  const xOffsets =
+    district.sourceMode === 'search'
+      ? [-2.65, 2.65]
+      : [-3, 3]
 
-  if (
-    district.sourceMode !== 'featured' &&
-    district.sourceMode !== 'latest'
-  ) {
-    return roomShelves
-  }
+  const placements: RoomShelfPlacement[] = []
+  rowOffsets.forEach((zOffset, rowIndex) => {
+    const yaw = rowIndex < rowOffsets.length / 2 ? 0 : Math.PI
+    xOffsets.forEach((xOffset, columnIndex) => {
+      const placementIndex =
+        rowIndex * xOffsets.length + columnIndex
+      placements.push({
+        world: [
+          x + xOffset,
+          heights[placementIndex] ?? heights.at(-1) ?? .7,
+          z + zOffset,
+        ],
+        yaw,
+        endCaps:
+          useEndCaps
+            ? columnIndex === 0
+              ? 'left'
+              : 'right'
+            : 'none',
+        floatId:
+          `${district.id}:room-row-${rowIndex}:col-${columnIndex}`,
+        pathBay: district.bay,
+        districtId: district.id,
+      })
+    })
+  })
 
-  const isLeftRoom = x < 0
-  const wallX = room.doorway[0] + (isLeftRoom ? -.5 : .5)
-  const wallYaw = isLeftRoom ? Math.PI / 2 : -Math.PI / 2
+  return placements
+}
 
-  return [
-    ...roomShelves,
-    {
-      world: [wallX, heights[0] + .08, z - 6],
-      yaw: wallYaw,
-      endCaps: useEndCaps ? 'left' : 'none',
-      floatId: `${district.id}:wall-north`,
-      pathBay: district.bay,
-      districtId: district.id,
-    },
-    {
-      world: [wallX, heights[2] + .04, z + 6],
-      yaw: wallYaw,
-      endCaps: useEndCaps ? 'right' : 'none',
-      floatId: `${district.id}:wall-south`,
-      pathBay: district.bay,
-      districtId: district.id,
-    },
-  ]
+const HALLWAY_SHELF_Z = [-6, -18, -26, -38, -46, -58] as const
+
+export function hallwayShelfPlacements(
+  district: LibraryDistrictConfig,
+  side: 'left' | 'right',
+): RoomShelfPlacement[] {
+  const isLeft = side === 'left'
+  const baseHeight =
+    district.sourceMode === 'featured' ? .78 : .58
+
+  return HALLWAY_SHELF_Z.map((z, index) => ({
+    world: [
+      isLeft ? -7.5 : 7.5,
+      baseHeight + (index % 3) * .07,
+      z,
+    ],
+    yaw: isLeft ? Math.PI / 2 : -Math.PI / 2,
+    endCaps:
+      district.sourceMode === 'latest'
+        ? index % 2 === 0
+          ? 'left'
+          : 'right'
+        : 'none',
+    floatId:
+      `hallway:${district.id}:${side}:${index}`,
+    pathBay: district.bay,
+    districtId: district.id,
+  }))
 }
 
 export type LibraryFurnishingAsset =
@@ -224,6 +226,7 @@ export type LibraryFurnishingPlacement = {
   hoverAmplitude: number
   hoverSpeed: number
   tiltX?: number
+  tiltY?: number
   tiltZ?: number
   floats?: boolean
   collider?: [number, number]
