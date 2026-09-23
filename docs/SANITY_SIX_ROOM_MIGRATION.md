@@ -65,9 +65,10 @@ with `NEXT_PUBLIC_SANITY_PROJECT_ID` and `SANITY_API_WRITE_TOKEN` available.
 The seed creates/replaces the six new room documents and updates the global
 library control and default Library Tour journey.
 
-Old cinematic district documents can remain in the dataset during migration.
-The runtime intentionally ignores legacy district documents that have neither
-`sourceMode` nor `roomSlot`, so they cannot collapse into the first room.
+Old cinematic district documents are preserved during migration, but the seed
+marks them `enabled: false` instead of deleting them. The runtime also ignores
+legacy district documents that have neither `sourceMode` nor `roomSlot`, so
+an unseeded or partially migrated dataset cannot collapse them into room one.
 
 ## Runtime flow
 
