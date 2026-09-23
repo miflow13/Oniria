@@ -2,6 +2,7 @@
 
 import {useEffect, useRef} from 'react'
 import * as THREE from 'three'
+import {GLTFExporter} from 'three/examples/jsm/exporters/GLTFExporter.js'
 import {FBXLoader} from 'three/examples/jsm/loaders/FBXLoader.js'
 import {GLTFLoader} from 'three/examples/jsm/loaders/GLTFLoader.js'
 import type {LibrarySection, SurfEdge, SurfNode} from './types'
@@ -33,6 +34,8 @@ type Props = {
   currentFloor: number
   floorRequest: FloorRequest
   onFloorChange: (floor: number) => void
+  editorExportRequest: number
+  onEditorExportReady: (ready: boolean) => void
 }
 
 type Placement = {
@@ -399,6 +402,8 @@ export default function OutdoorLibrary3D({
   currentFloor,
   floorRequest,
   onFloorChange,
+  editorExportRequest,
+  onEditorExportReady,
 }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const selectedRef = useRef(selectedId)
@@ -413,6 +418,8 @@ export default function OutdoorLibrary3D({
   const zoneRef = useRef(onZoneChange)
   const floorChangeRef = useRef(onFloorChange)
   const currentFloorRef = useRef(currentFloor)
+  const editorExportRequestRef = useRef(editorExportRequest)
+  const editorExportReadyRef = useRef(onEditorExportReady)
 
   useEffect(() => {
     selectedRef.current = selectedId
@@ -450,12 +457,19 @@ export default function OutdoorLibrary3D({
   useEffect(() => {
     currentFloorRef.current = currentFloor
   }, [currentFloor])
+  useEffect(() => {
+    editorExportRequestRef.current = editorExportRequest
+  }, [editorExportRequest])
+  useEffect(() => {
+    editorExportReadyRef.current = onEditorExportReady
+  }, [onEditorExportReady])
 
   useEffect(() => {
     const host = hostRef.current
     if (!host) return
 
     const scene = new THREE.Scene()
+    scene.name = 'Oniria Outdoor Library'
     scene.background = new THREE.Color(0xa9c8cb)
     scene.fog = new THREE.FogExp2(0xa7c0b7, .0085)
 
@@ -1136,6 +1150,35 @@ export default function OutdoorLibrary3D({
     }> = []
     const importedGeometries = new Set<THREE.BufferGeometry>()
     const importedMaterials = new Set<THREE.Material>()
+    let assetBatchesRemaining = 2
+    let editorExportReady = false
+    let handledEditorExportRequest = editorExportRequestRef.current
+
+    const exportEditorWorld = async () => {
+      scene.updateMatrixWorld(true)
+      const result = await new GLTFExporter().parseAsync(scene, {
+        binary: true,
+        onlyVisible: true,
+        includeCustomExtensions: true,
+        maxTextureSize: 2048,
+      })
+      if (!(result instanceof ArrayBuffer)) {
+        throw new Error('Expected a binary GLB export.')
+      }
+      const url = URL.createObjectURL(new Blob([result], {type: 'model/gltf-binary'}))
+      const link = document.createElement('a')
+      link.href = url
+      link.download = 'oniria-outdoor-library.glb'
+      link.click()
+      URL.revokeObjectURL(url)
+    }
+
+    const completeAssetBatch = () => {
+      assetBatchesRemaining -= 1
+      if (assetBatchesRemaining !== 0 || disposed) return
+      editorExportReady = true
+      editorExportReadyRef.current(true)
+    }
 
     const trackImportedResources = (root: THREE.Object3D) => {
       root.traverse((child) => {
@@ -1295,7 +1338,7 @@ export default function OutdoorLibrary3D({
           addRoot(clone)
         }
       }
-    })
+    }).finally(completeAssetBatch)
 
     Promise.allSettled([
       loadLibraryTemplate(LIBRARY_ASSETS.wallPanel, 4.7, 'height'),
@@ -1622,7 +1665,7 @@ export default function OutdoorLibrary3D({
           })
         }
       }
-    })
+    }).finally(completeAssetBatch)
 
     const keys = new Set<string>()
     const raycaster = new THREE.Raycaster()
@@ -1906,6 +1949,15 @@ export default function OutdoorLibrary3D({
           cloud.root.position.x = cloud.minX
         }
       })
+      if (
+        editorExportReady &&
+        editorExportRequestRef.current !== handledEditorExportRequest
+      ) {
+        handledEditorExportRequest = editorExportRequestRef.current
+        void exportEditorWorld().catch((error: unknown) => {
+          console.error('Unable to export the outdoor library GLB.', error)
+        })
+      }
       renderer.render(scene, camera)
     }
 
@@ -1922,6 +1974,7 @@ export default function OutdoorLibrary3D({
       window.removeEventListener('keyup', onKeyUp)
       if (document.pointerLockElement === renderer.domElement) document.exitPointerLock?.()
       hoverRef.current(null)
+      editorExportReadyRef.current(false)
       environmentRoots.forEach((root) => scene.remove(root))
       libraryRoots.forEach((root) => scene.remove(root))
       importedGeometries.forEach((geometry) => geometry.dispose())

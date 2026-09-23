@@ -686,6 +686,8 @@ export default function DevWebSurf() {
     floor: number
     nonce: number
   } | null>(null)
+  const [editorWorldReady, setEditorWorldReady] = useState(false)
+  const [editorExportRequest, setEditorExportRequest] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -1216,6 +1218,8 @@ export default function DevWebSurf() {
         currentFloor={currentFloor}
         floorRequest={floorRequest}
         onFloorChange={setCurrentFloor}
+        editorExportRequest={editorExportRequest}
+        onEditorExportReady={setEditorWorldReady}
       />
 
       <header className={styles.chrome}>
@@ -1243,9 +1247,20 @@ export default function DevWebSurf() {
           <kbd>↵</kbd>
         </form>
 
-        <div className={styles.connection}>
-          <i className={locked ? styles.online : ''} />
-          {locked ? 'walking' : 'cursor free'}
+        <div className={styles.chromeActions}>
+          <button
+            type="button"
+            className={styles.exportWorld}
+            disabled={!editorWorldReady}
+            onClick={() => setEditorExportRequest((request) => request + 1)}
+            title="Download the current outdoor library as a self-contained GLB"
+          >
+            {editorWorldReady ? 'Export GLB' : 'Packaging…'}
+          </button>
+          <div className={styles.connection}>
+            <i className={locked ? styles.online : ''} />
+            {locked ? 'walking' : 'cursor free'}
+          </div>
         </div>
       </header>
 
