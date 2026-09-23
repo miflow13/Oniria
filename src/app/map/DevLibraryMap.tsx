@@ -33,6 +33,7 @@ import styles from './library.module.css'
 import {
   archiveShelfPlacement,
   resolveArchiveShelfClearance,
+  type ArchiveShelfPlacement,
 } from './libraryLayout'
 
 const DEFAULT_USERNAME = 'mikachu'
@@ -1094,7 +1095,6 @@ export default function DevLibraryMap() {
     (shelf) => shelf.kind === 'catalog',
   ).length
   const lastCatalogLoadTriggerRef = useRef<string | null>(null)
-  const lastDeepStacksCatalogLengthRef = useRef(0)
 
   useEffect(() => {
     if (!catalogHasMore || catalogLoading || catalogShelfCount === 0) {
@@ -1120,20 +1120,9 @@ export default function DevLibraryMap() {
         .slice(-3)
         .some((item) => item.id === shelf.id)
 
-    if (deepStacksApproach) {
-      if (
-        lastDeepStacksCatalogLengthRef.current !==
-        catalog.length
-      ) {
-        lastDeepStacksCatalogLengthRef.current =
-          catalog.length
-        void loadMoreCatalog()
-      }
-      return
-    }
-
     if (
-      isLastVisibleCatalogShelf &&
+      (deepStacksApproach ||
+        isLastVisibleCatalogShelf) &&
       lastCatalogLoadTriggerRef.current !== candidate
     ) {
       lastCatalogLoadTriggerRef.current = candidate
@@ -1143,7 +1132,6 @@ export default function DevLibraryMap() {
     catalogHasMore,
     catalogLoading,
     catalogShelfCount,
-    catalog.length,
     loadMoreCatalog,
     navigation.nearestId,
     navigation.routeTargetId,
