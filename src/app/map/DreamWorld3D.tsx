@@ -6326,6 +6326,44 @@ export default function DreamWorld3D({
                 accentMaterial.opacity) *
               .11
           }
+
+          const shelfLabelMaterial =
+            visual.label.material as THREE.SpriteMaterial
+          const labelDistance =
+            camera.position.distanceTo(
+              visual.group.position,
+            )
+          const shelfDistanceOpacity =
+            labelDistance < 24
+              ? .96
+              : labelDistance < 50
+                ? THREE.MathUtils.lerp(
+                    .58,
+                    .14,
+                    (labelDistance - 24) / 26,
+                  )
+                : labelDistance < 78
+                  ? .045
+                  : .012
+          visual.label.visible =
+            labelDistance < 88 ||
+            selected ||
+            hoveredId === node._id
+          const shelfLabelTarget =
+            selected || hoveredId === node._id
+              ? 1
+              : shelfDistanceOpacity
+          shelfLabelMaterial.opacity +=
+            (((visible ? shelfLabelTarget : .04) *
+              introVisibility) -
+              shelfLabelMaterial.opacity) *
+            .08
+
+          // Shelf nodes intentionally skip the original Dream Map orb,
+          // mini-world, reflection and orbit animation path. Those objects
+          // are hidden for library shelves and updating them every frame is
+          // pure overhead when dozens of shelves are present.
+          continue
         }
 
         if (node.libraryKind !== 'shelf') {
