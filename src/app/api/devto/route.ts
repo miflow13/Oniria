@@ -243,18 +243,22 @@ export async function GET(request: NextRequest) {
         profileArticles,
         feedPageOne,
         feedPageTwo,
+        feedPageThree,
         latestPageOne,
         latestPageTwo,
+        latestPageThree,
         tags,
       ] = await Promise.all([
         devFetch(`/users/${encodeURIComponent(username)}`).catch(() => null),
         devFetch(
-          `/articles?username=${encodeURIComponent(username)}&per_page=30`,
+          `/articles?username=${encodeURIComponent(username)}&per_page=100`,
         ).catch(() => []),
         devFetch('/articles?per_page=100&page=1&top=7').catch(() => []),
         devFetch('/articles?per_page=100&page=2&top=7').catch(() => []),
+        devFetch('/articles?per_page=100&page=3&top=7').catch(() => []),
         devFetch('/articles?per_page=100&page=1').catch(() => []),
         devFetch('/articles?per_page=100&page=2').catch(() => []),
+        devFetch('/articles?per_page=100&page=3').catch(() => []),
         devFetch('/tags?per_page=30').catch(() => []),
       ])
 
@@ -275,8 +279,12 @@ export async function GET(request: NextRequest) {
         {
           profile,
           profileArticles: normalizeArticles(profileArticles),
-          feed: dedupe([feedPageOne, feedPageTwo]),
-          latest: dedupe([latestPageOne, latestPageTwo]),
+          feed: dedupe([feedPageOne, feedPageTwo, feedPageThree]),
+          latest: dedupe([
+            latestPageOne,
+            latestPageTwo,
+            latestPageThree,
+          ]),
           tags,
         },
         {
@@ -361,7 +369,7 @@ export async function GET(request: NextRequest) {
       const [profile, articles] = await Promise.all([
         devFetch(`/users/${encodeURIComponent(username)}`),
         devFetch(
-          `/articles?username=${encodeURIComponent(username)}&per_page=30`,
+          `/articles?username=${encodeURIComponent(username)}&per_page=100`,
         ),
       ])
 
@@ -377,12 +385,25 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({error: 'Missing tag'}, {status: 400})
       }
 
-      const articles = await devFetch(
-        `/articles?tag=${encodeURIComponent(tag)}&per_page=30&top=30`,
-      )
+      const [pageOne, pageTwo] = await Promise.all([
+        devFetch(
+          `/articles?tag=${encodeURIComponent(tag)}&per_page=100&page=1`,
+        ).catch(() => []),
+        devFetch(
+          `/articles?tag=${encodeURIComponent(tag)}&per_page=100&page=2`,
+        ).catch(() => []),
+      ])
+      const seen = new Set<number>()
+      const articles = [pageOne, pageTwo]
+        .flatMap((page) => normalizeArticles(page))
+        .filter((article) => {
+          if (seen.has(article.id)) return false
+          seen.add(article.id)
+          return true
+        })
       return NextResponse.json({
         tag,
-        articles: normalizeArticles(articles),
+        articles,
       })
     }
 
@@ -393,7 +414,7 @@ export async function GET(request: NextRequest) {
       }
 
       const articles = await devFetch(
-        `/articles/search?q=${encodeURIComponent(query)}&per_page=30`,
+        `/articles/search?q=${encodeURIComponent(query)}&per_page=100`,
       )
       return NextResponse.json({
         query,
