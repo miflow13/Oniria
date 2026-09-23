@@ -2,6 +2,9 @@ import {NextRequest, NextResponse} from 'next/server'
 
 const DEV_BASE = 'https://dev.to/api'
 const FOREM_ACCEPT = 'application/vnd.forem.api-v1+json'
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 const ALLOWED_IMAGE_HOSTS = new Set([
   'media.dev.to',
   'media2.dev.to',
@@ -235,23 +238,54 @@ export async function GET(request: NextRequest) {
     if (mode === 'bootstrap') {
       const username = safeValue(searchParams.get('username'), 'mikachu')
 
-      const [profile, profileArticles, feed, latest, tags] = await Promise.all([
+      const [
+        profile,
+        profileArticles,
+        feedPageOne,
+        feedPageTwo,
+        latestPageOne,
+        latestPageTwo,
+        tags,
+      ] = await Promise.all([
         devFetch(`/users/${encodeURIComponent(username)}`).catch(() => null),
         devFetch(
           `/articles?username=${encodeURIComponent(username)}&per_page=30`,
         ).catch(() => []),
-        devFetch('/articles?per_page=30&top=7').catch(() => []),
-        devFetch('/articles?per_page=30').catch(() => []),
+        devFetch('/articles?per_page=100&page=1&top=7').catch(() => []),
+        devFetch('/articles?per_page=100&page=2&top=7').catch(() => []),
+        devFetch('/articles?per_page=100&page=1').catch(() => []),
+        devFetch('/articles?per_page=100&page=2').catch(() => []),
         devFetch('/tags?per_page=30').catch(() => []),
       ])
 
-      return NextResponse.json({
-        profile,
-        profileArticles: normalizeArticles(profileArticles),
-        feed: normalizeArticles(feed),
-        latest: normalizeArticles(latest),
-        tags,
-      })
+      const dedupe = (groups: unknown[]) => {
+        const seen = new Set<number>()
+        return groups
+          .flatMap((group) => normalizeArticles(group))
+          .filter((article) => {
+            if (!article || typeof article !== 'object') return false
+            const id = Number((article as {id?: unknown}).id)
+            if (!Number.isFinite(id) || seen.has(id)) return false
+            seen.add(id)
+            return true
+          })
+      }
+
+      return NextResponse.json(
+        {
+          profile,
+          profileArticles: normalizeArticles(profileArticles),
+          feed: dedupe([feedPageOne, feedPageTwo]),
+          latest: dedupe([latestPageOne, latestPageTwo]),
+          tags,
+        },
+        {
+          headers: {
+            'cache-control':
+              'no-store, no-cache, max-age=0, must-revalidate',
+          },
+        },
+      )
     }
 
     if (mode === 'catalog') {
