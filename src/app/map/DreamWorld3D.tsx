@@ -815,11 +815,16 @@ export default function DreamWorld3D({
       camera.quaternion.fromArray(savedLibraryFlightState.quaternion)
     } else if (libraryMode) {
       camera.position.set(
-        CITY_ARRIVAL.x,
+        CITY_ARRIVAL.x + 1.8,
         CITY_GROUND_Y +
           CITY_ARRIVAL.elevation +
           1.64,
-        CITY_ARRIVAL.z + 3.8,
+        CITY_ARRIVAL.z + 4.6,
+      )
+      camera.lookAt(
+        -5.5,
+        CITY_GROUND_Y + 1.9,
+        -6.5,
       )
     } else {
       camera.position.set(0, 0, 10.8)
