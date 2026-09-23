@@ -103,8 +103,47 @@ export function createLibraryBuilding(
     context.fillText(title.toUpperCase(), width / 2, height * .43)
 
     context.fillStyle = 'rgba(255,255,255,.68)'
-    context.font = '400 28px system-ui, sans-serif'
-    context.fillText(subtitle, width / 2, height * .7)
+    context.font = '400 27px system-ui, sans-serif'
+
+    const subtitleWords = subtitle.split(/\s+/)
+    const subtitleLines: string[] = []
+    let currentLine = ''
+    const maxSubtitleWidth = width - 110
+
+    subtitleWords.forEach((word) => {
+      const candidate = currentLine ? currentLine + ' ' + word : word
+      if (
+        context.measureText(candidate).width <= maxSubtitleWidth ||
+        currentLine.length === 0
+      ) {
+        currentLine = candidate
+        return
+      }
+      subtitleLines.push(currentLine)
+      currentLine = word
+    })
+    if (currentLine) subtitleLines.push(currentLine)
+
+    const visibleSubtitleLines =
+      subtitleLines.length <= 2
+        ? subtitleLines
+        : [
+            subtitleLines[0],
+            subtitleLines.slice(1).join(' '),
+          ]
+    const subtitleLineHeight = 34
+    const subtitleCenterY = height * .72
+    const subtitleStartY =
+      subtitleCenterY -
+      ((visibleSubtitleLines.length - 1) * subtitleLineHeight) / 2
+
+    visibleSubtitleLines.slice(0, 2).forEach((line, index) => {
+      context.fillText(
+        line,
+        width / 2,
+        subtitleStartY + index * subtitleLineHeight,
+      )
+    })
 
     const texture = new THREE.CanvasTexture(canvas)
     texture.colorSpace = THREE.SRGBColorSpace
@@ -156,15 +195,15 @@ export function createLibraryBuilding(
   )
 
   addSign(
-    'ONIRIA × DEV LIBRARY',
-    'A live DEV.to archive you can walk through · browse a room · choose a shelf · click a book to read',
+    'WELCOME TO ONIRIA',
+    'Sanity curates this living DEV.to library. Live articles become books, and each room is a collection you can physically browse.',
     '#f1b76f',
     [0, 3.05, 5.35],
     [10.4, 2.08],
   )
   addSign(
     'HOW TO EXPLORE',
-    'WASD move · mouse look · click books · ESC returns you to the library',
+    'WASD move · mouse look · choose a shelf · click a book to read · ESC returns you to the library',
     '#8fdcf4',
     [0, 2.02, 5.48],
     [8.7, 1.32],
