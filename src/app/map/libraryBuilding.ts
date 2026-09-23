@@ -457,7 +457,6 @@ export function createLibraryBuilding(
       loadLibraryAsset('wallCorner', 5, 'height'),
       loadLibraryAsset('floorParquet', 5.8, 'span'),
       loadLibraryAsset('roofTile', 5.2, 'span'),
-      loadLibraryAsset('skyDome', 190, 'span'),
       loadLibraryAsset('column', 4.55, 'height'),
       loadLibraryAsset('readingRug', 4.2, 'span'),
       loadLibraryAsset('libraryChair', .9, 'height'),
@@ -491,41 +490,20 @@ export function createLibraryBuilding(
     const wallCorner = value(1)
     const floorParquet = value(2)
     const roofTile = value(3)
-    const skyDome = value(4)
-    const column = value(5)
-    const readingRug = value(6)
-    const libraryChair = value(7)
-    const readingTable = value(8)
-    const cardCatalogue = value(9)
-    const pendantLight = value(10)
-    const archedWindow = value(11)
-    const chairWingback = value(12)
-    const clockMantel = value(13)
-    const quietSign = value(14)
-    const pottedPlant = value(15)
-    const wallSconce = value(16)
-    const rollingLadder = value(17)
-    const cardCatalogueSecondary = value(18)
-
-    if (skyDome) {
-      const dome = placeAsset(skyDome, 0, -8, -30)
-      dome.traverse((child) => {
-        if (!(child instanceof THREE.Mesh)) return
-        const material = new THREE.MeshBasicMaterial({
-          color: 0xaebbd2,
-          vertexColors: true,
-          side: THREE.BackSide,
-          depthWrite: false,
-          fog: false,
-          toneMapped: true,
-        })
-        localMaterials.push(material)
-        child.material = material
-        child.castShadow = false
-        child.receiveShadow = false
-        child.renderOrder = -100
-      })
-    }
+    const column = value(4)
+    const readingRug = value(5)
+    const libraryChair = value(6)
+    const readingTable = value(7)
+    const cardCatalogue = value(8)
+    const pendantLight = value(9)
+    const archedWindow = value(10)
+    const chairWingback = value(11)
+    const clockMantel = value(12)
+    const quietSign = value(13)
+    const pottedPlant = value(14)
+    const wallSconce = value(15)
+    const rollingLadder = value(16)
+    const cardCatalogueSecondary = value(17)
 
     if (wallPanel) {
       const templateWidth = (template: THREE.Group) =>
