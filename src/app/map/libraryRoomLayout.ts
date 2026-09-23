@@ -8,29 +8,115 @@ export const LIBRARY_SHELF_WIDTH = 4.5
 export const LIBRARY_SHELF_DEPTH = .72
 export const LIBRARY_SHELF_HEIGHT = 3.5
 
-// Every room uses the same circulation contract: a wide, uninterrupted
-// center approach from the hallway door, two browsing banks to either side,
-// and a shallow back-wall collection. Keeping these values centralized makes
-// it hard for future content-specific layouts to accidentally block a door.
+// The six rooms all mirror one master blueprint. Coordinates below are local
+// to a room: `inward` starts at the hallway doorway and moves toward the
+// exterior wall; `lateral` moves along the room's Z axis. This means a layout
+// change is authored once and automatically mirrors to the opposite wing.
 export const LIBRARY_ROOM_DOORWAY_CLEAR_HALF_WIDTH = 2.35
-export const LIBRARY_ROOM_SHELF_ROW_OFFSET = 4.85
-// Two shelves per freestanding bank leave a generous walk-through gap in the
-// middle. The old three-column bank made the center case act like a wall and
-// trapped the back-wall collection behind it.
-export const LIBRARY_ROOM_SHELF_COLUMN_OFFSETS = [-4.5, 4.5] as const
-export const LIBRARY_ROOM_BACK_WALL_OFFSETS = [-5.15, 0, 5.15] as const
-// The wall nearest the central hallway is split around each doorway. One
-// shelf centered on each solid wall segment fills that otherwise-empty wall
-// without narrowing the doorway itself.
-export const LIBRARY_ROOM_ENTRY_WALL_Z_OFFSETS = [-6, 6] as const
-export const LIBRARY_ROOM_ENTRY_WALL_INSET = 7.5
-// Keep the freestanding banks closer to the room center so the outer half of
-// each room is usable instead of leaving a dead strip behind one shelf bank.
-export const LIBRARY_ROOM_INWARD_SHIFT = 1.9
-// The exterior wall is roughly 8.4 units from each room center. Shelves sit
-// just inside it rather than outside the building envelope.
-export const LIBRARY_ROOM_OUTER_WALL_INSET = 7.5
-export const LIBRARY_ROOM_OUTER_WALL_Z_OFFSETS = [-5.8, 0, 5.8] as const
+
+export type LibraryRoomShelfZone =
+  | 'freestanding'
+  | 'divider-wall'
+  | 'entry-wall'
+  | 'outer-wall'
+
+export type LibraryRoomShelfSlotId =
+  | 'S1'
+  | 'S2'
+  | 'S3'
+  | 'S4'
+  | 'B1'
+  | 'B2'
+  | 'B3'
+  | 'E1'
+  | 'E2'
+  | 'O1'
+  | 'O2'
+  | 'O3'
+
+export type LibraryRoomShelfSlot = {
+  id: LibraryRoomShelfSlotId
+  zone: LibraryRoomShelfZone
+  inward: number
+  lateral: number
+  facing: 'north' | 'south' | 'entry' | 'outer'
+  doubleSided: boolean
+}
+
+// Visual blueprint, viewed from above:
+//
+//                  DIVIDER / BACK WALL
+//             B1        B2        B3
+//
+//       O1       S1          S2       E1
+//
+//             ===== CLEAR AISLE =====
+//
+//       O2       S3          S4       E2
+//
+//       O3
+//
+//                    DOOR → HALLWAY
+//
+// The critical rule is that no shelf is hand-positioned outside this table.
+// Slots are mirrored per room and validated before they are allowed to spawn.
+export const LIBRARY_ROOM_SHELF_SLOTS: readonly LibraryRoomShelfSlot[] = [
+  {id: 'S1', zone: 'freestanding', inward: 5.9, lateral: -4.6, facing: 'north', doubleSided: true},
+  {id: 'S2', zone: 'freestanding', inward: 11.35, lateral: -4.6, facing: 'north', doubleSided: true},
+  {id: 'S3', zone: 'freestanding', inward: 5.9, lateral: 4.6, facing: 'south', doubleSided: true},
+  {id: 'S4', zone: 'freestanding', inward: 11.35, lateral: 4.6, facing: 'south', doubleSided: true},
+
+  {id: 'B1', zone: 'divider-wall', inward: 3, lateral: -9.45, facing: 'north', doubleSided: false},
+  {id: 'B2', zone: 'divider-wall', inward: 8.1, lateral: -9.45, facing: 'north', doubleSided: false},
+  {id: 'B3', zone: 'divider-wall', inward: 13.2, lateral: -9.45, facing: 'north', doubleSided: false},
+
+  {id: 'E1', zone: 'entry-wall', inward: .55, lateral: -5.6, facing: 'entry', doubleSided: false},
+  {id: 'E2', zone: 'entry-wall', inward: .55, lateral: 5.6, facing: 'entry', doubleSided: false},
+
+  {id: 'O1', zone: 'outer-wall', inward: 15.35, lateral: -5.3, facing: 'outer', doubleSided: false},
+  {id: 'O2', zone: 'outer-wall', inward: 15.35, lateral: 0, facing: 'outer', doubleSided: false},
+  {id: 'O3', zone: 'outer-wall', inward: 15.35, lateral: 5.3, facing: 'outer', doubleSided: false},
+] as const
+
+export type LibraryLayoutRect = {
+  minX: number
+  maxX: number
+  minZ: number
+  maxZ: number
+}
+
+const rectFromCenter = (
+  x: number,
+  z: number,
+  width: number,
+  depth: number,
+): LibraryLayoutRect => ({
+  minX: x - width / 2,
+  maxX: x + width / 2,
+  minZ: z - depth / 2,
+  maxZ: z + depth / 2,
+})
+
+const normalizeRect = (
+  x1: number,
+  x2: number,
+  z1: number,
+  z2: number,
+): LibraryLayoutRect => ({
+  minX: Math.min(x1, x2),
+  maxX: Math.max(x1, x2),
+  minZ: Math.min(z1, z2),
+  maxZ: Math.max(z1, z2),
+})
+
+const rectsOverlap = (
+  a: LibraryLayoutRect,
+  b: LibraryLayoutRect,
+) =>
+  a.minX < b.maxX &&
+  a.maxX > b.minX &&
+  a.minZ < b.maxZ &&
+  a.maxZ > b.minZ
 
 export const LIBRARY_BUILDING_BOUNDS = {
   minX: -24.1,
@@ -121,6 +207,15 @@ export type RoomShelfPlacement = {
   floatId: string
   pathBay: number
   districtId: string
+  slotId: LibraryRoomShelfSlotId
+  zone: LibraryRoomShelfZone
+}
+
+export type LibraryRoomLayoutIssue = {
+  roomSlot: LibraryRoomSlot
+  slotId: LibraryRoomShelfSlotId
+  reason: 'outside-room' | 'doorway' | 'overlap'
+  conflictsWith?: LibraryRoomShelfSlotId
 }
 
 const shelfHoverHeights = (
@@ -144,166 +239,224 @@ const shelfHoverHeights = (
   }
 }
 
-export function roomShelfPlacements(
+const shelfYawForSlot = (
+  slot: LibraryRoomShelfSlot,
+  sideDirection: -1 | 1,
+) => {
+  switch (slot.facing) {
+    case 'south':
+      return Math.PI
+    case 'entry':
+      return sideDirection < 0 ? -Math.PI / 2 : Math.PI / 2
+    case 'outer':
+      return sideDirection < 0 ? Math.PI / 2 : -Math.PI / 2
+    case 'north':
+    default:
+      return 0
+  }
+}
+
+const shelfSafetyMargin = (
+  placement: RoomShelfPlacement,
+) =>
+  placement.zone === 'freestanding' ? .28 : .1
+
+export function roomShelfPlacementRect(
+  placement: RoomShelfPlacement,
+): LibraryLayoutRect {
+  const sideFacing =
+    Math.abs(Math.sin(placement.yaw)) > .5
+  const margin = shelfSafetyMargin(placement)
+  return rectFromCenter(
+    placement.world[0],
+    placement.world[2],
+    (sideFacing ? LIBRARY_SHELF_DEPTH : LIBRARY_SHELF_WIDTH) +
+      margin * 2,
+    (sideFacing ? LIBRARY_SHELF_WIDTH : LIBRARY_SHELF_DEPTH) +
+      margin * 2,
+  )
+}
+
+export function roomDoorwayClearanceRect(
+  room: LibraryRoomLayout,
+): LibraryLayoutRect {
+  const sideDirection: -1 | 1 =
+    room.center[0] < 0 ? -1 : 1
+  const [doorX, doorZ] = room.doorway
+  const insideX = doorX + sideDirection * 3
+  return normalizeRect(
+    doorX - sideDirection * .15,
+    insideX,
+    doorZ - LIBRARY_ROOM_DOORWAY_CLEAR_HALF_WIDTH,
+    doorZ + LIBRARY_ROOM_DOORWAY_CLEAR_HALF_WIDTH,
+  )
+}
+
+export function roomCrossAisleRect(
+  room: LibraryRoomLayout,
+): LibraryLayoutRect {
+  const sideDirection: -1 | 1 =
+    room.center[0] < 0 ? -1 : 1
+  const [doorX, doorZ] = room.doorway
+  return normalizeRect(
+    doorX + sideDirection * .6,
+    doorX + sideDirection * 14.4,
+    doorZ - 2.2,
+    doorZ + 2.2,
+  )
+}
+
+const roomInteriorRect = (
+  room: LibraryRoomLayout,
+): LibraryLayoutRect => {
+  const sideDirection: -1 | 1 =
+    room.center[0] < 0 ? -1 : 1
+  const [doorX] = room.doorway
+  return normalizeRect(
+    doorX + sideDirection * .02,
+    doorX + sideDirection * 15.95,
+    room.center[1] - 9.95,
+    room.center[1] + 9.95,
+  )
+}
+
+export function validateRoomShelfPlacements(
+  room: LibraryRoomLayout,
+  placements: readonly RoomShelfPlacement[],
+): LibraryRoomLayoutIssue[] {
+  const issues: LibraryRoomLayoutIssue[] = []
+  const roomBounds = roomInteriorRect(room)
+  const doorway = roomDoorwayClearanceRect(room)
+
+  placements.forEach((placement) => {
+    const rect = roomShelfPlacementRect(placement)
+    if (
+      rect.minX < roomBounds.minX ||
+      rect.maxX > roomBounds.maxX ||
+      rect.minZ < roomBounds.minZ ||
+      rect.maxZ > roomBounds.maxZ
+    ) {
+      issues.push({
+        roomSlot: room.slot,
+        slotId: placement.slotId,
+        reason: 'outside-room',
+      })
+    }
+
+    if (
+      placement.zone === 'freestanding' &&
+      rectsOverlap(rect, doorway)
+    ) {
+      issues.push({
+        roomSlot: room.slot,
+        slotId: placement.slotId,
+        reason: 'doorway',
+      })
+    }
+  })
+
+  for (let first = 0; first < placements.length; first += 1) {
+    const a = placements[first]
+    if (!a) continue
+    const aRect = roomShelfPlacementRect(a)
+    for (
+      let second = first + 1;
+      second < placements.length;
+      second += 1
+    ) {
+      const b = placements[second]
+      if (!b) continue
+      if (!rectsOverlap(aRect, roomShelfPlacementRect(b))) continue
+      issues.push({
+        roomSlot: room.slot,
+        slotId: b.slotId,
+        reason: 'overlap',
+        conflictsWith: a.slotId,
+      })
+    }
+  }
+
+  return issues
+}
+
+export function roomShelfBlueprintPlacements(
   district: LibraryDistrictConfig,
   index = 0,
 ): RoomShelfPlacement[] {
   const room = roomForDistrict(district, index)
-  const [x, z] = room.center
   const heights = shelfHoverHeights(district.sourceMode)
-  const useEndCaps =
-    district.sourceMode === 'latest' ||
-    district.sourceMode === 'topics' ||
-    district.sourceMode === 'catalog'
-
-  // Repeatable room template:
-  //
-  //               BACK WALL
-  //        [S]        [S]        [S]
-  //
-  //   [S]                 [S]       <- north browsing bank
-  //
-  //       wide center approach +
-  //        cross-room walk-through
-  //
-  //   [S]                 [S]       <- south browsing bank
-  //
-  //                 DOOR
-  //
-  // The center strip around room.z is intentionally shelf-free from the
-  // hallway threshold to the back of the room. Each freestanding bank also
-  // has a large center gap, so visitors can pass through the bank to reach
-  // the back-wall cases instead of being funneled around a middle shelf.
-  // All four freestanding shelves are double-sided.
-  const sideDirection = x < 0 ? -1 : 1
-  const rowOffsets = [
-    -LIBRARY_ROOM_SHELF_ROW_OFFSET,
-    LIBRARY_ROOM_SHELF_ROW_OFFSET,
-  ] as const
-  const placements: RoomShelfPlacement[] = []
-
-  rowOffsets.forEach((zOffset, rowIndex) => {
-    LIBRARY_ROOM_SHELF_COLUMN_OFFSETS.forEach(
-      (depthOffset, columnIndex) => {
-        const placementIndex =
-          rowIndex * LIBRARY_ROOM_SHELF_COLUMN_OFFSETS.length +
-          columnIndex
-
-        placements.push({
-          world: [
-            x +
-              depthOffset * sideDirection +
-              (sideDirection < 0
-                ? LIBRARY_ROOM_INWARD_SHIFT
-                : -LIBRARY_ROOM_INWARD_SHIFT),
-            heights[placementIndex] ?? heights.at(-1) ?? .7,
-            z + zOffset,
-          ],
-          yaw: rowIndex === 0 ? 0 : Math.PI,
-          doubleSided: true,
-          endCaps:
-            useEndCaps
-              ? columnIndex === 0
-                ? 'left'
-                : columnIndex ===
-                    LIBRARY_ROOM_SHELF_COLUMN_OFFSETS.length - 1
-                  ? 'right'
-                  : 'none'
-              : 'none',
-          floatId:
-            `${district.id}:room-bank-${rowIndex}:col-${columnIndex}`,
-          pathBay: district.bay,
-          districtId: district.id,
-        })
-      },
-    )
-  })
-
-  // Finish every room with the same three single-sided back-wall cases. They
-  // sit against the solid deep divider and face inward. Because they are well
-  // behind the doorway approach, they add density without creating a choke
-  // point or changing the circulation pattern between rooms.
-  const backWallZ = z - 9.48
+  const sideDirection: -1 | 1 =
+    room.center[0] < 0 ? -1 : 1
+  const [doorX, roomZ] = room.doorway
   const wallBaseHeight =
     district.sourceMode === 'catalog'
       ? .78
       : district.sourceMode === 'featured'
         ? .68
         : .54
+  const useEndCaps =
+    district.sourceMode === 'latest' ||
+    district.sourceMode === 'topics' ||
+    district.sourceMode === 'catalog'
 
-  LIBRARY_ROOM_BACK_WALL_OFFSETS.forEach(
-    (xOffset, wallIndex) => {
-      placements.push({
-        world: [
-          x + xOffset,
-          wallBaseHeight + (wallIndex % 2) * .07,
-          backWallZ,
-        ],
-        yaw: 0,
-        doubleSided: false,
-        endCaps: 'none',
-        floatId: `${district.id}:back-wall:${wallIndex}`,
-        pathBay: district.bay,
-        districtId: district.id,
-      })
-    },
+  return LIBRARY_ROOM_SHELF_SLOTS.map((slot, slotIndex) => {
+    const isFreestanding = slot.zone === 'freestanding'
+    const endCaps =
+      useEndCaps && isFreestanding
+        ? slot.id === 'S1' || slot.id === 'S3'
+          ? 'left'
+          : 'right'
+        : 'none'
+
+    return {
+      world: [
+        doorX + sideDirection * slot.inward,
+        isFreestanding
+          ? heights[slotIndex % heights.length] ??
+            heights.at(-1) ??
+            .7
+          : wallBaseHeight + (slotIndex % 2) * .05,
+        roomZ + slot.lateral,
+      ],
+      yaw: shelfYawForSlot(slot, sideDirection),
+      doubleSided: slot.doubleSided,
+      endCaps,
+      floatId: `${district.id}:slot:${slot.id}`,
+      pathBay: district.bay,
+      districtId: district.id,
+      slotId: slot.id,
+      zone: slot.zone,
+    }
+  })
+}
+
+export function roomShelfPlacements(
+  district: LibraryDistrictConfig,
+  index = 0,
+): RoomShelfPlacement[] {
+  const room = roomForDistrict(district, index)
+  const placements = roomShelfBlueprintPlacements(
+    district,
+    index,
+  )
+  const issues = validateRoomShelfPlacements(
+    room,
+    placements,
   )
 
-  // Fill the two solid wall panels on the hallway/entry side of every room.
-  // These are single-sided and face inward. Their centers line up with the
-  // actual wall segments at z ± 6, which leaves the doorway opening and its
-  // approach completely untouched.
-  const entryWallX =
-    x - sideDirection * LIBRARY_ROOM_ENTRY_WALL_INSET
-  const entryWallYaw =
-    sideDirection < 0 ? -Math.PI / 2 : Math.PI / 2
+  if (issues.length > 0 && process.env.NODE_ENV !== 'production') {
+    console.warn(
+      '[DEV Library layout] invalid room slots',
+      issues,
+    )
+  }
 
-  LIBRARY_ROOM_ENTRY_WALL_Z_OFFSETS.forEach(
-    (zOffset, entryIndex) => {
-      placements.push({
-        world: [
-          entryWallX,
-          wallBaseHeight + (entryIndex % 2) * .05,
-          z + zOffset,
-        ],
-        yaw: entryWallYaw,
-        doubleSided: false,
-        endCaps: 'none',
-        floatId: `${district.id}:entry-wall:${entryIndex}`,
-        pathBay: district.bay,
-        districtId: district.id,
-      })
-    },
+  const invalidSlots = new Set(
+    issues.map((issue) => issue.slotId),
   )
-
-  // Use the previously empty exterior side of every room too. These three
-  // shelves sit just inside the outer wall and face inward, filling the large
-  // dead areas visible in the first rooms without changing the doorway or
-  // central cross-room circulation.
-  const outerWallX =
-    x + sideDirection * LIBRARY_ROOM_OUTER_WALL_INSET
-  const outerWallYaw =
-    sideDirection < 0 ? Math.PI / 2 : -Math.PI / 2
-
-  LIBRARY_ROOM_OUTER_WALL_Z_OFFSETS.forEach(
-    (zOffset, outerIndex) => {
-      placements.push({
-        world: [
-          outerWallX,
-          wallBaseHeight + (outerIndex % 2) * .05,
-          z + zOffset,
-        ],
-        yaw: outerWallYaw,
-        doubleSided: false,
-        endCaps: 'none',
-        floatId: `${district.id}:outer-wall:${outerIndex}`,
-        pathBay: district.bay,
-        districtId: district.id,
-      })
-    },
+  return placements.filter(
+    (placement) => !invalidSlots.has(placement.slotId),
   )
-
-  return placements
 }
 
 const HALLWAY_SHELF_Z = [-6, -18, -26, -38, -46, -58] as const
