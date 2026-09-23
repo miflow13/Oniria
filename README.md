@@ -112,4 +112,19 @@ sanity.cli.ts
 7. Click **+ Create symbol** and make a custom symbol.
 8. Save the dream.
 9. Confirm it appears at the top of the journal and changes the map.
+
+## Exporting the outdoor library
+
+Open `/surf` and wait for the **Export GLB** control in the upper-right corner
+to become available. It downloads `oniria-outdoor-library.glb`, a binary glTF
+package that can be imported directly into the [three.js editor](https://threejs.org/editor/).
+
+The exported scene is a snapshot of the currently loaded catalogue. It includes
+the procedural terrace halls, landscape, authored library/environment assets,
+lights, labels, and clouds; browser-only interaction, navigation, live DEV data
+fetching, and cloud motion are intentionally not part of the static GLB.
+
+The original low-poly environment attribution remains in
+`public/assets/lowpoly-environment/ATTRIBUTION.md`; retain it when redistributing
+an exported world.
 # Oniria
