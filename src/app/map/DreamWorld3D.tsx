@@ -2371,8 +2371,8 @@ export default function DreamWorld3D({
       const gridColors: number[] = []
       const gridIndices: number[] = []
       const gridRailPositions: number[] = []
-      const sideRoadColor = new THREE.Color(0x63d7e2)
-      const crossRoadColor = new THREE.Color(0xa68cff)
+      const sideRoadColor = new THREE.Color(0x4ebbc8)
+      const crossRoadColor = new THREE.Color(0x8c76cf)
 
       visibleGridSegments.forEach((segment) => {
         const [sx, sy, sz] = segment.start
@@ -2469,7 +2469,7 @@ export default function DreamWorld3D({
         color: 0xffffff,
         vertexColors: true,
         transparent: true,
-        opacity: .105,
+        opacity: .078,
         side: THREE.DoubleSide,
         depthWrite: false,
         blending: THREE.NormalBlending,
@@ -2478,7 +2478,7 @@ export default function DreamWorld3D({
       libraryGridUnderlayMaterial = new THREE.MeshBasicMaterial({
         color: 0x5546a7,
         transparent: true,
-        opacity: .05,
+        opacity: .028,
         side: THREE.DoubleSide,
         depthWrite: false,
         blending: THREE.AdditiveBlending,
@@ -2487,7 +2487,7 @@ export default function DreamWorld3D({
       libraryGridRailMaterial = new THREE.LineBasicMaterial({
         color: 0x8eeaf2,
         transparent: true,
-        opacity: .2,
+        opacity: .145,
         depthWrite: false,
         blending: THREE.NormalBlending,
         toneMapped: true,
@@ -3232,7 +3232,7 @@ export default function DreamWorld3D({
                 activeDistricts,
               ) *
                 2.4
-            : 3.35
+            : 2.15
         const sideVector = new THREE.Vector3(
           frame.normalX,
           0,
