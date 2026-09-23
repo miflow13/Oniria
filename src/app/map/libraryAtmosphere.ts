@@ -5,11 +5,9 @@ import type {
 } from '@/lib/libraryWorldConfig'
 import type {DreamQuality} from './dreamworld/quality'
 import {
-  ARCHIVE_PATH_RENDER_BAYS,
-  archiveBayFromWorldZ,
-  archivePathFrame,
-  archivePathPoint,
-} from './libraryLayout'
+  CITY_GROUND_Y,
+  cityDistrictBlock,
+} from './libraryCityLayout'
 
 type NebulaTextureFactory = (color: string) => THREE.Texture
 type SeededUnit = (seed: number, salt: number) => number
@@ -27,7 +25,7 @@ type LibraryAtmosphereUpdate = {
   camera: THREE.Camera
   districts: Pick<
     LibraryDistrictConfig,
-    'bay' | 'accent' | 'atmosphere'
+    'id' | 'bay' | 'accent' | 'atmosphere'
   >[]
 }
 
@@ -113,24 +111,24 @@ export function createLibraryAtmosphere({
 
   const hazeSpecs = [
     {
-      color: 'rgba(73, 132, 176, 0.36)',
-      position: [-28, 7, -72] as const,
-      scale: [92, 42] as const,
-      opacity: .036,
+      color: 'rgba(61, 127, 158, 0.34)',
+      position: [-34, 10, -12] as const,
+      scale: [86, 42] as const,
+      opacity: .032,
       rotation: -.035,
     },
     {
-      color: 'rgba(111, 82, 176, 0.36)',
-      position: [32, -4, -145] as const,
-      scale: [126, 54] as const,
-      opacity: .031,
-      rotation: .045,
+      color: 'rgba(112, 78, 172, 0.35)',
+      position: [12, 5, -34] as const,
+      scale: [92, 48] as const,
+      opacity: .035,
+      rotation: .04,
     },
     {
-      color: 'rgba(52, 153, 157, 0.36)',
-      position: [-18, 13, -228] as const,
-      scale: [158, 64] as const,
-      opacity: .027,
+      color: 'rgba(58, 122, 142, 0.30)',
+      position: [38, 12, -54] as const,
+      scale: [96, 52] as const,
+      opacity: .028,
       rotation: -.02,
     },
   ]
@@ -209,43 +207,34 @@ export function createLibraryAtmosphere({
 
   const fogBankCount =
     quality === 'cinematic'
-      ? 40
+      ? 34
       : quality === 'high'
-        ? 30
+        ? 26
         : quality === 'medium'
-          ? 22
-          : 14
+          ? 20
+          : 12
 
   for (let index = 0; index < fogBankCount; index += 1) {
-    const t = index / (fogBankCount - 1)
-    const bay = THREE.MathUtils.lerp(
-      .25,
-      ARCHIVE_PATH_RENDER_BAYS - .4,
-      t,
-    )
-    const point = archivePathPoint(bay)
-    const frame = archivePathFrame(bay)
+    const seed = index + 701
+    const x =
+      -35 + seededUnit(seed, 3) * 76
+    const z =
+      14 - seededUnit(seed, 4) * 76
     const phase = index * 1.37
-    const sidePattern = index % 3
-    const sideSign =
-      sidePattern === 0 ? -1 : sidePattern === 1 ? 1 : 0
-    const sideOffset =
-      sideSign *
-      (1.8 + seededUnit(index + 701, 4) * 4.4)
 
     const sprite = new THREE.Sprite(
       fogMaterials[index % fogMaterials.length],
     )
     sprite.position.set(
-      point[0] + frame.normalX * sideOffset,
-      point[1] +
-        (seededUnit(index + 701, 5) - .5) * 4.2 +
-        .6,
-      point[2] + frame.normalZ * sideOffset,
+      x,
+      CITY_GROUND_Y +
+        2 +
+        (seededUnit(seed, 5) - .5) * 8,
+      z,
     )
 
-    const width = 30 + seededUnit(index + 701, 6) * 18
-    const height = 12 + seededUnit(index + 701, 7) * 9
+    const width = 22 + seededUnit(seed, 6) * 18
+    const height = 10 + seededUnit(seed, 7) * 8
     sprite.scale.set(width, height, 1)
     sprite.userData.baseX = sprite.position.x
     sprite.userData.baseY = sprite.position.y
@@ -265,18 +254,18 @@ export function createLibraryAtmosphere({
     archiveFog.push(sprite)
   }
 
-  const localHazeOffsets = [
-    -1.6,
-    -.7,
-    .15,
-    1,
-    1.9,
-    3,
-    4.3,
-    5.8,
+  const localOffsets = [
+    [-7, -4],
+    [7, -5],
+    [-10, -11],
+    [10, -12],
+    [-5, -18],
+    [5, -19],
+    [-12, 4],
+    [12, 3],
   ] as const
 
-  localHazeOffsets.forEach((bayOffset, index) => {
+  localOffsets.forEach(([offsetX, offsetZ], index) => {
     const material = new THREE.SpriteMaterial({
       map: fogTextures[index % fogTextures.length],
       transparent: true,
@@ -288,30 +277,17 @@ export function createLibraryAtmosphere({
     archiveFogMaterials.push(material)
 
     const sprite = new THREE.Sprite(material)
-    const localSide =
-      index % 3 === 0 ? 0 : index % 2 === 0 ? 1 : -1
-    const initialBay = THREE.MathUtils.clamp(
-      .35 + bayOffset,
-      0,
-      ARCHIVE_PATH_RENDER_BAYS,
-    )
-    const initialPoint = archivePathPoint(initialBay)
-    const initialFrame = archivePathFrame(initialBay)
-    const initialSideDistance = localSide * 2.6
-
-    sprite.userData.localHazeBayOffset = bayOffset
+    sprite.userData.localOffsetX = offsetX
+    sprite.userData.localOffsetZ = offsetZ
     sprite.userData.localHazePhase = index * 1.27
-    sprite.userData.localHazeSide = localSide
     sprite.position.set(
-      initialPoint[0] +
-        initialFrame.normalX * initialSideDistance,
-      initialPoint[1] + .8,
-      initialPoint[2] +
-        initialFrame.normalZ * initialSideDistance,
+      offsetX,
+      CITY_GROUND_Y + 2,
+      offsetZ,
     )
     sprite.scale.set(
-      32 + (index % 3) * 6,
-      14 + (index % 4) * 2.2,
+      24 + (index % 3) * 5,
+      12 + (index % 4) * 1.8,
       1,
     )
     sprite.renderOrder = -1
@@ -361,7 +337,7 @@ export function createLibraryAtmosphere({
         sprite.position.x =
           (sprite.userData.baseX as number) +
           Math.sin(elapsed * .028 + phase) *
-            (1.1 + (index % 3) * .22)
+            (1 + (index % 3) * .18)
         sprite.position.y =
           (sprite.userData.baseY as number) +
           Math.cos(elapsed * .022 + phase) *
@@ -389,31 +365,42 @@ export function createLibraryAtmosphere({
           (.24 + clearance * .76)
       })
 
-      if (localHaze.length === 0) return
-
-      const cameraBay = archiveBayFromWorldZ(
-        camera.position.z,
-      )
-      const nearestDistrict =
+      const nearest =
         districts.length > 0
-          ? districts.reduce((nearest, candidate) =>
-              Math.abs(candidate.bay - cameraBay) <
-              Math.abs(nearest.bay - cameraBay)
-                ? candidate
-                : nearest,
-            )
+          ? districts.reduce<{
+              district: (typeof districts)[number]
+              index: number
+              distance: number
+            } | null>((best, district, index) => {
+              const block = cityDistrictBlock(
+                district.id,
+                index,
+              )
+              const distance = Math.hypot(
+                camera.position.x - block.x,
+                camera.position.z - block.z,
+              )
+              if (!best || distance < best.distance) {
+                return {
+                  district,
+                  index,
+                  distance,
+                }
+              }
+              return best
+            }, null)
           : null
 
+      const nearestDistrict =
+        nearest?.district ?? null
       let districtAtmosphereStrength = 1
 
-      if (nearestDistrict) {
+      if (nearestDistrict && nearest) {
         const visualPreset =
           getLibraryAtmosphereVisualPreset(
             nearestDistrict.atmosphere,
           )
 
-        // Atmosphere is intentionally stronger than the district accent.
-        // Accent still contributes identity, but the preset owns the mood.
         districtTint
           .set(visualPreset.tint)
           .lerp(
@@ -432,46 +419,49 @@ export function createLibraryAtmosphere({
         districtAtmosphereStrength =
           visualPreset.hazeStrength
 
-        const districtPoint = archivePathPoint(
-          nearestDistrict.bay,
+        const block = cityDistrictBlock(
+          nearestDistrict.id,
+          nearest.index,
         )
         districtLight.position.set(
-          districtPoint[0],
-          districtPoint[1] + 3.2,
-          districtPoint[2],
+          block.x,
+          CITY_GROUND_Y +
+            block.elevation +
+            3.2,
+          block.z,
         )
-        districtLight.color.lerp(districtTint, .08)
+        districtLight.color.lerp(
+          districtTint,
+          .08,
+        )
 
-        const districtDistance = Math.abs(
-          nearestDistrict.bay - cameraBay,
-        )
         const districtPresence =
           1 -
           THREE.MathUtils.smoothstep(
-            districtDistance,
-            .5,
-            5.5,
+            nearest.distance,
+            4,
+            22,
           )
-
-        const targetLight =
-          visualPreset.lightStrength
 
         districtLight.intensity +=
           (
-            targetLight *
+            visualPreset.lightStrength *
               (.35 + districtPresence * .65) -
             districtLight.intensity
           ) *
           .085
 
-        // Re-tint the broad fog banks as the visitor moves through the
-        // archive. This makes a district atmosphere readable at a glance,
-        // rather than only in the few sprites immediately around the camera.
         archiveFogMaterials.forEach((material) => {
-          material.color.lerp(districtTint, .045)
+          material.color.lerp(
+            districtTint,
+            .045,
+          )
         })
         hazeMaterials.forEach((material) => {
-          material.color.lerp(districtTint, .025)
+          material.color.lerp(
+            districtTint,
+            .025,
+          )
         })
       } else {
         districtTint.copy(fallbackTint)
@@ -479,63 +469,55 @@ export function createLibraryAtmosphere({
       }
 
       localHaze.forEach((sprite, index) => {
-        const bayOffset =
-          sprite.userData.localHazeBayOffset as number
-        const bay = THREE.MathUtils.clamp(
-          cameraBay + bayOffset,
-          0,
-          ARCHIVE_PATH_RENDER_BAYS,
-        )
-        const point = archivePathPoint(bay)
-        const frame = archivePathFrame(bay)
         const phase =
           sprite.userData.localHazePhase as number
-        const side =
-          sprite.userData.localHazeSide as number
-        const sideDistance =
-          side *
-          (2.6 + Math.sin(elapsed * .07 + phase) * .65)
+        const offsetX =
+          sprite.userData.localOffsetX as number
+        const offsetZ =
+          sprite.userData.localOffsetZ as number
 
         const targetX =
-          point[0] + frame.normalX * sideDistance
+          camera.position.x +
+          offsetX +
+          Math.sin(elapsed * .07 + phase) * .9
         const targetY =
-          point[1] +
-          .8 +
+          camera.position.y +
+          .7 +
           Math.sin(elapsed * .055 + phase) * .72
         const targetZ =
-          point[2] + frame.normalZ * sideDistance
+          camera.position.z +
+          offsetZ +
+          Math.cos(elapsed * .06 + phase) * .8
 
         sprite.position.x +=
-          (targetX - sprite.position.x) * .12
+          (targetX - sprite.position.x) * .1
         sprite.position.y +=
-          (targetY - sprite.position.y) * .1
+          (targetY - sprite.position.y) * .08
         sprite.position.z +=
-          (targetZ - sprite.position.z) * .12
+          (targetZ - sprite.position.z) * .1
 
         const material =
           sprite.material as THREE.SpriteMaterial
         const centerFade =
           index <= 1 ? .72 : index >= 6 ? .8 : 1
-        const landmarkRichness = nearestDistrict
+        const landmarkRichness = nearest
           ? 1 +
             (1 -
               THREE.MathUtils.smoothstep(
-                Math.abs(
-                  nearestDistrict.bay - cameraBay,
-                ),
-                .4,
-                3.6,
+                nearest.distance,
+                4,
+                18,
               )) *
-              .32
+              .34
           : 1
 
         material.opacity =
-          (.032 +
+          (.03 +
             Math.max(
               0,
               Math.sin(elapsed * .09 + phase),
             ) *
-              .016) *
+              .015) *
           centerFade *
           landmarkRichness *
           districtAtmosphereStrength
@@ -553,14 +535,24 @@ export function createLibraryAtmosphere({
       if (disposed) return
       disposed = true
 
-      hazePlanes.forEach((plane) => farWorld.remove(plane))
-      archiveFog.forEach((sprite) => world.remove(sprite))
-      localHaze.forEach((sprite) => world.remove(sprite))
+      hazePlanes.forEach((plane) =>
+        farWorld.remove(plane),
+      )
+      archiveFog.forEach((sprite) =>
+        world.remove(sprite),
+      )
+      localHaze.forEach((sprite) =>
+        world.remove(sprite),
+      )
       world.remove(districtLight)
 
       hazeGeometry.dispose()
-      hazeMaterials.forEach((material) => material.dispose())
-      hazeTextures.forEach((texture) => texture.dispose())
+      hazeMaterials.forEach((material) =>
+        material.dispose(),
+      )
+      hazeTextures.forEach((texture) =>
+        texture.dispose(),
+      )
       archiveFogMaterials.forEach((material) =>
         material.dispose(),
       )
