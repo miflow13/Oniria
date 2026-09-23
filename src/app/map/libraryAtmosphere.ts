@@ -27,6 +27,7 @@ type LibraryAtmosphereUpdate = {
   camera: THREE.Camera
   activeDistrictId?: string
   activeRoomCenter?: [number, number]
+  roomSelectionMode?: boolean
   districts: Pick<
     LibraryDistrictConfig,
     'id' | 'bay' | 'accent' | 'atmosphere'
@@ -340,6 +341,7 @@ export function createLibraryAtmosphere({
       camera,
       activeDistrictId,
       activeRoomCenter,
+      roomSelectionMode,
       districts,
     }) {
       if (disposed) return
@@ -402,20 +404,24 @@ export function createLibraryAtmosphere({
       const cameraBay = archiveBayFromWorldZ(
         camera.position.z,
       )
-      const nearestDistrict =
-        (activeDistrictId
+      const selectedRoomDistrict =
+        activeDistrictId
           ? districts.find(
               (district) => district.id === activeDistrictId,
-            )
-          : null) ??
-        (districts.length > 0
-          ? districts.reduce((nearest, candidate) =>
-              Math.abs(candidate.bay - cameraBay) <
-              Math.abs(nearest.bay - cameraBay)
-                ? candidate
-                : nearest,
-            )
-          : null)
+            ) ?? null
+          : null
+      const nearestDistrict =
+        roomSelectionMode
+          ? selectedRoomDistrict
+          : selectedRoomDistrict ??
+            (districts.length > 0
+              ? districts.reduce((nearest, candidate) =>
+                  Math.abs(candidate.bay - cameraBay) <
+                  Math.abs(nearest.bay - cameraBay)
+                    ? candidate
+                    : nearest,
+                )
+              : null)
 
       let districtAtmosphereStrength = 1
 
