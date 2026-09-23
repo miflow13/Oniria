@@ -25,6 +25,7 @@ export default defineConfig({
               ),
             S.divider(),
             S.documentTypeListItem('libraryDistrict').title('Districts'),
+            S.documentTypeListItem('libraryLayoutMarker').title('Layout Pins'),
             S.documentTypeListItem('curatedArticle').title('Curator Picks'),
             S.documentTypeListItem('archiveJourney').title('Guided Journeys'),
             S.divider(),
