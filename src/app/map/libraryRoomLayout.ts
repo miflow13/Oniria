@@ -107,25 +107,25 @@ export function roomShelfPlacements(
 
   return [
     {
-      world: [outerX, .12, z - 2.9],
+      world: [outerX, .02, z - 2.9],
       yaw: 0,
       pathBay: district.bay,
       districtId: district.id,
     },
     {
-      world: [innerX, .12, z - 2.9],
+      world: [innerX, .02, z - 2.9],
       yaw: 0,
       pathBay: district.bay,
       districtId: district.id,
     },
     {
-      world: [outerX, .12, z + 2.9],
+      world: [outerX, .02, z + 2.9],
       yaw: Math.PI,
       pathBay: district.bay,
       districtId: district.id,
     },
     {
-      world: [innerX, .12, z + 2.9],
+      world: [innerX, .02, z + 2.9],
       yaw: Math.PI,
       pathBay: district.bay,
       districtId: district.id,
