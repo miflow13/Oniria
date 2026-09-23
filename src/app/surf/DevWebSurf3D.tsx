@@ -1531,11 +1531,13 @@ export default function DevWebSurf3D({
       }
 
       if (roofTile) {
-        const ceilingMaterial = new THREE.MeshStandardMaterial({
-          color: 0xe4e0d8,
-          roughness: .78,
-          metalness: .02,
+        // Keep the ceiling visually white regardless of the scene's dark
+        // atmospheric lighting. The bath-tile GLB supplies the authored
+        // geometry; this unlit material supplies the intended library finish.
+        const ceilingMaterial = new THREE.MeshBasicMaterial({
+          color: 0xf4f4f1,
           side: THREE.DoubleSide,
+          toneMapped: false,
         })
         architecturalMaterials.push(ceilingMaterial)
 
@@ -1576,7 +1578,7 @@ export default function DevWebSurf3D({
             tile.traverse((child) => {
               if (!(child instanceof THREE.Mesh)) return
               child.material = ceilingMaterial
-              child.castShadow = true
+              child.castShadow = false
               child.receiveShadow = false
             })
           }
