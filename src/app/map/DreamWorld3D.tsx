@@ -4166,22 +4166,22 @@ export default function DreamWorld3D({
               .libraryLandmarkBaseRotationY as number
           const landmarkHeight =
             object.userData.libraryLandmarkHeight as number
-          const landmarkBay =
-            object.userData.libraryLandmarkBay as number
-          const landmarkDistance =
-            Math.abs(landmarkBay - currentArchiveBay)
+          const landmarkDistance = Math.hypot(
+            camera.position.x - object.position.x,
+            camera.position.z - object.position.z,
+          )
           const heroWake =
             1 -
             THREE.MathUtils.smoothstep(
               landmarkDistance,
-              .45,
-              5.2,
+              5,
+              24,
             )
           const passThroughFade =
             THREE.MathUtils.smoothstep(
               landmarkDistance,
-              .08,
-              .62,
+              1.4,
+              4.2,
             )
           const landmarkBaseScale =
             (object.userData.libraryLandmarkBaseScale as
@@ -4331,11 +4331,14 @@ export default function DreamWorld3D({
           typeof markerBay === 'number' &&
           object instanceof THREE.Sprite
         ) {
-          const distance = Math.abs(markerBay - currentArchiveBay)
+          const distance = Math.hypot(
+            camera.position.x - object.position.x,
+            camera.position.z - object.position.z,
+          )
           const wake = 1 - THREE.MathUtils.smoothstep(
             distance,
-            1.2,
-            5.5,
+            7,
+            28,
           )
           const material = object.material as THREE.SpriteMaterial
           material.opacity +=
