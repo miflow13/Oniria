@@ -4,11 +4,19 @@ export type FloatingPropOptions = {
   phase: number
   hoverAmplitude: number
   hoverSpeed: number
+  secondaryHoverAmplitude?: number
+  secondaryHoverSpeed?: number
   tiltX?: number
   tiltY?: number
   tiltZ?: number
   driftX?: number
   driftZ?: number
+  driftSide?: number
+  driftForward?: number
+  driftSpeedX?: number
+  driftSpeedZ?: number
+  driftSpeedSide?: number
+  driftSpeedForward?: number
 }
 
 type FloatingProp = FloatingPropOptions & {
@@ -58,14 +66,72 @@ export function createFloatingPropRegistry(): FloatingPropRegistry {
     update(elapsed) {
       for (const prop of props) {
         const wave = elapsed * prop.hoverSpeed + prop.phase
-        const driftWaveX =
-          Math.sin(wave * .29 + prop.phase * .61 + .7)
-        const driftWaveZ =
-          Math.cos(wave * .23 + prop.phase * .83 + 1.4)
+        const secondaryHover =
+          Math.sin(
+            elapsed *
+              (prop.secondaryHoverSpeed ??
+                prop.hoverSpeed * 1.73) +
+              prop.phase * 1.31,
+          ) * (prop.secondaryHoverAmplitude ?? 0)
+
+        const driftWaveX = Math.sin(
+          elapsed *
+            (prop.driftSpeedX ??
+              Math.max(.01, prop.hoverSpeed * .29)) +
+            prop.phase * .61 +
+            .7,
+        )
+        const driftWaveZ = Math.cos(
+          elapsed *
+            (prop.driftSpeedZ ??
+              Math.max(.01, prop.hoverSpeed * .23)) +
+            prop.phase * .83 +
+            1.4,
+        )
+
+        const sideWave = Math.sin(
+          elapsed *
+            (prop.driftSpeedSide ??
+              Math.max(.01, prop.hoverSpeed * .31)) +
+            prop.phase * .47 +
+            .35,
+        )
+        const forwardWave = Math.cos(
+          elapsed *
+            (prop.driftSpeedForward ??
+              Math.max(.01, prop.hoverSpeed * .21)) +
+            prop.phase * .79 +
+            1.05,
+        )
+
+        // Local side/forward drift follows the object's authored yaw. This is
+        // especially useful for wall-bound shelves: they can slide gently
+        // along a wall without drifting through it.
+        const sideX = Math.cos(prop.baseRotationY)
+        const sideZ = -Math.sin(prop.baseRotationY)
+        const forwardX = -Math.sin(prop.baseRotationY)
+        const forwardZ = -Math.cos(prop.baseRotationY)
+        const localDriftX =
+          sideX * sideWave * (prop.driftSide ?? 0) +
+          forwardX *
+            forwardWave *
+            (prop.driftForward ?? 0)
+        const localDriftZ =
+          sideZ * sideWave * (prop.driftSide ?? 0) +
+          forwardZ *
+            forwardWave *
+            (prop.driftForward ?? 0)
+
         prop.object.position.set(
-          prop.baseX + driftWaveX * (prop.driftX ?? 0),
-          prop.baseY + Math.sin(wave) * prop.hoverAmplitude,
-          prop.baseZ + driftWaveZ * (prop.driftZ ?? 0),
+          prop.baseX +
+            driftWaveX * (prop.driftX ?? 0) +
+            localDriftX,
+          prop.baseY +
+            Math.sin(wave) * prop.hoverAmplitude +
+            secondaryHover,
+          prop.baseZ +
+            driftWaveZ * (prop.driftZ ?? 0) +
+            localDriftZ,
         )
         prop.object.rotation.set(
           prop.baseRotationX +
