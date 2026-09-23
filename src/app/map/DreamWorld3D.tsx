@@ -2285,13 +2285,18 @@ export default function DreamWorld3D({
         libraryFloatingProps.register(group, {
           phase: floatingPhase(shelfFloatId),
           hoverAmplitude:
-            .04 + seededUnit(shelfFloatSeed, 143) * .028,
+            .045 + seededUnit(shelfFloatSeed, 143) * .035,
           hoverSpeed:
-            .11 + seededUnit(shelfFloatSeed, 144) * .05,
+            .07 + seededUnit(shelfFloatSeed, 144) * .045,
+          // Shelves stay authored toward their aisle; they never billboard
+          // toward the camera. Slow bounded pitch/yaw/roll gives them the
+          // suspended zero-g feel without making books unreadable.
           tiltX:
-            .0018 + seededUnit(shelfFloatSeed, 145) * .0012,
+            .018 + seededUnit(shelfFloatSeed, 145) * .018,
+          tiltY:
+            .006 + seededUnit(shelfFloatSeed, 147) * .008,
           tiltZ:
-            .0015 + seededUnit(shelfFloatSeed, 146) * .001,
+            .012 + seededUnit(shelfFloatSeed, 146) * .014,
         })
       }
 
