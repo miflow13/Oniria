@@ -272,15 +272,16 @@ export function createLibraryBuilding(
     metalness: .02,
   })
   const backupWallMaterial = new THREE.MeshStandardMaterial({
-    color: 0xece9e3,
-    roughness: .78,
-    metalness: .02,
+    color: 0xc9c1b6,
+    roughness: .86,
+    metalness: .01,
+    envMapIntensity: .05,
   })
   const backupCeilingMaterial = new THREE.MeshStandardMaterial({
-    color: 0xe8e1d6,
-    roughness: .94,
+    color: 0xbfb6aa,
+    roughness: .97,
     metalness: 0,
-    envMapIntensity: .12,
+    envMapIntensity: .035,
     side: THREE.DoubleSide,
   })
   localMaterials.push(
@@ -421,12 +422,12 @@ export function createLibraryBuilding(
     const sourceMode = district?.sourceMode ?? room.sourceMode
     const roomIntensity =
       sourceMode === 'featured'
-        ? .42
+        ? .22
         : sourceMode === 'catalog'
-          ? .18
+          ? .07
           : sourceMode === 'creators'
-            ? .3
-            : .25
+            ? .14
+            : .12
 
     const accentLight = new THREE.PointLight(
       new THREE.Color(accent),
@@ -442,8 +443,8 @@ export function createLibraryBuilding(
     // other, which makes the hallway read as alternating pools of light.
     const pendantGlow = new THREE.PointLight(
       sourceMode === 'catalog' ? 0xe6dfd5 : 0xffd3a0,
-      sourceMode === 'featured' ? .76 : sourceMode === 'catalog' ? .36 : .58,
-      8.2,
+      sourceMode === 'featured' ? .46 : sourceMode === 'catalog' ? .18 : .32,
+      6.5,
       2,
     )
     pendantGlow.position.set(x, 3.82, z)
@@ -455,8 +456,8 @@ export function createLibraryBuilding(
     // light do most of the illumination instead of flattening the whole room.
     const roomSpot = new THREE.SpotLight(
       sourceMode === 'catalog' ? 0xb9c8e8 : 0xffe6c9,
-      sourceMode === 'featured' ? .24 : sourceMode === 'catalog' ? .08 : .14,
-      7.5,
+      sourceMode === 'featured' ? .11 : sourceMode === 'catalog' ? .025 : .055,
+      5.8,
       Math.PI / 3.6,
       .78,
       2,
@@ -472,8 +473,8 @@ export function createLibraryBuilding(
   ;[6, -8, -28, -48, -68].forEach((z, index) => {
     const corridorLight = new THREE.PointLight(
       index === 4 ? 0xe2e0dd : 0xffd3a0,
-      index === 4 ? .34 : .52,
-      8.5,
+      index === 4 ? .15 : .24,
+      6.3,
       2,
     )
     corridorLight.position.set(0, 3.92, z)
@@ -483,14 +484,14 @@ export function createLibraryBuilding(
   })
 
   ;[
-    {position: [-18.2, 2.8, -12] as const, intensity: .4},
-    {position: [18, 2.75, -32] as const, intensity: .32},
-    {position: [-16, 2.9, -52] as const, intensity: .46},
+    {position: [-18.2, 2.8, -12] as const, intensity: .18},
+    {position: [18, 2.75, -32] as const, intensity: .14},
+    {position: [-16, 2.9, -52] as const, intensity: .2},
   ].forEach(({position, intensity}) => {
     const readingLight = new THREE.PointLight(
       0xffcf9e,
       intensity,
-      5.5,
+      4.8,
       2,
     )
     readingLight.position.set(
@@ -655,6 +656,33 @@ export function createLibraryBuilding(
     const cardCatalogueSecondary = value(17)
     const issueDesk = value(18)
 
+    archedWindow?.traverse((child) => {
+      if (!(child instanceof THREE.Mesh)) return
+      const materials = Array.isArray(child.material)
+        ? child.material
+        : [child.material]
+      materials.forEach((material) => {
+        material.toneMapped = true
+        if (
+          material instanceof THREE.MeshStandardMaterial ||
+          material instanceof THREE.MeshPhysicalMaterial
+        ) {
+          material.emissiveIntensity = Math.min(
+            material.emissiveIntensity,
+            .035,
+          )
+          material.envMapIntensity = Math.min(
+            material.envMapIntensity,
+            .08,
+          )
+          material.roughness = Math.max(
+            material.roughness,
+            .58,
+          )
+        }
+      })
+    })
+
     if (wallPanel) {
       const templateWidth = (template: THREE.Group) =>
         Math.max(
@@ -737,11 +765,11 @@ export function createLibraryBuilding(
 
     if (roofTile) {
       const ceilingMaterial = new THREE.MeshStandardMaterial({
-        color: 0xe8e1d6,
+        color: 0xbfb6aa,
         vertexColors: true,
-        roughness: .94,
+        roughness: .97,
         metalness: 0,
-        envMapIntensity: .12,
+        envMapIntensity: .035,
         side: THREE.DoubleSide,
         toneMapped: true,
       })
@@ -862,7 +890,7 @@ export function createLibraryBuilding(
       materials.forEach((material) => {
         if (!(material instanceof THREE.MeshStandardMaterial)) return
         material.emissive.setHex(0xffb36b)
-        material.emissiveIntensity = .32
+        material.emissiveIntensity = .1
       })
     })
 
