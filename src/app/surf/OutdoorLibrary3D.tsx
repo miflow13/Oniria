@@ -67,7 +67,6 @@ const CAMERA_HEIGHT = 1.62
 const WORLD_NEAR_Z = 28
 const WORLD_FAR_Z = -250
 const WORLD_HALF_WIDTH = 46
-const PATH_HALF_WIDTH = 4.25
 const SHELF_X = 7.1
 const TERRACE_SPAWN_Z = [9, -79, -141, -203]
 const TERRACE_LIBRARY_Z = [6, -96, -158, -220]
@@ -731,6 +730,50 @@ export default function OutdoorLibrary3D({
       addEastWestWall(room.x - halfWidth, room.doors.includes('west'))
       addEastWestWall(room.x + halfWidth, room.doors.includes('east'))
 
+      if (room.grand) {
+        // A narrow roof/terrace ring closes the horizontal step between the
+        // lower facade and the inset clerestory without putting a solid ceiling
+        // across the dramatic central reading hall.
+        const ledgeY = baseY + 4.73
+        const ledgeDepth = upperInset + .18
+        addLibraryBox(
+          libraryRoofMaterial,
+          room.x,
+          ledgeY,
+          room.z + halfDepth - ledgeDepth / 2,
+          room.width + .18,
+          .16,
+          ledgeDepth,
+        )
+        addLibraryBox(
+          libraryRoofMaterial,
+          room.x,
+          ledgeY,
+          room.z - halfDepth + ledgeDepth / 2,
+          room.width + .18,
+          .16,
+          ledgeDepth,
+        )
+        addLibraryBox(
+          libraryRoofMaterial,
+          room.x - halfWidth + ledgeDepth / 2,
+          ledgeY,
+          room.z,
+          ledgeDepth,
+          .16,
+          room.depth - ledgeDepth * 2,
+        )
+        addLibraryBox(
+          libraryRoofMaterial,
+          room.x + halfWidth - ledgeDepth / 2,
+          ledgeY,
+          room.z,
+          ledgeDepth,
+          .16,
+          room.depth - ledgeDepth * 2,
+        )
+      }
+
       // Roofs now hug their wall tops. Grand buildings roof the inset
       // clerestory footprint instead of throwing a giant black slab over the
       // whole lower storey.
@@ -868,6 +911,22 @@ export default function OutdoorLibrary3D({
         )
       }
     })
+
+    // The two open-air gaps between public wings are intentional garden
+    // courts, not leftover space between boxes.
+    for (const x of [-20.5, 20.5]) {
+      const courtBorder = new THREE.Mesh(unitBox, stoneMaterial)
+      courtBorder.scale.set(11, .08, 6.6)
+      courtBorder.position.set(x, .035, -6.5)
+      courtBorder.receiveShadow = true
+      scene.add(courtBorder)
+
+      const courtGreen = new THREE.Mesh(unitBox, grassMaterial)
+      courtGreen.scale.set(9.5, .07, 5.15)
+      courtGreen.position.set(x, .085, -6.5)
+      courtGreen.receiveShadow = true
+      scene.add(courtGreen)
+    }
 
     const commons = new THREE.Mesh(plinthGeometry, stoneMaterial)
     commons.position.set(0, .22, 24)
