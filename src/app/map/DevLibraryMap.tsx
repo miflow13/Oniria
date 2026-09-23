@@ -1152,7 +1152,7 @@ export default function DevLibraryMap() {
         <div className={styles.brand}>
           <span>DEV</span>
           <strong>Library</strong>
-          <small>cinematic webspace</small>
+          <small>Sanity-powered spatial archive</small>
         </div>
 
         <form className={styles.search} onSubmit={submitSearch}>
@@ -1258,7 +1258,7 @@ export default function DevLibraryMap() {
       {loading && (
         <div className={styles.loading}>
           <span>✦</span>
-          <strong>Building the floating library…</strong>
+          <strong>Opening the DEV Library…</strong>
         </div>
       )}
 
@@ -1281,7 +1281,7 @@ export default function DevLibraryMap() {
             ×
           </button>
 
-          <p className={styles.eyebrow}>Floating shelf</p>
+          <p className={styles.eyebrow}>DEV room shelf</p>
           <h1>{selectedShelf.title}</h1>
           <p className={styles.subtitle}>
             {dynamicTitle &&
