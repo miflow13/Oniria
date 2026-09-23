@@ -5218,12 +5218,50 @@ export default function DreamWorld3D({
         'YXZ',
       )
 
+      // Put the shelf zone in front of the camera rather than under the
+      // player's feet so placement is immediately visible and intuitive.
+      const markerForward = new THREE.Vector3(
+        0,
+        0,
+        -1,
+      ).applyQuaternion(camera.quaternion)
+      markerForward.y = 0
+      if (markerForward.lengthSq() < .0001) {
+        markerForward.set(
+          -Math.sin(cameraEuler.y),
+          0,
+          -Math.cos(cameraEuler.y),
+        )
+      }
+      markerForward.normalize()
+
+      let markerX = camera.position.x
+      let markerZ = camera.position.z
+      for (const distance of [2.2, 1.6, 1, .45]) {
+        const candidateX =
+          camera.position.x + markerForward.x * distance
+        const candidateZ =
+          camera.position.z + markerForward.z * distance
+        const candidateRoom = nearestRoomEntry(
+          candidateX,
+          candidateZ,
+        )
+        if (
+          candidateRoom?.district.id ===
+          roomEntry.district.id
+        ) {
+          markerX = candidateX
+          markerZ = candidateZ
+          break
+        }
+      }
+
       void libraryLayoutAuthoring
         .dropMarker({
           roomSlot: room.slot,
           districtId: roomEntry.district.id,
-          x: camera.position.x,
-          z: camera.position.z,
+          x: markerX,
+          z: markerZ,
           yaw: cameraEuler.y,
         })
         .then((marker) => {
