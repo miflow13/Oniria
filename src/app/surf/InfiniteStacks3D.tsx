@@ -561,30 +561,52 @@ export default function InfiniteStacks3D({
     geometries.push(postGeometry, railGeometry)
 
     const bayCount = 30
+    const postCount = FLOOR_COUNT * 2 * bayCount * 2
+    const railCount = FLOOR_COUNT * 2 * bayCount * 6
+    const posts = new THREE.InstancedMesh(postGeometry, steel, postCount)
+    const rails = new THREE.InstancedMesh(railGeometry, steel, railCount)
+    const frameDummy = new THREE.Object3D()
+    let postIndex = 0
+    let railIndex = 0
+
     for (let floorIndex = 0; floorIndex < FLOOR_COUNT; floorIndex += 1) {
       const floorBase = floorIndex * FLOOR_HEIGHT
       for (const side of [-1, 1] as const) {
         for (let bay = 0; bay < bayCount; bay += 1) {
           const bayZ = 7 - bay * 4.7
-          const frame = new THREE.Group()
 
-          const leftPost = new THREE.Mesh(postGeometry, steel)
-          leftPost.position.set(side * WALL_X, floorBase + 2.25, bayZ + 2.25)
-          frame.add(leftPost)
-          const rightPost = leftPost.clone()
-          rightPost.position.z = bayZ - 2.25
-          frame.add(rightPost)
+          for (const zOffset of [2.25, -2.25]) {
+            frameDummy.position.set(
+              side * WALL_X,
+              floorBase + 2.25,
+              bayZ + zOffset,
+            )
+            frameDummy.rotation.set(0, 0, 0)
+            frameDummy.scale.set(1, 1, 1)
+            frameDummy.updateMatrix()
+            posts.setMatrixAt(postIndex, frameDummy.matrix)
+            postIndex += 1
+          }
 
           for (let row = 0; row < 6; row += 1) {
-            const rail = new THREE.Mesh(railGeometry, steel)
-            rail.position.set(side * WALL_X, floorBase + .42 + row * .74, bayZ)
-            rail.rotation.y = Math.PI / 2
-            frame.add(rail)
+            frameDummy.position.set(
+              side * WALL_X,
+              floorBase + .42 + row * .74,
+              bayZ,
+            )
+            frameDummy.rotation.set(0, Math.PI / 2, 0)
+            frameDummy.scale.set(1, 1, 1)
+            frameDummy.updateMatrix()
+            rails.setMatrixAt(railIndex, frameDummy.matrix)
+            railIndex += 1
           }
-          scene.add(frame)
         }
       }
     }
+
+    posts.instanceMatrix.needsUpdate = true
+    rails.instanceMatrix.needsUpdate = true
+    scene.add(posts, rails)
 
     const fillerGeometry = new THREE.BoxGeometry(.22, .57, .12)
     geometries.push(fillerGeometry)
@@ -764,7 +786,8 @@ export default function InfiniteStacks3D({
       })
 
     const bookGeometry = new THREE.BoxGeometry(.29, .68, .17)
-    geometries.push(bookGeometry)
+    const bookStripeGeometry = new THREE.BoxGeometry(.012, .54, .13)
+    geometries.push(bookGeometry, bookStripeGeometry)
 
     nodes
       .filter((node) => node.kind === 'article')
@@ -793,15 +816,13 @@ export default function InfiniteStacks3D({
         mesh.userData.nodeId = node.id
         group.add(mesh)
 
-        const stripeGeometry = new THREE.BoxGeometry(.012, .54, .13)
-        geometries.push(stripeGeometry)
         const stripeMaterial = new THREE.MeshBasicMaterial({
           color: accent,
           transparent: true,
           opacity: .72,
         })
         materials.push(stripeMaterial)
-        const stripe = new THREE.Mesh(stripeGeometry, stripeMaterial)
+        const stripe = new THREE.Mesh(bookStripeGeometry, stripeMaterial)
         stripe.position.x = placement.side < 0 ? .151 : -.151
         group.add(stripe)
 
