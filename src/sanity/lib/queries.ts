@@ -83,6 +83,8 @@ export const LIBRARY_WORLD_QUERY = defineQuery(`
     atmosphere,
     audioProfile,
     landmarkType,
+    sourceMode,
+    roomSlot,
     enabled
   },
   "curatedArticles": *[
@@ -145,6 +147,8 @@ export const LIBRARY_WORLD_RAW_QUERY = defineQuery(`
     atmosphere,
     audioProfile,
     landmarkType,
+    sourceMode,
+    roomSlot,
     enabled
   },
   "curatedArticleDocs": *[_type == "curatedArticle"] {
