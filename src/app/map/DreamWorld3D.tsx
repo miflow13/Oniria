@@ -84,6 +84,10 @@ import {
 import {createLibraryBuilding} from './libraryBuilding'
 import {loadLibraryAsset} from './libraryAssets'
 import {
+  createFloatingPropRegistry,
+  floatingPhase,
+} from './libraryFloating'
+import {
   LIBRARY_BUILDING_BOUNDS,
   LIBRARY_EYE_HEIGHT,
   LIBRARY_SPAWN,
@@ -106,6 +110,8 @@ export type DreamWorldNode = {
   accent?: string
   world?: [number, number, number]
   libraryYaw?: number
+  libraryShelfEndCaps?: 'none' | 'left' | 'right'
+  libraryFloatId?: string
   libraryPathBay?: number
   libraryDistrictId?: string
   libraryBooks?: Array<{
@@ -751,7 +757,7 @@ export default function DreamWorld3D({
       `${quality}::${nodes
         .map(
           (node) =>
-            `${node._id}:${node.articleCount ?? 0}:${node.libraryBooks?.map((book) => book.id + ':' + (book.coverUrl ?? '')).join('|') ?? ''}:${node.world?.join(',') ?? ''}:${node.libraryYaw ?? ''}:${node.libraryPathBay ?? ''}`,
+            `${node._id}:${node.articleCount ?? 0}:${node.libraryBooks?.map((book) => book.id + ':' + (book.coverUrl ?? '')).join('|') ?? ''}:${node.world?.join(',') ?? ''}:${node.libraryYaw ?? ''}:${node.libraryShelfEndCaps ?? ''}:${node.libraryFloatId ?? ''}:${node.libraryPathBay ?? ''}`,
         )
         .join('|')}::${edges
         .map((edge) => `${edge.id}:${edge.weight}`)
@@ -886,7 +892,7 @@ export default function DreamWorld3D({
     )
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = libraryMode ? .84 : .94
+    renderer.toneMappingExposure = libraryMode ? .82 : .94
     renderer.shadowMap.enabled = settings.miniWorldDetail > 0
     renderer.shadowMap.type = THREE.PCFShadowMap
     renderer.domElement.className = styles.webglCanvas
@@ -942,13 +948,13 @@ export default function DreamWorld3D({
     scene.add(
       new THREE.AmbientLight(
         0x7182b6,
-        libraryMode ? .46 : .75,
+        libraryMode ? .38 : .75,
       ),
     )
 
     const keyLight = new THREE.DirectionalLight(
       0xd4e5ff,
-      libraryMode ? 1.22 : 2.1,
+      libraryMode ? 1.02 : 2.1,
     )
     keyLight.position.set(-5, 6, 8)
     keyLight.castShadow = renderer.shadowMap.enabled
@@ -962,7 +968,7 @@ export default function DreamWorld3D({
 
     const violetLight = new THREE.PointLight(
       0xb791ff,
-      libraryMode ? 7 : 12,
+      libraryMode ? 4 : 12,
       20,
       2,
     )
@@ -971,7 +977,7 @@ export default function DreamWorld3D({
 
     const cyanLight = new THREE.PointLight(
       0x72e2df,
-      libraryMode ? 6.5 : 11,
+      libraryMode ? 3.6 : 11,
       20,
       2,
     )
@@ -987,8 +993,13 @@ export default function DreamWorld3D({
     // The DEV Library now uses the enclosed six-room building from the
     // neighborhoods prototype while retaining the cinematic renderer,
     // reading ritual, audio, and Sanity-driven content model.
+    const libraryFloatingProps = createFloatingPropRegistry()
     const libraryBuilding = libraryMode
-      ? createLibraryBuilding(scene, activeLibraryConfig)
+      ? createLibraryBuilding(
+          scene,
+          activeLibraryConfig,
+          libraryFloatingProps,
+        )
       : null
 
     const starCount = settings.starCount
@@ -1782,6 +1793,18 @@ export default function DreamWorld3D({
         )
       : Promise.resolve<THREE.Group | null>(null)
 
+    const physicalShelfEndTemplatePromise = libraryMode
+      ? loadLibraryAsset('stackShelfEnd', 3.5, 'height').catch(
+          (error) => {
+            console.warn(
+              '[DEV Library] Shelf end failed; leaving row uncapped.',
+              error,
+            )
+            return null
+          },
+        )
+      : Promise.resolve<THREE.Group | null>(null)
+
     const libraryShelfLight = libraryMode
       ? new THREE.PointLight(0x8fe9f3, 0, 13, 2)
       : null
@@ -2216,11 +2239,33 @@ export default function DreamWorld3D({
           shelf.add(authoredShelf)
         })
 
+        if (
+          node.libraryShelfEndCaps &&
+          node.libraryShelfEndCaps !== 'none'
+        ) {
+          void physicalShelfEndTemplatePromise.then((template) => {
+            if (!template || sceneDisposed) return
+
+            const shelfEnd = template.clone(true)
+            shelfEnd.position.x =
+              node.libraryShelfEndCaps === 'left' ? -2.3 : 2.3
+            shelfEnd.rotation.y =
+              node.libraryShelfEndCaps === 'right' ? Math.PI : 0
+            shelfEnd.traverse((child) => {
+              if (!(child instanceof THREE.Mesh)) return
+              child.castShadow = false
+              child.receiveShadow = true
+              child.frustumCulled = true
+            })
+            shelf.add(shelfEnd)
+          })
+        }
+
         shelf.scale.setScalar(1)
         group.add(shelf)
         const labelStagger =
           seededUnit(seed, 141) > .5 ? .08 : -.04
-        label.position.set(0, 3.92 + labelStagger, .2)
+        label.position.set(0, 3.72 + labelStagger, .2)
         label.scale.set(3.08, .7, 1)
       }
 
@@ -2230,12 +2275,21 @@ export default function DreamWorld3D({
         const baseYaw =
           typeof node.libraryYaw === 'number'
             ? node.libraryYaw
-            : Math.atan2(
-                camera.position.x - start.x,
-                camera.position.z - start.z,
-              ) + Math.PI
-        group.userData.libraryBaseYaw = baseYaw
+            : 0
         group.rotation.y = baseYaw
+        const shelfFloatId = node.libraryFloatId ?? node._id
+        const shelfFloatSeed = hashString(shelfFloatId)
+        libraryFloatingProps.register(group, {
+          phase: floatingPhase(shelfFloatId),
+          hoverAmplitude:
+            .04 + seededUnit(shelfFloatSeed, 143) * .028,
+          hoverSpeed:
+            .11 + seededUnit(shelfFloatSeed, 144) * .05,
+          tiltX:
+            .0018 + seededUnit(shelfFloatSeed, 145) * .0012,
+          tiltZ:
+            .0015 + seededUnit(shelfFloatSeed, 146) * .001,
+        })
       }
 
       const baseScale =
@@ -5877,16 +5931,9 @@ export default function DreamWorld3D({
         const visual = nodeVisuals.get(node._id)
         if (!visual) continue
 
-        const target = worldPosition(node, positionsRef.current)
-        const memoryAge = nodeMemoryAge.get(node._id) ?? 0
-        if (node.libraryKind === 'shelf') {
-          target.y +=
-            Math.sin(elapsed * .18 + visual.phase) * .075
-          target.x +=
-            Math.cos(elapsed * .12 + visual.phase) * .012
-          target.z +=
-            Math.sin(elapsed * .1 + visual.phase) * .012
-        } else {
+        if (node.libraryKind !== 'shelf') {
+          const target = worldPosition(node, positionsRef.current)
+          const memoryAge = nodeMemoryAge.get(node._id) ?? 0
           target.z =
             visual.z -
             memoryAge * (node.frequency <= 1 ? 1.35 : .48) +
@@ -5897,32 +5944,34 @@ export default function DreamWorld3D({
           target.x +=
             Math.cos(elapsed * .29 + visual.phase) * .05 +
             Math.sin(elapsed * .12) * .07
-        }
-
-        const gravity =
-          node.libraryKind === 'shelf'
-            ? undefined
-            : gravityParents.get(node._id)
-        if (gravity) {
-          const parentVisual = nodeVisuals.get(gravity.parentId)
-          if (parentVisual) {
-            const orbitAngle =
-              elapsed * (0.035 + Math.min(node.frequency, 3) * 0.004) +
-              gravity.phase
-            const orbitTarget = parentVisual.group.position
-              .clone()
-              .add(
-                new THREE.Vector3(
-                  Math.cos(orbitAngle) * gravity.radius,
-                  Math.sin(orbitAngle * 0.73) * gravity.radius * 0.58,
-                  Math.sin(orbitAngle) * gravity.radius * 0.34,
-                ),
-              )
-            target.lerp(orbitTarget, gravity.influence)
+          const gravity = gravityParents.get(node._id)
+          if (gravity) {
+            const parentVisual = nodeVisuals.get(gravity.parentId)
+            if (parentVisual) {
+              const orbitAngle =
+                elapsed *
+                  (0.035 +
+                    Math.min(node.frequency, 3) * 0.004) +
+                gravity.phase
+              const orbitTarget = parentVisual.group.position
+                .clone()
+                .add(
+                  new THREE.Vector3(
+                    Math.cos(orbitAngle) * gravity.radius,
+                    Math.sin(orbitAngle * 0.73) *
+                      gravity.radius *
+                      0.58,
+                    Math.sin(orbitAngle) *
+                      gravity.radius *
+                      0.34,
+                  ),
+                )
+              target.lerp(orbitTarget, gravity.influence)
+            }
           }
-        }
 
-        visual.group.position.lerp(target, .08)
+          visual.group.position.lerp(target, .08)
+        }
 
         const selected = selectedRef.current === node._id
         const active = activeRef.current
@@ -5968,27 +6017,22 @@ export default function DreamWorld3D({
           node.libraryKind === 'shelf' &&
           nearestLibraryShelfDistance < 16
 
-        const scaleBoost =
-          node.libraryKind === 'shelf'
-            ? selected
-              ? 1.045
-              : hoveredId === node._id
-                ? 1.025
-                : isNearestLibraryShelf
-                  ? 1.035
-                  : nearbyShelfFocusActive && shelfDistance < 30
-                    ? .965
-                    : 1
-            : selected
-              ? 1.32
-              : hoveredId === node._id
-                ? 1.14
-                : 1
-        const desiredScale = visual.baseScale * scaleBoost
-        visual.group.scale.lerp(
-          new THREE.Vector3(desiredScale, desiredScale, desiredScale),
-          selected ? .13 : .08,
-        )
+        if (node.libraryKind !== 'shelf') {
+          const scaleBoost = selected
+            ? 1.32
+            : hoveredId === node._id
+              ? 1.14
+              : 1
+          const desiredScale = visual.baseScale * scaleBoost
+          visual.group.scale.lerp(
+            new THREE.Vector3(
+              desiredScale,
+              desiredScale,
+              desiredScale,
+            ),
+            selected ? .13 : .08,
+          )
+        }
 
         if (node.libraryKind === 'shelf') {
           const frameMaterial =
@@ -6058,36 +6102,7 @@ export default function DreamWorld3D({
           }
         }
 
-        if (node.libraryKind === 'shelf') {
-          const baseYaw =
-            typeof visual.group.userData.libraryBaseYaw === 'number'
-              ? visual.group.userData.libraryBaseYaw
-              : Math.PI
-          const cameraFacingYaw =
-            Math.atan2(
-              camera.position.x - visual.group.position.x,
-              camera.position.z - visual.group.position.z,
-            ) + Math.PI
-          const yawDelta = Math.atan2(
-            Math.sin(cameraFacingYaw - baseYaw),
-            Math.cos(cameraFacingYaw - baseYaw),
-          )
-          const approachStrength = isNearestLibraryShelf
-            ? THREE.MathUtils.clamp(
-                1 - (nearestLibraryShelfDistance - 6) / 12,
-                0,
-                1,
-              )
-            : 0
-          visual.group.rotation.y =
-            baseYaw +
-            yawDelta * approachStrength * .28 +
-            Math.sin(elapsed * .085 + visual.phase) * .009
-          visual.group.rotation.x =
-            Math.sin(elapsed * .07 + visual.phase) * .003
-          visual.group.rotation.z =
-            Math.cos(elapsed * .065 + visual.phase) * .002
-        } else {
+        if (node.libraryKind !== 'shelf') {
           visual.group.rotation.y += selected ? .007 : .0022
           visual.group.rotation.x =
             Math.sin(elapsed * .22 + visual.phase) * .045
@@ -6196,6 +6211,8 @@ export default function DreamWorld3D({
         visual.core.rotation.x += .006
         visual.core.rotation.y -= .008
       }
+
+      libraryFloatingProps.update(elapsed)
 
       edgeVisuals.forEach((edgeVisual) => {
         const source = nodeVisuals.get(edgeVisual.source)?.group.position
@@ -6397,10 +6414,10 @@ export default function DreamWorld3D({
               ? .88
               : .9
       const exposureTarget = libraryMode
-        ? Math.max(
+        ? THREE.MathUtils.clamp(
+            baseExposure * atmospherePreset.exposureScale,
             .5,
-            baseExposure *
-              atmospherePreset.exposureScale,
+            .88,
           )
         : baseExposure
       renderer.toneMappingExposure +=
@@ -6465,14 +6482,14 @@ export default function DreamWorld3D({
         : 1
       violetLight.intensity +=
         (
-          (selectedVisual ? 8.5 : 7) *
+          (selectedVisual ? 4.7 : 4) *
             atmosphereLightScale -
           violetLight.intensity
         ) *
         .035
       cyanLight.intensity +=
         (
-          (selectedVisual ? 8 : 6.5) *
+          (selectedVisual ? 4.3 : 3.6) *
             atmosphereLightScale -
           cyanLight.intensity
         ) *
@@ -6937,6 +6954,7 @@ export default function DreamWorld3D({
 
       libraryAudio?.dispose()
       libraryBuilding?.dispose()
+      libraryFloatingProps.clear()
 
       camera.remove(listener)
 

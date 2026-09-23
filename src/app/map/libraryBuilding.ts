@@ -1,7 +1,14 @@
 import * as THREE from 'three'
 import type {LibraryWorldConfig} from '@/lib/libraryWorldConfig'
 import {loadLibraryAsset} from './libraryAssets'
-import {LIBRARY_ROOMS} from './libraryRoomLayout'
+import {
+  LIBRARY_FURNISHINGS,
+  LIBRARY_ROOMS,
+} from './libraryRoomLayout'
+import {
+  floatingPhase,
+  type FloatingPropRegistry,
+} from './libraryFloating'
 
 type WallRun = {
   x: number
@@ -21,6 +28,7 @@ export type LibraryBuilding = {
 export function createLibraryBuilding(
   scene: THREE.Scene,
   config: LibraryWorldConfig,
+  floatingProps: FloatingPropRegistry,
 ): LibraryBuilding {
   const group = new THREE.Group()
   group.name = 'sanity-room-library-building'
@@ -179,8 +187,11 @@ export function createLibraryBuilding(
     roughness: .78,
     metalness: .02,
   })
-  const backupCeilingMaterial = new THREE.MeshBasicMaterial({
-    color: 0xf6f6f3,
+  const backupCeilingMaterial = new THREE.MeshStandardMaterial({
+    color: 0xe8e1d6,
+    roughness: .94,
+    metalness: 0,
+    envMapIntensity: .12,
     side: THREE.DoubleSide,
   })
   localMaterials.push(
@@ -309,10 +320,29 @@ export function createLibraryBuilding(
       })
     }
 
-    const light = new THREE.PointLight(room.accent, 2.4, 13, 2)
+    const light = new THREE.PointLight(room.accent, 1.05, 11, 2)
     light.position.set(x, 3.35, z)
     group.add(light)
   }
+
+  ;[
+    {position: [-18.2, 2.8, -12] as const, intensity: .68},
+    {position: [18, 2.75, -32] as const, intensity: .48},
+    {position: [-16, 2.9, -52] as const, intensity: .52},
+  ].forEach(({position, intensity}) => {
+    const readingLight = new THREE.PointLight(
+      0xffd7aa,
+      intensity,
+      7,
+      2,
+    )
+    readingLight.position.set(
+      position[0],
+      position[1],
+      position[2],
+    )
+    group.add(readingLight)
+  })
 
   addWall(-8, 9, .28, 11, 5)
   addWall(8, 9, .28, 11, 5)
@@ -343,6 +373,7 @@ export function createLibraryBuilding(
     scale = 1,
     rotationY = 0,
     rotationX = 0,
+    castsShadow = false,
   ) => {
     const instance = template.clone(true)
     instance.position.x += x
@@ -354,6 +385,7 @@ export function createLibraryBuilding(
     instance.traverse((child) => {
       if (!(child instanceof THREE.Mesh)) return
       child.frustumCulled = true
+      child.castShadow = castsShadow
       child.receiveShadow = true
     })
     group.add(instance)
@@ -367,13 +399,11 @@ export function createLibraryBuilding(
       loadLibraryAsset('floorParquet', 5.8, 'span'),
       loadLibraryAsset('roofTile', 5.2, 'span'),
       loadLibraryAsset('skyDome', 190, 'span'),
-      loadLibraryAsset('decoyBookshelf', 3.15, 'height'),
-      loadLibraryAsset('areaRug', 4.2, 'span'),
-      loadLibraryAsset('armchair', .9, 'height'),
-      loadLibraryAsset('issueDesk', 1.45, 'height'),
-      loadLibraryAsset('cardCatalogue', 1.85, 'height'),
-      loadLibraryAsset('displayCase', 1.45, 'height'),
-      loadLibraryAsset('periodicalRack', 1.75, 'height'),
+      loadLibraryAsset('column', 4.55, 'height'),
+      loadLibraryAsset('readingRug', 4.2, 'span'),
+      loadLibraryAsset('libraryChair', .9, 'height'),
+      loadLibraryAsset('readingTable', .78, 'height'),
+      loadLibraryAsset('cardCatalogue', 1.55, 'height'),
       loadLibraryAsset('pendantLight', 1.05, 'height'),
       loadLibraryAsset('archedWindow', 5, 'height'),
     ])
@@ -392,27 +422,25 @@ export function createLibraryBuilding(
     const floorParquet = value(2)
     const roofTile = value(3)
     const skyDome = value(4)
-    const decoyBookshelf = value(5)
-    const areaRug = value(6)
-    const armchair = value(7)
-    const issueDesk = value(8)
+    const column = value(5)
+    const readingRug = value(6)
+    const libraryChair = value(7)
+    const readingTable = value(8)
     const cardCatalogue = value(9)
-    const displayCase = value(10)
-    const periodicalRack = value(11)
-    const pendantLight = value(12)
-    const archedWindow = value(13)
+    const pendantLight = value(10)
+    const archedWindow = value(11)
 
     if (skyDome) {
       const dome = placeAsset(skyDome, 0, -8, -30)
       dome.traverse((child) => {
         if (!(child instanceof THREE.Mesh)) return
         const material = new THREE.MeshBasicMaterial({
-          color: 0xffffff,
+          color: 0xaebbd2,
           vertexColors: true,
           side: THREE.BackSide,
           depthWrite: false,
           fog: false,
-          toneMapped: false,
+          toneMapped: true,
         })
         localMaterials.push(material)
         child.material = material
@@ -503,11 +531,14 @@ export function createLibraryBuilding(
     }
 
     if (roofTile) {
-      const ceilingMaterial = new THREE.MeshBasicMaterial({
-        color: 0xffffff,
+      const ceilingMaterial = new THREE.MeshStandardMaterial({
+        color: 0xe8e1d6,
         vertexColors: true,
+        roughness: .94,
+        metalness: 0,
+        envMapIntensity: .12,
         side: THREE.DoubleSide,
-        toneMapped: false,
+        toneMapped: true,
       })
       localMaterials.push(ceilingMaterial)
 
@@ -540,7 +571,7 @@ export function createLibraryBuilding(
             if (!(child instanceof THREE.Mesh)) return
             child.material = ceilingMaterial
             child.castShadow = false
-            child.receiveShadow = false
+            child.receiveShadow = true
           })
         }
       }
@@ -548,130 +579,37 @@ export function createLibraryBuilding(
       backupCeiling.visible = false
     }
 
-    if (decoyBookshelf) {
-      const size = new THREE.Box3()
-        .setFromObject(decoyBookshelf)
-        .getSize(new THREE.Vector3())
-      const axisCorrection =
-        size.x >= size.z ? 0 : Math.PI / 2
-
-      const placeDecoy = (
-        x: number,
-        z: number,
-        rotationY: number,
-        index: number,
-      ) => {
-        const shelf = placeAsset(
-          decoyBookshelf,
-          x,
-          .02,
-          z,
-          1,
-          rotationY + axisCorrection,
-        )
-        shelf.scale.x *= 1 + ((index % 3) - 1) * .018
-        shelf.traverse((child) => {
-          if (!(child instanceof THREE.Mesh)) return
-          child.castShadow = false
-        })
-      }
-
-      const zRows = [-21.55, -22.45, -41.55, -42.45, -61.55]
-      zRows.forEach((z, rowIndex) => {
-        const rotationY = rowIndex % 2 === 0 ? 0 : Math.PI
-        const xs = [
-          -22.5, -20.7, -18.9, -17.1, -15.3, -13.5, -11.7,
-          11.7, 13.5, 15.3, 17.1, 18.9, 20.7, 22.5,
-        ]
-        xs.forEach((x, index) =>
-          placeDecoy(x, z, rotationY, index),
-        )
-      })
-
-      const outerSideRuns = wallRuns.filter(
-        (run) =>
-          run.windows &&
-          run.axis === 'z' &&
-          Math.abs(run.x) > 20,
-      )
-      const wallPanelWidth = wallPanel
-        ? Math.max(
-            .1,
-            new THREE.Box3()
-              .setFromObject(wallPanel)
-              .getSize(new THREE.Vector3()).x,
-          )
-        : 2
-      const windowZs = outerSideRuns.flatMap((run) => {
-        const count = Math.max(
-          1,
-          Math.ceil(
-            run.length / Math.max(.65, wallPanelWidth * .97),
-          ),
-        )
-        const cell = run.length / count
-        return Array.from({length: count}, (_, index) => {
-          const useWindow =
-            index > 1 &&
-            index < count - 2 &&
-            index % 4 === 2
-          if (!useWindow) return null
-          return (
-            run.z -
-            run.length / 2 +
-            cell * (index + .5)
-          )
-        }).filter((z): z is number => z !== null)
-      })
-      const nookZs = [-5.2, -25.3, -45.3]
-      const roomShelfRows = LIBRARY_ROOMS.flatMap((room) => [
-        room.center[1] - 2.9,
-        room.center[1] + 2.9,
-      ])
-      const candidateZs = Array.from(
-        {length: 34},
-        (_, index) => 1.5 - index * 2.05,
-      ).filter(
-        (z) =>
-          z > -69 &&
-          !windowZs.some(
-            (windowZ) => Math.abs(z - windowZ) < 1.35,
-          ) &&
-          !nookZs.some(
-            (nookZ) => Math.abs(z - nookZ) < 2.1,
-          ) &&
-          !roomShelfRows.some(
-            (shelfZ) => Math.abs(z - shelfZ) < 1.3,
-          ),
-      )
-
-      candidateZs.forEach((z, index) => {
-        placeDecoy(-23.35, z, Math.PI / 2, index)
-        placeDecoy(23.35, z, -Math.PI / 2, index)
-      })
+    const furnishingTemplates = {
+      column,
+      readingRug,
+      libraryChair,
+      readingTable,
+      cardCatalogue,
     }
 
-    if (areaRug) {
-      ;[
-        {x: -20.8, z: -5.2, r: 0},
-        {x: 20.8, z: -5.2, r: Math.PI},
-        {x: -20.8, z: -25.3, r: 0},
-        {x: 20.8, z: -45.3, r: Math.PI},
-      ].forEach(({x, z, r}) =>
-        placeAsset(areaRug, x, .022, z, 1, r),
-      )
-    }
+    LIBRARY_FURNISHINGS.forEach((placement) => {
+      const template = furnishingTemplates[placement.asset]
+      if (!template) return
 
-    if (armchair) {
-      ;[
-        {x: -22.05, z: -5.2, r: Math.PI / 2},
-        {x: 22.05, z: -5.2, r: -Math.PI / 2},
-        {x: -22.05, z: -25.3, r: Math.PI / 2},
-        {x: 22.05, z: -45.3, r: -Math.PI / 2},
-      ].forEach(({x, z, r}) =>
-        placeAsset(armchair, x, .025, z, 1, r),
+      const instance = placeAsset(
+        template,
+        placement.position[0],
+        placement.position[1],
+        placement.position[2],
+        placement.scale ?? 1,
+        placement.yaw ?? 0,
+        0,
+        placement.castsShadow ?? false,
       )
-    }
+      instance.name = `library-floating-${placement.id}`
+      floatingProps.register(instance, {
+        phase: floatingPhase(placement.id),
+        hoverAmplitude: placement.hoverAmplitude,
+        hoverSpeed: placement.hoverSpeed,
+        tiltX: placement.tiltX,
+        tiltZ: placement.tiltZ,
+      })
+    })
 
     if (pendantLight) {
       LIBRARY_ROOMS.forEach((room) => {
@@ -683,20 +621,6 @@ export function createLibraryBuilding(
       }
     }
 
-    if (issueDesk) {
-      placeAsset(issueDesk, -3.8, .03, 8, 1, Math.PI / 2)
-      placeAsset(issueDesk, -16, .03, -52, .9)
-    }
-    if (displayCase) {
-      placeAsset(displayCase, -16, .03, -12, 1, Math.PI / 2)
-    }
-    if (periodicalRack) {
-      placeAsset(periodicalRack, 16, .03, -12, 1, -Math.PI / 2)
-    }
-    if (cardCatalogue) {
-      placeAsset(cardCatalogue, -16, .03, -32, .95, Math.PI / 2)
-      placeAsset(cardCatalogue, -12.5, .03, -52, .86, Math.PI / 2)
-    }
   })().catch((error) => {
     console.warn('Library building asset pass failed', error)
   })

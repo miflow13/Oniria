@@ -80,6 +80,8 @@ function makeShelf(
     accent: SHELF_ACCENTS[kind],
     world: placement.world,
     yaw: placement.yaw,
+    endCaps: placement.endCaps,
+    floatId: placement.floatId,
     pathBay: placement.pathBay,
     districtId: placement.districtId,
     articles,
@@ -887,6 +889,8 @@ export default function DevLibraryMap() {
         accent: shelf.accent,
         world: shelf.world,
         libraryYaw: shelf.yaw,
+        libraryShelfEndCaps: shelf.endCaps,
+        libraryFloatId: shelf.floatId,
         libraryPathBay: shelf.pathBay,
         libraryDistrictId: shelf.districtId,
         libraryBooks: shelf.articles.slice(0, 9).map((article) => {

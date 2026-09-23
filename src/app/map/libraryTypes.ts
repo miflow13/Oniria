@@ -67,6 +67,8 @@ export type LibraryShelf = {
   accent: string
   world: [number, number, number]
   yaw: number
+  endCaps: 'none' | 'left' | 'right'
+  floatId: string
   pathBay: number
   districtId: string
   articles: DevArticleSummary[]
