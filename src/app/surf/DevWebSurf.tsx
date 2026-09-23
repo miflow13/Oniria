@@ -1087,8 +1087,8 @@ export default function DevWebSurf() {
     return (
       <main className={styles.loadingScreen}>
         <div className={styles.loadingCore} aria-hidden="true" />
-        <span>entering the Stackwell</span>
-        <strong>Tracing the live DEV strata…</strong>
+        <span>entering the open stacks</span>
+        <strong>Growing the live DEV library…</strong>
         {error && <small>{error}</small>}
       </main>
     )
@@ -1172,7 +1172,7 @@ export default function DevWebSurf() {
         : 'section:featured'
 
   const breadcrumb = [
-    'DEV // Stackwell',
+    'DEV // Open Stacks',
     SECTION_COPY[currentSection].title,
     activeNode?.title,
   ].filter(Boolean)
@@ -1182,13 +1182,13 @@ export default function DevWebSurf() {
     label: string
     target: string
   }> = [
-    {section: 'atrium', label: 'Well', target: 'dev-home'},
+    {section: 'atrium', label: 'Commons', target: 'dev-home'},
     {section: 'featured', label: '#javascript', target: 'section:featured'},
     {section: 'latest', label: 'New Growth', target: 'section:latest'},
-    {section: 'topics', label: 'Districts', target: 'section:topics'},
+    {section: 'topics', label: 'Trails', target: 'section:topics'},
     {section: 'creators', label: 'Authors', target: 'section:creators'},
     {section: 'search', label: 'Search', target: 'section:search'},
-    {section: 'archive', label: 'Deep Strata', target: 'section:archive'},
+    {section: 'archive', label: 'Deep Woods', target: 'section:archive'},
   ]
 
   return (
@@ -1228,7 +1228,7 @@ export default function DevWebSurf() {
           }}
         >
           <b>DEV</b>
-          <span>Stackwell</span>
+          <span>Open Stacks</span>
         </button>
 
         <form className={styles.addressBar} onSubmit={submitSearch}>
@@ -1237,8 +1237,8 @@ export default function DevWebSurf() {
             ref={searchInputRef}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search the Stackwell: article, @creator, #topic"
-            aria-label="Search the Stackwell"
+            placeholder="Search the open stacks: article, @creator, #topic"
+            aria-label="Search the open stacks"
           />
           <kbd>↵</kbd>
         </form>
@@ -1259,7 +1259,7 @@ export default function DevWebSurf() {
       </nav>
 
       {currentFloor === 0 && (
-        <nav className={styles.wingRail} aria-label="Browse Stackwell districts">
+        <nav className={styles.wingRail} aria-label="Browse outdoor library groves">
           {wingLinks.map((item) => (
             <button
               type="button"
@@ -1329,7 +1329,7 @@ export default function DevWebSurf() {
             <button
               type="button"
               onClick={() => setDirectoryOpen(false)}
-              aria-label="Close Stackwell index"
+              aria-label="Close outdoor library index"
             >
               ×
             </button>
@@ -1494,11 +1494,11 @@ export default function DevWebSurf() {
 
           {activeNode.kind === 'home' && (
             <>
-              <div className={styles.pageType}>Atrium · Information desk</div>
+              <div className={styles.pageType}>Garden Commons · Information desk</div>
               <h1>DEV Library</h1>
               <p>
                 The live DEV Community organized as a physical library.
-                Popular posts fill the reading hall, new writing arrives in
+                Popular posts fill the open shelves, new writing arrives in
                 New Arrivals, tags become topic wings, and creators have their
                 own studies.
               </p>
