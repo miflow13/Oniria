@@ -81,19 +81,19 @@ const SECTION_ORDER: LibrarySection[] = [
 ]
 
 const SECTION_LABELS: Record<LibrarySection, {title: string; subtitle: string}> = {
-  atrium: {title: 'INDEX HALL', subtitle: 'DEV COMMUNITY ARCHIVE'},
-  featured: {title: 'FEATURED', subtitle: 'POPULAR THIS WEEK'},
-  latest: {title: 'NEW ARRIVALS', subtitle: 'FRESHLY PUBLISHED'},
-  topics: {title: 'TOPIC STACKS', subtitle: 'BROWSE BY TAG'},
-  creators: {title: 'CREATOR STACKS', subtitle: 'AUTHOR COLLECTIONS'},
-  search: {title: 'INDEX TERMINAL', subtitle: 'SEARCH THE LIVE CATALOG'},
-  archive: {title: 'DEEP ARCHIVE', subtitle: 'LONG-TAIL COLLECTION'},
+  atrium: {title: 'THE WELL', subtitle: 'PRIMARY STACKWELL LANDMARK'},
+  featured: {title: '#JAVASCRIPT DISTRICT', subtitle: 'LIVE DEV STRATA'},
+  latest: {title: 'NEW GROWTH', subtitle: 'THE ARCHIVE IS STILL FORMING'},
+  topics: {title: 'DISTRICT INDEX', subtitle: 'TAGS BECOME PLACES'},
+  creators: {title: 'AUTHOR INDEX', subtitle: 'CREATOR COLLECTIONS'},
+  search: {title: 'INDEX TERMINAL', subtitle: 'QUERY THE LIVE ARCHIVE'},
+  archive: {title: 'DEEP STRATA', subtitle: 'OLDER LAYERS · NO VISIBLE END'},
 }
 
 const SECTION_ACCENTS: Record<LibrarySection, number> = {
-  atrium: 0xf4f5f7,
-  featured: 0x3b49df,
-  latest: 0x5b6cff,
+  atrium: 0xeef6ff,
+  featured: 0xf7df1e,
+  latest: 0x79e6c5,
   topics: 0x5fe1ff,
   creators: 0xae7bff,
   search: 0xff5edb,
@@ -105,6 +105,49 @@ const BRIDGE_Z = [6, -14, -34, -54, -74, -94, -114]
 function hexToNumber(value: string | undefined, fallback: number) {
   if (!value || !/^#[0-9a-f]{6}$/i.test(value)) return fallback
   return Number.parseInt(value.slice(1), 16)
+}
+
+const TAG_ACCENTS: Record<string, number> = {
+  javascript: 0xf7df1e,
+  webdev: 0x53d3ff,
+  ai: 0xae7bff,
+  css: 0xff4fd8,
+  react: 0x61dafb,
+  rust: 0xc66a35,
+  opensource: 0x79e6c5,
+  beginners: 0x8bb8ff,
+  career: 0xf4a261,
+}
+
+function nodeTags(node: SurfNode) {
+  const raw = node.payload?.tag_list ?? []
+  return Array.isArray(raw)
+    ? raw.map((tag) => String(tag).toLowerCase())
+    : []
+}
+
+function districtAccent(node: SurfNode, fallback: number) {
+  const tags = nodeTags(node)
+  for (const tag of tags) {
+    if (TAG_ACCENTS[tag]) return TAG_ACCENTS[tag]
+  }
+  return fallback
+}
+
+function articleReadingMinutes(node: SurfNode) {
+  return Math.max(1, node.payload?.reading_time_minutes ?? 4)
+}
+
+function articleReactionCount(node: SurfNode) {
+  return (
+    node.payload?.public_reactions_count ??
+    node.payload?.positive_reactions_count ??
+    0
+  )
+}
+
+function articleCommentCount(node: SurfNode) {
+  return node.payload?.comments_count ?? 0
 }
 
 function sectionForZ(z: number): LibrarySection {
@@ -204,10 +247,26 @@ function createBookCardTexture(node: SurfNode) {
 
     context.fillStyle = '#9ca8b8'
     context.font = '600 23px system-ui, sans-serif'
-    context.fillText(node.subtitle.slice(0, 70), 68, 274)
+    context.fillText(node.subtitle.slice(0, 70), 68, 264)
+
+    const tags = nodeTags(node).slice(0, 4)
+    const details = [
+      articleReadingMinutes(node) + ' min',
+      articleReactionCount(node) + ' reactions',
+      articleCommentCount(node) + ' comments',
+    ].join('  ·  ')
+
+    context.fillStyle = '#778395'
+    context.font = '600 17px system-ui, sans-serif'
+    context.fillText(details, 68, 310)
     context.fillStyle = accent
-    context.font = '700 18px system-ui, sans-serif'
-    context.fillText('E  OPEN ARTICLE', 68, 340)
+    context.font = '700 17px system-ui, sans-serif'
+    context.fillText(
+      (tags.length ? tags.map((tag) => '#' + tag).join('  ') + '    ·    ' : '') +
+        'E  OPEN',
+      68,
+      350,
+    )
   }
 
   const texture = new THREE.CanvasTexture(canvas)
@@ -355,7 +414,7 @@ function isWalkable(position: THREE.Vector3, floor: number) {
   return onLeftGallery || onRightGallery || onBridge
 }
 
-export default function InfiniteStacks3D({
+export default function Stackwell3D({
   nodes,
   edges,
   selectedId,
@@ -832,7 +891,7 @@ export default function InfiniteStacks3D({
       scene.add(glow)
     }
 
-    const devTexture = makeLabelTexture('DEV', 'THE INFINITE STACKS', '#ffffff', 900, 300)
+    const devTexture = makeLabelTexture('DEV', 'THE STACKWELL', '#ffffff', 900, 300)
     textures.push(devTexture)
     const devMaterial = new THREE.MeshBasicMaterial({
       map: devTexture,
@@ -958,16 +1017,20 @@ export default function InfiniteStacks3D({
         const placement = layout.get(node.id)
         if (!placement || placement.side === 0) return
 
-        const accent = hexToNumber(
+        const fallbackAccent = hexToNumber(
           node.accent,
           articleIndex % 3 === 0 ? 0x3b49df : 0x5fe1ff,
         )
+        const accent = districtAccent(node, fallbackAccent)
+        const reactions = articleReactionCount(node)
+        const comments = articleCommentCount(node)
         const material = new THREE.MeshStandardMaterial({
           color: 0x465062,
           roughness: .61,
           metalness: .18,
           emissive: accent,
-          emissiveIntensity: .095,
+          emissiveIntensity:
+            .075 + Math.min(.12, Math.log10(1 + reactions + comments) * .035),
         })
         materials.push(material)
 
@@ -977,6 +1040,17 @@ export default function InfiniteStacks3D({
 
         const mesh = new THREE.Mesh(bookGeometry, material)
         mesh.userData.nodeId = node.id
+        const readingMinutes = articleReadingMinutes(node)
+        const prominence = THREE.MathUtils.clamp(
+          1 + Math.log10(1 + reactions) * .055,
+          1,
+          1.28,
+        )
+        mesh.scale.set(
+          THREE.MathUtils.clamp(.72 + readingMinutes * .045, .78, 1.32),
+          prominence,
+          1,
+        )
         group.add(mesh)
 
         const stripeMaterial = new THREE.MeshBasicMaterial({
