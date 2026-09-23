@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import Stackwell3D from './InfiniteStacks3D'
+import Stackwell3D from './OutdoorLibrary3D'
 import type {
   DevArticle,
   DevArticleSummary,
@@ -32,13 +32,13 @@ const SECTION_COPY: Record<
   {title: string; subtitle: string; accent: string}
 > = {
   atrium: {
-    title: 'The Stackwell',
-    subtitle: 'the Well',
+    title: 'Open Stacks',
+    subtitle: 'garden commons',
     accent: '#f5f5f5',
   },
   featured: {
-    title: 'JavaScript District',
-    subtitle: 'live #javascript strata',
+    title: 'JavaScript Grove',
+    subtitle: 'featured writing under the trees',
     accent: '#3b49df',
   },
   latest: {
@@ -47,23 +47,23 @@ const SECTION_COPY: Record<
     accent: '#5b6cff',
   },
   topics: {
-    title: 'District Index',
-    subtitle: 'browse the archive by tag',
+    title: 'Trail Index',
+    subtitle: 'follow the archive by tag',
     accent: '#3b49df',
   },
   creators: {
-    title: 'Author Index',
-    subtitle: 'creator collections and pillars',
+    title: 'Author Grove',
+    subtitle: 'creator collections among the trees',
     accent: '#7c83ff',
   },
   search: {
-    title: 'Index Terminal',
-    subtitle: 'search the live collection',
+    title: 'Search Pavilion',
+    subtitle: 'search the live collection from the pavilion',
     accent: '#3b49df',
   },
   archive: {
-    title: 'Deep Strata',
-    subtitle: 'older layers disappearing into the Well',
+    title: 'Deep Woods',
+    subtitle: 'older catalog terraces climbing into the woods',
     accent: '#a3a3a3',
   },
 }
@@ -263,8 +263,8 @@ function buildLibraryGraph(
   addNode({
     id: 'dev-home',
     kind: 'home',
-    title: 'The Stackwell',
-    subtitle: 'the Well',
+    title: 'Open Stacks',
+    subtitle: 'garden commons',
     href: 'https://dev.to/',
     section: 'atrium',
     position: [0, .55, 7],
@@ -1287,8 +1287,8 @@ export default function DevWebSurf() {
         </nav>
       )}
 
-      <nav className={styles.floorRail} aria-label="Stackwell levels">
-        <span>Level</span>
+      <nav className={styles.floorRail} aria-label="Outdoor library terraces">
+        <span>Terrace</span>
         {Array.from({length: LIBRARY_FLOOR_COUNT}, (_, floor) => (
           <button
             type="button"
@@ -1309,7 +1309,7 @@ export default function DevWebSurf() {
             : Math.min(catalogArticles.length, MEGA_SHELF_CAPACITY) +
               '/' +
               MEGA_SHELF_CAPACITY +
-              ' shelf books · keys 1–4'}
+              ' shelf books · terraces 1–4'}
         </small>
       </nav>
 
@@ -1325,7 +1325,7 @@ export default function DevWebSurf() {
       {directoryOpen && (
         <aside className={styles.directory}>
           <div className={styles.directoryHeading}>
-            <span>Stackwell Index</span>
+            <span>Open Stacks Index</span>
             <button
               type="button"
               onClick={() => setDirectoryOpen(false)}
@@ -1335,7 +1335,7 @@ export default function DevWebSurf() {
             </button>
           </div>
           <p>
-            Use the Well as your landmark. Choose a district or trace a route into the archive.
+            Use the garden commons as your landmark. Choose a grove or follow the trail deeper into the archive.
           </p>
 
           <div className={styles.directoryGrid}>
@@ -1347,21 +1347,21 @@ export default function DevWebSurf() {
               type="button"
               onClick={() => walkTo('section:featured')}
             >
-              <b>#javascript district</b>
+              <b>#javascript grove</b>
               <small>live articles in the first archive zone</small>
             </button>
             <button
               type="button"
               onClick={() => walkTo('section:topics')}
             >
-              <b>District index</b>
+              <b>Trail index</b>
               <small>tags become places in the archive</small>
             </button>
             <button
               type="button"
               onClick={() => walkTo('section:creators')}
             >
-              <b>Author index</b>
+              <b>Author grove</b>
               <small>creator collections and future pillars</small>
             </button>
             <button
@@ -1385,7 +1385,7 @@ export default function DevWebSurf() {
             className={styles.archiveLink}
             onClick={() => walkTo('section:archive')}
           >
-            Descend into the Deep Strata →
+            Continue into the Deep Woods →
           </button>
         </aside>
       )}
@@ -1396,8 +1396,8 @@ export default function DevWebSurf() {
           <strong>{routeTarget.title}</strong>
           <p>
             {routeTargetFloor !== currentFloor
-              ? 'Take the central lift, then follow the cyan floor strips.'
-              : 'Follow the floor strips through the lit doorway.'}
+              ? 'Follow the terrace trail, then use the cyan guide line.'
+              : 'Follow the cyan guide line along the garden path.'}
           </p>
           <div>
             <button
@@ -1414,7 +1414,7 @@ export default function DevWebSurf() {
               }}
             >
               {routeTargetFloor !== currentFloor
-                ? 'Take lift'
+                ? 'Take trail'
                 : 'Walk route'}
             </button>
             <button type="button" onClick={() => jumpTo(routeTarget.id)}>
@@ -1437,8 +1437,8 @@ export default function DevWebSurf() {
           {activeNode?.kind === 'article' ? 'put back' : 'inspect'}
         </span>
         <span><kbd>F</kbd> travel</span>
-        <span><kbd>1–4</kbd> floors</span>
-        <span><kbd>Pg↑↓</kbd> lift</span>
+        <span><kbd>1–4</kbd> terraces</span>
+        <span><kbd>Pg↑↓</kbd> terrace</span>
         <span><kbd>Shift</kbd> hurry</span>
         <span><kbd>Esc</kbd> cursor</span>
       </section>
@@ -1511,7 +1511,7 @@ export default function DevWebSurf() {
                   deep-catalog shelf books
                 </span>
                 <span>
-                  <b>{LIBRARY_FLOOR_COUNT}</b> physical floors
+                  <b>{LIBRARY_FLOOR_COUNT}</b> garden terraces
                 </span>
               </div>
               <div className={styles.pageActions}>
@@ -1825,7 +1825,7 @@ export default function DevWebSurf() {
       {!locked && !activeNode && !directoryOpen && (
         <div className={styles.capturePrompt}>
           <span>click inside the library</span>
-          <strong>Capture pointer to walk the stacks</strong>
+          <strong>Capture pointer to walk the open stacks</strong>
         </div>
       )}
     </main>
