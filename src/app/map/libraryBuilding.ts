@@ -661,70 +661,60 @@ export function createLibraryBuilding(
   backupCeiling.position.set(0, 5.03, -30.15)
   group.add(backupCeiling)
 
-  const skylightGlassMaterial =
-    new THREE.MeshPhysicalMaterial({
-      color: 0xbfd9e8,
-      transmission: .5,
-      transparent: true,
-      opacity: .72,
-      roughness: .22,
-      metalness: 0,
-      clearcoat: .12,
-      clearcoatRoughness: .28,
-      envMapIntensity: .42,
-      side: THREE.DoubleSide,
-      toneMapped: true,
-    })
   const skylightFrameMaterial =
     new THREE.MeshStandardMaterial({
       color: 0x2e2924,
-      roughness: .7,
-      metalness: .18,
-      envMapIntensity: .14,
+      roughness: .72,
+      metalness: .16,
+      envMapIntensity: .12,
     })
-  const skylightGlowMaterial =
-    new THREE.MeshBasicMaterial({
-      color: 0xd9efff,
-      transparent: true,
-      opacity: .11,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-      toneMapped: false,
-      side: THREE.DoubleSide,
-    })
+  const skyRockMaterial = new THREE.MeshStandardMaterial({
+    color: 0x343536,
+    roughness: .94,
+    metalness: .015,
+    envMapIntensity: .16,
+  })
+  const skyDebrisMaterial = new THREE.MeshStandardMaterial({
+    color: 0x5b4b3b,
+    roughness: .88,
+    metalness: .04,
+    envMapIntensity: .12,
+  })
+  const skyParticleMaterial = new THREE.PointsMaterial({
+    color: 0xc8dbe8,
+    size: .055,
+    transparent: true,
+    opacity: .52,
+    depthWrite: false,
+    sizeAttenuation: true,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+  })
   localMaterials.push(
-    skylightGlassMaterial,
     skylightFrameMaterial,
-    skylightGlowMaterial,
+    skyRockMaterial,
+    skyDebrisMaterial,
+    skyParticleMaterial,
   )
 
-  const skylightGlassGeometry =
-    new THREE.PlaneGeometry(5.1, 5.7)
   const skylightFrameLongGeometry =
-    new THREE.BoxGeometry(.18, .12, 5.95)
+    new THREE.BoxGeometry(.2, .14, 6.05)
   const skylightFrameShortGeometry =
-    new THREE.BoxGeometry(5.45, .12, .18)
-  const skylightMullionLongGeometry =
-    new THREE.BoxGeometry(.08, .1, 5.7)
-  const skylightMullionShortGeometry =
-    new THREE.BoxGeometry(5.1, .1, .08)
-  const skylightShaftGeometry =
-    new THREE.CylinderGeometry(
-      1.45,
-      2.65,
-      4.7,
-      20,
-      1,
-      true,
-    )
+    new THREE.BoxGeometry(5.55, .14, .2)
+  const skyRockLargeGeometry =
+    new THREE.IcosahedronGeometry(.44, 1)
+  const skyRockSmallGeometry =
+    new THREE.IcosahedronGeometry(.26, 0)
+  const skyDebrisGeometry =
+    new THREE.TetrahedronGeometry(.15, 0)
   localGeometries.push(
-    skylightGlassGeometry,
     skylightFrameLongGeometry,
     skylightFrameShortGeometry,
-    skylightMullionLongGeometry,
-    skylightMullionShortGeometry,
-    skylightShaftGeometry,
+    skyRockLargeGeometry,
+    skyRockSmallGeometry,
+    skyDebrisGeometry,
   )
+
 
   const wallRuns: WallRun[] = [
     {
@@ -1270,6 +1260,9 @@ export function createLibraryBuilding(
         'height',
       ),
       loadLibraryAsset('issueDesk', 1.32, 'height'),
+      loadLibraryAsset('writingDesk', .92, 'height'),
+      loadLibraryAsset('bookcaseTall', 3.25, 'height'),
+      loadLibraryAsset('decoyBookshelf', 3.25, 'height'),
     ])
 
     if (disposed) return
@@ -1300,6 +1293,8 @@ export function createLibraryBuilding(
     const rollingLadder = value(16)
     const cardCatalogueSecondary = value(17)
     const issueDesk = value(18)
+    const writingDesk = value(19)
+    const bookcaseTall = value(20) ?? value(21)
 
     archedWindow?.traverse((child) => {
       if (!(child instanceof THREE.Mesh)) return
@@ -1568,17 +1563,55 @@ export function createLibraryBuilding(
 
       backupCeiling.visible = false
 
-      LIBRARY_SKYLIGHT_CENTERS.forEach((z, index) => {
-        const glass = new THREE.Mesh(
-          skylightGlassGeometry,
-          skylightGlassMaterial,
-        )
-        glass.rotation.x = Math.PI / 2
-        glass.position.set(0, 5.08, z)
-        glass.name = `library-skylight-glass-${index}`
-        group.add(glass)
+      // A single suspended particle field lives above the roof. Depth testing
+      // means it only becomes visible through the actual ceiling openings.
+      const skyParticleCount = 210
+      const skyParticlePositions =
+        new Float32Array(skyParticleCount * 3)
+      for (let particle = 0; particle < skyParticleCount; particle += 1) {
+        const phase = particle * 12.9898
+        const u = Math.sin(phase) * 43758.5453
+        const v = Math.sin(phase * 1.37 + 4.2) * 24634.6345
+        const w = Math.sin(phase * .73 + 9.1) * 19341.137
+        const unitU = u - Math.floor(u)
+        const unitV = v - Math.floor(v)
+        const unitW = w - Math.floor(w)
+        skyParticlePositions[particle * 3] =
+          -3.15 + unitU * 6.3
+        skyParticlePositions[particle * 3 + 1] =
+          5.75 + unitV * 6.8
+        skyParticlePositions[particle * 3 + 2] =
+          -72 + unitW * 71
+      }
+      const skyParticleGeometry = new THREE.BufferGeometry()
+      skyParticleGeometry.setAttribute(
+        'position',
+        new THREE.BufferAttribute(
+          skyParticlePositions,
+          3,
+        ),
+      )
+      localGeometries.push(skyParticleGeometry)
+      const skyParticles = new THREE.Points(
+        skyParticleGeometry,
+        skyParticleMaterial,
+      )
+      skyParticles.name = 'library-open-roof-particles'
+      group.add(skyParticles)
+      floatingProps.register(skyParticles, {
+        phase: floatingPhase('open-roof-particles'),
+        hoverAmplitude: .12,
+        hoverSpeed: .09,
+        driftSide: .16,
+        driftForward: .1,
+        driftSpeedSide: .07,
+        driftSpeedForward: .055,
+      })
 
-        ;[-2.65, 2.65].forEach((x) => {
+      LIBRARY_SKYLIGHT_CENTERS.forEach((z, index) => {
+        // Only a perimeter lip remains. There is intentionally no glass and
+        // no mullion grid: the scene beyond is the actual visible exterior.
+        ;[-2.72, 2.72].forEach((x) => {
           const frame = new THREE.Mesh(
             skylightFrameLongGeometry,
             skylightFrameMaterial,
@@ -1586,7 +1619,7 @@ export function createLibraryBuilding(
           frame.position.set(x, 5.1, z)
           group.add(frame)
         })
-        ;[-2.92, 2.92].forEach((dz) => {
+        ;[-3, 3].forEach((dz) => {
           const frame = new THREE.Mesh(
             skylightFrameShortGeometry,
             skylightFrameMaterial,
@@ -1595,45 +1628,97 @@ export function createLibraryBuilding(
           group.add(frame)
         })
 
-        ;[-1.28, 0, 1.28].forEach((x) => {
-          const mullion = new THREE.Mesh(
-            skylightMullionLongGeometry,
-            skylightFrameMaterial,
-          )
-          mullion.position.set(x, 5.11, z)
-          group.add(mullion)
-        })
-        ;[-1.42, 0, 1.42].forEach((dz) => {
-          const mullion = new THREE.Mesh(
-            skylightMullionShortGeometry,
-            skylightFrameMaterial,
-          )
-          mullion.position.set(0, 5.11, z + dz)
-          group.add(mullion)
-        })
-
-        const shaft = new THREE.Mesh(
-          skylightShaftGeometry,
-          skylightGlowMaterial,
-        )
-        shaft.position.set(0, 2.63, z)
-        shaft.renderOrder = 1
-        shaft.name = `library-skylight-shaft-${index}`
-        group.add(shaft)
-
+        // Daylight exists physically, but the old visible cone mesh is gone.
         const daylight = new THREE.SpotLight(
           0xc9e6ff,
-          78,
-          8.5,
-          Math.PI / 3.25,
-          .92,
+          30,
+          9.5,
+          Math.PI / 3,
+          .96,
           2,
         )
-        daylight.position.set(0, 5.15, z)
-        daylight.target.position.set(0, .2, z)
+        daylight.position.set(0, 6.1, z)
+        daylight.target.position.set(0, .45, z)
         daylight.castShadow = false
-        daylight.name = `library-skylight-light-${index}`
+        daylight.name = `library-open-skylight-light-${index}`
         group.add(daylight, daylight.target)
+
+        // Floating stones and fragments above each opening sell that this roof
+        // looks into Oniria rather than an ordinary building exterior.
+        for (let rockIndex = 0; rockIndex < 3; rockIndex += 1) {
+          const phase = index * 17 + rockIndex * 7
+          const rock = new THREE.Mesh(
+            rockIndex === 0
+              ? skyRockLargeGeometry
+              : skyRockSmallGeometry,
+            skyRockMaterial,
+          )
+          rock.position.set(
+            -1.7 + rockIndex * 1.65 +
+              Math.sin(phase * 1.7) * .34,
+            6.5 + rockIndex * 1.15 +
+              Math.sin(phase) * .35,
+            z - .85 + Math.cos(phase * 1.3) * 1.45,
+          )
+          rock.scale.set(
+            .78 + ((phase * 13) % 7) * .05,
+            .62 + ((phase * 5) % 5) * .08,
+            .72 + ((phase * 11) % 6) * .06,
+          )
+          rock.rotation.set(
+            phase * .19,
+            phase * .27,
+            phase * .13,
+          )
+          rock.name =
+            `library-sky-rock-${index}-${rockIndex}`
+          group.add(rock)
+          floatingProps.register(rock, {
+            phase: floatingPhase(rock.name),
+            hoverAmplitude: .28 + rockIndex * .11,
+            hoverSpeed: .08 + rockIndex * .018,
+            secondaryHoverAmplitude: .08,
+            secondaryHoverSpeed: .17,
+            tiltX: .14,
+            tiltY: .2,
+            tiltZ: .12,
+            driftSide: .38 + rockIndex * .12,
+            driftForward: .28 + rockIndex * .08,
+            driftSpeedSide: .08 + rockIndex * .018,
+            driftSpeedForward: .06 + rockIndex * .014,
+          })
+        }
+
+        for (let shardIndex = 0; shardIndex < 5; shardIndex += 1) {
+          const phase = index * 23 + shardIndex * 11 + 3
+          const shard = new THREE.Mesh(
+            skyDebrisGeometry,
+            skyDebrisMaterial,
+          )
+          shard.position.set(
+            -2.15 + (shardIndex % 3) * 2.05 +
+              Math.sin(phase) * .4,
+            6.05 + (shardIndex % 4) * .86,
+            z - 1.9 + ((shardIndex * 1.07) % 3.8),
+          )
+          const scale = .5 + (shardIndex % 3) * .24
+          shard.scale.set(scale, scale * .5, scale * .8)
+          shard.name =
+            `library-sky-debris-${index}-${shardIndex}`
+          group.add(shard)
+          floatingProps.register(shard, {
+            phase: floatingPhase(shard.name),
+            hoverAmplitude: .18 + shardIndex * .025,
+            hoverSpeed: .12 + shardIndex * .014,
+            tiltX: .32,
+            tiltY: .38,
+            tiltZ: .28,
+            driftSide: .3 + shardIndex * .055,
+            driftForward: .22 + shardIndex * .04,
+            driftSpeedSide: .12 + shardIndex * .016,
+            driftSpeedForward: .09 + shardIndex * .013,
+          })
+        }
       })
     }
 
@@ -1749,6 +1834,7 @@ export function createLibraryBuilding(
       libraryChair,
       chairWingback,
       readingTable,
+      writingDesk,
       cardCatalogue,
       cardCatalogueSecondary,
       clockMantel,
@@ -1757,6 +1843,50 @@ export function createLibraryBuilding(
       wallSconce,
       rollingLadder,
       issueDesk,
+    }
+
+    if (bookcaseTall) {
+      LIBRARY_ROOMS.forEach((room) => {
+        const leftRoom = room.center[0] < 0
+        const wallX = leftRoom ? -23.72 : 23.72
+        const yaw = leftRoom ? Math.PI / 2 : -Math.PI / 2
+
+        ;[-8.05, 8.05].forEach((zOffset, index) => {
+          const mock = placeAsset(
+            bookcaseTall,
+            wallX,
+            floorSurfaceY + .04,
+            room.center[1] + zOffset,
+            .92,
+            yaw,
+          )
+          mock.name =
+            `library-mock-bookcase-${room.slot}-${index}`
+          mock.userData.libraryDecorative = true
+          mock.userData.libraryMockShelf = true
+
+          mock.updateMatrixWorld(true)
+          const bounds = new THREE.Box3().setFromObject(mock)
+          mock.position.y +=
+            floorSurfaceY + .08 - bounds.min.y
+          mock.updateMatrixWorld(true)
+
+          floatingProps.register(mock, {
+            phase: floatingPhase(mock.name),
+            hoverAmplitude: .045,
+            hoverSpeed: .105 + index * .012,
+            secondaryHoverAmplitude: .012,
+            secondaryHoverSpeed: .2,
+            tiltX: .01,
+            tiltY: .008,
+            tiltZ: .012,
+            driftSide: .07,
+            driftForward: .008,
+            driftSpeedSide: .13,
+            driftSpeedForward: .07,
+          })
+        })
+      })
     }
 
     wallSconce?.traverse((child) => {
@@ -1789,12 +1919,12 @@ export function createLibraryBuilding(
       instance.name = `library-furnishing-${placement.id}`
 
       if (placement.id.startsWith('hall-reading-desk-')) {
-        // Rebase from the table's actual post-scale world bounds instead of a
-        // guessed group Y. Keep enough clearance for the full hover envelope
-        // so the lowest point of the animation still floats above the rug.
+        // These writing desks are intentionally much lighter than the shelf
+        // masses. Rebase from the measured post-scale bounds and give the
+        // animation enough vertical clearance to roam without touching rugs.
         instance.updateMatrixWorld(true)
         const deskBounds = new THREE.Box3().setFromObject(instance)
-        const targetBottomY = floorSurfaceY + .34
+        const targetBottomY = floorSurfaceY + .78
         const lift = targetBottomY - deskBounds.min.y
         instance.position.y += lift
         instance.updateMatrixWorld(true)
@@ -1953,14 +2083,22 @@ export function createLibraryBuilding(
                   driftX: .07,
                   driftZ: .055,
                 }
-              : placement.asset === 'readingTable'
+              : placement.asset === 'writingDesk'
                 ? {
-                    tiltX: .034,
-                    tiltY: .028,
-                    tiltZ: .03,
-                    driftX: .085,
-                    driftZ: .065,
+                    tiltX: .095,
+                    tiltY: .08,
+                    tiltZ: .11,
+                    driftX: .28,
+                    driftZ: .22,
                   }
+                : placement.asset === 'readingTable'
+                  ? {
+                      tiltX: .034,
+                      tiltY: .028,
+                      tiltZ: .03,
+                      driftX: .085,
+                      driftZ: .065,
+                    }
                 : placement.asset === 'cardCatalogue' ||
                     placement.asset === 'cardCatalogueSecondary'
                   ? {
@@ -2002,12 +2140,18 @@ export function createLibraryBuilding(
                             driftZ: .04,
                           }
 
+        const lightDesk = placement.asset === 'writingDesk'
         floatingProps.register(instance, {
           phase: floatingPhase(placement.id),
           hoverAmplitude:
             placement.hoverAmplitude *
-            (placement.asset === 'readingTable' ? 1.45 : 1.22),
-          hoverSpeed: placement.hoverSpeed * .88,
+            (lightDesk
+              ? 1.7
+              : placement.asset === 'readingTable'
+                ? 1.45
+                : 1.22),
+          hoverSpeed:
+            placement.hoverSpeed * (lightDesk ? 1.22 : .88),
           tiltX: Math.max(
             placement.tiltX ?? 0,
             motionProfile.tiltX,
@@ -2022,30 +2166,43 @@ export function createLibraryBuilding(
           ),
           driftX: motionProfile.driftX,
           driftZ: motionProfile.driftZ,
-          driftSpeedX:
-            placement.asset === 'readingTable' ? .16 : .13,
-          driftSpeedZ:
-            placement.asset === 'readingTable' ? .125 : .105,
-          driftSide:
-            placement.asset === 'readingTable'
+          driftSpeedX: lightDesk
+            ? .29
+            : placement.asset === 'readingTable'
+              ? .16
+              : .13,
+          driftSpeedZ: lightDesk
+            ? .23
+            : placement.asset === 'readingTable'
+              ? .125
+              : .105,
+          driftSide: lightDesk
+            ? .62
+            : placement.asset === 'readingTable'
               ? .1
               : placement.asset === 'libraryChair' ||
                   placement.asset === 'chairWingback'
                 ? .075
                 : .045,
-          driftForward:
-            placement.asset === 'readingTable'
+          driftForward: lightDesk
+            ? .4
+            : placement.asset === 'readingTable'
               ? .04
               : .025,
-          driftSpeedSide:
-            placement.asset === 'readingTable' ? .18 : .15,
-          driftSpeedForward: .105,
-          secondaryHoverAmplitude:
-            placement.asset === 'readingTable'
+          driftSpeedSide: lightDesk
+            ? .31
+            : placement.asset === 'readingTable'
+              ? .18
+              : .15,
+          driftSpeedForward: lightDesk ? .24 : .105,
+          secondaryHoverAmplitude: lightDesk
+            ? .095
+            : placement.asset === 'readingTable'
               ? .026
               : .014,
-          secondaryHoverSpeed:
-            placement.asset === 'readingTable'
+          secondaryHoverSpeed: lightDesk
+            ? .39
+            : placement.asset === 'readingTable'
               ? .23
               : .19,
         })
