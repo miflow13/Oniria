@@ -1081,11 +1081,18 @@ export default function DreamWorld3D({
         const offset = index * 3
         const seed = index + 1703
         const isMote = index >= tinyParticleCount
-        const depth = Math.pow(seededUnit(seed, 3), .58)
+        const theta = seededUnit(seed, 1) * Math.PI * 2
+        const phi = Math.acos(2 * seededUnit(seed, 2) - 1)
+        const radius =
+          112 + seededUnit(seed, 3) * 118
+        const sinPhi = Math.sin(phi)
 
-        positions[offset] = (seededUnit(seed, 1) - .5) * 180
-        positions[offset + 1] = (seededUnit(seed, 2) - .5) * 88
-        positions[offset + 2] = -42 - depth * 215
+        positions[offset] =
+          Math.cos(theta) * sinPhi * radius
+        positions[offset + 1] =
+          Math.cos(phi) * radius
+        positions[offset + 2] =
+          -30 + Math.sin(theta) * sinPhi * radius
 
         const color =
           palette[Math.floor(seededUnit(seed, 4) * palette.length)] ??
