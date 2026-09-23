@@ -92,6 +92,7 @@ export function roomForDistrict(
 export type RoomShelfPlacement = {
   world: [number, number, number]
   yaw: number
+  doubleSided: boolean
   endCaps: 'none' | 'left' | 'right'
   floatId: string
   pathBay: number
@@ -156,6 +157,7 @@ export function roomShelfPlacements(
           z + zOffset,
         ],
         yaw,
+        doubleSided: true,
         endCaps:
           useEndCaps
             ? columnIndex === 0
@@ -190,6 +192,7 @@ export function hallwayShelfPlacements(
       z,
     ],
     yaw: isLeft ? Math.PI / 2 : -Math.PI / 2,
+    doubleSided: false,
     endCaps:
       district.sourceMode === 'latest'
         ? index % 2 === 0
