@@ -5,6 +5,7 @@ import {
   LIBRARY_FURNISHINGS,
   LIBRARY_HALL_READING_Z,
   LIBRARY_ROOMS,
+  LIBRARY_SHELF_WIDTH,
   roomCrossAisleRect,
   roomDoorwayClearanceRect,
   roomShelfBlueprintPlacements,
@@ -2016,45 +2017,102 @@ export function createLibraryBuilding(
     }
 
     if (bookcaseTall) {
-      LIBRARY_ROOMS.forEach((room) => {
-        const leftRoom = room.center[0] < 0
-        const wallX = leftRoom ? -23.72 : 23.72
-        const yaw = leftRoom ? Math.PI / 2 : -Math.PI / 2
+      bookcaseTall.updateMatrixWorld(true)
+      const mockTemplateSize = new THREE.Box3()
+        .setFromObject(bookcaseTall)
+        .getSize(new THREE.Vector3())
+      const fillerZones = [
+        'divider-wall',
+        'outer-wall',
+        'rear-wall',
+      ] as const
 
-        ;[-8.05, 8.05].forEach((zOffset, index) => {
-          const mock = placeAsset(
-            bookcaseTall,
-            wallX,
-            floorSurfaceY + .04,
-            room.center[1] + zOffset,
-            .92,
-            yaw,
-          )
-          mock.name =
-            `library-mock-bookcase-${room.slot}-${index}`
-          mock.userData.libraryDecorative = true
-          mock.userData.libraryMockShelf = true
+      roomDistricts.forEach((district, districtIndex) => {
+        const realWallShelves = [
+          ...roomShelfBlueprintPlacements(
+            district,
+            districtIndex,
+          ),
+          ...surveyedRoomShelfPlacements(
+            district,
+            districtIndex,
+          ),
+        ]
 
-          mock.updateMatrixWorld(true)
-          const bounds = new THREE.Box3().setFromObject(mock)
-          mock.position.y +=
-            floorSurfaceY + .08 - bounds.min.y
-          mock.updateMatrixWorld(true)
+        fillerZones.forEach((zone) => {
+          const zoneShelves = realWallShelves
+            .filter((placement) => placement.zone === zone)
+            .sort((a, b) =>
+              zone === 'outer-wall'
+                ? a.world[2] - b.world[2]
+                : a.world[0] - b.world[0],
+            )
 
-          floatingProps.register(mock, {
-            phase: floatingPhase(mock.name),
-            hoverAmplitude: .045,
-            hoverSpeed: .105 + index * .012,
-            secondaryHoverAmplitude: .012,
-            secondaryHoverSpeed: .2,
-            tiltX: .01,
-            tiltY: .008,
-            tiltZ: .012,
-            driftSide: .07,
-            driftForward: .008,
-            driftSpeedSide: .13,
-            driftSpeedForward: .07,
-          })
+          for (
+            let index = 0;
+            index < zoneShelves.length - 1;
+            index += 1
+          ) {
+            const current = zoneShelves[index]
+            const next = zoneShelves[index + 1]
+            if (Math.abs(current.yaw - next.yaw) > .08) continue
+
+            const dx = next.world[0] - current.world[0]
+            const dz = next.world[2] - current.world[2]
+            const centerDistance = Math.hypot(dx, dz)
+            const realShelfSpan =
+              LIBRARY_SHELF_WIDTH *
+              Math.max(
+                current.widthScale ?? 1,
+                next.widthScale ?? 1,
+              )
+            const freeGap = centerDistance - realShelfSpan
+
+            // Tiny gaps read better as molding. Only insert a filler case when
+            // there is enough visual breathing room to keep the DEV shelves
+            // recognizable as the interactive collection.
+            if (freeGap < .42) continue
+
+            const scale = THREE.MathUtils.clamp(
+              (freeGap + .42) /
+                Math.max(.1, mockTemplateSize.x),
+              .62,
+              .88,
+            )
+            const mock = placeAsset(
+              bookcaseTall,
+              (current.world[0] + next.world[0]) / 2,
+              floorSurfaceY + .04,
+              (current.world[2] + next.world[2]) / 2,
+              scale,
+              current.yaw,
+            )
+            mock.name =
+              `library-mock-bookcase-${district.roomSlot}-${zone}-${index}`
+            mock.userData.libraryDecorative = true
+            mock.userData.libraryMockShelf = true
+
+            mock.updateMatrixWorld(true)
+            const bounds = new THREE.Box3().setFromObject(mock)
+            mock.position.y +=
+              floorSurfaceY + .08 - bounds.min.y
+            mock.updateMatrixWorld(true)
+
+            floatingProps.register(mock, {
+              phase: floatingPhase(mock.name),
+              hoverAmplitude: .055,
+              hoverSpeed: .12 + index * .008,
+              secondaryHoverAmplitude: .014,
+              secondaryHoverSpeed: .21,
+              tiltX: .012,
+              tiltY: .01,
+              tiltZ: .014,
+              driftSide: .075,
+              driftForward: .008,
+              driftSpeedSide: .14,
+              driftSpeedForward: .075,
+            })
+          }
         })
       })
     }
@@ -2087,6 +2145,14 @@ export function createLibraryBuilding(
         placement.castsShadow ?? false,
       )
       instance.name = `library-furnishing-${placement.id}`
+
+      if (placement.asset === 'pottedPlant') {
+        // Plants are among the lightest props in the archive. Start them
+        // clearly off the floor so their wider orbital drift reads as
+        // zero-gravity decoration rather than a wobbling floor object.
+        instance.position.y += .52
+        instance.updateMatrixWorld(true)
+      }
 
       if (placement.id.startsWith('hall-reading-desk-')) {
         // Central desks use the proven-visible reading-table mesh. Rebase from
@@ -2260,6 +2326,14 @@ export function createLibraryBuilding(
                 driftX: .018,
                 driftZ: .014,
               }
+            : placement.asset === 'pottedPlant'
+              ? {
+                  tiltX: .075,
+                  tiltY: .11,
+                  tiltZ: .082,
+                  driftX: .36,
+                  driftZ: .31,
+                }
             : placement.asset === 'libraryChair' ||
                 placement.asset === 'chairWingback'
               ? {
@@ -2328,17 +2402,21 @@ export function createLibraryBuilding(
 
         const lightDesk =
           placement.id.startsWith('hall-reading-desk-')
+        const lightPlant = placement.asset === 'pottedPlant'
         floatingProps.register(instance, {
           phase: floatingPhase(placement.id),
           hoverAmplitude:
             placement.hoverAmplitude *
             (lightDesk
               ? 1.7
+              : lightPlant
+                ? 5.8
               : placement.asset === 'readingTable'
                 ? 1.45
                 : 1.22),
           hoverSpeed:
-            placement.hoverSpeed * (lightDesk ? 1.22 : .88),
+            placement.hoverSpeed *
+            (lightDesk ? 1.22 : lightPlant ? 1.55 : .88),
           tiltX: Math.max(
             placement.tiltX ?? 0,
             motionProfile.tiltX,
@@ -2355,16 +2433,22 @@ export function createLibraryBuilding(
           driftZ: motionProfile.driftZ,
           driftSpeedX: lightDesk
             ? .29
+            : lightPlant
+              ? .24
             : placement.asset === 'readingTable'
               ? .16
               : .13,
           driftSpeedZ: lightDesk
             ? .23
+            : lightPlant
+              ? .2
             : placement.asset === 'readingTable'
               ? .125
               : .105,
           driftSide: lightDesk
             ? .62
+            : lightPlant
+              ? .58
             : placement.asset === 'readingTable'
               ? .1
               : placement.asset === 'libraryChair' ||
@@ -2373,22 +2457,31 @@ export function createLibraryBuilding(
                 : .045,
           driftForward: lightDesk
             ? .4
+            : lightPlant
+              ? .46
             : placement.asset === 'readingTable'
               ? .04
               : .025,
           driftSpeedSide: lightDesk
             ? .31
+            : lightPlant
+              ? .26
             : placement.asset === 'readingTable'
               ? .18
               : .15,
-          driftSpeedForward: lightDesk ? .24 : .105,
+          driftSpeedForward:
+            lightDesk ? .24 : lightPlant ? .2 : .105,
           secondaryHoverAmplitude: lightDesk
             ? .095
+            : lightPlant
+              ? .085
             : placement.asset === 'readingTable'
               ? .026
               : .014,
           secondaryHoverSpeed: lightDesk
             ? .39
+            : lightPlant
+              ? .36
             : placement.asset === 'readingTable'
               ? .23
               : .19,
