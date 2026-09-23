@@ -456,8 +456,26 @@ export default function DevLibraryMap() {
 
     const handleLayoutButton = (event: Event) => {
       const detail = (
-        event as CustomEvent<{remove?: boolean}>
+        event as CustomEvent<{
+          remove?: boolean
+          clearAll?: boolean
+        }>
       ).detail
+
+      if (detail?.clearAll) {
+        setLayoutHudVisible(true)
+        setLayoutHudStatus('CLEARING ALL PINS…')
+        window.dispatchEvent(
+          new CustomEvent('oniria:layout-pin-request', {
+            detail: {
+              clearAll: true,
+              source: 'BUTTON',
+            },
+          }),
+        )
+        return
+      }
+
       sendLayoutRequest(
         Boolean(detail?.remove),
         'BUTTON',
@@ -1553,6 +1571,26 @@ export default function DevLibraryMap() {
               }}
             >
               Copy pins JSON
+            </button>
+            <button
+              type="button"
+              className={styles.layoutAuthoringDanger}
+              onClick={() => {
+                if (
+                  !window.confirm(
+                    'Clear every layout pin? The normalized shelf layout will remain.',
+                  )
+                ) {
+                  return
+                }
+                window.dispatchEvent(
+                  new CustomEvent('oniria:layout-pin-button', {
+                    detail: {clearAll: true},
+                  }),
+                )
+              }}
+            >
+              Clear all pins
             </button>
           </div>
           <small>
