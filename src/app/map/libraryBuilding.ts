@@ -726,7 +726,7 @@ export function createLibraryBuilding(
     new THREE.MeshStandardMaterial({
       color: 0xffdfb5,
       emissive: 0xffb768,
-      emissiveIntensity: .82,
+      emissiveIntensity: 1.18,
       roughness: .34,
       metalness: 0,
       toneMapped: true,
@@ -1072,7 +1072,7 @@ export function createLibraryBuilding(
       materials.forEach((material) => {
         if (!(material instanceof THREE.MeshStandardMaterial)) return
         material.emissive.setHex(0xffb36b)
-        material.emissiveIntensity = .1
+        material.emissiveIntensity = .16
       })
     })
 
@@ -1224,21 +1224,21 @@ export function createLibraryBuilding(
           room.sourceMode
         const pointIntensity =
           sourceMode === 'featured'
-            ? .54
+            ? .72
             : sourceMode === 'catalog'
-              ? .22
-              : .38
+              ? .3
+              : .5
         const spotIntensity =
           sourceMode === 'featured'
-            ? .14
+            ? .2
             : sourceMode === 'catalog'
-              ? .035
-              : .07
+              ? .055
+              : .1
         addPendantFixtureLight(
           fixture,
           `room-${room.slot}`,
           pointIntensity,
-          7.2,
+          7.8,
           spotIntensity,
         )
       })
@@ -1255,9 +1255,9 @@ export function createLibraryBuilding(
           addPendantFixtureLight(
             fixture,
             `hall-${index}`,
-            index === 4 ? .19 : .3,
-            7,
-            index === 4 ? .04 : .065,
+            index === 4 ? .28 : .42,
+            7.6,
+            index === 4 ? .06 : .095,
           )
         },
       )
