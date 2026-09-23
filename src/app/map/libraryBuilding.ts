@@ -100,6 +100,31 @@ export function createLibraryBuilding(
     return shadow
   }
 
+  const architecturalAoMaterial = new THREE.MeshBasicMaterial({
+    color: 0x080605,
+    transparent: true,
+    opacity: .12,
+    depthWrite: false,
+    toneMapped: true,
+  })
+  const galleryWoodMaterial = new THREE.MeshStandardMaterial({
+    color: 0x33251c,
+    roughness: .82,
+    metalness: .015,
+    envMapIntensity: .1,
+  })
+  const galleryRailMaterial = new THREE.MeshStandardMaterial({
+    color: 0x221913,
+    roughness: .74,
+    metalness: .06,
+    envMapIntensity: .12,
+  })
+  localMaterials.push(
+    architecturalAoMaterial,
+    galleryWoodMaterial,
+    galleryRailMaterial,
+  )
+
   const createSignTexture = (
     title: string,
     subtitle: string,
@@ -682,6 +707,77 @@ export function createLibraryBuilding(
     },
   )
 
+  // Cheap doorway AO: narrow dark jamb strips provide the missing contact
+  // depth at each room opening without re-enabling the expensive SSAO pass.
+  const jambGeometry = new THREE.BoxGeometry(.045, 4.55, .16)
+  const lintelGeometry = new THREE.BoxGeometry(.045, .14, 3.5)
+  localGeometries.push(jambGeometry, lintelGeometry)
+  LIBRARY_ROOMS.forEach((room) => {
+    const edgeX = room.center[0] < 0 ? -7.84 : 7.84
+    ;[-1.76, 1.76].forEach((offset) => {
+      const jamb = new THREE.Mesh(
+        jambGeometry,
+        architecturalAoMaterial,
+      )
+      jamb.position.set(edgeX, 2.33, room.center[1] + offset)
+      jamb.renderOrder = 1
+      group.add(jamb)
+    })
+    const lintel = new THREE.Mesh(
+      lintelGeometry,
+      architecturalAoMaterial,
+    )
+    lintel.position.set(edgeX, 4.55, room.center[1])
+    lintel.renderOrder = 1
+    group.add(lintel)
+  })
+
+  // Shallow, inaccessible upper galleries along the outer walls add vertical
+  // scale and break the single-extruded-corridor read without changing walk
+  // collision or navigation.
+  const galleryDeckGeometry = new THREE.BoxGeometry(.92, .12, 16.4)
+  const galleryRailGeometry = new THREE.BoxGeometry(.075, .075, 15.7)
+  const galleryPostGeometry = new THREE.BoxGeometry(.075, .66, .075)
+  localGeometries.push(
+    galleryDeckGeometry,
+    galleryRailGeometry,
+    galleryPostGeometry,
+  )
+
+  LIBRARY_ROOMS.forEach((room) => {
+    const left = room.center[0] < 0
+    const deckX = left ? -23.78 : 23.78
+    const railX = left ? -23.27 : 23.27
+
+    const deck = new THREE.Mesh(
+      galleryDeckGeometry,
+      galleryWoodMaterial,
+    )
+    deck.position.set(deckX, 3.7, room.center[1])
+    deck.receiveShadow = true
+    group.add(deck)
+
+    const rail = new THREE.Mesh(
+      galleryRailGeometry,
+      galleryRailMaterial,
+    )
+    rail.position.set(railX, 4.17, room.center[1])
+    group.add(rail)
+
+    ;[-7.3, -3.65, 0, 3.65, 7.3].forEach((offset) => {
+      const post = new THREE.Mesh(
+        galleryPostGeometry,
+        galleryRailMaterial,
+      )
+      post.position.set(
+        railX,
+        3.92,
+        room.center[1] + offset,
+      )
+      group.add(post)
+    })
+  })
+
   // Small architectural edges do a lot of work in a low-poly room. A dark
   // baseboard and matching crown line break the giant flat wall surfaces and
   // make each room read as intentionally constructed rather than boxed-in.
@@ -770,8 +866,43 @@ export function createLibraryBuilding(
       metalness: 0,
       toneMapped: true,
     })
-  localGeometries.push(pendantBulbGeometry)
-  localMaterials.push(pendantBulbMaterial)
+
+  const poolCanvas = document.createElement('canvas')
+  poolCanvas.width = 128
+  poolCanvas.height = 128
+  const poolContext = poolCanvas.getContext('2d')
+  if (poolContext) {
+    const gradient = poolContext.createRadialGradient(
+      64,
+      64,
+      4,
+      64,
+      64,
+      62,
+    )
+    gradient.addColorStop(0, 'rgba(255, 205, 145, .42)')
+    gradient.addColorStop(.42, 'rgba(255, 190, 120, .17)')
+    gradient.addColorStop(1, 'rgba(255, 170, 100, 0)')
+    poolContext.fillStyle = gradient
+    poolContext.fillRect(0, 0, 128, 128)
+  }
+  const pendantPoolTexture = new THREE.CanvasTexture(poolCanvas)
+  pendantPoolTexture.colorSpace = THREE.SRGBColorSpace
+  pendantPoolTexture.needsUpdate = true
+  const pendantPoolGeometry = new THREE.PlaneGeometry(1, 1)
+  const pendantPoolMaterial = new THREE.MeshBasicMaterial({
+    map: pendantPoolTexture,
+    transparent: true,
+    opacity: .72,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    toneMapped: true,
+    side: THREE.DoubleSide,
+  })
+
+  localGeometries.push(pendantBulbGeometry, pendantPoolGeometry)
+  localMaterials.push(pendantBulbMaterial, pendantPoolMaterial)
+  localTextures.push(pendantPoolTexture)
 
   const addPendantFixtureLight = (
     fixture: THREE.Group,
@@ -819,6 +950,18 @@ export function createLibraryBuilding(
     spot.target.position.set(center.x, .55, center.z)
     spot.name = `library-pendant-spot-${id}`
     group.add(spot, spot.target)
+
+    const pool = new THREE.Mesh(
+      pendantPoolGeometry,
+      pendantPoolMaterial,
+    )
+    pool.rotation.x = -Math.PI / 2
+    const poolSize = 3.4 + pointIntensity * 2.6
+    pool.scale.set(poolSize, poolSize, 1)
+    pool.position.set(center.x, .019, center.z)
+    pool.renderOrder = 1
+    pool.name = `library-pendant-pool-${id}`
+    group.add(pool)
   }
 
   const ready = (async () => {
@@ -1417,6 +1560,59 @@ export function createLibraryBuilding(
         },
       )
     }
+
+    // A high rear-wall oculus gives the long hallway a destination without
+    // stealing floor space from the surveyed rear shelving.
+    const oculusGlassMaterial = new THREE.MeshStandardMaterial({
+      color: 0x263147,
+      emissive: 0x17111c,
+      emissiveIntensity: .08,
+      roughness: .48,
+      metalness: .02,
+      transparent: true,
+      opacity: .92,
+      envMapIntensity: .12,
+      toneMapped: true,
+      side: THREE.DoubleSide,
+    })
+    const oculusFrameMaterial = new THREE.MeshStandardMaterial({
+      color: 0x7b5a35,
+      roughness: .58,
+      metalness: .24,
+      envMapIntensity: .18,
+    })
+    const oculusGlassGeometry = new THREE.CircleGeometry(.66, 36)
+    const oculusFrameGeometry = new THREE.RingGeometry(.72, .84, 36)
+    localMaterials.push(
+      oculusGlassMaterial,
+      oculusFrameMaterial,
+    )
+    localGeometries.push(
+      oculusGlassGeometry,
+      oculusFrameGeometry,
+    )
+
+    const oculusGlass = new THREE.Mesh(
+      oculusGlassGeometry,
+      oculusGlassMaterial,
+    )
+    const oculusFrame = new THREE.Mesh(
+      oculusFrameGeometry,
+      oculusFrameMaterial,
+    )
+    oculusGlass.position.set(0, 4.05, -74.79)
+    oculusFrame.position.set(0, 4.05, -74.77)
+    group.add(oculusGlass, oculusFrame)
+
+    const oculusLight = new THREE.PointLight(
+      0xffc886,
+      .18,
+      5.5,
+      2,
+    )
+    oculusLight.position.set(0, 4.05, -73.95)
+    oculusLight.castShadow = false
+    group.add(oculusLight)
 
   })().catch((error) => {
     console.warn('Library building asset pass failed', error)
