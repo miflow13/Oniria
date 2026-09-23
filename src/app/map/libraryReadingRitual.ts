@@ -6,6 +6,7 @@ export type LibraryBookVisual = {
   group: THREE.Group
   coverHinge: THREE.Group
   coverMaterial: THREE.MeshStandardMaterial
+  hoverGlow: THREE.Mesh
   bookmark: THREE.Mesh
   basePosition: THREE.Vector3
   baseRotationY: number
