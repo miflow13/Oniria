@@ -861,7 +861,7 @@ export function createLibraryBuilding(
     new THREE.MeshStandardMaterial({
       color: 0xffdfb5,
       emissive: 0xffb768,
-      emissiveIntensity: 1.18,
+      emissiveIntensity: 2.1,
       roughness: .34,
       metalness: 0,
       toneMapped: true,
@@ -893,11 +893,15 @@ export function createLibraryBuilding(
   const pendantPoolMaterial = new THREE.MeshBasicMaterial({
     map: pendantPoolTexture,
     transparent: true,
-    opacity: .72,
+    opacity: .58,
     depthWrite: false,
-    blending: THREE.AdditiveBlending,
-    toneMapped: true,
+    depthTest: true,
+    blending: THREE.NormalBlending,
+    toneMapped: false,
     side: THREE.DoubleSide,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
   })
 
   localGeometries.push(pendantBulbGeometry, pendantPoolGeometry)
@@ -956,10 +960,14 @@ export function createLibraryBuilding(
       pendantPoolMaterial,
     )
     pool.rotation.x = -Math.PI / 2
-    const poolSize = 3.4 + pointIntensity * 2.6
+    const poolSize = THREE.MathUtils.clamp(
+      3.9 + pointIntensity * .012,
+      4.2,
+      5.1,
+    )
     pool.scale.set(poolSize, poolSize, 1)
-    pool.position.set(center.x, .019, center.z)
-    pool.renderOrder = 1
+    pool.position.set(center.x, .032, center.z)
+    pool.renderOrder = 3
     pool.name = `library-pendant-pool-${id}`
     group.add(pool)
   }
@@ -1294,7 +1302,7 @@ export function createLibraryBuilding(
         const rug = placeAsset(
           readingRug,
           0,
-          .025,
+          .045,
           z,
           1,
           longAxisIsX ? Math.PI / 2 : 0,
@@ -1520,18 +1528,22 @@ export function createLibraryBuilding(
         const sourceMode =
           roomDistrictBySlot.get(room.slot)?.sourceMode ??
           room.sourceMode
+        // Three r186 uses photometric light units. Sub-1 point-light
+        // intensities were effectively invisible at our .56 library exposure.
+        // These values approximate practical warm interior bulbs while the
+        // distance/decay still keeps each pool local to its fixture.
         const pointIntensity =
           sourceMode === 'featured'
-            ? .72
+            ? 82
             : sourceMode === 'catalog'
-              ? .3
-              : .5
+              ? 54
+              : 68
         const spotIntensity =
           sourceMode === 'featured'
-            ? .2
+            ? 34
             : sourceMode === 'catalog'
-              ? .055
-              : .1
+              ? 22
+              : 28
         addPendantFixtureLight(
           fixture,
           `room-${room.slot}`,
@@ -1553,9 +1565,9 @@ export function createLibraryBuilding(
           addPendantFixtureLight(
             fixture,
             `hall-${index}`,
-            index === 4 ? .28 : .42,
-            7.6,
-            index === 4 ? .06 : .095,
+            index === 4 ? 48 : 64,
+            7.8,
+            index === 4 ? 18 : 24,
           )
         },
       )
