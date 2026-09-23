@@ -2666,6 +2666,7 @@ export default function DreamWorld3D({
           shelfFloatId.includes(':divider-wall:') ||
           shelfFloatId.includes(':entry-wall:') ||
           shelfFloatId.includes(':outer-wall:') ||
+          shelfFloatId.includes(':rear-wall:') ||
           shelfFloatId.startsWith('hallway:')
         libraryFloatingProps.register(group, {
           phase: floatingPhase(shelfFloatId),
