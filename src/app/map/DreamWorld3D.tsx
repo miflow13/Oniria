@@ -1188,17 +1188,38 @@ export default function DreamWorld3D({
         0x83c9ef,
       ]
 
-      for (let routeIndex = 0; routeIndex < 7; routeIndex += 1) {
-        const startBay = 1.5 + routeIndex * 8.6
+      // Give every expressway its own piece of sky. The old procedural
+      // formula pushed several routes through the same center/height band,
+      // which made them read as one knot above the landmarks.
+      const skywayBands = [
+        {lateral: -62, altitude: 16, wave: 5.5, phase: .2},
+        {lateral: -45, altitude: 25, wave: 7, phase: 1.05},
+        {lateral: -28, altitude: 11, wave: 6.5, phase: 2.1},
+        {lateral: -10, altitude: 31, wave: 5.5, phase: 3.0},
+        {lateral: 11, altitude: 19, wave: 6.5, phase: 3.85},
+        {lateral: 29, altitude: 28, wave: 7, phase: 4.7},
+        {lateral: 47, altitude: 13, wave: 5.8, phase: 5.55},
+        {lateral: 64, altitude: 23, wave: 5.2, phase: 6.35},
+      ] as const
+
+      for (
+        let routeIndex = 0;
+        routeIndex < skywayBands.length;
+        routeIndex += 1
+      ) {
+        const band = skywayBands[routeIndex]
+        const startBay =
+          .75 + (routeIndex % 4) * 1.15
         const endBay = Math.min(
           ARCHIVE_PATH_RENDER_BAYS - 1,
-          startBay + 29 + (routeIndex % 3) * 3,
+          51 + routeIndex * 2.4,
         )
         const curvePoints: THREE.Vector3[] = []
-        const crossingRoute = routeIndex === 1 || routeIndex === 3 || routeIndex === 5
+        const interchangeRoute =
+          routeIndex === 2 || routeIndex === 5
 
-        for (let step = 0; step <= 9; step += 1) {
-          const t = step / 9
+        for (let step = 0; step <= 11; step += 1) {
+          const t = step / 11
           const bay = THREE.MathUtils.lerp(startBay, endBay, t)
           const pathPoint = new THREE.Vector3(...archivePathPoint(bay))
           const frame = archivePathFrame(bay)
@@ -1207,20 +1228,33 @@ export default function DreamWorld3D({
             0,
             frame.normalZ,
           )
-          const phase = routeIndex * 1.17
-          const lateral = crossingRoute
-            ? Math.sin(t * Math.PI * 1.35 + phase) *
-              (28 + routeIndex * 1.5)
-            : (routeIndex % 2 === 0 ? 1 : -1) *
-                (25 + (routeIndex % 3) * 5) +
-              Math.sin(t * Math.PI * 2.2 + phase) * 9.5
+
+          // Most routes stay inside a dedicated lateral band. Two routes
+          // make broad interchange sweeps toward one another, providing the
+          // "intertwined" moment without collapsing the whole network into
+          // the same center point.
+          const interchangeSweep = interchangeRoute
+            ? Math.sin(t * Math.PI) *
+              (routeIndex === 2 ? 14 : -14)
+            : 0
+          const lateral =
+            band.lateral +
+            Math.sin(
+              t * Math.PI * 2.05 + band.phase,
+            ) *
+              band.wave +
+            interchangeSweep
 
           pathPoint.addScaledVector(normal, lateral)
           pathPoint.y +=
-            11 +
-            (routeIndex % 4) * 3.8 +
-            Math.sin(t * Math.PI * 3.1 + phase) * 3.1 +
-            (crossingRoute ? 3.5 : 0)
+            band.altitude +
+            Math.sin(
+              t * Math.PI * 2.45 + band.phase,
+            ) *
+              2.25 +
+            (interchangeRoute
+              ? Math.sin(t * Math.PI) * 2.8
+              : 0)
           curvePoints.push(pathPoint)
         }
 
@@ -1230,7 +1264,7 @@ export default function DreamWorld3D({
           'catmullrom',
           .36,
         )
-        const width = 2.8 + (routeIndex % 3) * .55
+        const width = 2.45 + (routeIndex % 3) * .42
         const {
           ribbonGeometry,
           leftGeometry,
@@ -1244,7 +1278,7 @@ export default function DreamWorld3D({
         const roadMaterial = new THREE.MeshBasicMaterial({
           color: accent.clone().multiplyScalar(.22),
           transparent: true,
-          opacity: .5,
+          opacity: .42,
           side: THREE.DoubleSide,
           depthWrite: false,
           blending: THREE.NormalBlending,
