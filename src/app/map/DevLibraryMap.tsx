@@ -39,7 +39,7 @@ const DEFAULT_USERNAME = 'mikachu'
 const QUALITY: DreamQuality = 'cinematic'
 const CATALOG_PAGE_SIZE = 100
 const CATALOG_BOOKS_PER_SHELF = 9
-const DISTRICT_RENDERED_SHELF_LIMIT = 8
+const DISTRICT_RENDERED_SHELF_LIMIT = 12
 const DISTRICT_VISIBLE_ARTICLE_CAPACITY =
   DISTRICT_RENDERED_SHELF_LIMIT * CATALOG_BOOKS_PER_SHELF * 2
 const DISTRICT_SHELF_PAIR_OFFSETS = [-.68, .68] as const
@@ -374,7 +374,7 @@ export default function DevLibraryMap() {
     [worldConfig],
   )
 
-  const loadMoreCatalog = useCallback(async () => {
+  const loadMoreCatalog = useCallback(async (pages = 1) => {
     if (
       catalogLoadingRef.current ||
       !catalogHasMoreRef.current
@@ -390,7 +390,9 @@ export default function DevLibraryMap() {
       const response = await fetch(
         '/api/devto?mode=catalog&start_page=' +
           page +
-          '&pages=1&per_page=' +
+          '&pages=' +
+          Math.max(1, Math.min(4, pages)) +
+          '&per_page=' +
           CATALOG_PAGE_SIZE,
       )
       if (!response.ok) {
@@ -505,7 +507,7 @@ export default function DevLibraryMap() {
 
         if (initial && !catalogInitializedRef.current) {
           catalogInitializedRef.current = true
-          void loadMoreCatalog()
+          void loadMoreCatalog(3)
         }
       } catch (caught) {
         if (initial) {
@@ -780,15 +782,10 @@ export default function DevLibraryMap() {
       bootstrap.profileArticles,
       catalog,
     )
-    const creatorPreview = creators
-      .map((creator) =>
-        creatorCandidates.find(
-          (article) => article.user.username === creator.username,
-        ),
-      )
-      .filter(
-        (article): article is DevArticleSummary => Boolean(article),
-      )
+    // Every DEV article is also a creator artifact. Use the full diverse
+    // author pool by default so the expanded Creators stacks stay populated;
+    // choosing a specific @creator still replaces this with that profile.
+    const creatorPreview = creatorCandidates
 
     const allKnownArticles = uniqueArticles(
       curatedLiveArticles,
@@ -836,8 +833,7 @@ export default function DevLibraryMap() {
             bootstrap.feed,
           )
           const capacity =
-            DISTRICT_RENDERED_SHELF_LIMIT *
-            CATALOG_BOOKS_PER_SHELF
+            DISTRICT_VISIBLE_ARTICLE_CAPACITY
           return source.length > capacity
             ? source.slice(-capacity)
             : source
