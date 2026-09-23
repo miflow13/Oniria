@@ -32,6 +32,14 @@ export type LibraryBuilding = {
   dispose: () => void
 }
 
+const LIBRARY_SKYLIGHT_CENTERS = [
+  -4,
+  -20,
+  -36,
+  -52,
+  -68,
+] as const
+
 export function createLibraryBuilding(
   scene: THREE.Scene,
   config: LibraryWorldConfig,
@@ -652,6 +660,71 @@ export function createLibraryBuilding(
   backupCeiling.rotation.x = Math.PI / 2
   backupCeiling.position.set(0, 5.03, -30.15)
   group.add(backupCeiling)
+
+  const skylightGlassMaterial =
+    new THREE.MeshPhysicalMaterial({
+      color: 0xbfd9e8,
+      transmission: .5,
+      transparent: true,
+      opacity: .72,
+      roughness: .22,
+      metalness: 0,
+      clearcoat: .12,
+      clearcoatRoughness: .28,
+      envMapIntensity: .42,
+      side: THREE.DoubleSide,
+      toneMapped: true,
+    })
+  const skylightFrameMaterial =
+    new THREE.MeshStandardMaterial({
+      color: 0x2e2924,
+      roughness: .7,
+      metalness: .18,
+      envMapIntensity: .14,
+    })
+  const skylightGlowMaterial =
+    new THREE.MeshBasicMaterial({
+      color: 0xd9efff,
+      transparent: true,
+      opacity: .11,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      toneMapped: false,
+      side: THREE.DoubleSide,
+    })
+  localMaterials.push(
+    skylightGlassMaterial,
+    skylightFrameMaterial,
+    skylightGlowMaterial,
+  )
+
+  const skylightGlassGeometry =
+    new THREE.PlaneGeometry(5.1, 5.7)
+  const skylightFrameLongGeometry =
+    new THREE.BoxGeometry(.18, .12, 5.95)
+  const skylightFrameShortGeometry =
+    new THREE.BoxGeometry(5.45, .12, .18)
+  const skylightMullionLongGeometry =
+    new THREE.BoxGeometry(.08, .1, 5.7)
+  const skylightMullionShortGeometry =
+    new THREE.BoxGeometry(5.1, .1, .08)
+  const skylightShaftGeometry =
+    new THREE.CylinderGeometry(
+      1.45,
+      2.65,
+      4.7,
+      20,
+      1,
+      true,
+    )
+  localGeometries.push(
+    skylightGlassGeometry,
+    skylightFrameLongGeometry,
+    skylightFrameShortGeometry,
+    skylightMullionLongGeometry,
+    skylightMullionShortGeometry,
+    skylightShaftGeometry,
+  )
 
   const wallRuns: WallRun[] = [
     {
@@ -1466,6 +1539,13 @@ export function createLibraryBuilding(
         for (let iz = 0; iz < countZ; iz += 1) {
           const x = -24.45 + cellX * (ix + .5)
           const z = -74.95 + cellZ * (iz + .5)
+          const insideSkylight =
+            Math.abs(x) < 3.2 &&
+            LIBRARY_SKYLIGHT_CENTERS.some(
+              (centerZ) => Math.abs(z - centerZ) < 3.15,
+            )
+          if (insideSkylight) continue
+
           const tile = placeAsset(
             roofTile,
             x,
@@ -1487,6 +1567,74 @@ export function createLibraryBuilding(
       }
 
       backupCeiling.visible = false
+
+      LIBRARY_SKYLIGHT_CENTERS.forEach((z, index) => {
+        const glass = new THREE.Mesh(
+          skylightGlassGeometry,
+          skylightGlassMaterial,
+        )
+        glass.rotation.x = Math.PI / 2
+        glass.position.set(0, 5.08, z)
+        glass.name = `library-skylight-glass-${index}`
+        group.add(glass)
+
+        ;[-2.65, 2.65].forEach((x) => {
+          const frame = new THREE.Mesh(
+            skylightFrameLongGeometry,
+            skylightFrameMaterial,
+          )
+          frame.position.set(x, 5.1, z)
+          group.add(frame)
+        })
+        ;[-2.92, 2.92].forEach((dz) => {
+          const frame = new THREE.Mesh(
+            skylightFrameShortGeometry,
+            skylightFrameMaterial,
+          )
+          frame.position.set(0, 5.1, z + dz)
+          group.add(frame)
+        })
+
+        ;[-1.28, 0, 1.28].forEach((x) => {
+          const mullion = new THREE.Mesh(
+            skylightMullionLongGeometry,
+            skylightFrameMaterial,
+          )
+          mullion.position.set(x, 5.11, z)
+          group.add(mullion)
+        })
+        ;[-1.42, 0, 1.42].forEach((dz) => {
+          const mullion = new THREE.Mesh(
+            skylightMullionShortGeometry,
+            skylightFrameMaterial,
+          )
+          mullion.position.set(0, 5.11, z + dz)
+          group.add(mullion)
+        })
+
+        const shaft = new THREE.Mesh(
+          skylightShaftGeometry,
+          skylightGlowMaterial,
+        )
+        shaft.position.set(0, 2.63, z)
+        shaft.renderOrder = 1
+        shaft.name = `library-skylight-shaft-${index}`
+        group.add(shaft)
+
+        const daylight = new THREE.SpotLight(
+          0xc9e6ff,
+          78,
+          8.5,
+          Math.PI / 3.25,
+          .92,
+          2,
+        )
+        daylight.position.set(0, 5.15, z)
+        daylight.target.position.set(0, .2, z)
+        daylight.castShadow = false
+        daylight.name = `library-skylight-light-${index}`
+        group.add(daylight, daylight.target)
+      })
     }
 
     // Surveyed corridor rugs. Always render a thin old-library rug base so
