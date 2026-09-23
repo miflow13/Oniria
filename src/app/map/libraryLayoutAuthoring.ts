@@ -147,13 +147,17 @@ export function createLibraryLayoutAuthoring(
   const stemMaterial = new THREE.MeshBasicMaterial({
     color: 0x5edcff,
     transparent: true,
-    opacity: .95,
+    opacity: 1,
+    depthTest: false,
+    depthWrite: false,
     toneMapped: false,
   })
   const headMaterial = new THREE.MeshBasicMaterial({
     color: 0xffffff,
     transparent: true,
-    opacity: .98,
+    opacity: 1,
+    depthTest: false,
+    depthWrite: false,
     toneMapped: false,
   })
   const zoneMaterial = new THREE.MeshBasicMaterial({
@@ -161,7 +165,7 @@ export function createLibraryLayoutAuthoring(
     transparent: true,
     opacity: .34,
     depthWrite: false,
-    depthTest: true,
+    depthTest: false,
     side: THREE.DoubleSide,
     toneMapped: false,
   })
@@ -171,15 +175,46 @@ export function createLibraryLayoutAuthoring(
   const zoneEdgesMaterial = new THREE.LineBasicMaterial({
     color: 0x8ce8ff,
     transparent: true,
-    opacity: .96,
-    depthTest: true,
+    opacity: 1,
+    depthTest: false,
     toneMapped: false,
   })
   geometries.push(zoneEdgesGeometry)
   materials.push(zoneEdgesMaterial)
 
   const pulseGeometry = new THREE.RingGeometry(.16, .22, 32)
-  geometries.push(pulseGeometry)
+  const beamGeometry = new THREE.CylinderGeometry(
+    .045,
+    .045,
+    3.8,
+    10,
+  )
+  const ringGeometry = new THREE.TorusGeometry(
+    .5,
+    .035,
+    8,
+    32,
+  )
+  geometries.push(pulseGeometry, beamGeometry, ringGeometry)
+
+  const beamMaterial = new THREE.MeshBasicMaterial({
+    color: 0x39d8ff,
+    transparent: true,
+    opacity: .62,
+    depthTest: false,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+  })
+  const ringMaterial = new THREE.MeshBasicMaterial({
+    color: 0xc5f7ff,
+    transparent: true,
+    opacity: .96,
+    depthTest: false,
+    depthWrite: false,
+    toneMapped: false,
+  })
+  materials.push(beamMaterial, ringMaterial)
 
   const toast = document.createElement('div')
   toast.setAttribute('data-oniria-layout-toast', 'true')
@@ -313,6 +348,23 @@ export function createLibraryLayoutAuthoring(
     head.renderOrder = 32
     visual.add(head)
 
+    const beam = new THREE.Mesh(
+      beamGeometry,
+      beamMaterial,
+    )
+    beam.position.y = 1.9
+    beam.renderOrder = 98
+    visual.add(beam)
+
+    const ring = new THREE.Mesh(
+      ringGeometry,
+      ringMaterial,
+    )
+    ring.rotation.x = Math.PI / 2
+    ring.position.y = 1.18
+    ring.renderOrder = 99
+    visual.add(ring)
+
     const labelTexture = makeLabelTexture(
       marker.label,
       textures,
@@ -320,6 +372,7 @@ export function createLibraryLayoutAuthoring(
     const labelMaterial = new THREE.SpriteMaterial({
       map: labelTexture,
       transparent: true,
+      depthTest: false,
       depthWrite: false,
       toneMapped: false,
     })
@@ -332,6 +385,18 @@ export function createLibraryLayoutAuthoring(
 
     group.add(visual)
     visualById.set(marker.id, visual)
+    window.dispatchEvent(
+      new CustomEvent('oniria:layout-pin-rendered', {
+        detail: {
+          id: marker.id,
+          label: marker.label,
+          x: marker.x,
+          z: marker.z,
+          yaw: marker.yaw,
+          visualCount: visualById.size,
+        },
+      }),
+    )
   }
 
   const mergeMarkers = (
