@@ -121,6 +121,7 @@ export type DreamWorldNode = {
   libraryBooks?: Array<{
     id: string
     title: string
+    author?: string
     coverUrl?: string
     activity?: number
     fresh?: boolean
@@ -1988,6 +1989,12 @@ export default function DreamWorld3D({
     const shelfReactiveMaterials: THREE.Material[] = []
     const shelfCoverMaterials: THREE.MeshStandardMaterial[] = []
     const shelfCoverTextures: THREE.Texture[] = []
+    const shelfBookLabelTextures: THREE.Texture[] = []
+    const shelfBookLabelMaterials: THREE.SpriteMaterial[] = []
+    const shelfBookLabelLayers: Array<{
+      shelfRoot: THREE.Group
+      layer: THREE.Group
+    }> = []
     const shelfTextureLoader = new THREE.TextureLoader()
     shelfTextureLoader.setCrossOrigin('anonymous')
     const shelfCoverTextureCache = new Map<string, THREE.Texture>()
@@ -2085,6 +2092,79 @@ export default function DreamWorld3D({
       shelfCoverWaiters.set(url, [material])
       shelfCoverQueue.push(url)
       pumpShelfCoverQueue()
+    }
+
+    const compactBookLabel = (
+      value: string,
+      maxLength: number,
+    ) =>
+      value.length > maxLength
+        ? value.slice(0, Math.max(1, maxLength - 1)).trimEnd() + '…'
+        : value
+
+    const createShelfBookLabel = (
+      bookData: NonNullable<DreamWorldNode['libraryBooks']>[number],
+    ) => {
+      const canvas = document.createElement('canvas')
+      canvas.width = 256
+      canvas.height = 80
+      const context = canvas.getContext('2d')
+
+      if (context) {
+        context.clearRect(0, 0, canvas.width, canvas.height)
+        roundedRect(context, 4, 4, 248, 72, 10)
+        context.fillStyle = 'rgba(18, 13, 10, .86)'
+        context.fill()
+        context.strokeStyle = 'rgba(190, 151, 93, .66)'
+        context.lineWidth = 2
+        context.stroke()
+
+        context.textAlign = 'center'
+        context.textBaseline = 'middle'
+        context.fillStyle = '#f4e7d2'
+        context.font =
+          '600 15px Georgia, "Times New Roman", serif'
+        context.fillText(
+          compactBookLabel(bookData.title, 28),
+          128,
+          30,
+        )
+
+        context.fillStyle = '#baa68b'
+        context.font = '500 12px system-ui, sans-serif'
+        context.fillText(
+          compactBookLabel(
+            bookData.author ?? 'DEV Community',
+            24,
+          ),
+          128,
+          53,
+        )
+      }
+
+      const texture = new THREE.CanvasTexture(canvas)
+      texture.colorSpace = THREE.SRGBColorSpace
+      texture.minFilter = THREE.LinearFilter
+      texture.magFilter = THREE.LinearFilter
+      texture.generateMipmaps = false
+      texture.needsUpdate = true
+      shelfBookLabelTextures.push(texture)
+
+      const material = new THREE.SpriteMaterial({
+        map: texture,
+        transparent: true,
+        opacity: .94,
+        depthWrite: false,
+        depthTest: true,
+        toneMapped: false,
+      })
+      shelfBookLabelMaterials.push(material)
+
+      const sprite = new THREE.Sprite(material)
+      sprite.scale.set(.9, .28, 1)
+      sprite.renderOrder = 7
+      sprite.userData.libraryDecorative = true
+      return sprite
     }
 
     const shelfPickMaterial = new THREE.MeshBasicMaterial({
@@ -2342,6 +2422,15 @@ export default function DreamWorld3D({
         const shelf = new THREE.Group()
         shelf.rotation.y = 0
 
+        const shelfBookLabels = new THREE.Group()
+        shelfBookLabels.name = `library-book-labels-${node._id}`
+        shelfBookLabels.visible = false
+        shelf.add(shelfBookLabels)
+        shelfBookLabelLayers.push({
+          shelfRoot: group,
+          layer: shelfBookLabels,
+        })
+
         // Render a correctly-sized procedural frame immediately, then swap it
         // for the authored stack-shelf GLB as soon as the cached model loads.
         const fallbackFrame = new THREE.Group()
@@ -2467,6 +2556,14 @@ export default function DreamWorld3D({
           backing.userData.bookIndex = index
           bookGroup.add(backing)
           bookInteractives.push(backing)
+
+          const bookLabel = createShelfBookLabel(bookData)
+          bookLabel.position.set(
+            bookGroup.position.x,
+            bookGroup.position.y - .43,
+            .5 * facing,
+          )
+          shelfBookLabels.add(bookLabel)
 
           const coverHinge = new THREE.Group()
           coverHinge.position.set(-.39, 0, .056)
@@ -6978,6 +7075,16 @@ export default function DreamWorld3D({
 
       libraryFloatingProps.update(elapsed)
 
+      if (libraryMode) {
+        shelfBookLabelLayers.forEach(({shelfRoot, layer}) => {
+          const distanceSq =
+            camera.position.distanceToSquared(
+              shelfRoot.position,
+            )
+          layer.visible = distanceSq < 12.5 * 12.5
+        })
+      }
+
       edgeVisuals.forEach((edgeVisual) => {
         const source = nodeVisuals.get(edgeVisual.source)?.group.position
         const target = nodeVisuals.get(edgeVisual.target)?.group.position
@@ -7774,6 +7881,8 @@ export default function DreamWorld3D({
       shelfReactiveMaterials.forEach((material) => material.dispose())
       shelfCoverMaterials.forEach((material) => material.dispose())
       shelfCoverTextures.forEach((texture) => texture.dispose())
+      shelfBookLabelMaterials.forEach((material) => material.dispose())
+      shelfBookLabelTextures.forEach((texture) => texture.dispose())
       shelfAccentMaterial.dispose()
       shelfPickMaterial.dispose()
       libraryShelfSparkleGeometry?.dispose()
