@@ -6,6 +6,8 @@ export const LIBRARY_ASSETS = {
   wallPanel: '/assets/library-kit/library-wall-panel.glb',
   wallCorner: '/assets/library-kit/library-wall-corner.glb',
   floorParquet: '/assets/library-kit/library-floor-parquet.glb',
+  roofTile: '/assets/library-kit/bath-floor-tile.glb',
+  skyDome: '/assets/library-kit/day-sky-dome.glb',
   stackShelf: '/assets/library-kit/stack-shelf.glb',
   bookPacked: '/assets/library-kit/book-row-packed.glb',
   bookLeaning: '/assets/library-kit/book-row-leaning.glb',

@@ -467,7 +467,7 @@ export default function DevWebSurf3D({
     renderer.toneMappingExposure = 1.06
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.shadowMap.enabled = true
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap
+    renderer.shadowMap.type = THREE.PCFShadowMap
     renderer.shadowMap.autoUpdate = false
     renderer.shadowMap.needsUpdate = true
     renderer.domElement.className = styles.canvas
@@ -519,6 +519,7 @@ export default function DevWebSurf3D({
       minY: number
       maxY: number
     }> = []
+    const structuralWallMeshes: THREE.Mesh[] = []
     const remoteTextures = new Set<THREE.Texture>()
     const textureLoader = new THREE.TextureLoader()
     textureLoader.setCrossOrigin('anonymous')
@@ -789,6 +790,7 @@ export default function DevWebSurf3D({
       mesh.castShadow = true
       mesh.receiveShadow = true
       scene.add(mesh)
+      structuralWallMeshes.push(mesh)
       collisionRects.push({
         minX: x - width / 2,
         maxX: x + width / 2,
@@ -1223,23 +1225,9 @@ export default function DevWebSurf3D({
     directory.scale.set(8.8, 2.2, 1)
     scene.add(directory)
 
-    // The upper silhouette suggests scale without creating fake navigable
-    // floors. The playable collection remains entirely on the ground floor.
-    for (const y of [6.4, 10.6, 14.8]) {
-      for (const x of [-22.7, 22.7]) {
-        const balcony = addFloor(x, -30, 2.7, 87, floorMaterial, y)
-        balcony.userData.decorative = true
-        for (let z = -69; z < 8; z += 5) {
-          const silhouette = new THREE.Mesh(
-            new THREE.BoxGeometry(1.4, 2.2, 2.6),
-            shelfMaterial,
-          )
-          architecturalGeometries.push(silhouette.geometry)
-          silhouette.position.set(x, y + 1.1, z)
-          scene.add(silhouette)
-        }
-      }
-    }
+    // A real authored roof now closes the building, so the old decorative
+    // upper-floor silhouettes are intentionally gone. They read like exposed
+    // shelving once the library became an enclosed building.
 
     // Every room keeps physical shelf positions even before its live query is
     // opened. Empty neighborhoods therefore still read as a real library.
@@ -1339,6 +1327,8 @@ export default function DevWebSurf3D({
       ['wallPanel', 5, 'height'],
       ['wallCorner', 5, 'height'],
       ['floorParquet', 5.8, 'span'],
+      ['roofTile', 5.2, 'span'],
+      ['skyDome', 190, 'span'],
       ['stackShelf', 3.5, 'height'],
       ['bookPacked', 2.45, 'span'],
       ['bookLeaning', 2.35, 'span'],
@@ -1385,6 +1375,8 @@ export default function DevWebSurf3D({
       const wallPanel = loaded.wallPanel
       const wallCorner = loaded.wallCorner
       const floorParquet = loaded.floorParquet
+      const roofTile = loaded.roofTile
+      const skyDome = loaded.skyDome
       const stackShelf = loaded.stackShelf
       const bookPacked = loaded.bookPacked
       const bookLeaning = loaded.bookLeaning
@@ -1401,45 +1393,91 @@ export default function DevWebSurf3D({
       const readingTable = loaded.readingTable
       const summerClouds = loaded.summerClouds
 
-      const bayPositions = (
-        center: number,
-        length: number,
-        span: number,
-      ) => {
-        const count = Math.max(1, Math.ceil(length / Math.max(.6, span * .94)))
-        const spacing = length / count
-        return Array.from(
-          {length: count},
-          (_, index) => center - length / 2 + spacing * (index + .5),
-        )
+      if (skyDome) {
+        const dome = placeAsset(skyDome, 0, -8, -30)
+        dome.traverse((child) => {
+          if (!(child instanceof THREE.Mesh)) return
+
+          const sources = Array.isArray(child.material)
+            ? child.material
+            : [child.material]
+          const skyMaterials = sources.map((source) => {
+            const color =
+              'color' in source && source.color instanceof THREE.Color
+                ? source.color.clone()
+                : new THREE.Color(0xffffff)
+            const material = new THREE.MeshBasicMaterial({
+              color,
+              vertexColors: true,
+              side: THREE.BackSide,
+              depthWrite: false,
+              depthTest: true,
+              fog: false,
+              toneMapped: false,
+            })
+            architecturalMaterials.push(material)
+            return material
+          })
+          child.material =
+            Array.isArray(child.material)
+              ? skyMaterials
+              : skyMaterials[0]
+          child.castShadow = false
+          child.receiveShadow = false
+          child.renderOrder = -100
+        })
       }
 
       if (wallPanel) {
-        const wallSize = new THREE.Box3()
-          .setFromObject(wallPanel)
-          .getSize(new THREE.Vector3())
-        const wallSpan = Math.max(.9, wallSize.x)
-
-        wallRuns.forEach((run) => {
-          const positions = bayPositions(
-            run.axis === 'x' ? run.x : run.z,
-            run.length,
-            wallSpan,
+        const templateWidth = (template: THREE.Group) =>
+          Math.max(
+            .1,
+            new THREE.Box3()
+              .setFromObject(template)
+              .getSize(new THREE.Vector3()).x,
           )
-          positions.forEach((positionValue, index) => {
+
+        // Wall panels and arched windows are both treated as interchangeable
+        // bays. Each clone is scaled to the exact bay width plus a tiny
+        // overlap, so there is never daylight between neighboring GLBs.
+        wallRuns.forEach((run) => {
+          const wallSpan = templateWidth(wallPanel)
+          const count = Math.max(
+            1,
+            Math.ceil(run.length / Math.max(.65, wallSpan * .97)),
+          )
+          const cell = run.length / count
+
+          for (let index = 0; index < count; index += 1) {
+            const along =
+              (run.axis === 'x' ? run.x : run.z) -
+              run.length / 2 +
+              cell * (index + .5)
+            const useWindow =
+              Boolean(run.windows && archedWindow) &&
+              index > 1 &&
+              index < count - 2 &&
+              index % 4 === 2
             const template =
-              run.windows && archedWindow && index % 4 === 1
-                ? archedWindow
-                : wallPanel
-            placeAsset(
+              useWindow && archedWindow ? archedWindow : wallPanel
+            const instance = placeAsset(
               template,
-              run.axis === 'x' ? positionValue : run.x,
+              run.axis === 'x' ? along : run.x,
               .04,
-              run.axis === 'z' ? positionValue : run.z,
+              run.axis === 'z' ? along : run.z,
               1,
               run.rotationY,
             )
-          })
+            const width = templateWidth(template)
+            instance.scale.x *= (cell / width) * 1.018
+          }
+        })
+
+        // The primitive walls remain as collision geometry, but once the real
+        // wall kit has loaded they must not sit behind the windows and turn
+        // every opening black.
+        structuralWallMeshes.forEach((mesh) => {
+          mesh.visible = false
         })
       }
 
@@ -1490,6 +1528,40 @@ export default function DevWebSurf3D({
           tileArea(x, z, 15.5, 16.4)
         })
         tileArea(0, 9, 15.3, 10.5)
+      }
+
+      if (roofTile) {
+        const roofSize = new THREE.Box3()
+          .setFromObject(roofTile)
+          .getSize(new THREE.Vector3())
+        const tileX = Math.max(1.2, roofSize.x)
+        const tileZ = Math.max(1.2, roofSize.z)
+        const roofWidth = 48.9
+        const roofDepth = 89.6
+        const roofCenterZ = -30.15
+        const countX = Math.max(1, Math.ceil(roofWidth / tileX))
+        const countZ = Math.max(1, Math.ceil(roofDepth / tileZ))
+        const cellX = roofWidth / countX
+        const cellZ = roofDepth / countZ
+
+        for (let ix = 0; ix < countX; ix += 1) {
+          for (let iz = 0; iz < countZ; iz += 1) {
+            const x =
+              -roofWidth / 2 + cellX * (ix + .5)
+            const z =
+              roofCenterZ - roofDepth / 2 + cellZ * (iz + .5)
+            const tile = placeAsset(roofTile, x, 5.03, z)
+            // 1.5% overlap removes hairline cracks from floating point
+            // precision and camera-angle aliasing.
+            tile.scale.x *= (cellX / roofSize.x) * 1.015
+            tile.scale.z *= (cellZ / roofSize.z) * 1.015
+            tile.traverse((child) => {
+              if (!(child instanceof THREE.Mesh)) return
+              child.castShadow = true
+              child.receiveShadow = false
+            })
+          }
+        }
       }
 
       if (stackShelf) {
@@ -1848,7 +1920,7 @@ export default function DevWebSurf3D({
         disposableTextures.push(labelTexture)
       }
       const labelMaterial = new THREE.SpriteMaterial({
-        map: labelTexture ?? undefined,
+        ...(labelTexture ? {map: labelTexture} : {}),
         transparent: true,
         opacity:
           node.kind === 'article'
