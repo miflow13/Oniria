@@ -131,6 +131,56 @@ export const LIBRARY_BUILDING_BOUNDS = {
   maxZ: 14.4,
 } as const
 
+export const LIBRARY_ROOM_HALF_DEPTH = 9.95
+
+export type LibraryRoomBounds = {
+  minX: number
+  maxX: number
+  minZ: number
+  maxZ: number
+}
+
+export function libraryRoomBounds(
+  room: LibraryRoomLayout,
+  margin = 0,
+): LibraryRoomBounds {
+  const isLeft = room.center[0] < 0
+  const hallwayX = room.doorway[0]
+  const outerX = isLeft
+    ? LIBRARY_BUILDING_BOUNDS.minX
+    : LIBRARY_BUILDING_BOUNDS.maxX
+
+  return {
+    minX:
+      Math.min(hallwayX, outerX) - margin,
+    maxX:
+      Math.max(hallwayX, outerX) + margin,
+    minZ:
+      room.center[1] -
+      LIBRARY_ROOM_HALF_DEPTH -
+      margin,
+    maxZ:
+      room.center[1] +
+      LIBRARY_ROOM_HALF_DEPTH +
+      margin,
+  }
+}
+
+export function libraryRoomContainsPoint(
+  room: LibraryRoomLayout,
+  x: number,
+  z: number,
+  margin = 0,
+) {
+  const bounds = libraryRoomBounds(room, margin)
+  return (
+    x >= bounds.minX &&
+    x <= bounds.maxX &&
+    z >= bounds.minZ &&
+    z <= bounds.maxZ
+  )
+}
+
 export const LIBRARY_SPAWN: [number, number, number] = [
   0,
   LIBRARY_EYE_HEIGHT,
