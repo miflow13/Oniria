@@ -933,19 +933,13 @@ export function createLibraryBuilding(
     .03,
     3.96,
   )
-  const rugBorderMaterial = new THREE.MeshStandardMaterial({
-    color: 0x8b6b35,
-    roughness: .86,
-    metalness: .015,
-    envMapIntensity: .1,
-    toneMapped: true,
+  const rugBorderMaterial = new THREE.MeshBasicMaterial({
+    color: 0xb38a43,
+    toneMapped: false,
   })
-  const rugInsetMaterial = new THREE.MeshStandardMaterial({
-    color: 0x542f36,
-    roughness: .94,
-    metalness: 0,
-    envMapIntensity: .07,
-    toneMapped: true,
+  const rugInsetMaterial = new THREE.MeshBasicMaterial({
+    color: 0x6b3442,
+    toneMapped: false,
   })
 
   localGeometries.push(
@@ -1367,8 +1361,8 @@ export function createLibraryBuilding(
         rugBorderGeometry,
         rugBorderMaterial,
       )
-      border.position.set(0, .034, z)
-      border.receiveShadow = true
+      border.position.set(0, .16, z)
+      border.renderOrder = 6
       border.name = `library-rug-fallback-border-${index}`
       group.add(border)
 
@@ -1376,8 +1370,8 @@ export function createLibraryBuilding(
         rugInsetGeometry,
         rugInsetMaterial,
       )
-      inset.position.set(0, .051, z)
-      inset.receiveShadow = true
+      inset.position.set(0, .182, z)
+      inset.renderOrder = 7
       inset.name = `library-rug-fallback-inset-${index}`
       group.add(inset)
 
@@ -1385,7 +1379,7 @@ export function createLibraryBuilding(
         const rug = placeAsset(
           readingRug,
           0,
-          .078,
+          .205,
           z,
           1,
           rugLongAxisIsX ? Math.PI / 2 : 0,
