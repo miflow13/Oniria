@@ -342,32 +342,48 @@ const wallRect = (
   maxZ: z + depth / 2,
 })
 
-const LIBRARY_SHELF_COLLIDERS: WalkCollisionRect[] =
-  LIBRARY_ROOMS.flatMap((room) => {
-    const district: LibraryDistrictConfig = {
-      id: `room-${room.slot}`,
-      label: '',
-      code: '',
-      bay: 0,
-      devTags: [],
-      accent: '',
-      atmosphere: 'dream-archive' as const,
-      audioProfile: 'ambient' as const,
-      landmarkType: 'index',
-      sourceMode: room.sourceMode,
-      roomSlot: room.slot,
-      enabled: true,
-    }
-    return roomShelfPlacements(district).map((placement) => {
-      const isSideFacing = Math.abs(Math.sin(placement.yaw)) > .5
-      return wallRect(
-        placement.world[0],
-        placement.world[2],
-        isSideFacing ? .88 : 4.7,
-        isSideFacing ? 4.7 : .88,
-      )
-    })
-  })
+const colliderDistrict = (
+  room: LibraryRoomLayout,
+): LibraryDistrictConfig => ({
+  id: `room-${room.slot}`,
+  label: '',
+  code: '',
+  bay: 0,
+  devTags: [],
+  accent: '',
+  atmosphere: 'dream-archive' as const,
+  audioProfile: 'ambient' as const,
+  landmarkType: 'index',
+  sourceMode: room.sourceMode,
+  roomSlot: room.slot,
+  enabled: true,
+})
+
+const shelfCollider = (
+  placement: RoomShelfPlacement,
+): WalkCollisionRect => {
+  const isSideFacing = Math.abs(Math.sin(placement.yaw)) > .5
+  return wallRect(
+    placement.world[0],
+    placement.world[2],
+    isSideFacing ? .88 : 4.7,
+    isSideFacing ? 4.7 : .88,
+  )
+}
+
+const LIBRARY_SHELF_COLLIDERS: WalkCollisionRect[] = [
+  ...LIBRARY_ROOMS.flatMap((room) =>
+    roomShelfPlacements(colliderDistrict(room)).map(shelfCollider),
+  ),
+  ...hallwayShelfPlacements(
+    colliderDistrict(LIBRARY_ROOMS[0]),
+    'left',
+  ).map(shelfCollider),
+  ...hallwayShelfPlacements(
+    colliderDistrict(LIBRARY_ROOMS[1]),
+    'right',
+  ).map(shelfCollider),
+]
 
 const LIBRARY_FURNISHING_COLLIDERS = LIBRARY_FURNISHINGS.flatMap(
   (placement) =>
