@@ -922,18 +922,11 @@ export default function DevLibraryMap() {
     [bootstrap?.tags.length, creators.length, shelves],
   )
 
-  const edges = useMemo<DreamWorldEdge[]>(() => {
-    if (nodes.length < 2) return []
-    return nodes.map((node, index) => {
-      const target = nodes[(index + 1) % nodes.length]
-      return {
-        id: 'route:' + node._id + ':' + target._id,
-        source: node._id,
-        target: target._id,
-        weight: 2,
-      }
-    })
-  }, [nodes])
+  // The six-room building is navigated spatially rather than as a graph.
+  // Leaving relationship edges empty prevents cinematic connection lines
+  // and free-space routes from cutting through interior walls.
+  const edges = useMemo<DreamWorldEdge[]>(() => [], [])
+
 
   const selectedShelf =
     shelves.find((shelf) => shelf.id === selectedId) ?? null
