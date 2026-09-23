@@ -19,6 +19,11 @@ export const LIBRARY_ROOM_SHELF_ROW_OFFSET = 4.85
 // trapped the back-wall collection behind it.
 export const LIBRARY_ROOM_SHELF_COLUMN_OFFSETS = [-4.5, 4.5] as const
 export const LIBRARY_ROOM_BACK_WALL_OFFSETS = [-5.15, 0, 5.15] as const
+// The wall nearest the central hallway is split around each doorway. One
+// shelf centered on each solid wall segment fills that otherwise-empty wall
+// without narrowing the doorway itself.
+export const LIBRARY_ROOM_ENTRY_WALL_Z_OFFSETS = [-6, 6] as const
+export const LIBRARY_ROOM_ENTRY_WALL_INSET = 7.5
 
 export const LIBRARY_BUILDING_BOUNDS = {
   minX: -24.1,
@@ -227,6 +232,33 @@ export function roomShelfPlacements(
         doubleSided: false,
         endCaps: 'none',
         floatId: `${district.id}:back-wall:${wallIndex}`,
+        pathBay: district.bay,
+        districtId: district.id,
+      })
+    },
+  )
+
+  // Fill the two solid wall panels on the hallway/entry side of every room.
+  // These are single-sided and face inward. Their centers line up with the
+  // actual wall segments at z ± 6, which leaves the doorway opening and its
+  // approach completely untouched.
+  const entryWallX =
+    x - sideDirection * LIBRARY_ROOM_ENTRY_WALL_INSET
+  const entryWallYaw =
+    sideDirection < 0 ? -Math.PI / 2 : Math.PI / 2
+
+  LIBRARY_ROOM_ENTRY_WALL_Z_OFFSETS.forEach(
+    (zOffset, entryIndex) => {
+      placements.push({
+        world: [
+          entryWallX,
+          wallBaseHeight + (entryIndex % 2) * .05,
+          z + zOffset,
+        ],
+        yaw: entryWallYaw,
+        doubleSided: false,
+        endCaps: 'none',
+        floatId: `${district.id}:entry-wall:${entryIndex}`,
         pathBay: district.bay,
         districtId: district.id,
       })
