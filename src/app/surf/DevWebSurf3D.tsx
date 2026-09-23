@@ -1632,9 +1632,9 @@ export default function DevWebSurf3D({
       }
 
       // Dense background shelving makes the collection feel much larger
-      // without turning decorative books into interactive DEV nodes. These
-      // shallow banks sit against the solid room-divider walls, leaving the
-      // perimeter windows and the central navigation spine unobstructed.
+      // without turning decorative books into interactive DEV nodes. Solid
+      // divider walls get tight shelf banks, while the long outer walls only
+      // receive shelves in non-window bays and away from real DEV shelves.
       if (decoyBookshelf) {
         const decoySize = new THREE.Box3()
           .setFromObject(decoyBookshelf)
@@ -1642,8 +1642,37 @@ export default function DevWebSurf3D({
         const decoyWidthRunsOnX = decoySize.x >= decoySize.z
         const decoyAxisCorrection =
           decoyWidthRunsOnX ? 0 : Math.PI / 2
-        const leftXs = [-22.6, -20.6, -18.6, -16.6, -14.6, -12.6, -10.6]
-        const rightXs = leftXs.map((x) => -x).reverse()
+
+        const placeDecoy = (
+          x: number,
+          z: number,
+          rotationY: number,
+          variationIndex: number,
+        ) => {
+          const instance = placeAsset(
+            decoyBookshelf,
+            x,
+            .02,
+            z,
+            1,
+            rotationY + decoyAxisCorrection,
+          )
+          const variation = 1 + ((variationIndex % 3) - 1) * .018
+          instance.scale.x *= variation
+          instance.traverse((child) => {
+            if (!(child instanceof THREE.Mesh)) return
+            child.castShadow = false
+            child.receiveShadow = true
+          })
+          return instance
+        }
+
+        // Fill the solid divider walls much more tightly than before.
+        const dividerXs = Array.from(
+          {length: 8},
+          (_, index) => -22.7 + index * 1.72,
+        )
+        const mirroredDividerXs = dividerXs.map((x) => -x).reverse()
         const decoyBanks = [
           {z: -21.55, rotationY: 0},
           {z: -22.45, rotationY: Math.PI},
@@ -1653,35 +1682,112 @@ export default function DevWebSurf3D({
         ]
 
         decoyBanks.forEach((bank) => {
-          ;[leftXs, rightXs].forEach((xs) => {
+          ;[dividerXs, mirroredDividerXs].forEach((xs) => {
             xs.forEach((x, index) => {
-              const instance = placeAsset(
-                decoyBookshelf,
-                x,
-                .02,
-                bank.z,
-                1,
-                bank.rotationY + decoyAxisCorrection,
-              )
-              // Tiny deterministic variation keeps the repeated modules from
-              // reading like a copied wall texture.
-              const variation = 1 + ((index % 3) - 1) * .018
-              instance.scale.x *= variation
-              instance.traverse((child) => {
-                if (!(child instanceof THREE.Mesh)) return
-                child.castShadow = false
-                child.receiveShadow = true
-              })
+              placeDecoy(x, bank.z, bank.rotationY, index)
             })
 
             const centerX = xs.reduce((sum, x) => sum + x, 0) / xs.length
             addPropCollider(
               centerX,
               bank.z,
-              Math.abs(xs[xs.length - 1] - xs[0]) + 1.8,
+              Math.abs(xs[xs.length - 1] - xs[0]) + 1.7,
               .72,
               3.2,
             )
+          })
+        })
+
+        // Outer-wall filler: use the exact same window-bay math as the wall
+        // builder, then reject candidate shelves that would cover a window.
+        const outerSideRuns = wallRuns.filter(
+          (run) =>
+            run.windows &&
+            run.axis === 'z' &&
+            Math.abs(run.x) > 20,
+        )
+        const wallPanelWidth = wallPanel
+          ? Math.max(
+              .1,
+              new THREE.Box3()
+                .setFromObject(wallPanel)
+                .getSize(new THREE.Vector3()).x,
+            )
+          : 2
+        const windowZs = outerSideRuns.flatMap((run) => {
+          const count = Math.max(
+            1,
+            Math.ceil(
+              run.length /
+                Math.max(.65, wallPanelWidth * .97),
+            ),
+          )
+          const cell = run.length / count
+          return Array.from({length: count}, (_, index) => {
+            const useWindow =
+              index > 1 &&
+              index < count - 2 &&
+              index % 4 === 2
+            if (!useWindow) return null
+            return (
+              run.z -
+              run.length / 2 +
+              cell * (index + .5)
+            )
+          }).filter((z): z is number => z !== null)
+        })
+
+        const liveShelfAnchors = ROOM_ORDER.flatMap(
+          (section) => ROOMS[section].shelves,
+        )
+        const nookZs = [-5.2, -25.3, -45.3]
+        const candidateZs = Array.from(
+          {length: 34},
+          (_, index) => 1.5 - index * 2.05,
+        )
+
+        const canPlaceOuterShelf = (
+          side: -1 | 1,
+          z: number,
+        ) => {
+          // Preserve every arched-window opening.
+          if (windowZs.some((windowZ) => Math.abs(z - windowZ) < 1.35)) {
+            return false
+          }
+
+          // Give each real DEV shelf row a generous visual buffer so the
+          // interactive shelves remain the obvious foreground collection.
+          if (
+            liveShelfAnchors.some(
+              (anchor) =>
+                Math.sign(anchor.x) === side &&
+                Math.abs(anchor.x) > 17 &&
+                Math.abs(z - anchor.z) < 2.15,
+            )
+          ) {
+            return false
+          }
+
+          // Keep the decorative reading nooks visually open.
+          if (nookZs.some((nookZ) => Math.abs(z - nookZ) < 2.2)) {
+            return false
+          }
+
+          // Leave the entrance and deep-archive landmark breathing room.
+          return z < 2 && z > -69
+        }
+
+        ;([-1, 1] as const).forEach((side) => {
+          const x = side * 23.45
+          const rotationY =
+            side < 0 ? Math.PI / 2 : -Math.PI / 2
+          const placedZs = candidateZs.filter((z) =>
+            canPlaceOuterShelf(side, z),
+          )
+
+          placedZs.forEach((z, index) => {
+            placeDecoy(x, z, rotationY, index)
+            addPropCollider(x, z, .68, 1.72, 3.2)
           })
         })
       }
