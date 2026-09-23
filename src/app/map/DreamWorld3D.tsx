@@ -64,8 +64,10 @@ import {
   ARCHIVE_WALKWAY_Y_OFFSET,
   archiveBayFromWorldZ,
   archiveDistrictInfluence,
+  archiveGridRoadSegments,
   archivePathFrame,
   archivePathPoint,
+  archiveWalkSurfaceAtPosition,
   archiveWalkwayHalfWidthAtBay,
 } from './libraryLayout'
 import {createLibraryAudio} from './libraryAudio'
@@ -778,6 +780,9 @@ export default function DreamWorld3D({
     const libraryMode = nodeRef.current.some(
       (node) => node.libraryKind === 'shelf',
     )
+    const libraryGridSegments = libraryMode
+      ? archiveGridRoadSegments(activeDistricts)
+      : []
 
     const scene = new THREE.Scene()
     const globalAtmospherePreset =
