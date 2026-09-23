@@ -1,5 +1,8 @@
 import * as THREE from 'three'
-import type {LibraryDistrictConfig} from '@/lib/libraryWorldConfig'
+import type {
+  LibraryAtmosphere,
+  LibraryDistrictConfig,
+} from '@/lib/libraryWorldConfig'
 import type {DreamQuality} from './dreamworld/quality'
 import {
   ARCHIVE_PATH_RENDER_BAYS,
@@ -31,6 +34,69 @@ type LibraryAtmosphereUpdate = {
 export type LibraryAtmosphereController = {
   update: (state: LibraryAtmosphereUpdate) => void
   dispose: () => void
+}
+
+export type LibraryAtmosphereVisualPreset = {
+  background: number
+  fog: number
+  fogScale: number
+  hazeStrength: number
+  lightStrength: number
+  tint: number
+  exposureScale: number
+  bloomScale: number
+}
+
+export function getLibraryAtmosphereVisualPreset(
+  atmosphere: LibraryAtmosphere,
+): LibraryAtmosphereVisualPreset {
+  switch (atmosphere) {
+    case 'crystalline':
+      return {
+        background: 0x02131b,
+        fog: 0x0b5261,
+        fogScale: .8,
+        hazeStrength: 2.05,
+        lightStrength: 1.8,
+        tint: 0x72efff,
+        exposureScale: 1.06,
+        bloomScale: 1.28,
+      }
+    case 'industrial':
+      return {
+        background: 0x090d0f,
+        fog: 0x2b3537,
+        fogScale: 1.16,
+        hazeStrength: 1.5,
+        lightStrength: .82,
+        tint: 0x91a9a8,
+        exposureScale: .84,
+        bloomScale: .7,
+      }
+    case 'deep-void':
+      return {
+        background: 0x010005,
+        fog: 0x230a35,
+        fogScale: 1.58,
+        hazeStrength: 2.35,
+        lightStrength: .42,
+        tint: 0x7547c7,
+        exposureScale: .72,
+        bloomScale: .86,
+      }
+    case 'dream-archive':
+    default:
+      return {
+        background: 0x100619,
+        fog: 0x45143f,
+        fogScale: 1.02,
+        hazeStrength: 1.35,
+        lightStrength: 1.12,
+        tint: 0xd782e8,
+        exposureScale: .96,
+        bloomScale: 1,
+      }
+  }
 }
 
 export function createLibraryAtmosphere({
@@ -341,25 +407,30 @@ export function createLibraryAtmosphere({
       let districtAtmosphereStrength = 1
 
       if (nearestDistrict) {
+        const visualPreset =
+          getLibraryAtmosphereVisualPreset(
+            nearestDistrict.atmosphere,
+          )
+
+        // Atmosphere is intentionally stronger than the district accent.
+        // Accent still contributes identity, but the preset owns the mood.
         districtTint
-          .set(nearestDistrict.accent)
+          .set(visualPreset.tint)
           .lerp(
-            whiteTint,
+            new THREE.Color(nearestDistrict.accent),
             nearestDistrict.atmosphere === 'industrial'
               ? .18
-              : nearestDistrict.atmosphere === 'deep-void'
-                ? .08
-                : .34,
+              : .28,
+          )
+          .lerp(
+            whiteTint,
+            nearestDistrict.atmosphere === 'crystalline'
+              ? .16
+              : 0,
           )
 
         districtAtmosphereStrength =
-          nearestDistrict.atmosphere === 'crystalline'
-            ? 1.18
-            : nearestDistrict.atmosphere === 'industrial'
-              ? .82
-              : nearestDistrict.atmosphere === 'deep-void'
-                ? .56
-                : 1
+          visualPreset.hazeStrength
 
         const districtPoint = archivePathPoint(
           nearestDistrict.bay,
@@ -383,21 +454,25 @@ export function createLibraryAtmosphere({
           )
 
         const targetLight =
-          nearestDistrict.atmosphere === 'deep-void'
-            ? .45
-            : nearestDistrict.atmosphere === 'industrial'
-              ? .7
-              : nearestDistrict.atmosphere === 'crystalline'
-                ? 1.25
-                : .95
+          visualPreset.lightStrength
 
         districtLight.intensity +=
           (
             targetLight *
-              (.45 + districtPresence * .55) -
+              (.35 + districtPresence * .65) -
             districtLight.intensity
           ) *
-          .06
+          .085
+
+        // Re-tint the broad fog banks as the visitor moves through the
+        // archive. This makes a district atmosphere readable at a glance,
+        // rather than only in the few sprites immediately around the camera.
+        archiveFogMaterials.forEach((material) => {
+          material.color.lerp(districtTint, .045)
+        })
+        hazeMaterials.forEach((material) => {
+          material.color.lerp(districtTint, .025)
+        })
       } else {
         districtTint.copy(fallbackTint)
         districtLight.intensity *= .92
@@ -455,12 +530,12 @@ export function createLibraryAtmosphere({
           : 1
 
         material.opacity =
-          (.025 +
+          (.032 +
             Math.max(
               0,
               Math.sin(elapsed * .09 + phase),
             ) *
-              .01) *
+              .016) *
           centerFade *
           landmarkRichness *
           districtAtmosphereStrength
@@ -468,8 +543,8 @@ export function createLibraryAtmosphere({
         material.color.lerp(
           districtTint,
           nearestDistrict?.atmosphere === 'deep-void'
-            ? .014
-            : .025,
+            ? .055
+            : .075,
         )
       })
     },
