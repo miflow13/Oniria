@@ -1470,7 +1470,11 @@ export default function DreamWorld3D({
           [26, -46, 112],
         ] as const
         const position = positions[index] ?? positions[0]
-        sprite.position.set(...position)
+        sprite.position.set(
+          position[0],
+          position[1],
+          position[2],
+        )
         const scale = 72 + index * 18
         sprite.scale.set(scale * 1.7, scale, 1)
         material.opacity = .16
