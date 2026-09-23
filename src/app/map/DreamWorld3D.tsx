@@ -1920,6 +1920,24 @@ export default function DreamWorld3D({
         emissiveIntensity: .01,
         roughness: .92,
       }),
+      new THREE.MeshStandardMaterial({
+        color: 0x6a3f32,
+        emissive: 0x0b0503,
+        emissiveIntensity: .008,
+        roughness: .91,
+      }),
+      new THREE.MeshStandardMaterial({
+        color: 0x6d5b2f,
+        emissive: 0x090703,
+        emissiveIntensity: .008,
+        roughness: .9,
+      }),
+      new THREE.MeshStandardMaterial({
+        color: 0x48543a,
+        emissive: 0x040603,
+        emissiveIntensity: .008,
+        roughness: .92,
+      }),
     ]
     const shelfAccentMaterial = new THREE.MeshBasicMaterial({
       color: 0x5263c8,
@@ -1949,8 +1967,12 @@ export default function DreamWorld3D({
     ) => {
       material.map = texture
       material.color.setHex(0xffffff)
-      material.emissive.setHex(0x080b10)
-      material.emissiveIntensity = .055
+      material.emissive.setHex(0x000000)
+      material.emissiveIntensity = 0
+      material.roughness = .9
+      material.metalness = 0
+      material.envMapIntensity =
+        settings.environmentIntensity * .26
       material.needsUpdate = true
     }
 
@@ -2380,15 +2402,23 @@ export default function DreamWorld3D({
               (seed + index * 7) % shelfBookMaterials.length
             ],
           )
+          const bookWidthScale =
+            .64 + seededUnit(seed, index + 89) * .34
+          const bookHeightScale =
+            .82 + seededUnit(seed, index + 90) * .28
           backing.scale.set(
-            .92 + seededUnit(seed, index + 89) * .12,
-            .9 + seededUnit(seed, index + 90) * .14,
-            .9 + seededUnit(seed, index + 91) * .1,
+            bookWidthScale,
+            bookHeightScale,
+            .82 + seededUnit(seed, index + 91) * .22,
           )
           bookGroup.rotation.z =
-            (seededUnit(seed, index + 92) - .5) * .055
+            (seededUnit(seed, index + 92) - .5) * .12
           bookGroup.position.x +=
-            (seededUnit(seed, index + 93) - .5) * .08
+            (seededUnit(seed, index + 93) - .5) * .16
+          bookGroup.position.y +=
+            (seededUnit(seed, index + 94) - .5) * .045
+          bookGroup.position.z +=
+            (seededUnit(seed, index + 95) - .5) * .025 * facing
           backing.userData.bookNodeId = node._id
           backing.userData.bookIndex = index
           bookGroup.add(backing)
@@ -2400,10 +2430,12 @@ export default function DreamWorld3D({
 
           const coverMaterial = new THREE.MeshStandardMaterial({
             color: 0x555b67,
-            roughness: .98,
+            roughness: .9,
             metalness: 0,
             emissive: 0x000000,
             emissiveIntensity: 0,
+            envMapIntensity:
+              settings.environmentIntensity * .26,
             side: THREE.DoubleSide,
             toneMapped: true,
           })
@@ -2422,6 +2454,11 @@ export default function DreamWorld3D({
           )
           cover.position.set(.35, 0, .002)
           cover.rotation.y = 0
+          cover.scale.set(
+            .88 + (bookWidthScale - .64) * .36,
+            .9 + (bookHeightScale - .82) * .24,
+            1,
+          )
           cover.renderOrder = 5
           cover.userData.bookNodeId = node._id
           cover.userData.bookIndex = index
