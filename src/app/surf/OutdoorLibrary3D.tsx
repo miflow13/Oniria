@@ -1127,9 +1127,8 @@ export default function OutdoorLibrary3D({
     const loader = new FBXLoader()
     const gltfLoader = new GLTFLoader()
     const dracoLoader = new DRACOLoader()
-    dracoLoader.setDecoderPath(
-      'https://www.gstatic.com/draco/versioned/decoders/1.5.7/',
-    )
+    dracoLoader.setDecoderPath('/draco/')
+    dracoLoader.setDecoderConfig({type: 'js'})
     dracoLoader.preload()
     gltfLoader.setDRACOLoader(dracoLoader)
 
