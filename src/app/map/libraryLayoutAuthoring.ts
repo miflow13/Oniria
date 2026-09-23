@@ -127,15 +127,15 @@ export function createLibraryLayoutAuthoring(
   const markerById = new Map<string, LibraryLayoutMarker>()
 
   const stemGeometry = new THREE.CylinderGeometry(
-    .035,
-    .035,
-    .72,
-    8,
+    .055,
+    .055,
+    1.05,
+    10,
   )
   const headGeometry = new THREE.ConeGeometry(
-    .15,
-    .32,
-    10,
+    .22,
+    .42,
+    12,
   )
   const zoneGeometry = new THREE.BoxGeometry(
     1,
@@ -157,14 +157,115 @@ export function createLibraryLayoutAuthoring(
     toneMapped: false,
   })
   const zoneMaterial = new THREE.MeshBasicMaterial({
-    color: 0x379cff,
+    color: 0x2fb7ff,
     transparent: true,
-    opacity: .2,
+    opacity: .34,
     depthWrite: false,
+    depthTest: true,
     side: THREE.DoubleSide,
     toneMapped: false,
   })
   materials.push(stemMaterial, headMaterial, zoneMaterial)
+
+  const zoneEdgesGeometry = new THREE.EdgesGeometry(zoneGeometry)
+  const zoneEdgesMaterial = new THREE.LineBasicMaterial({
+    color: 0x8ce8ff,
+    transparent: true,
+    opacity: .96,
+    depthTest: true,
+    toneMapped: false,
+  })
+  geometries.push(zoneEdgesGeometry)
+  materials.push(zoneEdgesMaterial)
+
+  const pulseGeometry = new THREE.RingGeometry(.16, .22, 32)
+  geometries.push(pulseGeometry)
+
+  const toast = document.createElement('div')
+  toast.setAttribute('data-oniria-layout-toast', 'true')
+  Object.assign(toast.style, {
+    position: 'fixed',
+    left: '50%',
+    bottom: '92px',
+    transform: 'translateX(-50%) translateY(12px)',
+    padding: '10px 16px',
+    border: '1px solid rgba(94,220,255,.9)',
+    borderRadius: '999px',
+    background: 'rgba(4,10,18,.94)',
+    color: '#fff',
+    font: '700 13px/1.2 system-ui, sans-serif',
+    letterSpacing: '.08em',
+    textTransform: 'uppercase',
+    pointerEvents: 'none',
+    zIndex: '99999',
+    opacity: '0',
+    transition: 'opacity 120ms ease, transform 120ms ease',
+    boxShadow: '0 0 24px rgba(47,183,255,.35)',
+  })
+  document.body.appendChild(toast)
+
+  let toastTimer: number | null = null
+  const showToast = (
+    message: string,
+    tone: 'ok' | 'warn' = 'ok',
+  ) => {
+    toast.textContent = message
+    toast.style.borderColor =
+      tone === 'ok'
+        ? 'rgba(94,220,255,.95)'
+        : 'rgba(255,190,90,.95)'
+    toast.style.boxShadow =
+      tone === 'ok'
+        ? '0 0 28px rgba(47,183,255,.42)'
+        : '0 0 28px rgba(255,170,70,.35)'
+    toast.style.opacity = '1'
+    toast.style.transform =
+      'translateX(-50%) translateY(0)'
+    if (toastTimer !== null) {
+      window.clearTimeout(toastTimer)
+    }
+    toastTimer = window.setTimeout(() => {
+      toast.style.opacity = '0'
+      toast.style.transform =
+        'translateX(-50%) translateY(12px)'
+      toastTimer = null
+    }, 1100)
+  }
+
+  const pulseMarker = (
+    x: number,
+    z: number,
+  ) => {
+    const material = new THREE.MeshBasicMaterial({
+      color: 0x8ce8ff,
+      transparent: true,
+      opacity: .88,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      toneMapped: false,
+    })
+    const pulse = new THREE.Mesh(pulseGeometry, material)
+    pulse.rotation.x = -Math.PI / 2
+    pulse.position.set(x, .12, z)
+    pulse.renderOrder = 40
+    scene.add(pulse)
+
+    const started = performance.now()
+    const animatePulse = (now: number) => {
+      const progress = Math.min(1, (now - started) / 720)
+      const eased = 1 - Math.pow(1 - progress, 3)
+      const scale = .6 + eased * 8
+      pulse.scale.setScalar(scale)
+      material.opacity = .88 * (1 - progress)
+      if (progress < 1) {
+        requestAnimationFrame(animatePulse)
+        return
+      }
+      scene.remove(pulse)
+      material.dispose()
+    }
+    requestAnimationFrame(animatePulse)
+  }
 
   const removeVisual = (id: string) => {
     const visual = visualById.get(id)
@@ -183,24 +284,33 @@ export function createLibraryLayoutAuthoring(
 
     const visual = new THREE.Group()
     visual.name = `library-layout-marker-${marker.id}`
-    visual.position.set(marker.x, .035, marker.z)
+    visual.position.set(marker.x, .09, marker.z)
     visual.rotation.y = marker.yaw
 
     const zone = new THREE.Mesh(zoneGeometry, zoneMaterial)
     zone.scale.set(marker.width, 1, marker.depth)
-    zone.position.y = .015
+    zone.position.y = .02
     zone.renderOrder = 30
     visual.add(zone)
 
+    const zoneEdges = new THREE.LineSegments(
+      zoneEdgesGeometry,
+      zoneEdgesMaterial,
+    )
+    zoneEdges.scale.set(marker.width, 1, marker.depth)
+    zoneEdges.position.y = .035
+    zoneEdges.renderOrder = 31
+    visual.add(zoneEdges)
+
     const stem = new THREE.Mesh(stemGeometry, stemMaterial)
-    stem.position.y = .42
-    stem.renderOrder = 31
+    stem.position.y = .63
+    stem.renderOrder = 32
     visual.add(stem)
 
     const head = new THREE.Mesh(headGeometry, headMaterial)
     head.rotation.x = Math.PI
-    head.position.y = .92
-    head.renderOrder = 31
+    head.position.y = 1.28
+    head.renderOrder = 32
     visual.add(head)
 
     const labelTexture = makeLabelTexture(
@@ -215,9 +325,9 @@ export function createLibraryLayoutAuthoring(
     })
     materials.push(labelMaterial)
     const label = new THREE.Sprite(labelMaterial)
-    label.position.set(0, 1.22, 0)
-    label.scale.set(1.65, .46, 1)
-    label.renderOrder = 32
+    label.position.set(0, 1.72, 0)
+    label.scale.set(2.35, .66, 1)
+    label.renderOrder = 33
     visual.add(label)
 
     group.add(visual)
@@ -296,6 +406,8 @@ export function createLibraryLayoutAuthoring(
 
     markerById.set(marker.id, marker)
     addVisual(marker)
+    pulseMarker(marker.x, marker.z)
+    showToast(`PIN ${marker.label} PLACED`)
     saveLocalMarkers(
       [...markerById.values()].filter(
         (entry) => entry.persistence !== 'sanity',
@@ -324,6 +436,7 @@ export function createLibraryLayoutAuthoring(
         }
         markerById.set(persisted.id, persisted)
         addVisual(persisted)
+        showToast(`PIN ${persisted.label} SAVED`)
         saveLocalMarkers(
           [...markerById.values()].filter(
             (entry) => entry.persistence !== 'sanity',
@@ -365,6 +478,7 @@ export function createLibraryLayoutAuthoring(
     const selected = nearest as LibraryLayoutMarker
     markerById.delete(selected.id)
     removeVisual(selected.id)
+    showToast(`PIN ${selected.label} REMOVED`, 'warn')
     saveLocalMarkers(
       [...markerById.values()].filter(
         (entry) => entry.persistence !== 'sanity',
@@ -402,6 +516,11 @@ export function createLibraryLayoutAuthoring(
     markers: () => [...markerById.values()],
     dispose: () => {
       scene.remove(group)
+      if (toastTimer !== null) {
+        window.clearTimeout(toastTimer)
+        toastTimer = null
+      }
+      toast.remove()
       visualById.clear()
       markerById.clear()
       geometries.forEach((geometry) => geometry.dispose())
