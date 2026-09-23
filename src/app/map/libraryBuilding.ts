@@ -3,6 +3,7 @@ import type {LibraryWorldConfig} from '@/lib/libraryWorldConfig'
 import {loadLibraryAsset} from './libraryAssets'
 import {
   LIBRARY_FURNISHINGS,
+  LIBRARY_HALL_READING_Z,
   LIBRARY_ROOMS,
   roomCrossAisleRect,
   roomDoorwayClearanceRect,
@@ -30,26 +31,6 @@ export type LibraryBuilding = {
   ready: Promise<void>
   dispose: () => void
 }
-
-// Normalized from Mika's in-world rug survey. X is intentionally centered on
-// the corridor; the measured Z cadence and the larger break around -42 are
-// preserved so the runner reads as discrete old-library rugs, not one strip.
-const SURVEYED_HALL_RUG_Z = [
-  -1.6,
-  -6.3,
-  -10.65,
-  -15.25,
-  -20.45,
-  -25.3,
-  -29.85,
-  -34.55,
-  -39.45,
-  -47.8,
-  -53.05,
-  -58,
-  -63.7,
-  -69.55,
-] as const
 
 export function createLibraryBuilding(
   scene: THREE.Scene,
@@ -207,60 +188,63 @@ export function createLibraryBuilding(
     if (!context) return new THREE.CanvasTexture(canvas)
 
     context.clearRect(0, 0, width, height)
-    context.fillStyle = 'rgba(8, 10, 16, .9)'
-    context.strokeStyle = accent
-    context.lineWidth = 10
-    context.beginPath()
-    context.roundRect(12, 12, width - 24, height - 24, 30)
-    context.fill()
-    context.stroke()
 
-    context.fillStyle = '#ffffff'
-    context.font = '700 58px system-ui, sans-serif'
+    // Walnut frame + aged paper insert + brass rule. The accent is kept as a
+    // restrained wax-seal/rule color rather than a neon UI border.
+    context.fillStyle = '#2c2119'
+    context.fillRect(0, 0, width, height)
+    context.fillStyle = '#8e6b3e'
+    context.fillRect(18, 18, width - 36, height - 36)
+    context.fillStyle = '#d8c5a2'
+    context.fillRect(27, 27, width - 54, height - 54)
+    context.strokeStyle = '#5d452c'
+    context.lineWidth = 3
+    context.strokeRect(34, 34, width - 68, height - 68)
+
+    context.fillStyle = accent
+    context.fillRect(width * .12, 53, width * .76, 5)
+
+    context.fillStyle = '#241b15'
+    context.font = '700 54px Georgia, "Times New Roman", serif'
     context.textAlign = 'center'
     context.textBaseline = 'middle'
-    context.fillText(title.toUpperCase(), width / 2, height * .43)
+    context.fillText(title.toUpperCase(), width / 2, height * .39)
 
-    context.fillStyle = 'rgba(255,255,255,.68)'
-    context.font = '400 27px system-ui, sans-serif'
+    const wrapLine = (value: string, maxWidth: number) => {
+      const words = value.trim().split(/\s+/)
+      const lines: string[] = []
+      let current = ''
+      words.forEach((word) => {
+        const candidate = current ? current + ' ' + word : word
+        if (
+          context.measureText(candidate).width <= maxWidth ||
+          !current
+        ) {
+          current = candidate
+          return
+        }
+        lines.push(current)
+        current = word
+      })
+      if (current) lines.push(current)
+      return lines
+    }
 
-    const subtitleWords = subtitle.split(/\s+/)
-    const subtitleLines: string[] = []
-    let currentLine = ''
-    const maxSubtitleWidth = width - 110
-
-    subtitleWords.forEach((word) => {
-      const candidate = currentLine ? currentLine + ' ' + word : word
-      if (
-        context.measureText(candidate).width <= maxSubtitleWidth ||
-        currentLine.length === 0
-      ) {
-        currentLine = candidate
-        return
-      }
-      subtitleLines.push(currentLine)
-      currentLine = word
-    })
-    if (currentLine) subtitleLines.push(currentLine)
-
-    const visibleSubtitleLines =
-      subtitleLines.length <= 2
-        ? subtitleLines
-        : [
-            subtitleLines[0],
-            subtitleLines.slice(1).join(' '),
-          ]
-    const subtitleLineHeight = 34
-    const subtitleCenterY = height * .72
-    const subtitleStartY =
-      subtitleCenterY -
-      ((visibleSubtitleLines.length - 1) * subtitleLineHeight) / 2
-
-    visibleSubtitleLines.slice(0, 2).forEach((line, index) => {
+    context.fillStyle = '#544331'
+    context.font = '600 24px Georgia, "Times New Roman", serif'
+    const explicitLines = subtitle
+      .split('\n')
+      .flatMap((line) => wrapLine(line, width - 120))
+      .slice(0, 2)
+    const lineHeight = 31
+    const startY =
+      height * .69 -
+      ((explicitLines.length - 1) * lineHeight) / 2
+    explicitLines.forEach((line, index) => {
       context.fillText(
         line,
         width / 2,
-        subtitleStartY + index * subtitleLineHeight,
+        startY + index * lineHeight,
       )
     })
 
@@ -271,27 +255,93 @@ export function createLibraryBuilding(
     return texture
   }
 
+  const signWoodMaterial = new THREE.MeshStandardMaterial({
+    color: 0x2d2118,
+    roughness: .8,
+    metalness: .02,
+    envMapIntensity: .1,
+  })
+  localMaterials.push(signWoodMaterial)
+
   const addSign = (
     title: string,
     subtitle: string,
     accent: string,
     position: [number, number, number],
     scale: [number, number],
+    yaw = 0,
   ) => {
     const texture = createSignTexture(title, subtitle, accent)
-    const material = new THREE.SpriteMaterial({
+    const plaqueMaterial = new THREE.MeshStandardMaterial({
       map: texture,
-      transparent: true,
-      depthWrite: false,
-      toneMapped: false,
+      roughness: .74,
+      metalness: 0,
+      envMapIntensity: .08,
+      side: THREE.DoubleSide,
+      toneMapped: true,
     })
-    localMaterials.push(material)
-    const sprite = new THREE.Sprite(material)
-    sprite.position.set(...position)
-    sprite.scale.set(scale[0], scale[1], 1)
-    sprite.renderOrder = 12
-    group.add(sprite)
-    return sprite
+    const plaqueGeometry = new THREE.PlaneGeometry(
+      scale[0],
+      scale[1],
+    )
+    const backGeometry = new THREE.BoxGeometry(
+      scale[0] * 1.035,
+      scale[1] * 1.08,
+      .09,
+    )
+    localMaterials.push(plaqueMaterial)
+    localGeometries.push(plaqueGeometry, backGeometry)
+
+    const signGroup = new THREE.Group()
+    signGroup.position.set(...position)
+    signGroup.rotation.y = yaw
+
+    const back = new THREE.Mesh(
+      backGeometry,
+      signWoodMaterial,
+    )
+    back.position.z = -.05
+    signGroup.add(back)
+
+    const plaque = new THREE.Mesh(
+      plaqueGeometry,
+      plaqueMaterial,
+    )
+    plaque.position.z = .008
+    plaque.renderOrder = 8
+    signGroup.add(plaque)
+
+    group.add(signGroup)
+    return signGroup
+  }
+
+  const headerDate = new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
+    .format(new Date())
+    .toUpperCase()
+
+  const roomFunction = (
+    sourceMode: LibraryWorldConfig['districts'][number]['sourceMode'],
+  ) => {
+    switch (sourceMode) {
+      case 'featured':
+        return 'CURATED PICKS'
+      case 'latest':
+        return 'NEWLY PUBLISHED'
+      case 'topics':
+      case 'tagged':
+        return 'TAG INDEX'
+      case 'creators':
+        return 'AUTHOR INDEX'
+      case 'search':
+        return 'LIVE CARD CATALOGUE'
+      case 'catalog':
+      default:
+        return 'LONG-TAIL ARCHIVE'
+    }
   }
 
   const roomDistricts = [...config.districts]
@@ -479,7 +529,8 @@ export function createLibraryBuilding(
 
   addSign(
     config.welcomeTitle || 'DEV LIBRARY',
-    directoryLine || 'Featured ← · New Arrivals → · Topics ← · Creators → · Search ← · Archive →',
+    'ROOM DIRECTORY · ' + headerDate + '\n' +
+      (directoryLine || 'Featured ← · New Arrivals → · Topics ← · Creators → · Search ← · Archive →'),
     '#53d3ff',
     [0, 3.45, 10.55],
     [7.2, 1.5],
@@ -487,14 +538,14 @@ export function createLibraryBuilding(
 
   addSign(
     'WELCOME TO ONIRIA',
-    'Sanity curates this living DEV.to library. Live articles become books, and each room is a collection you can physically browse.',
+    'SANITY-POWERED DEV ARCHIVE · ' + headerDate + '\nLive articles become books you can physically browse.',
     '#f1b76f',
     [0, 2.68, 5.5],
     [5.4, 1.12],
   )
   addSign(
     'HOW TO EXPLORE',
-    'WASD move · mouse look · choose a shelf · click a book to read · ESC returns you to the library',
+    'READING ROOM ETIQUETTE\nWASD move · choose a shelf · click a book · ESC returns',
     '#8fdcf4',
     [0, 1.92, 5.55],
     [4.8, .78],
@@ -510,11 +561,12 @@ export function createLibraryBuilding(
     const [x, z] = room.center
     const signX = x < 0 ? -10.25 : 10.25
     addSign(
-      district.label,
-      district.description ?? 'Live DEV collection',
+      `${district.code} · ${district.label}`,
+      `${roomFunction(district.sourceMode)} · ${headerDate}\n${district.description ?? 'Live DEV collection'}`,
       district.accent,
       [signX, 3.65, z],
-      [5.1, 1.28],
+      [4.7, 1.16],
+      x < 0 ? Math.PI / 2 : -Math.PI / 2,
     )
 
     const glowGeometry = new THREE.PlaneGeometry(11.5, 11.5)
@@ -976,6 +1028,26 @@ export function createLibraryBuilding(
   localMaterials.push(pendantBulbMaterial, pendantPoolMaterial)
   localTextures.push(pendantPoolTexture)
 
+  const pendantShaftGeometry = new THREE.CylinderGeometry(
+    .08,
+    1.05,
+    1,
+    20,
+    1,
+    true,
+  )
+  const pendantShaftMaterial = new THREE.MeshBasicMaterial({
+    color: 0xffd5a0,
+    transparent: true,
+    opacity: .035,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+  })
+  localGeometries.push(pendantShaftGeometry)
+  localMaterials.push(pendantShaftMaterial)
+
   const sconceHaloGeometry = new THREE.PlaneGeometry(1, 1)
   const sconceHaloMaterial = new THREE.MeshBasicMaterial({
     map: pendantPoolTexture,
@@ -1083,6 +1155,21 @@ export function createLibraryBuilding(
     pool.renderOrder = 3
     pool.name = `library-pendant-pool-${id}`
     group.add(pool)
+
+    const shaftHeight = Math.max(1.2, bulbY - .22)
+    const shaft = new THREE.Mesh(
+      pendantShaftGeometry,
+      pendantShaftMaterial,
+    )
+    shaft.scale.set(1, shaftHeight, 1)
+    shaft.position.set(
+      center.x,
+      bulbY - shaftHeight / 2,
+      center.z,
+    )
+    shaft.renderOrder = 2
+    shaft.name = `library-pendant-shaft-${id}`
+    group.add(shaft)
   }
 
   const ready = (async () => {
@@ -1432,7 +1519,7 @@ export function createLibraryBuilding(
       )
     }
 
-    SURVEYED_HALL_RUG_Z.forEach((z, index) => {
+    LIBRARY_HALL_READING_Z.forEach((z, index) => {
       const border = new THREE.Mesh(
         rugBorderGeometry,
         rugBorderMaterial,
@@ -1775,6 +1862,32 @@ export function createLibraryBuilding(
           ),
           driftX: motionProfile.driftX,
           driftZ: motionProfile.driftZ,
+          driftSpeedX:
+            placement.asset === 'readingTable' ? .16 : .13,
+          driftSpeedZ:
+            placement.asset === 'readingTable' ? .125 : .105,
+          driftSide:
+            placement.asset === 'readingTable'
+              ? .1
+              : placement.asset === 'libraryChair' ||
+                  placement.asset === 'chairWingback'
+                ? .075
+                : .045,
+          driftForward:
+            placement.asset === 'readingTable'
+              ? .04
+              : .025,
+          driftSpeedSide:
+            placement.asset === 'readingTable' ? .18 : .15,
+          driftSpeedForward: .105,
+          secondaryHoverAmplitude:
+            placement.asset === 'readingTable'
+              ? .026
+              : .014,
+          secondaryHoverSpeed:
+            placement.asset === 'readingTable'
+              ? .23
+              : .19,
         })
       }
     })
