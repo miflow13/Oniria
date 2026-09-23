@@ -244,22 +244,6 @@ export function createLibraryAudio(
   master.gain.value = 0
   master.connect(listener.getInput())
 
-  const floorFilter = context.createBiquadFilter()
-  floorFilter.type = 'lowpass'
-  floorFilter.frequency.value = 180
-  floorFilter.Q.value = .6
-
-  const floorOscillator = context.createOscillator()
-  floorOscillator.type = 'sine'
-  floorOscillator.frequency.value = 54
-  const floorGain = context.createGain()
-  floorGain.gain.value = .012
-  floorOscillator
-    .connect(floorFilter)
-    .connect(floorGain)
-    .connect(master)
-  floorOscillator.start()
-
   // A real musical loop replaces the old continuous drone/tone pair.
   // The one-minute phrase uses felt-piano-like chords and sparse bell notes,
   // with a clean silent tail so it can repeat for long reading sessions.
@@ -419,11 +403,6 @@ export function createLibraryAudio(
         1,
       )
 
-      floorGain.gain.setTargetAtTime(
-        walking ? .014 : .006,
-        now,
-        .18,
-      )
       windGain.gain.setTargetAtTime(
         walking
           ? .0015 + speedStrength * .001
@@ -494,16 +473,12 @@ export function createLibraryAudio(
       window.removeEventListener(AUDIO_ENABLE_EVENT, handleUnlock)
 
       noiseSource.stop()
-      floorOscillator.stop()
       musicSource.stop()
 
       noiseSource.disconnect()
-      floorOscillator.disconnect()
       musicSource.disconnect()
-      floorFilter.disconnect()
       musicFilter.disconnect()
       windFilter.disconnect()
-      floorGain.disconnect()
       musicGain.disconnect()
       windGain.disconnect()
       master.disconnect()
