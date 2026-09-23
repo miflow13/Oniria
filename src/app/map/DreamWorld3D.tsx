@@ -59,20 +59,6 @@ import {
   type PortalSceneTransition,
 } from './dreamworld/effects/createPortalSceneTransition'
 import {
-  ARCHIVE_PATH_RENDER_BAYS,
-  ARCHIVE_WALKWAY_HALF_WIDTH,
-  ARCHIVE_WALKWAY_Y_OFFSET,
-  archiveBayFromWorldZ,
-  archiveDistrictGridLaneOffset,
-  archiveDistrictInfluence,
-  archiveGridRoadSegments,
-  archiveOffsetPathPoint,
-  archivePathFrame,
-  archivePathPoint,
-  archiveWalkSurfaceAtPosition,
-  archiveWalkwayHalfWidthAtBay,
-} from './libraryLayout'
-import {
   CITY_ARRIVAL,
   CITY_GROUND_Y,
   cityDistrictBlock,
@@ -790,9 +776,6 @@ export default function DreamWorld3D({
     const libraryMode = nodeRef.current.some(
       (node) => node.libraryKind === 'shelf',
     )
-    const libraryGridSegments = libraryMode
-      ? archiveGridRoadSegments(activeDistricts)
-      : []
 
     const scene = new THREE.Scene()
     const globalAtmospherePreset =
@@ -4353,59 +4336,7 @@ export default function DreamWorld3D({
         }
       }
 
-      if (libraryRouteDots && libraryRouteDotGeometry) {
-        const routePositions =
-          libraryRouteDotGeometry.getAttribute(
-            'position',
-          ) as THREE.BufferAttribute
-        const pulseGroups = Math.max(
-          1,
-          Math.floor(libraryRouteDotCount / 3),
-        )
 
-        for (
-          let index = 0;
-          index < libraryRouteDotCount;
-          index += 1
-        ) {
-          const lane = (index % 3) - 1
-          const pulseIndex = Math.floor(index / 3)
-          const laneOffset = lane === 0 ? 0 : lane * .18
-          const bay =
-            (elapsed * .46 +
-              pulseIndex *
-                (ARCHIVE_PATH_RENDER_BAYS / pulseGroups) +
-              laneOffset +
-              ARCHIVE_PATH_RENDER_BAYS) %
-            ARCHIVE_PATH_RENDER_BAYS
-          const point = archivePathPoint(bay)
-          const frame = archivePathFrame(bay)
-          const halfWidth =
-            archiveWalkwayHalfWidthAtBay(
-              bay,
-              activeDistricts,
-            )
-          const lateral =
-            lane === 0
-              ? 0
-              : lane * Math.max(.4, halfWidth - .3)
-
-          routePositions.setXYZ(
-            index,
-            point[0] + frame.normalX * lateral,
-            point[1] +
-              ARCHIVE_WALKWAY_Y_OFFSET +
-              (lane === 0 ? .095 : .13),
-            point[2] + frame.normalZ * lateral,
-          )
-        }
-        routePositions.needsUpdate = true
-        if (libraryRouteDotMaterial) {
-          libraryRouteDotMaterial.opacity =
-            .7 +
-            Math.max(0, Math.sin(elapsed * .72)) * .16
-        }
-      }
 
       worldLightShafts.forEach((shaft, index) => {
         shaft.rotation.y += .00022 + index * .00005
