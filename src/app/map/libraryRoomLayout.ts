@@ -135,10 +135,13 @@ export function roomShelfPlacements(
   // Use fewer, wider-separated aisles. Each freestanding row still spans
   // almost the full room depth, but the larger gaps make browsing feel like
   // a real library instead of a packed storage maze.
-  const rowOffsets =
+  const loungeHeavyRoom =
+    district.sourceMode === 'featured' ||
+    district.sourceMode === 'creators' ||
     district.sourceMode === 'search'
-      ? [-5.8, 5.8]
-      : [-5.8, 0, 5.8]
+  const rowOffsets = loungeHeavyRoom
+    ? [-5.8, 5.8]
+    : [-5.8, 0, 5.8]
   const sideDirection = x < 0 ? -1 : 1
   const depthOffsets = [-5.2, 0, 5.2]
 
