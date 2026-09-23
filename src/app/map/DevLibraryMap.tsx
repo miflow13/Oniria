@@ -31,6 +31,7 @@ import type {
 import styles from './library.module.css'
 import {
   hallwayShelfPlacements,
+  LIBRARY_ROOM_SHELF_SLOTS,
   roomShelfPlacements,
   type RoomShelfPlacement,
 } from './libraryRoomLayout'
@@ -39,7 +40,8 @@ const DEFAULT_USERNAME = 'mikachu'
 const QUALITY: DreamQuality = 'cinematic'
 const CATALOG_PAGE_SIZE = 100
 const CATALOG_BOOKS_PER_SHELF = 9
-const DISTRICT_RENDERED_SHELF_LIMIT = 13
+const DISTRICT_RENDERED_SHELF_LIMIT =
+  LIBRARY_ROOM_SHELF_SLOTS.length
 const DISTRICT_VISIBLE_ARTICLE_CAPACITY =
   DISTRICT_RENDERED_SHELF_LIMIT * CATALOG_BOOKS_PER_SHELF * 2
 const DISTRICT_SHELF_PAIR_OFFSETS = [-.68, .68] as const
