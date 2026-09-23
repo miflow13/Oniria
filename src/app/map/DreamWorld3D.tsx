@@ -2319,6 +2319,75 @@ export default function DreamWorld3D({
           })
         }
 
+        let authoredShelfHydrated = false
+        const hydrateAuthoredShelf = () => {
+          if (authoredShelfHydrated || sceneDisposed) return
+          authoredShelfHydrated = true
+
+          void physicalShelfTemplatePromise.then((template) => {
+            if (!template || sceneDisposed) return
+
+            const authoredShelf = template.clone(true)
+            const size = new THREE.Box3()
+              .setFromObject(authoredShelf)
+              .getSize(new THREE.Vector3())
+            const widthRunsOnX = size.x >= size.z
+            const sourceWidth = Math.max(
+              .001,
+              widthRunsOnX ? size.x : size.z,
+            )
+            const sourceDepth = Math.max(
+              .001,
+              widthRunsOnX ? size.z : size.x,
+            )
+
+            authoredShelf.rotation.y +=
+              widthRunsOnX ? 0 : Math.PI / 2
+            if (widthRunsOnX) {
+              authoredShelf.scale.x *= 4.5 / sourceWidth
+              authoredShelf.scale.z *= .72 / sourceDepth
+            } else {
+              authoredShelf.scale.z *= 4.5 / sourceWidth
+              authoredShelf.scale.x *= .72 / sourceDepth
+            }
+            authoredShelf.traverse((child) => {
+              if (!(child instanceof THREE.Mesh)) return
+              child.castShadow = renderer.shadowMap.enabled
+              child.receiveShadow = true
+              child.frustumCulled = true
+            })
+
+            fallbackFrame.visible = false
+            shelf.add(authoredShelf)
+          })
+
+          if (
+            node.libraryShelfEndCaps &&
+            node.libraryShelfEndCaps !== 'none'
+          ) {
+            void physicalShelfEndTemplatePromise.then((template) => {
+              if (!template || sceneDisposed) return
+
+              const shelfEnd = template.clone(true)
+              shelfEnd.position.x =
+                node.libraryShelfEndCaps === 'left'
+                  ? -2.3
+                  : 2.3
+              shelfEnd.rotation.y =
+                node.libraryShelfEndCaps === 'right'
+                  ? Math.PI
+                  : 0
+              shelfEnd.traverse((child) => {
+                if (!(child instanceof THREE.Mesh)) return
+                child.castShadow = false
+                child.receiveShadow = true
+                child.frustumCulled = true
+              })
+              shelf.add(shelfEnd)
+            })
+          }
+        }
+
         const hydrateShelfBooks = () => {
           if (
             hydratedShelfIds.has(node._id) ||
@@ -2329,6 +2398,7 @@ export default function DreamWorld3D({
 
           hydratedShelfIds.add(node._id)
           pendingShelfHydrators.delete(node._id)
+          hydrateAuthoredShelf()
           shelfBooks.forEach((bookData, index) => {
             addShelfBook(
               bookData,
@@ -2374,65 +2444,6 @@ export default function DreamWorld3D({
         pick.userData.nodeId = node._id
         shelf.add(pick)
         interactive.push(pick)
-
-        void physicalShelfTemplatePromise.then((template) => {
-          if (!template || sceneDisposed) return
-
-          const authoredShelf = template.clone(true)
-          const size = new THREE.Box3()
-            .setFromObject(authoredShelf)
-            .getSize(new THREE.Vector3())
-          const widthRunsOnX = size.x >= size.z
-          const sourceWidth = Math.max(
-            .001,
-            widthRunsOnX ? size.x : size.z,
-          )
-          const sourceDepth = Math.max(
-            .001,
-            widthRunsOnX ? size.z : size.x,
-          )
-
-          authoredShelf.rotation.y +=
-            widthRunsOnX ? 0 : Math.PI / 2
-          if (widthRunsOnX) {
-            authoredShelf.scale.x *= 4.5 / sourceWidth
-            authoredShelf.scale.z *= .72 / sourceDepth
-          } else {
-            authoredShelf.scale.z *= 4.5 / sourceWidth
-            authoredShelf.scale.x *= .72 / sourceDepth
-          }
-          authoredShelf.traverse((child) => {
-            if (!(child instanceof THREE.Mesh)) return
-            child.castShadow = renderer.shadowMap.enabled
-            child.receiveShadow = true
-            child.frustumCulled = true
-          })
-
-          fallbackFrame.visible = false
-          shelf.add(authoredShelf)
-        })
-
-        if (
-          node.libraryShelfEndCaps &&
-          node.libraryShelfEndCaps !== 'none'
-        ) {
-          void physicalShelfEndTemplatePromise.then((template) => {
-            if (!template || sceneDisposed) return
-
-            const shelfEnd = template.clone(true)
-            shelfEnd.position.x =
-              node.libraryShelfEndCaps === 'left' ? -2.3 : 2.3
-            shelfEnd.rotation.y =
-              node.libraryShelfEndCaps === 'right' ? Math.PI : 0
-            shelfEnd.traverse((child) => {
-              if (!(child instanceof THREE.Mesh)) return
-              child.castShadow = false
-              child.receiveShadow = true
-              child.frustumCulled = true
-            })
-            shelf.add(shelfEnd)
-          })
-        }
 
         shelf.scale.setScalar(1)
         group.add(shelf)
