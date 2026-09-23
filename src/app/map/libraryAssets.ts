@@ -10,7 +10,7 @@ export const LIBRARY_ASSETS = {
   stackShelf: '/assets/library-kit/stack-shelf.glb',
   stackShelfEnd: '/assets/library-kit/stack-shelf-end.glb',
   column: '/assets/library-kit/column.glb',
-  readingRug: '/assets/library-kit/reading-rug.glb',
+  readingRug: '/assets/library-kit/office-area-rug.glb',
   libraryChair: '/assets/library-kit/library-chair.glb',
   chairWingback: '/assets/library-kit/chair-wingback.glb',
   readingTable: '/assets/library-kit/reading-table.glb',
