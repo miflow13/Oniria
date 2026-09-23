@@ -200,7 +200,7 @@ export function archiveShelfPlacement(
 
 const ARCHIVE_SHELF_MIN_CENTER_DISTANCE = 5.35
 const ARCHIVE_SHELF_CLEARANCE_STEP_BAYS = .1
-const ARCHIVE_SHELF_MAX_CLEARANCE_STEPS = 48
+const ARCHIVE_SHELF_MAX_CLEARANCE_STEPS = 5
 
 function wrapAngle(angle: number) {
   return Math.atan2(Math.sin(angle), Math.cos(angle))
@@ -247,7 +247,8 @@ function moveArchivePlacementToBay(
     world,
     yaw: nextBaseYaw + yawOffset,
     pathBay: nextBay,
-    districtId: nearestArchiveDistrict(nextBay, districts).id,
+    // Clearance must never migrate a shelf into another district.
+    districtId: placement.districtId,
   }
 }
 
@@ -256,8 +257,9 @@ function moveArchivePlacementToBay(
  *
  * Layout formulas can produce perfectly valid anchor spacing while rotated
  * shelf bodies still look crowded. This resolver keeps earlier shelf
- * placements stable and only nudges later shelves forward along the fixed
- * archive path until their centers have enough clearance.
+ * placements stable and only nudges later shelves a small amount inside
+ * their own district. Shelf clearance is intentionally bounded so streaming
+ * more catalogue data can never expand or reorder the physical boulevard.
  */
 export function resolveArchiveShelfClearance(
   placements: ArchiveShelfPlacement[],
@@ -274,6 +276,13 @@ export function resolveArchiveShelfClearance(
       attempt += 1
     ) {
       const overlaps = resolved.some((other) => {
+        // Adjacent districts own separate physical footprints. Cross-district
+        // clearance used to push later shelves progressively down the route,
+        // which made Deep Stacks expand as more DEV pages were fetched.
+        if (other.districtId !== placement.districtId) {
+          return false
+        }
+
         const dx = candidate.world[0] - other.world[0]
         const dz = candidate.world[2] - other.world[2]
         const horizontalDistance = Math.hypot(dx, dz)
