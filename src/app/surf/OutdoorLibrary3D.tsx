@@ -583,6 +583,28 @@ export default function OutdoorLibrary3D({
       libraryGoldMaterial,
     )
 
+    const libraryColliders: Array<{
+      minX: number
+      maxX: number
+      minZ: number
+      maxZ: number
+    }> = []
+
+    const addLibraryCollider = (
+      x: number,
+      z: number,
+      width: number,
+      depth: number,
+    ) => {
+      const margin = .18
+      libraryColliders.push({
+        minX: x - width / 2 - margin,
+        maxX: x + width / 2 + margin,
+        minZ: z - depth / 2 - margin,
+        maxZ: z + depth / 2 + margin,
+      })
+    }
+
     const addLibraryBox = (
       material: THREE.Material,
       x: number,
@@ -687,6 +709,7 @@ export default function OutdoorLibrary3D({
               2.7,
               span,
             )
+            addLibraryCollider(x, midZ, .34, span)
             addLibraryBox(
               libraryWindowMaterial,
               side * (wallX - .05),
@@ -797,6 +820,7 @@ export default function OutdoorLibrary3D({
             4.2,
             .58,
           )
+          addLibraryCollider(side * 8.35, z, 4.9, .58)
         }
         addLibraryBox(
           libraryStoneMaterial,
@@ -1368,10 +1392,30 @@ export default function OutdoorLibrary3D({
         if (movement.lengthSq() > 0) {
           movement.normalize()
           const speed = keys.has('ShiftLeft') || keys.has('ShiftRight') ? 8.4 : 4.8
-          const nextX = THREE.MathUtils.clamp(camera.position.x + movement.x * speed * delta, -WORLD_HALF_WIDTH, WORLD_HALF_WIDTH)
-          const nextZ = THREE.MathUtils.clamp(camera.position.z + movement.z * speed * delta, WORLD_FAR_Z, WORLD_NEAR_Z)
-          camera.position.x = nextX
-          camera.position.z = nextZ
+          const nextX = THREE.MathUtils.clamp(
+            camera.position.x + movement.x * speed * delta,
+            -WORLD_HALF_WIDTH,
+            WORLD_HALF_WIDTH,
+          )
+          const nextZ = THREE.MathUtils.clamp(
+            camera.position.z + movement.z * speed * delta,
+            WORLD_FAR_Z,
+            WORLD_NEAR_Z,
+          )
+          const canOccupy = (x: number, z: number) =>
+            !libraryColliders.some(
+              (collider) =>
+                x >= collider.minX &&
+                x <= collider.maxX &&
+                z >= collider.minZ &&
+                z <= collider.maxZ,
+            )
+          if (canOccupy(nextX, camera.position.z)) {
+            camera.position.x = nextX
+          }
+          if (canOccupy(camera.position.x, nextZ)) {
+            camera.position.z = nextZ
+          }
         }
       }
 
