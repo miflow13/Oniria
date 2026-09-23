@@ -33,7 +33,6 @@ import styles from './library.module.css'
 import {
   archiveShelfPlacement,
   resolveArchiveShelfClearance,
-  type ArchiveShelfPlacement,
 } from './libraryLayout'
 
 const DEFAULT_USERNAME = 'mikachu'
@@ -43,45 +42,6 @@ const CATALOG_BOOKS_PER_SHELF = 9
 const FRONT_PAGE_SHELF_TARGET = 8
 const DISTRICT_RENDERED_SHELF_LIMIT = 4
 const DISTRICT_SHELF_PAIR_OFFSETS = [-.48, .48] as const
-
-function catalogShelfPlacement(
-  index: number,
-  districts: LibraryDistrictConfig[],
-): ArchiveShelfPlacement {
-  const block = Math.floor(index / 20)
-  const within = index % 20
-  const blockStartBay = 3 + block * 10
-  const key = 'shelf:catalog:' + index
-
-  if (within < 8) {
-    const bay = blockStartBay + Math.floor(within / 2)
-    const side: -1 | 1 = within % 2 === 0 ? -1 : 1
-    return archiveShelfPlacement(key, bay, side, {}, districts)
-  }
-
-  if (within < 12) {
-    const slot = within - 8
-    const offsets = [-.98, -.38, .38, .98] as const
-    const sides = [-1, 1, -1, 1] as const
-    return archiveShelfPlacement(
-      key,
-      blockStartBay + 4.5 + offsets[slot],
-      sides[slot],
-      {
-        laneBias: -.12,
-        heightBias: slot % 2 === 0 ? .08 : -.06,
-        alongJitterScale: .08,
-        yawJitterScale: .16,
-      },
-      districts,
-    )
-  }
-
-  const local = within - 12
-  const bay = blockStartBay + 5 + Math.floor(local / 2)
-  const side: -1 | 1 = local % 2 === 0 ? -1 : 1
-  return archiveShelfPlacement(key, bay, side, {}, districts)
-}
 
 const SHELF_ACCENTS: Record<LibraryShelfKind, string> = {
   featured: '#8c7cff',
@@ -874,7 +834,6 @@ export default function DevLibraryMap() {
       }
     })
 
-    let catalogShelfIndex = 0
     districts.forEach((district) => {
       const districtArticles =
         articlesByDistrict.get(district.id) ?? []
@@ -967,7 +926,6 @@ export default function DevLibraryMap() {
         shelf.accent = district.accent
         shelf.districtId = district.id
         result.push(shelf)
-        catalogShelfIndex += 1
       }
     })
 
