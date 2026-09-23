@@ -1821,6 +1821,7 @@ export default function DreamWorld3D({
     const libraryBookVisuals: LibraryBookVisual[] = []
     const bookInteractives: THREE.Object3D[] = []
     let hoveredBook: LibraryBookVisual | null = null
+    const BOOK_INTERACTION_DISTANCE = 3.35
 
     // Reusable shelf kit for cinematic library mode.
     const shelfSideGeometry = new THREE.BoxGeometry(.16, 3.56, .66)
@@ -1828,9 +1829,54 @@ export default function DreamWorld3D({
     const shelfBackGeometry = new THREE.BoxGeometry(4.5, 3.46, .055)
     const shelfBookGeometry = new THREE.BoxGeometry(.78, .54, .1)
     const shelfCoverGeometry = new THREE.PlaneGeometry(.7, .46)
+    const shelfHoverGlowGeometry = new THREE.PlaneGeometry(.94, .68)
     const shelfAccentGeometry = new THREE.BoxGeometry(4.26, .024, .032)
     const shelfPickGeometry = new THREE.BoxGeometry(4.8, 3.8, 1.1)
     const shelfBookmarkGeometry = new THREE.PlaneGeometry(.12, .34)
+    const shelfHoverGlowCanvas = document.createElement('canvas')
+    shelfHoverGlowCanvas.width = 128
+    shelfHoverGlowCanvas.height = 96
+    const shelfHoverGlowContext =
+      shelfHoverGlowCanvas.getContext('2d')
+    if (shelfHoverGlowContext) {
+      shelfHoverGlowContext.clearRect(0, 0, 128, 96)
+      shelfHoverGlowContext.save()
+      shelfHoverGlowContext.shadowColor =
+        'rgba(255, 191, 112, .95)'
+      shelfHoverGlowContext.shadowBlur = 22
+      shelfHoverGlowContext.strokeStyle =
+        'rgba(255, 218, 164, .92)'
+      shelfHoverGlowContext.lineWidth = 5
+      roundedRect(
+        shelfHoverGlowContext,
+        13,
+        12,
+        102,
+        72,
+        10,
+      )
+      shelfHoverGlowContext.stroke()
+      shelfHoverGlowContext.restore()
+    }
+    const shelfHoverGlowTexture =
+      new THREE.CanvasTexture(shelfHoverGlowCanvas)
+    shelfHoverGlowTexture.colorSpace = THREE.SRGBColorSpace
+    shelfHoverGlowTexture.minFilter = THREE.LinearFilter
+    shelfHoverGlowTexture.magFilter = THREE.LinearFilter
+    shelfHoverGlowTexture.generateMipmaps = false
+    shelfHoverGlowTexture.needsUpdate = true
+    const shelfHoverGlowMaterial =
+      new THREE.MeshBasicMaterial({
+        map: shelfHoverGlowTexture,
+        transparent: true,
+        opacity: .92,
+        depthWrite: false,
+        depthTest: true,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+        toneMapped: false,
+      })
+
     const shelfBookmarkMaterial = new THREE.MeshBasicMaterial({
       color: 0xd782e8,
       transparent: true,
@@ -2606,6 +2652,17 @@ export default function DreamWorld3D({
           coverHinge.add(cover)
           bookInteractives.push(cover)
 
+          const hoverGlow = new THREE.Mesh(
+            shelfHoverGlowGeometry,
+            shelfHoverGlowMaterial,
+          )
+          hoverGlow.position.set(.35, 0, -.012)
+          hoverGlow.scale.copy(cover.scale).multiplyScalar(1.08)
+          hoverGlow.visible = false
+          hoverGlow.renderOrder = 4
+          hoverGlow.userData.libraryDecorative = true
+          coverHinge.add(hoverGlow)
+
           const bookmark = new THREE.Mesh(
             shelfBookmarkGeometry,
             shelfBookmarkMaterial,
@@ -2638,6 +2695,7 @@ export default function DreamWorld3D({
             group: bookGroup,
             coverHinge,
             coverMaterial,
+            hoverGlow,
             bookmark,
             basePosition,
             baseRotationY,
@@ -5149,8 +5207,12 @@ export default function DreamWorld3D({
         bookInteractives,
         false,
       )
-      if (!intersections.length) return null
-      return bookVisualFromObject(intersections[0].object)
+      const hit = intersections.find(
+        (intersection) =>
+          intersection.distance <= BOOK_INTERACTION_DISTANCE,
+      )
+      if (!hit) return null
+      return bookVisualFromObject(hit.object)
     }
 
     function pickCenterBook() {
@@ -5160,8 +5222,12 @@ export default function DreamWorld3D({
         bookInteractives,
         false,
       )
-      if (!intersections.length) return null
-      return bookVisualFromObject(intersections[0].object)
+      const hit = intersections.find(
+        (intersection) =>
+          intersection.distance <= BOOK_INTERACTION_DISTANCE,
+      )
+      if (!hit) return null
+      return bookVisualFromObject(hit.object)
     }
 
     function beginBookOpen(visual: LibraryBookVisual) {
@@ -6703,13 +6769,30 @@ export default function DreamWorld3D({
               : 0
           const presented =
             libraryReadingRitual?.isPresenting(bookVisual) ?? false
+          const directlyHovered =
+            hoveredBook === bookVisual &&
+            shelfDistance <= BOOK_INTERACTION_DISTANCE
+
+          bookVisual.hoverGlow.visible =
+            directlyHovered && !presented
+          if (bookVisual.hoverGlow.visible) {
+            const hoverPulse =
+              1.05 + Math.sin(elapsed * 4.6) * .035
+            bookVisual.hoverGlow.scale.set(
+              hoverPulse,
+              hoverPulse,
+              1,
+            )
+          }
 
           bookVisual.coverMaterial.emissive.setHex(
             presented ? 0x6d2f73 : 0x163744,
           )
           const targetEmissive = presented
             ? 1.35
-            : awake * .5
+            : directlyHovered
+              ? .82
+              : awake * .5
           bookVisual.coverMaterial.emissiveIntensity +=
             (targetEmissive -
               bookVisual.coverMaterial.emissiveIntensity) *
@@ -7862,6 +7945,9 @@ export default function DreamWorld3D({
       shelfBackGeometry.dispose()
       shelfBookGeometry.dispose()
       shelfCoverGeometry.dispose()
+      shelfHoverGlowGeometry.dispose()
+      shelfHoverGlowMaterial.dispose()
+      shelfHoverGlowTexture.dispose()
       shelfContactShadows.forEach((shadow) => world.remove(shadow))
       shelfContactShadowGeometry.dispose()
       shelfContactShadowMaterial.dispose()
