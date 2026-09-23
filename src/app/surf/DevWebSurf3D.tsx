@@ -4,6 +4,8 @@ import {useEffect, useRef} from 'react'
 import * as THREE from 'three'
 import type {LibrarySection, SurfEdge, SurfNode, SurfNodeKind} from './types'
 import styles from './surf.module.css'
+import {EYE_HEIGHT, FLOOR_COUNT, LANDMARK, ROOMS, ROOM_ORDER, SPAWN, WALK_BOUNDS} from './libraryLayout'
+import {LIBRARY_ASSETS, loadLibraryAsset} from './libraryAssets'
 
 type TravelRequest = {
   id: string
@@ -60,39 +62,23 @@ type Visual = {
   phase: number
 }
 
-const LIBRARY_FLOOR_COUNT = 4
+const LIBRARY_FLOOR_COUNT = FLOOR_COUNT
 const LIBRARY_FLOOR_HEIGHT = 5.2
-const CAMERA_HEIGHT = 1.62
+const CAMERA_HEIGHT = EYE_HEIGHT
 
-const SECTION_CENTERS: Record<LibrarySection, THREE.Vector3> = {
-  atrium: new THREE.Vector3(0, 1.6, 8),
-  featured: new THREE.Vector3(0, 1.6, -8),
-  latest: new THREE.Vector3(-13, 1.6, -12),
-  topics: new THREE.Vector3(13, 1.6, -12),
-  creators: new THREE.Vector3(13, 1.6, -26),
-  search: new THREE.Vector3(-13, 1.6, -26),
-  archive: new THREE.Vector3(0, 1.6, -40),
-}
-
-const SECTION_DOORWAYS: Record<LibrarySection, THREE.Vector3> = {
-  atrium: new THREE.Vector3(0, .09, 5.8),
-  featured: new THREE.Vector3(0, .09, -5.4),
-  latest: new THREE.Vector3(-8.35, .09, -5.2),
-  topics: new THREE.Vector3(8.35, .09, -5.2),
-  creators: new THREE.Vector3(8.35, .09, -21.1),
-  search: new THREE.Vector3(-8.35, .09, -21.1),
-  archive: new THREE.Vector3(0, .09, -34.4),
-}
-
-const SECTION_ACCENTS: Record<LibrarySection, number> = {
-  atrium: 0xf5f5f5,
-  featured: 0x3b49df,
-  latest: 0x5b6cff,
-  topics: 0x53d3ff,
-  creators: 0xae7bff,
-  search: 0xff4fd8,
-  archive: 0x8b96a8,
-}
+const SECTION_CENTERS = Object.fromEntries(
+  (Object.keys(ROOMS) as LibrarySection[]).map((section) => [
+    section, new THREE.Vector3(ROOMS[section].center[0], CAMERA_HEIGHT, ROOMS[section].center[1]),
+  ]),
+) as Record<LibrarySection, THREE.Vector3>
+const SECTION_DOORWAYS = Object.fromEntries(
+  (Object.keys(ROOMS) as LibrarySection[]).map((section) => [
+    section, new THREE.Vector3(ROOMS[section].doorway[0], .09, ROOMS[section].doorway[1]),
+  ]),
+) as Record<LibrarySection, THREE.Vector3>
+const SECTION_ACCENTS = Object.fromEntries(
+  (Object.keys(ROOMS) as LibrarySection[]).map((section) => [section, ROOMS[section].accent]),
+) as Record<LibrarySection, number>
 
 const KIND_GEOMETRY: Record<SurfNodeKind, () => THREE.BufferGeometry> = {
   home: () => new THREE.CylinderGeometry(.8, 1.05, .72, 8),
@@ -268,15 +254,15 @@ function makeArchitecturalGuide(
   if (currentSection !== targetSection && targetFloor === 0) {
     if (currentSection !== 'atrium' && startFloor === 0) {
       const exit = SECTION_DOORWAYS[currentSection].clone()
-      exit.y = startBase + .09
+      exit.y = startBase + CAMERA_HEIGHT
       points.push(exit)
-      points.push(new THREE.Vector3(0, startBase + .09, exit.z))
+      points.push(new THREE.Vector3(0, startBase + CAMERA_HEIGHT, exit.z))
     }
 
     const entry = SECTION_DOORWAYS[targetSection].clone()
-    entry.y = targetBase + .09
+    entry.y = targetBase + CAMERA_HEIGHT
     if (targetSection !== 'atrium') {
-      points.push(new THREE.Vector3(0, targetBase + .09, entry.z))
+      points.push(new THREE.Vector3(0, targetBase + CAMERA_HEIGHT, entry.z))
       points.push(entry)
     } else {
       points.push(entry)
@@ -297,12 +283,13 @@ function makeArchitecturalGuide(
     return makeCurve(start, destination, .03)
   }
 
-  return new THREE.CatmullRomCurve3(
-    deduped,
-    false,
-    'centripetal',
-    .35,
-  )
+  // Linear segments stay inside the explicit doorway corridor. A spline
+  // can bow into a wall even when each of its control points is safe.
+  const route = new THREE.CurvePath<THREE.Vector3>()
+  for (let index = 1; index < deduped.length; index++) {
+    route.add(new THREE.LineCurve3(deduped[index - 1], deduped[index]))
+  }
+  return route
 }
 
 function createSectionSignTexture(
@@ -431,6 +418,7 @@ export default function DevWebSurf3D({
   onFloorChange,
 }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null)
+  const cameraState = useRef<{position: THREE.Vector3; yaw: number; pitch: number} | null>(null)
   const selectedRef = useRef(selectedId)
   const routeTargetRef = useRef(routeTargetId)
   const travelRequestRef = useRef(travelRequest)
@@ -467,11 +455,8 @@ export default function DevWebSurf3D({
     scene.fog = new THREE.FogExp2(0x0c0e16, .0115)
 
     const camera = new THREE.PerspectiveCamera(62, 1, .07, 140)
-    camera.position.set(
-      0,
-      currentFloorRef.current * LIBRARY_FLOOR_HEIGHT + CAMERA_HEIGHT,
-      13,
-    )
+    camera.position.set(...SPAWN)
+    if (cameraState.current) camera.position.copy(cameraState.current.position)
 
     const renderer = new THREE.WebGLRenderer({
       antialias: true,
@@ -1131,320 +1116,113 @@ export default function DevWebSurf3D({
     })
     architecturalGeometries.push(scanGateGeometry)
 
-    addSectionFloorGlow('atrium', 0, 7, 4.2)
-    addSectionFloorGlow('featured', 0, -12.5, 5.4)
-    addSectionFloorGlow('latest', -13, -14, 4.8)
-    addSectionFloorGlow('topics', 13, -14, 4.8)
-    addSectionFloorGlow('creators', 13, -25.5, 4.4)
-    addSectionFloorGlow('search', -13, -25.5, 4.4)
-    addSectionFloorGlow('archive', 0, -39.5, 4.3)
-
-    addDoorwayBeacon('featured', 0, -5.4, 0)
-    addDoorwayBeacon('latest', -8.35, -5.2, Math.PI / 2)
-    addDoorwayBeacon('topics', 8.35, -5.2, Math.PI / 2)
-    addDoorwayBeacon('creators', 8.35, -21.1, Math.PI / 2)
-    addDoorwayBeacon('search', -8.35, -21.1, Math.PI / 2)
-    addDoorwayBeacon('archive', 0, -34.4, 0)
-
-    // Multi-level building shell. Upper floors are real slabs with a
-    // central lift void so vertical travel never clips through geometry.
-    const buildingHeight = LIBRARY_FLOOR_COUNT * LIBRARY_FLOOR_HEIGHT
-    addWall(-19, -15, .38, 60, buildingHeight, concrete, 0)
-    addWall(19, -15, .38, 60, buildingHeight, concrete, 0)
-    addWall(0, -44.7, 38, .38, buildingHeight, concrete, 0)
-    addWall(-10.4, 14.7, 17.2, .38, buildingHeight, concrete, 0)
-    addWall(10.4, 14.7, 17.2, .38, buildingHeight, concrete, 0)
-
-    function addUpperFloor(floor: number) {
-      const base = floor * LIBRARY_FLOOR_HEIGHT
-      addFloor(-10.35, -15, 17.3, 60, floorMaterial, base)
-      addFloor(10.35, -15, 17.3, 60, floorMaterial, base)
-      addFloor(0, -20, 3.4, 50, floorMaterial, base)
-      addFloor(0, 12, 3.4, 6, floorMaterial, base)
-
-      const floorGrid = new THREE.GridHelper(
-        36,
-        36,
-        floor % 2 === 0 ? 0x53d3ff : 0x5965e8,
-        0x1b2340,
-      )
-      floorGrid.position.set(0, base + .012, -15)
-      const floorGridMaterials = Array.isArray(floorGrid.material)
-        ? floorGrid.material
-        : [floorGrid.material]
-      floorGridMaterials.forEach((material) => {
-        material.transparent = true
-        material.opacity = .085
-        material.blending = THREE.AdditiveBlending
-        architecturalMaterials.push(material)
-      })
-      scene.add(floorGrid)
-
-      const aisleLightGeometry = new THREE.BoxGeometry(.04, .025, 48)
-      architecturalGeometries.push(aisleLightGeometry)
-      const aisleLightMaterial = new THREE.MeshBasicMaterial({
-        color: floor % 2 === 0 ? 0x53d3ff : 0x7c83ff,
-        transparent: true,
-        opacity: .16,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-      })
-      architecturalMaterials.push(aisleLightMaterial)
-      ;[-1.7, 1.7].forEach((x) => {
-        const aisleLight = new THREE.Mesh(
-          aisleLightGeometry,
-          aisleLightMaterial,
-        )
-        aisleLight.position.set(x, base + 4.55, -16)
-        scene.add(aisleLight)
-      })
-
-      const railGeometry = new THREE.BoxGeometry(3.7, .055, .055)
-      const sideRailGeometry = new THREE.BoxGeometry(.055, .055, 4.4)
-      architecturalGeometries.push(railGeometry, sideRailGeometry)
-      const railMaterial = new THREE.MeshBasicMaterial({
-        color: 0x53d3ff,
-        transparent: true,
-        opacity: .2,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-      })
-      architecturalMaterials.push(railMaterial)
-
-      ;[5, 9].forEach((z) => {
-        const rail = new THREE.Mesh(railGeometry, railMaterial)
-        rail.position.set(0, base + 1.05, z)
-        scene.add(rail)
-      })
-      ;[-1.7, 1.7].forEach((x) => {
-        const rail = new THREE.Mesh(sideRailGeometry, railMaterial)
-        rail.position.set(x, base + 1.05, 7)
-        scene.add(rail)
-      })
-
-      const levelTexture = createTextTexture(
-        'LEVEL ' + String(floor + 1).padStart(2, '0'),
-        'DEEP DEV COLLECTION',
-        floor % 2 === 0 ? '#53d3ff' : '#7c83ff',
-        640,
-        160,
-      )
-      labelsToDispose.push(levelTexture)
-      const levelMaterial = new THREE.SpriteMaterial({
-        map: levelTexture,
-        transparent: true,
-        depthWrite: false,
-        toneMapped: false,
-      })
-      architecturalMaterials.push(levelMaterial)
-      const levelSprite = new THREE.Sprite(levelMaterial)
-      levelSprite.position.set(0, base + 2.7, 4.6)
-      levelSprite.scale.set(5.4, 1.35, 1)
-      scene.add(levelSprite)
+    // The readable floor is a corridor with six side rooms. Decorative upper
+    // levels have no collision, routes or article nodes.
+    addFloor(0, -30, 49, 91)
+    addWall(-24.4, -30, .3, 90, 6)
+    addWall(24.4, -30, .3, 90, 6)
+    addWall(0, -75, 49, .3, 6)
+    addWall(0, 14.7, 49, .3, 6)
+    for (const z of [-22, -42, -62]) {
+      addWall(-16.2, z, 16, .28, 5)
+      addWall(16.2, z, 16, .28, 5)
     }
-
-    for (let floor = 1; floor < LIBRARY_FLOOR_COUNT; floor += 1) {
-      addUpperFloor(floor)
-    }
-    addFloor(0, -15, 38, 60, concrete, buildingHeight)
-
-    // Central lift shaft ties every floor together visually and is also the
-    // route used by cross-floor travel.
-    const liftColumnGeometry = new THREE.BoxGeometry(.07, buildingHeight, .07)
-    const liftRingGeometry = new THREE.BoxGeometry(3.5, .045, 4.1)
-    architecturalGeometries.push(liftColumnGeometry, liftRingGeometry)
-    const liftMaterial = new THREE.MeshBasicMaterial({
-      color: 0x53d3ff,
-      transparent: true,
-      opacity: .22,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    })
-    architecturalMaterials.push(liftMaterial)
-    ;[-1.65, 1.65].forEach((x) => {
-      ;[5.05, 8.95].forEach((z) => {
-        const column = new THREE.Mesh(liftColumnGeometry, liftMaterial)
-        column.position.set(x, buildingHeight / 2, z)
-        scene.add(column)
-      })
-    })
-    for (let floor = 0; floor <= LIBRARY_FLOOR_COUNT; floor += 1) {
-      const ring = new THREE.Mesh(liftRingGeometry, liftMaterial)
-      ring.position.set(0, floor * LIBRARY_FLOOR_HEIGHT + .04, 7)
-      scene.add(ring)
-    }
-
-    // Main library architecture.
-    addFloor(0, -15, 34, 58)
-    addFloor(-13, -13, 16, 28)
-    addFloor(13, -13, 16, 28)
-    addFloor(0, -39, 18, 12)
-
-    // Atrium shell and central nave. Side walls are segmented so the
-    // library has actual doorways into each wing instead of invisible
-    // graph-style travel through walls.
-    ;[-8.9, 8.9].forEach((x) => {
-      addWall(x, 7, .35, 10, 5.8)
-      addWall(x, -12.5, .35, 11, 5.8)
-      addWall(x, -32.5, .35, 17, 5.8)
-    })
-    addWall(0, 14.5, 18, .35, 5.8)
-    addWall(0, -44.5, 18, .35, 5.8)
-
-    // Wing separators leave intentional door-sized gaps.
-    addWall(-13, 1.8, 7.5, .28, 4.6)
-    addWall(-13, -29.5, 7.5, .28, 4.6)
-    addWall(13, 1.8, 7.5, .28, 4.6)
-    addWall(13, -29.5, 7.5, .28, 4.6)
-
-    // Build shelves from article occupancy. If a shelf exists, it has books.
-    // This removes the distracting empty-furniture problem on every floor.
-    const occupiedShelfUnits = new Map<
-      string,
-      {
-        x: number
-        z: number
-        rotationY: number
-        floorBase: number
+    // Every corridor opening is wider than the player's collision diameter.
+    for (const section of ROOM_ORDER) {
+      const {center, doorway, accent} = ROOMS[section]
+      const left = center[0] < 0
+      const edgeX = left ? -8 : 8
+      for (const dz of [-6, 6]) {
+        addWall(edgeX, center[1] + dz, .28, 8.6, 5)
       }
-    >()
-
+      addSectionFloorGlow(section, center[0], center[1], 6)
+      addDoorwayBeacon(section, doorway[0], doorway[1], Math.PI / 2)
+      addSectionSign(section, left ? -11 : 11, 3.9, center[1], '#' + accent.toString(16).padStart(6, '0'), left ? Math.PI / 2 : -Math.PI / 2)
+      const light = new THREE.PointLight(accent, 3.3, 13, 2)
+      light.position.set(center[0], 3.4, center[1])
+      scene.add(light)
+      // Each room has a recognisable center object and floor treatment.
+      const pedestalGeometry = section === 'topics'
+        ? new THREE.IcosahedronGeometry(.7, 1)
+        : section === 'search'
+          ? new THREE.BoxGeometry(1.35, 1.05, 1.35)
+          : section === 'creators'
+            ? new THREE.CylinderGeometry(.58, .8, 1.15, 12)
+            : section === 'archive'
+              ? new THREE.OctahedronGeometry(.77)
+              : section === 'latest'
+                ? new THREE.ConeGeometry(.85, 1.4, 6)
+                : new THREE.TorusGeometry(.76, .17, 8, 20)
+      architecturalGeometries.push(pedestalGeometry)
+      const pedestalMaterial = new THREE.MeshStandardMaterial({color: accent, metalness: .65, roughness: .38})
+      architecturalMaterials.push(pedestalMaterial)
+      const pedestal = new THREE.Mesh(pedestalGeometry, pedestalMaterial)
+      pedestal.position.set(center[0], 1.05, center[1])
+      scene.add(pedestal)
+      collisionRects.push({minX: center[0]-1.1, maxX: center[0]+1.1, minZ: center[1]-1.1, maxZ: center[1]+1.1, minY: 0, maxY: 2})
+    }
+    addSectionFloorGlow('atrium', 0, 8, 5)
+    addSectionSign('atrium', 0, 4.5, 7, '#f5f5f5')
+    addWall(-8, 9, .28, 11, 5)
+    addWall(8, 9, .28, 11, 5)
+    // Framing above eye level hints at a much taller building without
+    // implying access to shelves that cannot be reached.
+    for (const y of [6.4, 10.6, 14.8]) {
+      for (const x of [-22.7, 22.7]) {
+        const balcony = addFloor(x, -30, 2.7, 87, floorMaterial, y)
+        balcony.userData.decorative = true
+        for (let z = -69; z < 8; z += 5) {
+          const silhouette = new THREE.Mesh(new THREE.BoxGeometry(1.4, 2.2, 2.6), shelfMaterial)
+          architecturalGeometries.push(silhouette.geometry)
+          silhouette.position.set(x, y + 1.1, z)
+          scene.add(silhouette)
+        }
+      }
+    }
+    // Ground shelves exist only when their stable shelf ID has live books.
+    const occupiedShelfUnits = new Map<string, {x: number; z: number; rotationY: number}>()
     nodes.forEach((node) => {
       if (node.kind !== 'article' || !node.shelfKey) return
-
-      const physicalKey =
-        (node.floorIndex ?? 0) +
-        ':' +
-        node.shelfKey.replace(/:level-\d+$/, '')
-      if (occupiedShelfUnits.has(physicalKey)) return
-
-      const rotationY = node.rotationY ?? 0
-      const floorIndex = node.floorIndex ?? 0
-      const slotSpacing = floorIndex === 0 ? 1.02 : .96
-      const slotOffset = ((node.shelfSlot ?? 1) - 1) * slotSpacing
-      const front = .42
-
-      const localX = Math.cos(rotationY) * slotOffset
-      const localZ = -Math.sin(rotationY) * slotOffset
-      const frontX = Math.sin(rotationY) * front
-      const frontZ = Math.cos(rotationY) * front
-
-      occupiedShelfUnits.set(physicalKey, {
-        x: node.position[0] - localX - frontX,
-        z: node.position[2] - localZ - frontZ,
-        rotationY,
-        floorBase: floorIndex * LIBRARY_FLOOR_HEIGHT,
-      })
+      const key = node.shelfKey.replace(/:level-\d+$/, '')
+      if (occupiedShelfUnits.has(key)) return
+      const shelf = ROOMS[node.section ?? 'archive'].shelves.find((item) => key.includes(item.id))
+      if (shelf) occupiedShelfUnits.set(key, shelf)
     })
+    occupiedShelfUnits.forEach(({x, z, rotationY}) => addShelf(x, z, 4.5, rotationY))
+    // The model adapter is dormant until a real file is supplied. The
+    // procedural shelf keeps the same collision and book anchor positions.
+    const shelfAssetPath = LIBRARY_ASSETS.bookshelf
+    if (shelfAssetPath) {
+      void loadLibraryAsset(shelfAssetPath, 4.5).then((model) => {
+        if (destroyed) return
+        occupiedShelfUnits.forEach(({x, z, rotationY}) => {
+          const instance = model.clone(true)
+          instance.position.set(x, 0, z)
+          instance.rotation.y = rotationY
+          scene.add(instance)
+        })
+      }).catch(() => {/* The procedural shelves remain usable. */})
+    }
+    const markerGeometry = new THREE.CylinderGeometry(.9, 1.2, 3.4, 12)
+    architecturalGeometries.push(markerGeometry)
+    const marker = new THREE.Mesh(markerGeometry, brass)
+    marker.position.set(LANDMARK[0], 1.7, LANDMARK[1])
+    scene.add(marker)
+    collisionRects.push({minX: -1.3, maxX: 1.3, minZ: -73.3, maxZ: -70.7, minY: 0, maxY: 4})
 
-    occupiedShelfUnits.forEach(
-      ({x, z, rotationY, floorBase}) => {
-        addShelf(
-          x,
-          z,
-          floorBase === 0 ? 4.5 : 4.45,
-          rotationY,
-          floorBase,
-        )
-      },
-    )
-
-    const ceilingRailGeometry = new THREE.BoxGeometry(.035, .035, 52)
-    const ceilingRailMaterial = new THREE.MeshBasicMaterial({
-      color: 0x3148b5,
-      transparent: true,
-      opacity: .28,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    })
-    architecturalGeometries.push(ceilingRailGeometry)
-    architecturalMaterials.push(ceilingRailMaterial)
-    ;[-2.25, 2.25].forEach((x) => {
-      const rail = new THREE.Mesh(
-        ceilingRailGeometry,
-        ceilingRailMaterial,
-      )
-      rail.position.set(x, 4.72, -15)
-      scene.add(rail)
-    })
-
-    const wingRailGeometry = new THREE.BoxGeometry(.03, .03, 22)
-    architecturalGeometries.push(wingRailGeometry)
-    ;[-13, 13].forEach((x) => {
-      const rail = new THREE.Mesh(
-        wingRailGeometry,
-        ceilingRailMaterial,
-      )
-      rail.position.set(x, 4.15, -15.5)
-      scene.add(rail)
-    })
-
-    addSectionSign('atrium', 0, 4.6, 5.5, '#f5f5f5')
-    addSectionSign('featured', 0, 4.1, -5.8, '#3b49df')
-    addSectionSign(
-      'latest',
-      -13,
-      4.1,
-      -6.6,
-      '#5b6cff',
-      Math.PI / 2,
-    )
-    addSectionSign(
-      'topics',
-      13,
-      4.1,
-      -6.6,
-      '#53d3ff',
-      -Math.PI / 2,
-    )
-    addSectionSign(
-      'creators',
-      13,
-      4.1,
-      -21.4,
-      '#ae7bff',
-      -Math.PI / 2,
-    )
-    addSectionSign(
-      'search',
-      -13,
-      4.1,
-      -21.4,
-      '#ff4fd8',
-      Math.PI / 2,
-    )
-    addSectionSign('archive', 0, 4.1, -35.5, '#a3a3a3')
-
-    // A retro-futuristic information desk in the atrium.
-    const deskGeometry = new THREE.CylinderGeometry(1.5, 1.75, .95, 10)
+    const deskGeometry = new THREE.BoxGeometry(3, .95, 1)
     architecturalGeometries.push(deskGeometry)
     const desk = new THREE.Mesh(deskGeometry, brass)
-    desk.position.set(0, .48, 7)
-    desk.castShadow = true
+    desk.position.set(-3.8, .48, 8)
     scene.add(desk)
-    collisionRects.push({
-      minX: -1.7,
-      maxX: 1.7,
-      minZ: 5.3,
-      maxZ: 8.7,
-      minY: 0,
-      maxY: 1.2,
-    })
-
-    const deskGlowGeometry = new THREE.TorusGeometry(1.15, .028, 8, 72)
-    const deskGlowMaterial = new THREE.MeshBasicMaterial({
-      color: 0x77d9d1,
-      transparent: true,
-      opacity: .35,
-      blending: THREE.AdditiveBlending,
-    })
+    collisionRects.push({minX: -5.3, maxX: -2.3, minZ: 7.5, maxZ: 8.5, minY: 0, maxY: 1.2})
+    const deskGlowGeometry = new THREE.TorusGeometry(.55, .03, 8, 48)
     architecturalGeometries.push(deskGlowGeometry)
+    const deskGlowMaterial = new THREE.MeshBasicMaterial({color: 0x7295ff, transparent: true, opacity: .3})
     architecturalMaterials.push(deskGlowMaterial)
     const deskGlow = new THREE.Mesh(deskGlowGeometry, deskGlowMaterial)
-    deskGlow.rotation.x = Math.PI / 2
-    deskGlow.position.set(0, 1.04, 7)
+    deskGlow.position.set(-3.8, 1.05, 8)
     scene.add(deskGlow)
-
     const nodeById = new Map(nodes.map((node) => [node.id, node]))
     const visuals = new Map<string, Visual>()
     const interactive: THREE.Object3D[] = []
@@ -1967,8 +1745,8 @@ export default function DevWebSurf3D({
       '(prefers-reduced-motion: reduce)',
     ).matches
     const euler = new THREE.Euler(0, 0, 0, 'YXZ')
-    let yaw = 0
-    let pitch = 0
+    let yaw = cameraState.current?.yaw ?? 0
+    let pitch = cameraState.current?.pitch ?? 0
     let hoverId: string | null = null
     let currentSection: LibrarySection = 'atrium'
     let lastTime = performance.now()
@@ -2031,7 +1809,7 @@ export default function DevWebSurf3D({
     function pickCenter() {
       raycaster.setFromCamera(center, camera)
       const hit = raycaster.intersectObjects(interactive, false)[0]
-      if (!hit) return null
+      if (!hit || hit.distance > 3.8) return null
       const nodeId = hit.object.userData.nodeId as string | undefined
       const node = nodeId ? nodeById.get(nodeId) ?? null : null
       if (!node) return null
@@ -2106,8 +1884,8 @@ export default function DevWebSurf3D({
       const nextX = position.clone()
       nextX.x = THREE.MathUtils.clamp(
         nextX.x + deltaMove.x,
-        -19.55,
-        19.55,
+        WALK_BOUNDS.minX,
+        WALK_BOUNDS.maxX,
       )
       if (!collides(nextX)) {
         position.x = nextX.x
@@ -2118,8 +1896,8 @@ export default function DevWebSurf3D({
       const nextZ = position.clone()
       nextZ.z = THREE.MathUtils.clamp(
         nextZ.z + deltaMove.z,
-        -43.15,
-        13.65,
+        WALK_BOUNDS.minZ,
+        WALK_BOUNDS.maxZ,
       )
       if (!collides(nextZ)) {
         position.z = nextZ.z
@@ -2994,6 +2772,7 @@ export default function DevWebSurf3D({
     frame = requestAnimationFrame(animate)
 
     return () => {
+      cameraState.current = {position: camera.position.clone(), yaw, pitch}
       cancelAnimationFrame(frame)
       resizeObserver.disconnect()
       renderer.domElement.removeEventListener('click', onCanvasClick)

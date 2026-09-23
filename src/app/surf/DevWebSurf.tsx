@@ -9,6 +9,7 @@ import {
   useState,
 } from 'react'
 import DevWebSurf3D from './DevWebSurf3D'
+import {FLOOR_COUNT, ROOMS, ROOM_ORDER, EYE_HEIGHT} from './libraryLayout'
 import type {
   DevArticle,
   DevArticleSummary,
@@ -22,11 +23,9 @@ import type {
 import styles from './surf.module.css'
 
 const DEFAULT_USERNAME = 'mikachu'
-const LIBRARY_FLOOR_COUNT = 4
+const LIBRARY_FLOOR_COUNT = FLOOR_COUNT
 const LIBRARY_FLOOR_HEIGHT = 5.2
-const DEEP_CATALOG_PAGES = 8
-const MEGA_SHELF_CAPACITY =
-  (LIBRARY_FLOOR_COUNT - 1) * 4 * 6 * 9
+const MEGA_SHELF_CAPACITY = 18
 
 const SECTION_COPY: Record<
   LibrarySection,
@@ -160,49 +159,9 @@ type ShelfPlacement = Pick<
   | 'floorIndex'
 >
 
-const SHELF_ANCHORS: Partial<
-  Record<
-    LibrarySection,
-    Array<{
-      id: string
-      x: number
-      z: number
-      rotationY: number
-      front: number
-    }>
-  >
-> = {
-  featured: [
-    {id: 'featured-left', x: -4.9, z: -10, rotationY: 0, front: .42},
-    {id: 'featured-right', x: 4.9, z: -10, rotationY: 0, front: .42},
-    {id: 'featured-deep-left', x: -4.9, z: -17, rotationY: 0, front: .42},
-    {id: 'featured-deep-right', x: 4.9, z: -17, rotationY: 0, front: .42},
-  ],
-  latest: [
-    {id: 'latest-outer', x: -14.8, z: -10, rotationY: Math.PI / 2, front: .42},
-    {id: 'latest-inner', x: -11.1, z: -10, rotationY: Math.PI / 2, front: .42},
-    {id: 'latest-deep-outer', x: -14.8, z: -18, rotationY: Math.PI / 2, front: .42},
-    {id: 'latest-deep-inner', x: -11.1, z: -18, rotationY: Math.PI / 2, front: .42},
-  ],
-  topics: [
-    {id: 'topics-inner', x: 11.1, z: -10, rotationY: -Math.PI / 2, front: .42},
-    {id: 'topics-outer', x: 14.8, z: -10, rotationY: -Math.PI / 2, front: .42},
-    {id: 'topics-deep-inner', x: 11.1, z: -18, rotationY: -Math.PI / 2, front: .42},
-    {id: 'topics-deep-outer', x: 14.8, z: -18, rotationY: -Math.PI / 2, front: .42},
-  ],
-  creators: [
-    {id: 'creators-inner', x: 11.1, z: -25.5, rotationY: -Math.PI / 2, front: .42},
-    {id: 'creators-outer', x: 14.8, z: -25.5, rotationY: -Math.PI / 2, front: .42},
-  ],
-  search: [
-    {id: 'search-outer', x: -14.8, z: -25.5, rotationY: Math.PI / 2, front: .42},
-    {id: 'search-inner', x: -11.1, z: -25.5, rotationY: Math.PI / 2, front: .42},
-  ],
-  archive: [
-    {id: 'archive-left', x: -4.6, z: -39.5, rotationY: 0, front: .42},
-    {id: 'archive-right', x: 4.6, z: -39.5, rotationY: 0, front: .42},
-  ],
-}
+const SHELF_ANCHORS = Object.fromEntries(
+  ROOM_ORDER.map((section) => [section, ROOMS[section].shelves]),
+) as Partial<Record<LibrarySection, typeof ROOMS.featured.shelves>>
 
 function shelfPlacement(
   section: LibrarySection,
@@ -233,13 +192,13 @@ function shelfPlacement(
   const y = .7 + level * 1.1
 
   let x = anchor.x
-  let z = anchor.z + anchor.front
+  let z = anchor.z + .42
 
   if (Math.abs(anchor.rotationY) < .1) {
     x += localOffset
   } else {
     z += localOffset
-    x += Math.sign(anchor.rotationY) * anchor.front
+    x += Math.sign(anchor.rotationY) * .42
   }
 
   return {
@@ -250,47 +209,6 @@ function shelfPlacement(
     shelfSlot: slot,
     shelfOrder: localIndex,
     floorIndex: 0,
-  }
-}
-
-function megaShelfPlacement(index: number): ShelfPlacement {
-  const catalogFloorCount = LIBRARY_FLOOR_COUNT - 1
-  const floorIndex = 1 + (index % catalogFloorCount)
-  const floorBookIndex = Math.floor(index / catalogFloorCount)
-  const booksPerShelf = 9
-  const shelfIndex = Math.floor(floorBookIndex / booksPerShelf)
-  const localIndex = floorBookIndex % booksPerShelf
-  const level = Math.floor(localIndex / 3)
-  const slot = localIndex % 3
-
-  const columns = [-12, -4, 4, 12]
-  const rows = [-9.5, -15.2, -20.9, -26.6, -32.3, -38]
-  const columnIndex = shelfIndex % columns.length
-  const rowIndex = Math.floor(shelfIndex / columns.length) % rows.length
-  const rotationY = rowIndex % 2 === 0 ? 0 : Math.PI
-  const localOffset = (slot - 1) * .96
-  const floorBase = floorIndex * LIBRARY_FLOOR_HEIGHT
-
-  return {
-    position: [
-      columns[columnIndex] + localOffset,
-      floorBase + .7 + level * 1.1,
-      rows[rowIndex] + (rotationY === 0 ? .42 : -.42),
-    ],
-    rotationY,
-    shelfKey:
-      'catalog:f' +
-      floorIndex +
-      ':r' +
-      rowIndex +
-      ':c' +
-      columnIndex +
-      ':level-' +
-      level,
-    shelfLevel: level,
-    shelfSlot: slot,
-    shelfOrder: localIndex,
-    floorIndex,
   }
 }
 
@@ -323,7 +241,7 @@ function buildLibraryGraph(
     subtitle: 'information atrium',
     href: 'https://dev.to/',
     section: 'atrium',
-    position: [0, .55, 7],
+    position: [0, .55, 9.5],
     floorIndex: 0,
     importance: 2,
     accent: SECTION_COPY.atrium.accent,
@@ -333,14 +251,11 @@ function buildLibraryGraph(
     id: string
     section: LibrarySection
     position: [number, number, number]
-  }> = [
-    {id: 'section:featured', section: 'featured', position: [0, 1.3, -5]},
-    {id: 'section:latest', section: 'latest', position: [-10.3, 1.3, -5]},
-    {id: 'section:topics', section: 'topics', position: [10.3, 1.3, -5]},
-    {id: 'section:creators', section: 'creators', position: [10.3, 1.3, -20.4]},
-    {id: 'section:search', section: 'search', position: [-10.3, 1.3, -20.4]},
-    {id: 'section:archive', section: 'archive', position: [0, 1.3, -34.2]},
-  ]
+  }> = ROOM_ORDER.map((section) => ({
+    id: 'section:' + section,
+    section,
+    position: [ROOMS[section].travel[0], 1.3, ROOMS[section].travel[1]],
+  }))
 
   sections.forEach(({id, section, position}) => {
     const copy = SECTION_COPY[section]
@@ -441,9 +356,9 @@ function buildLibraryGraph(
       tag: tag.name,
       section: 'topics',
       position: [
-        column === 0 ? 11.1 : 14.6,
+        column === 0 ? -19.3 : -12.7,
         1.15,
-        -9.3 - row * 2.7,
+        -26.4 - row * 2.2,
       ],
       floorIndex: 0,
       importance: 1.1,
@@ -481,9 +396,9 @@ function buildLibraryGraph(
       username,
       section: 'creators',
       position: [
-        index % 2 === 0 ? 11.2 : 14.7,
+        index % 2 === 0 ? 12.4 : 19.6,
         1.2,
-        -22.5 - Math.floor(index / 2) * 3,
+        -27.5 - Math.floor(index / 2) * 3,
       ],
       floorIndex: 0,
       importance: 1 + articles.length * .12,
@@ -508,7 +423,7 @@ function buildLibraryGraph(
       href: 'https://dev.to/' + bootstrap.profile.username,
       username: bootstrap.profile.username,
       section: 'creators',
-      position: [13, 1.25, -20.8],
+      position: [16, 1.25, -34],
       floorIndex: 0,
       importance: 2,
       accent: '#7c83ff',
@@ -591,28 +506,19 @@ function buildLibraryGraph(
     .filter((article) => !alreadyPlaced.has(article.id))
     .slice(0, MEGA_SHELF_CAPACITY)
     .forEach((article, index) => {
-      const id = 'article:' + article.id
-      const placement = megaShelfPlacement(index)
       addNode({
-        id,
+        id: 'article:' + article.id,
         kind: 'article',
         title: article.title,
-        subtitle:
-          '@' +
-          article.user.username +
-          ' · floor ' +
-          ((placement.floorIndex ?? 0) + 1),
+        subtitle: '@' + article.user.username,
         href: article.url,
         articleId: article.id,
         username: article.user.username,
         section: 'archive',
         payload: article,
-        ...placement,
-        importance: articleImportance(article) * .82,
-        accent:
-          (placement.floorIndex ?? 0) % 2 === 0
-            ? '#3b49df'
-            : '#53d3ff',
+        ...shelfPlacement('archive', index + 6),
+        importance: articleImportance(article),
+        accent: SECTION_COPY.archive.accent,
       })
     })
 
@@ -766,46 +672,24 @@ export default function DevWebSurf() {
     }
   }, [])
 
+  // The archive is a query, not a mesh dump. Load a bounded page when visited.
   useEffect(() => {
+    if (currentSection !== 'archive' || catalogArticles.length) return
     let cancelled = false
-
-    fetch(
-      '/api/devto?mode=catalog&pages=' +
-        DEEP_CATALOG_PAGES +
-        '&per_page=100',
-    )
+    setCatalogLoading(true)
+    fetch('/api/devto?mode=catalog&pages=1&per_page=30')
       .then(async (response) => {
-        const data = (await response.json()) as {
-          articles?: DevArticleSummary[]
-          error?: string
-        }
-        if (!response.ok) {
-          throw new Error(data.error ?? 'Could not load deep catalog')
-        }
+        const data = (await response.json()) as {articles?: DevArticleSummary[]; error?: string}
+        if (!response.ok) throw new Error(data.error ?? 'Could not load archive')
         return data
       })
-      .then((data) => {
-        if (!cancelled) {
-          setCatalogArticles(data.articles ?? [])
-        }
+      .then((data) => { if (!cancelled) setCatalogArticles(data.articles ?? []) })
+      .catch((reason) => {
+        if (!cancelled) setError(reason instanceof Error ? reason.message : 'Could not load archive')
       })
-      .catch((nextError) => {
-        if (!cancelled) {
-          setError(
-            nextError instanceof Error
-              ? nextError.message
-              : 'Could not load deep catalog',
-          )
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setCatalogLoading(false)
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [])
+      .finally(() => { if (!cancelled) setCatalogLoading(false) })
+    return () => { cancelled = true }
+  }, [currentSection, catalogArticles.length])
 
   const graph = useMemo(
     () =>
@@ -895,7 +779,7 @@ export default function DevWebSurf() {
       href: 'https://dev.to/t/' + tag,
       tag,
       section: 'topics',
-      position: [13, 1.2, -20.4],
+      position: [ROOMS.topics.center[0], 1.2, ROOMS.topics.center[1]],
       importance: 1.3,
         accent: SECTION_COPY.topics.accent,
       })
@@ -1089,7 +973,7 @@ export default function DevWebSurf() {
           href: 'https://dev.to/' + data.profile.username,
           username: data.profile.username,
           section: 'creators',
-          position: [13, 1.2, -28.5],
+          position: [ROOMS.creators.center[0], 1.2, ROOMS.creators.center[1]],
           importance: 1.8,
           accent: SECTION_COPY.creators.accent,
         })
@@ -1113,7 +997,7 @@ export default function DevWebSurf() {
           title: 'search: ' + value,
           subtitle: 'temporary search aisle',
           section: 'search',
-          position: [-13, 1.1, -22.4],
+          position: [ROOMS.search.center[0], 1.1, ROOMS.search.center[1]],
           importance: 1.8,
           accent: SECTION_COPY.search.accent,
         })
@@ -1331,31 +1215,13 @@ export default function DevWebSurf() {
         </nav>
       )}
 
-      <nav className={styles.floorRail} aria-label="Library floors">
-        <span>Floor</span>
-        {Array.from({length: LIBRARY_FLOOR_COUNT}, (_, floor) => (
-          <button
-            type="button"
-            key={floor}
-            className={
-              currentFloor === floor
-                ? styles.floorRailActive
-                : ''
-            }
-            onClick={() => requestFloor(floor)}
-          >
-            {String(floor + 1).padStart(2, '0')}
-          </button>
-        ))}
-        <small>
-          {catalogLoading
-            ? 'cataloging…'
-            : Math.min(catalogArticles.length, MEGA_SHELF_CAPACITY) +
-              '/' +
-              MEGA_SHELF_CAPACITY +
-              ' shelf books · keys 1–4'}
-        </small>
-      </nav>
+      <div className={styles.floorRail} role="status">
+        Ground floor · {currentSection === 'archive' && catalogLoading
+          ? 'Loading archive shelves…'
+          : currentSection === 'archive' && !catalogArticles.length
+            ? error || 'No archive books found. Search the live DEV catalog.'
+            : 'Live DEV collection'}
+      </div>
 
       <button
         type="button"
@@ -1482,17 +1348,15 @@ export default function DevWebSurf() {
           {activeNode?.kind === 'article' ? 'put back' : 'inspect'}
         </span>
         <span><kbd>F</kbd> travel</span>
-        <span><kbd>1–4</kbd> floors</span>
-        <span><kbd>Pg↑↓</kbd> lift</span>
         <span><kbd>Shift</kbd> hurry</span>
         <span><kbd>Esc</kbd> cursor</span>
       </section>
 
       {hovered && !activeNode && (
-        <div className={styles.hoverCard}>
+        <div className={styles.hoverCard} role="status" aria-live="polite">
           <span>{hovered.kind}</span>
           <strong>{hovered.title}</strong>
-          <small>E inspect · F travel</small>
+          <small>{hovered.kind === 'article' ? 'E read · F approach' : 'E inspect · F travel'}</small>
         </div>
       )}
 
@@ -1556,7 +1420,7 @@ export default function DevWebSurf() {
                   deep-catalog shelf books
                 </span>
                 <span>
-                  <b>{LIBRARY_FLOOR_COUNT}</b> physical floors
+                  <b>1</b> navigable ground floor
                 </span>
               </div>
               <div className={styles.pageActions}>
@@ -1755,7 +1619,7 @@ export default function DevWebSurf() {
                       href: 'https://dev.to/' + username,
                       username,
                       section: 'creators',
-                      position: [13, 1.2, -28.5],
+                      position: [ROOMS.creators.center[0], 1.2, ROOMS.creators.center[1]],
                       importance: 1.6,
                       accent: SECTION_COPY.creators.accent,
                     })
