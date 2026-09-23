@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import Stackwell3D from './OutdoorLibrary3D'
+import OutdoorLibrary3D from './OutdoorLibrary3D'
 import type {
   DevArticle,
   DevArticleSummary,
@@ -1193,7 +1193,7 @@ export default function DevWebSurf() {
 
   return (
     <main className={styles.page}>
-      <Stackwell3D
+      <OutdoorLibrary3D
         nodes={graph.nodes}
         edges={graph.edges}
         selectedId={selectedId}
