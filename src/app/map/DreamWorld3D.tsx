@@ -959,7 +959,7 @@ export default function DreamWorld3D({
     // neighborhoods prototype while retaining the cinematic renderer,
     // reading ritual, audio, and Sanity-driven content model.
     const libraryBuilding = libraryMode
-      ? createLibraryBuilding(scene)
+      ? createLibraryBuilding(scene, activeLibraryConfig)
       : null
 
     const starCount = settings.starCount
