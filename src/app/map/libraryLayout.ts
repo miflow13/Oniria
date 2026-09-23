@@ -142,6 +142,7 @@ export type ArchiveShelfPlacementOptions = {
   alongJitterScale?: number
   lookAheadScale?: number
   yawJitterScale?: number
+  orientationBay?: number
 }
 
 /**
@@ -198,9 +199,27 @@ export function archiveShelfPlacement(
     (options.yawJitterScale ?? 1)
 
   const yaw =
-    Math.atan2(targetX - world[0], targetZ - world[2]) +
-    Math.PI +
-    yawJitter
+    typeof options.orientationBay === 'number'
+      ? (() => {
+          const orientationFrame = archivePathFrame(
+            options.orientationBay,
+          )
+          const inwardX =
+            -orientationFrame.normalX * side
+          const inwardZ =
+            -orientationFrame.normalZ * side
+          return (
+            Math.atan2(inwardX, inwardZ) +
+            Math.PI +
+            yawJitter
+          )
+        })()
+      : Math.atan2(
+          targetX - world[0],
+          targetZ - world[2],
+        ) +
+        Math.PI +
+        yawJitter
 
   return {
     world,
