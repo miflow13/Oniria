@@ -207,15 +207,15 @@ export type RoomShelfPlacement = {
   floatId: string
   pathBay: number
   districtId: string
-  slotId: LibraryRoomShelfSlotId
-  zone: LibraryRoomShelfZone
+  slotId: string
+  zone: LibraryRoomShelfZone | 'hallway'
 }
 
 export type LibraryRoomLayoutIssue = {
   roomSlot: LibraryRoomSlot
-  slotId: LibraryRoomShelfSlotId
+  slotId: string
   reason: 'outside-room' | 'doorway' | 'overlap'
-  conflictsWith?: LibraryRoomShelfSlotId
+  conflictsWith?: string
 }
 
 const shelfHoverHeights = (
@@ -487,6 +487,8 @@ export function hallwayShelfPlacements(
       `hallway:${district.id}:${side}:${index}`,
     pathBay: district.bay,
     districtId: district.id,
+    slotId: `H${index + 1}`,
+    zone: 'hallway',
   }))
 }
 
