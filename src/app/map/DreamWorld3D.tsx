@@ -115,6 +115,7 @@ export type DreamWorldNode = {
   libraryFloatId?: string
   libraryPathBay?: number
   libraryDistrictId?: string
+  libraryWidthScale?: number
   libraryBooks?: Array<{
     id: string
     title: string
@@ -758,7 +759,7 @@ export default function DreamWorld3D({
       `${quality}::${nodes
         .map(
           (node) =>
-            `${node._id}:${node.articleCount ?? 0}:${node.libraryBooks?.map((book) => book.id + ':' + (book.coverUrl ?? '')).join('|') ?? ''}:${node.world?.join(',') ?? ''}:${node.libraryYaw ?? ''}:${node.libraryDoubleSided ? 1 : 0}:${node.libraryShelfEndCaps ?? ''}:${node.libraryFloatId ?? ''}:${node.libraryPathBay ?? ''}`,
+            `${node._id}:${node.articleCount ?? 0}:${node.libraryBooks?.map((book) => book.id + ':' + (book.coverUrl ?? '')).join('|') ?? ''}:${node.world?.join(',') ?? ''}:${node.libraryYaw ?? ''}:${node.libraryDoubleSided ? 1 : 0}:${node.libraryShelfEndCaps ?? ''}:${node.libraryFloatId ?? ''}:${node.libraryPathBay ?? ''}:${node.libraryWidthScale ?? 1}`,
         )
         .join('|')}::${edges
         .map((edge) => `${edge.id}:${edge.weight}`)
@@ -2538,7 +2539,9 @@ export default function DreamWorld3D({
         shelf.add(pick)
         interactive.push(pick)
 
-        shelf.scale.setScalar(1)
+        const shelfWidthScale =
+          node.libraryWidthScale ?? 1
+        shelf.scale.set(shelfWidthScale, 1, 1)
         group.add(shelf)
         const labelStagger =
           seededUnit(seed, 141) > .5 ? .08 : -.04
@@ -2565,6 +2568,8 @@ export default function DreamWorld3D({
           0,
           -baseYaw,
         )
+        shelfContactShadow.scale.x =
+          node.libraryWidthScale ?? 1
         shelfContactShadow.renderOrder = 1
         shelfContactShadow.userData.libraryDecorative = true
         world.add(shelfContactShadow)
@@ -2572,7 +2577,7 @@ export default function DreamWorld3D({
         const shelfFloatId = node.libraryFloatId ?? node._id
         const shelfFloatSeed = hashString(shelfFloatId)
         const wallBoundShelf =
-          shelfFloatId.includes(':back-wall:') ||
+          shelfFloatId.includes(':divider-wall:') ||
           shelfFloatId.includes(':entry-wall:') ||
           shelfFloatId.includes(':outer-wall:') ||
           shelfFloatId.startsWith('hallway:')
