@@ -866,8 +866,8 @@ export default function OutdoorLibrary3D({
     let yaw = 0
     let pitch = 0
     let navigationTarget: NavigationTarget | null = null
-    let handledTravelNonce = -1
-    let handledFloorNonce = -1
+    let handledTravelNonce = travelRequestRef.current?.nonce ?? -1
+    let handledFloorNonce = floorRequestRef.current?.nonce ?? -1
     let frame = 0
     let lastTime = performance.now()
     let previousTerrace = 0
@@ -917,10 +917,24 @@ export default function OutdoorLibrary3D({
     }
 
     const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement
+      ) {
+        return
+      }
+
       keys.add(event.code)
+      const locked = document.pointerLockElement === renderer.domElement
 
       if (event.code === 'KeyE' && !event.repeat) {
-        if (selectedRef.current) {
+        event.preventDefault()
+        const selected = selectedRef.current
+          ? nodeById.get(selectedRef.current)
+          : null
+        if (selected?.kind === 'article') {
           putBackRef.current()
           return
         }
@@ -930,22 +944,41 @@ export default function OutdoorLibrary3D({
         }
       }
 
-      if (event.code === 'KeyF' && !event.repeat && hoveredId) {
-        const node = nodeById.get(hoveredId)
-        if (node) travelRef.current(node, false)
+      if (event.code === 'KeyF' && !event.repeat) {
+        event.preventDefault()
+        const routed = routeRef.current
+          ? nodeById.get(routeRef.current)
+          : null
+        const aimed = hoveredId ? nodeById.get(hoveredId) : null
+        const targetNode = routed ?? aimed
+        if (targetNode) requestNavigation(targetNode, true)
       }
 
-      if (!event.repeat && /^Digit[1-4]$/.test(event.code)) {
+      if (locked && !event.repeat && /^Digit[1-4]$/.test(event.code)) {
+        event.preventDefault()
         const floor = Number(event.code.slice(-1)) - 1
         floorChangeRef.current(floor)
         requestTerrace(floor)
       }
 
-      if (!event.repeat && (event.code === 'PageUp' || event.code === 'PageDown')) {
+      if (
+        locked &&
+        !event.repeat &&
+        (event.code === 'PageUp' || event.code === 'PageDown')
+      ) {
+        event.preventDefault()
         const delta = event.code === 'PageUp' ? 1 : -1
-        const next = THREE.MathUtils.clamp(currentFloorRef.current + delta, 0, TERRACE_COUNT - 1)
+        const next = THREE.MathUtils.clamp(
+          currentFloorRef.current + delta,
+          0,
+          TERRACE_COUNT - 1,
+        )
         floorChangeRef.current(next)
         requestTerrace(next)
+      }
+
+      if (event.code === 'Escape') {
+        document.exitPointerLock?.()
       }
     }
 
@@ -997,7 +1030,8 @@ export default function OutdoorLibrary3D({
         const distance = camera.position.distanceTo(navigationTarget.position)
         const alpha = 1 - Math.exp(-delta * 3.9)
         camera.position.lerp(navigationTarget.position, alpha)
-        if (distance < .16) {          camera.position.copy(navigationTarget.position)
+        if (distance < .16) {
+          camera.position.copy(navigationTarget.position)
           const completed = navigationTarget
           navigationTarget = null
           if (completed.node) {
