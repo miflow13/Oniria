@@ -1230,13 +1230,8 @@ export default function DevWebSurf3D({
     // shelving once the library became an enclosed building.
 
     // Every room keeps physical shelf positions even before its live query is
-    // opened. Empty neighborhoods therefore still read as a real library.
-    const occupiedShelfKeys = new Set<string>()
-    nodes.forEach((node) => {
-      if (node.kind !== 'article' || !node.shelfKey) return
-      occupiedShelfKeys.add(node.shelfKey.replace(/:level-\d+$/, ''))
-    })
-
+    // opened. The authored shelves remain empty; only live DEV article books
+    // are rendered onto them by the interaction layer below.
     const shelfUnits = ROOM_ORDER.flatMap((section) =>
       ROOMS[section].shelves.map((anchor) => ({
         section,
@@ -1330,8 +1325,6 @@ export default function DevWebSurf3D({
       ['roofTile', 5.2, 'span'],
       ['skyDome', 190, 'span'],
       ['stackShelf', 3.5, 'height'],
-      ['bookPacked', 2.45, 'span'],
-      ['bookLeaning', 2.35, 'span'],
       ['chair', 1.05, 'height'],
       ['issueDesk', 1.45, 'height'],
       ['cardCatalogue', 1.85, 'height'],
@@ -1378,8 +1371,6 @@ export default function DevWebSurf3D({
       const roofTile = loaded.roofTile
       const skyDome = loaded.skyDome
       const stackShelf = loaded.stackShelf
-      const bookPacked = loaded.bookPacked
-      const bookLeaning = loaded.bookLeaning
       const chair = loaded.chair
       const issueDesk = loaded.issueDesk
       const cardCatalogue = loaded.cardCatalogue
@@ -1522,12 +1513,10 @@ export default function DevWebSurf3D({
           }
         }
 
-        tileArea(0, -30, 15.3, 89)
-        ROOM_ORDER.forEach((section) => {
-          const [x, z] = ROOMS[section].center
-          tileArea(x, z, 15.5, 16.4)
-        })
-        tileArea(0, 9, 15.3, 10.5)
+        // Cover the complete enclosed footprint in one pass. The previous
+        // corridor + room tiling left half-metre seams at room thresholds and
+        // larger uncovered strips between neighborhood bays.
+        tileArea(0, -30.15, 48.9, 89.6)
       }
 
       if (roofTile) {
@@ -1550,8 +1539,18 @@ export default function DevWebSurf3D({
               -roofWidth / 2 + cellX * (ix + .5)
             const z =
               roofCenterZ - roofDepth / 2 + cellZ * (iz + .5)
-            const tile = placeAsset(roofTile, x, 5.03, z)
-            // 1.5% overlap removes hairline cracks from floating point
+            const tile = placeAsset(
+              roofTile,
+              x,
+              5.03,
+              z,
+              1,
+              0,
+              Math.PI,
+            )
+            // The source is a floor tile, so rotating it 180° around X puts
+            // its finished face downward into the library. 1.5% overlap
+            // removes hairline cracks from floating point
             // precision and camera-angle aliasing.
             tile.scale.x *= (cellX / roofSize.x) * 1.015
             tile.scale.z *= (cellZ / roofSize.z) * 1.015
@@ -1565,7 +1564,7 @@ export default function DevWebSurf3D({
       }
 
       if (stackShelf) {
-        shelfUnits.forEach((shelf, index) => {
+        shelfUnits.forEach((shelf) => {
           fallbackShelves.get(shelf.key)!.visible = false
           placeAsset(
             stackShelf,
@@ -1575,28 +1574,6 @@ export default function DevWebSurf3D({
             1,
             shelf.rotationY,
           )
-
-          if (!occupiedShelfKeys.has(shelf.key)) {
-            const filler = index % 2 === 0 ? bookPacked : bookLeaning
-            if (filler) {
-              placeAsset(
-                filler,
-                shelf.x,
-                .84,
-                shelf.z,
-                .88,
-                shelf.rotationY,
-              )
-              placeAsset(
-                filler,
-                shelf.x,
-                1.86,
-                shelf.z,
-                .82,
-                shelf.rotationY,
-              )
-            }
-          }
         })
       }
 
