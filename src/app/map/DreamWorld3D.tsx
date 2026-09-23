@@ -2346,7 +2346,9 @@ export default function DreamWorld3D({
                 ? 3.7
                 : district.landmarkType === 'index'
                   ? 3.2
-                  : 2.7
+                  : district.landmarkType === 'dev-monument'
+                    ? 2.25
+                    : 2.7
 
         // Compose signs for a walking-height camera, not an overhead map.
         // The tallest archive towers get extra breathing room so their
@@ -2406,7 +2408,7 @@ export default function DreamWorld3D({
             landmarkGeometry = new THREE.ConeGeometry(1.65, 4.2, 6)
             break
           case 'dev-monument':
-            landmarkGeometry = new THREE.BoxGeometry(2.7, 2.7, 2.7)
+            landmarkGeometry = new THREE.BoxGeometry(3.7, 2.25, .42)
             break
           case 'archive-tower':
             landmarkGeometry = new THREE.CylinderGeometry(
@@ -2433,7 +2435,9 @@ export default function DreamWorld3D({
           opacity:
             district.landmarkType === 'terminal-wall'
               ? .14
-              : .24,
+              : district.landmarkType === 'dev-monument'
+                ? .72
+                : .24,
           depthWrite: false,
           blending: THREE.NormalBlending,
           toneMapped: false,
@@ -2443,7 +2447,8 @@ export default function DreamWorld3D({
           color: district.accent,
           transparent: true,
           opacity: .96,
-          wireframe: true,
+          wireframe:
+            district.landmarkType !== 'dev-monument',
           depthWrite: false,
           blending: THREE.AdditiveBlending,
           toneMapped: false,
@@ -2452,10 +2457,7 @@ export default function DreamWorld3D({
         const landmarkGroup = new THREE.Group()
         landmarkGroup.position.copy(landmarkPosition)
         landmarkGroup.rotation.y =
-          Math.atan2(frame.tangentX, frame.tangentZ) +
-          (district.landmarkType === 'dev-monument'
-            ? Math.PI / 4
-            : 0)
+          Math.atan2(frame.tangentX, frame.tangentZ)
         landmarkGroup.userData.libraryLandmark = true
         landmarkGroup.userData.libraryLandmarkBaseY =
           landmarkPosition.y
@@ -2719,24 +2721,58 @@ export default function DreamWorld3D({
             branchMaterial,
           )
         } else if (district.id === 'front-page') {
-          ;[0, 1, 2].forEach((row) => {
-            const geometry = new THREE.BoxGeometry(
-              2.3 - row * .42,
-              .08,
-              .05,
-            )
-            const headline = new THREE.Mesh(
-              geometry,
-              motifMaterial,
-            )
-            headline.position.set(
-              row === 1 ? -.18 : 0,
-              .68 - row * .34,
-              -1.62,
-            )
-            motifGroup.add(headline)
-            libraryDistrictLandmarkGeometries.push(geometry)
+          const devLetterMaterial = new THREE.MeshBasicMaterial({
+            color: 0xf5f7ff,
+            transparent: true,
+            opacity: .96,
+            depthWrite: false,
+            toneMapped: false,
           })
+
+          const addDevBar = (
+            x: number,
+            y: number,
+            width: number,
+            height: number,
+            rotationZ = 0,
+          ) => {
+            const geometry = new THREE.BoxGeometry(
+              width,
+              height,
+              .12,
+            )
+            ;[-1, 1].forEach((face) => {
+              const bar = new THREE.Mesh(
+                geometry,
+                devLetterMaterial,
+              )
+              bar.position.set(x, y, face * .285)
+              bar.rotation.z = rotationZ
+              bar.userData.libraryDecorative = true
+              motifGroup.add(bar)
+            })
+            libraryDistrictLandmarkGeometries.push(geometry)
+          }
+
+          // D
+          addDevBar(-1.18, 0, .16, 1.12)
+          addDevBar(-.82, .48, .72, .16)
+          addDevBar(-.82, -.48, .72, .16)
+          addDevBar(-.48, 0, .16, 1.12)
+
+          // E
+          addDevBar(-.02, 0, .16, 1.12)
+          addDevBar(.28, .48, .62, .16)
+          addDevBar(.24, 0, .52, .15)
+          addDevBar(.28, -.48, .62, .16)
+
+          // V
+          addDevBar(.9, .03, .16, 1.08, -.23)
+          addDevBar(1.34, .03, .16, 1.08, .23)
+
+          libraryDistrictLandmarkMaterials.push(
+            devLetterMaterial,
+          )
         } else {
           ;[0, 1].forEach((ringIndex) => {
             const geometry = new THREE.TorusGeometry(
@@ -2838,7 +2874,16 @@ export default function DreamWorld3D({
         libraryDistrictLandmarkMaterials.push(auraMaterial)
       })
 
-      const welcomePoint = new THREE.Vector3(...archivePathPoint(.35))
+      const welcomeBay = .08
+      const welcomePoint = new THREE.Vector3(
+        ...archivePathPoint(welcomeBay),
+      )
+      const welcomeFrame = archivePathFrame(welcomeBay)
+      const welcomeSide = new THREE.Vector3(
+        welcomeFrame.normalX,
+        0,
+        welcomeFrame.normalZ,
+      )
       const welcomeTexture =
         createLibraryWelcomeTexture(activeLibraryConfig)
       const welcomeMaterial = new THREE.SpriteMaterial({
@@ -2850,12 +2895,12 @@ export default function DreamWorld3D({
         toneMapped: true,
       })
       const welcomeBoard = new THREE.Sprite(welcomeMaterial)
-      welcomeBoard.position.set(
-        welcomePoint.x,
-        welcomePoint.y + ARCHIVE_WALKWAY_Y_OFFSET + 4.85,
-        welcomePoint.z + .65,
-      )
-      welcomeBoard.scale.set(9.4, 5.25, 1)
+      welcomeBoard.position
+        .copy(welcomePoint)
+        .addScaledVector(welcomeSide, -5.15)
+      welcomeBoard.position.y +=
+        ARCHIVE_WALKWAY_Y_OFFSET + 3.85
+      welcomeBoard.scale.set(7.35, 4.2, 1)
       welcomeBoard.renderOrder = 5
       welcomeBoard.userData.libraryDecorative = true
       welcomeBoard.userData.libraryWelcome = true
@@ -2866,7 +2911,7 @@ export default function DreamWorld3D({
       libraryRouteMaterials.push(welcomeMaterial)
       libraryRouteObjects.push(welcomeBoard)
 
-      const welcomeRingGeometry = new THREE.RingGeometry(2.8, 3.02, 64)
+      const welcomeRingGeometry = new THREE.RingGeometry(1.7, 1.86, 64)
       const welcomeRingMaterial = new THREE.MeshBasicMaterial({
         color: 0x7edfea,
         transparent: true,
@@ -2879,11 +2924,11 @@ export default function DreamWorld3D({
         welcomeRingGeometry,
         welcomeRingMaterial,
       )
-      welcomeRing.position.set(
-        welcomePoint.x,
-        welcomePoint.y + ARCHIVE_WALKWAY_Y_OFFSET + .04,
-        welcomePoint.z,
-      )
+      welcomeRing.position
+        .copy(welcomePoint)
+        .addScaledVector(welcomeSide, -5.15)
+      welcomeRing.position.y +=
+        ARCHIVE_WALKWAY_Y_OFFSET + .04
       welcomeRing.rotation.x = -Math.PI / 2
       welcomeRing.renderOrder = 3
       welcomeRing.userData.libraryDecorative = true
