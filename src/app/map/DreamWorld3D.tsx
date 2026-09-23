@@ -890,7 +890,7 @@ export default function DreamWorld3D({
     )
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = libraryMode ? .5 : .94
+    renderer.toneMappingExposure = libraryMode ? .56 : .94
     renderer.shadowMap.enabled = settings.miniWorldDetail > 0
     renderer.shadowMap.type = THREE.PCFShadowMap
     renderer.domElement.className = styles.webglCanvas
@@ -899,7 +899,7 @@ export default function DreamWorld3D({
     const cinematicEnvironment = createCinematicEnvironment(renderer)
     scene.environment = cinematicEnvironment.texture
     scene.environmentIntensity = libraryMode
-      ? settings.environmentIntensity * .34
+      ? settings.environmentIntensity * .4
       : settings.environmentIntensity
 
     const composer = new EffectComposer(renderer)
@@ -958,7 +958,7 @@ export default function DreamWorld3D({
         new THREE.HemisphereLight(
           0xd8c8b0,
           0x05070b,
-          .07,
+          .095,
         ),
       )
     } else {
@@ -967,7 +967,7 @@ export default function DreamWorld3D({
 
     const keyLight = new THREE.DirectionalLight(
       libraryMode ? 0xfff3df : 0xd4e5ff,
-      libraryMode ? .015 : 2.1,
+      libraryMode ? .025 : 2.1,
     )
     keyLight.position.set(-5, 6, 8)
     keyLight.castShadow =
@@ -982,7 +982,7 @@ export default function DreamWorld3D({
 
     const violetLight = new THREE.PointLight(
       0xb791ff,
-      libraryMode ? .06 : 12,
+      libraryMode ? .075 : 12,
       20,
       2,
     )
@@ -991,7 +991,7 @@ export default function DreamWorld3D({
 
     const cyanLight = new THREE.PointLight(
       0x72e2df,
-      libraryMode ? .045 : 11,
+      libraryMode ? .055 : 11,
       20,
       2,
     )
@@ -6790,12 +6790,12 @@ export default function DreamWorld3D({
         libraryReadingRitual?.isActive() ?? false
       const baseExposure = libraryMode
         ? readingRitualActive
-          ? .44
+          ? .48
           : selectedVisual?.group.userData.libraryKind === 'shelf'
-            ? .56
+            ? .61
             : selectedVisual
-              ? .58
-              : .5
+              ? .63
+              : .56
         : readingRitualActive
           ? .66
           : selectedVisual?.group.userData.libraryKind === 'shelf'
@@ -6806,8 +6806,8 @@ export default function DreamWorld3D({
       const exposureTarget = libraryMode
         ? THREE.MathUtils.clamp(
             baseExposure * atmospherePreset.exposureScale,
-            .36,
-            .6,
+            .4,
+            .66,
           )
         : baseExposure
       renderer.toneMappingExposure +=
