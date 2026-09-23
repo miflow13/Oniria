@@ -59,6 +59,8 @@ const GALLERY_INNER_X = 3.75
 const GALLERY_OUTER_X = 6.25
 const WORLD_NEAR_Z = 14
 const WORLD_FAR_Z = -132
+const WELL_Z = 6
+const WELL_RADIUS = 2.15
 
 const SECTION_Z: Record<LibrarySection, number> = {
   atrium: 7,
@@ -607,6 +609,176 @@ export default function Stackwell3D({
     const floor = new THREE.Mesh(floorGeometry, concrete)
     floor.position.set(0, -.12, -59)
     scene.add(floor)
+
+    // The Well is the Stackwell's permanent orientation landmark: a vertical
+    // light/void column that continues beyond the playable bounds.
+    const wellVoidGeometry = new THREE.CircleGeometry(WELL_RADIUS, 64)
+    const wellVoidMaterial = new THREE.MeshBasicMaterial({
+      color: 0x010204,
+      transparent: true,
+      opacity: .98,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    })
+    geometries.push(wellVoidGeometry)
+    materials.push(wellVoidMaterial)
+    const wellVoid = new THREE.Mesh(wellVoidGeometry, wellVoidMaterial)
+    wellVoid.rotation.x = -Math.PI / 2
+    wellVoid.position.set(0, .025, WELL_Z)
+    scene.add(wellVoid)
+
+    const wellRingGeometry = new THREE.TorusGeometry(WELL_RADIUS + .18, .09, 12, 72)
+    const wellRingMaterial = new THREE.MeshStandardMaterial({
+      color: 0x26384a,
+      emissive: 0x75dfff,
+      emissiveIntensity: .62,
+      metalness: .8,
+      roughness: .28,
+    })
+    geometries.push(wellRingGeometry)
+    materials.push(wellRingMaterial)
+    const wellRing = new THREE.Mesh(wellRingGeometry, wellRingMaterial)
+    wellRing.rotation.x = Math.PI / 2
+    wellRing.position.set(0, .08, WELL_Z)
+    scene.add(wellRing)
+
+    const wellBeamGeometry = new THREE.CylinderGeometry(1.05, 1.8, 52, 28, 1, true)
+    const wellBeamMaterial = new THREE.MeshBasicMaterial({
+      color: 0x8bdfff,
+      transparent: true,
+      opacity: .055,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    })
+    geometries.push(wellBeamGeometry)
+    materials.push(wellBeamMaterial)
+    const wellBeam = new THREE.Mesh(wellBeamGeometry, wellBeamMaterial)
+    wellBeam.position.set(0, 8, WELL_Z)
+    scene.add(wellBeam)
+
+    const wellCoreGeometry = new THREE.CylinderGeometry(.08, .08, 60, 8)
+    const wellCoreMaterial = new THREE.MeshBasicMaterial({
+      color: 0xc7f4ff,
+      transparent: true,
+      opacity: .72,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+    geometries.push(wellCoreGeometry)
+    materials.push(wellCoreMaterial)
+    const wellCore = new THREE.Mesh(wellCoreGeometry, wellCoreMaterial)
+    wellCore.position.set(0, 8, WELL_Z)
+    scene.add(wellCore)
+
+    // Inaccessible archive strata above and below the playable levels imply
+    // that the excavation continues past what the player can reach.
+    const distantTierGeometry = new THREE.BoxGeometry(12.8, .18, 18)
+    const distantTierMaterial = new THREE.MeshStandardMaterial({
+      color: 0x111925,
+      emissive: 0x0b2238,
+      emissiveIntensity: .22,
+      roughness: .72,
+      metalness: .28,
+      transparent: true,
+      opacity: .58,
+    })
+    geometries.push(distantTierGeometry)
+    materials.push(distantTierMaterial)
+    ;[-9, -4.5, FLOOR_COUNT * FLOOR_HEIGHT + 5.5, FLOOR_COUNT * FLOOR_HEIGHT + 10].forEach(
+      (y, index) => {
+        const tier = new THREE.Mesh(distantTierGeometry, distantTierMaterial)
+        tier.position.set(index % 2 === 0 ? -1.8 : 1.6, y, -24 - index * 18)
+        tier.rotation.y = (index % 2 === 0 ? 1 : -1) * .08
+        scene.add(tier)
+      },
+    )
+
+    // Curved catwalks break the clean corridor silhouette and hide their
+    // endpoints, supporting the illusion that districts keep branching.
+    const catwalkMaterial = new THREE.MeshStandardMaterial({
+      color: 0x1b2532,
+      emissive: 0x17354c,
+      emissiveIntensity: .3,
+      metalness: .62,
+      roughness: .42,
+    })
+    materials.push(catwalkMaterial)
+    ;[
+      {floor: 1, side: -1, endZ: -12},
+      {floor: 2, side: 1, endZ: -31},
+      {floor: 3, side: -1, endZ: -50},
+    ].forEach(({floor: bridgeFloor, side, endZ}) => {
+      const y = bridgeFloor * FLOOR_HEIGHT + .1
+      const curve = new THREE.CatmullRomCurve3(
+        [
+          new THREE.Vector3(side * 1.8, y, WELL_Z - 1.2),
+          new THREE.Vector3(side * 3.2, y + .1, (WELL_Z + endZ) * .5 + 2),
+          new THREE.Vector3(side * 4.7, y, endZ),
+        ],
+        false,
+        'centripetal',
+        .35,
+      )
+      const geometry = new THREE.TubeGeometry(curve, 28, .34, 8, false)
+      geometries.push(geometry)
+      const mesh = new THREE.Mesh(geometry, catwalkMaterial)
+      scene.add(mesh)
+    })
+
+    // #javascript is the first fully legible district. Its surrounding
+    // silhouette is intentionally irregular rather than a clean room.
+    const districtBlockMaterial = new THREE.MeshStandardMaterial({
+      color: 0x1e1d16,
+      emissive: 0x5b4d05,
+      emissiveIntensity: .34,
+      roughness: .7,
+      metalness: .18,
+    })
+    materials.push(districtBlockMaterial)
+    const districtBlocks = [
+      [-10.1, 3.2, -10.5, 4.8, 6.4, 6.2],
+      [10.4, 5.4, -13.8, 5.4, 10.5, 7.8],
+      [-11.7, 7.8, -18.5, 6.2, 14.5, 5.4],
+      [9.6, 4.1, -22.5, 4.2, 7.8, 5.2],
+    ] as const
+    districtBlocks.forEach(([x, y, z, width, height, depth], index) => {
+      const geometry = new THREE.BoxGeometry(width, height, depth)
+      geometries.push(geometry)
+      const block = new THREE.Mesh(geometry, districtBlockMaterial)
+      block.position.set(x, y, z)
+      block.rotation.y = (index % 2 === 0 ? 1 : -1) * (.08 + index * .02)
+      scene.add(block)
+    })
+    const javascriptGlow = new THREE.PointLight(0xf7df1e, 15, 28, 1.8)
+    javascriptGlow.position.set(-8, 6, -16)
+    scene.add(javascriptGlow)
+
+    // New Growth uses incomplete frames/scaffolding instead of finished walls.
+    const scaffoldMaterial = new THREE.MeshStandardMaterial({
+      color: 0x293c38,
+      emissive: 0x1d5b4b,
+      emissiveIntensity: .28,
+      metalness: .66,
+      roughness: .38,
+    })
+    materials.push(scaffoldMaterial)
+    const scaffoldPostGeometry = new THREE.BoxGeometry(.12, 7.2, .12)
+    const scaffoldBeamGeometry = new THREE.BoxGeometry(5.8, .1, .1)
+    geometries.push(scaffoldPostGeometry, scaffoldBeamGeometry)
+    for (const x of [-10.8, -7.9]) {
+      for (const z of [-27.8, -34.2]) {
+        const post = new THREE.Mesh(scaffoldPostGeometry, scaffoldMaterial)
+        post.position.set(x, 3.6, z)
+        scene.add(post)
+      }
+    }
+    for (let level = 0; level < 4; level += 1) {
+      const beam = new THREE.Mesh(scaffoldBeamGeometry, scaffoldMaterial)
+      beam.position.set(-9.35, .7 + level * 1.65, -31)
+      beam.rotation.y = Math.PI / 2
+      scene.add(beam)
+    }
 
     const trenchGeometry = new THREE.BoxGeometry(7.2, .08, 148)
     geometries.push(trenchGeometry)
@@ -1713,6 +1885,12 @@ export default function Stackwell3D({
           1 - Math.exp(-delta * 12),
         )
       }
+
+      wellRing.rotation.z += delta * .035
+      wellCoreMaterial.opacity =
+        .58 + Math.max(0, Math.sin(now * .72)) * .22
+      wellBeamMaterial.opacity =
+        .04 + Math.max(0, Math.sin(now * .31)) * .028
 
       renderer.render(scene, camera)
     }
