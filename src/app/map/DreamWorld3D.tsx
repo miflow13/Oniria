@@ -5153,44 +5153,57 @@ export default function DreamWorld3D({
       )
     }
 
-    function handleLibraryAuthoringKeyDown(
-      event: KeyboardEvent,
+    function emitLayoutAuthoringResult(
+      detail: Record<string, unknown>,
     ) {
+      window.dispatchEvent(
+        new CustomEvent('oniria:layout-pin-result', {
+          detail,
+        }),
+      )
+    }
+
+    function handleLibraryLayoutRequest(event: Event) {
       if (
         !libraryMode ||
         !libraryLayoutAuthoring ||
-        event.code !== 'KeyP' ||
         diveMode !== 'none' ||
         inputBlockedRef.current
       ) {
+        emitLayoutAuthoringResult({
+          ok: false,
+          action: 'blocked',
+          message: 'LAYOUT PIN BLOCKED',
+        })
         return
       }
 
-      const target = event.target
-      if (
-        target instanceof HTMLInputElement ||
-        target instanceof HTMLTextAreaElement ||
-        (target instanceof HTMLElement &&
-          target.isContentEditable)
-      ) {
-        return
-      }
+      const request = event as CustomEvent<{
+        remove?: boolean
+        source?: string
+      }>
 
-      event.preventDefault()
-      event.stopPropagation()
-
-      if (event.shiftKey) {
+      if (request.detail?.remove) {
         void libraryLayoutAuthoring
           .removeNearest(
             camera.position.x,
             camera.position.z,
           )
           .then((removed) => {
-            if (!removed) {
-              console.info(
-                '[DEV Library layout] no nearby pin to remove',
-              )
-            }
+            emitLayoutAuthoringResult(
+              removed
+                ? {
+                    ok: true,
+                    action: 'removed',
+                    marker: removed,
+                    message: `PIN ${removed.label} REMOVED`,
+                  }
+                : {
+                    ok: false,
+                    action: 'remove-miss',
+                    message: 'NO PIN NEARBY',
+                  },
+            )
           })
         return
       }
@@ -5203,6 +5216,11 @@ export default function DreamWorld3D({
         console.info(
           '[DEV Library layout] stand inside a room before dropping a pin',
         )
+        emitLayoutAuthoringResult({
+          ok: false,
+          action: 'outside-room',
+          message: 'STAND INSIDE A ROOM',
+        })
         return
       }
 
@@ -5218,8 +5236,6 @@ export default function DreamWorld3D({
         'YXZ',
       )
 
-      // Put the shelf zone in front of the camera rather than under the
-      // player's feet so placement is immediately visible and intuitive.
       const markerForward = new THREE.Vector3(
         0,
         0,
@@ -5269,6 +5285,24 @@ export default function DreamWorld3D({
             '[DEV Library layout] pin dropped',
             marker,
           )
+          emitLayoutAuthoringResult({
+            ok: true,
+            action: 'placed',
+            marker,
+            roomSlot: room.slot,
+            message: `PIN ${marker.label} PLACED`,
+          })
+        })
+        .catch((error) => {
+          console.error(
+            '[DEV Library layout] pin drop failed',
+            error,
+          )
+          emitLayoutAuthoringResult({
+            ok: false,
+            action: 'failed',
+            message: 'PIN DROP FAILED',
+          })
         })
     }
 
@@ -5405,9 +5439,8 @@ export default function DreamWorld3D({
 
     document.addEventListener('mousemove', handleFlightMouse)
     window.addEventListener(
-      'keydown',
-      handleLibraryAuthoringKeyDown,
-      true,
+      'oniria:layout-pin-request',
+      handleLibraryLayoutRequest,
     )
     window.addEventListener('keydown', handleFlightKeyDown)
     window.addEventListener('keyup', handleFlightKeyUp)
@@ -7470,9 +7503,8 @@ export default function DreamWorld3D({
       renderer.domElement.removeEventListener('dblclick', handleDoubleClick)
       document.removeEventListener('mousemove', handleFlightMouse)
       window.removeEventListener(
-        'keydown',
-        handleLibraryAuthoringKeyDown,
-        true,
+        'oniria:layout-pin-request',
+        handleLibraryLayoutRequest,
       )
       window.removeEventListener('keydown', handleFlightKeyDown)
       window.removeEventListener('keyup', handleFlightKeyUp)
