@@ -137,10 +137,10 @@ export function roomShelfPlacements(
   // a real library instead of a packed storage maze.
   const rowOffsets =
     district.sourceMode === 'search'
-      ? [-6.2, 6.2]
-      : [-7.2, 0, 7.2]
+      ? [-5.8, 5.8]
+      : [-5.8, 0, 5.8]
   const sideDirection = x < 0 ? -1 : 1
-  const depthOffsets = [-4.7, 0, 4.7]
+  const depthOffsets = [-5.2, 0, 5.2]
 
   const placements: RoomShelfPlacement[] = []
   rowOffsets.forEach((zOffset, rowIndex) => {
@@ -172,30 +172,31 @@ export function roomShelfPlacements(
     })
   })
 
-  // Finish every room with single-sided floating shelves on the true outer
-  // wall. They face inward and sit between the freestanding aisles so they
-  // add density without pinching circulation.
-  const outerWallX = x < 0 ? -23.45 : 23.45
-  const wallYaw = x < 0 ? Math.PI / 2 : -Math.PI / 2
+  // The room's back wall is the solid divider at the deep (-Z) end of the
+  // room, not the windowed exterior wall. Three single-sided cases finish
+  // that wall and face back into the room.
+  const backWallZ = z - 9.48
   const wallOffsets =
     district.sourceMode === 'search'
-      ? [-3.4, 3.4]
-      : [-4.8, 4.8]
+      ? [-4.8, 0, 4.8]
+      : [-5.2, 0, 5.2]
   const wallBaseHeight =
     district.sourceMode === 'catalog'
-      ? .82
+      ? .78
       : district.sourceMode === 'featured'
-        ? .72
-        : .58
+        ? .68
+        : .54
 
-  wallOffsets.forEach((zOffset, wallIndex) => {
+  wallOffsets.forEach((xOffset, wallIndex) => {
     placements.push({
       world: [
-        outerWallX,
-        wallBaseHeight + wallIndex * .08,
-        z + zOffset,
+        x + xOffset,
+        wallBaseHeight + (wallIndex % 2) * .07,
+        backWallZ,
       ],
-      yaw: wallYaw,
+      // Local +Z is the readable book face, so yaw 0 points the shelf
+      // inward from the back wall toward the room center.
+      yaw: 0,
       doubleSided: false,
       endCaps: 'none',
       floatId: `${district.id}:back-wall:${wallIndex}`,
