@@ -133,18 +133,98 @@ export function roomShelfPlacements(
   ]
 }
 
+type WalkCollisionRect = {
+  minX: number
+  maxX: number
+  minZ: number
+  maxZ: number
+}
+
+const wallRect = (
+  x: number,
+  z: number,
+  width: number,
+  depth: number,
+): WalkCollisionRect => ({
+  minX: x - width / 2,
+  maxX: x + width / 2,
+  minZ: z - depth / 2,
+  maxZ: z + depth / 2,
+})
+
+export const LIBRARY_WALK_COLLIDERS: WalkCollisionRect[] = [
+  ...[-22, -42, -62].flatMap((z) => [
+    wallRect(-16.2, z, 16, .38),
+    wallRect(16.2, z, 16, .38),
+  ]),
+  ...LIBRARY_ROOMS.flatMap((room) => {
+    const [x, z] = room.center
+    const edgeX = x < 0 ? -8 : 8
+    return [
+      wallRect(edgeX, z - 6, .38, 8.6),
+      wallRect(edgeX, z + 6, .38, 8.6),
+    ]
+  }),
+  wallRect(-8, 9, .38, 11),
+  wallRect(8, 9, .38, 11),
+]
+
 export function clampLibraryWalkPosition(
   x: number,
   z: number,
 ) {
-  return {
-    x: Math.max(
-      LIBRARY_BUILDING_BOUNDS.minX,
-      Math.min(LIBRARY_BUILDING_BOUNDS.maxX, x),
-    ),
-    z: Math.max(
-      LIBRARY_BUILDING_BOUNDS.minZ,
-      Math.min(LIBRARY_BUILDING_BOUNDS.maxZ, z),
-    ),
+  let nextX = Math.max(
+    LIBRARY_BUILDING_BOUNDS.minX,
+    Math.min(LIBRARY_BUILDING_BOUNDS.maxX, x),
+  )
+  let nextZ = Math.max(
+    LIBRARY_BUILDING_BOUNDS.minZ,
+    Math.min(LIBRARY_BUILDING_BOUNDS.maxZ, z),
+  )
+
+  // Resolve against the same divider-wall footprint used by the visual
+  // building. Door gaps remain open because the wall runs are split around
+  // them rather than represented as one solid room boundary.
+  for (let pass = 0; pass < 2; pass += 1) {
+    for (const rect of LIBRARY_WALK_COLLIDERS) {
+      if (
+        nextX <= rect.minX ||
+        nextX >= rect.maxX ||
+        nextZ <= rect.minZ ||
+        nextZ >= rect.maxZ
+      ) {
+        continue
+      }
+
+      const candidates = [
+        {
+          distance: Math.abs(nextX - rect.minX),
+          axis: 'x' as const,
+          value: rect.minX - .04,
+        },
+        {
+          distance: Math.abs(rect.maxX - nextX),
+          axis: 'x' as const,
+          value: rect.maxX + .04,
+        },
+        {
+          distance: Math.abs(nextZ - rect.minZ),
+          axis: 'z' as const,
+          value: rect.minZ - .04,
+        },
+        {
+          distance: Math.abs(rect.maxZ - nextZ),
+          axis: 'z' as const,
+          value: rect.maxZ + .04,
+        },
+      ].sort((a, b) => a.distance - b.distance)
+
+      const nearest = candidates[0]
+      if (!nearest) continue
+      if (nearest.axis === 'x') nextX = nearest.value
+      else nextZ = nearest.value
+    }
   }
+
+  return {x: nextX, z: nextZ}
 }
