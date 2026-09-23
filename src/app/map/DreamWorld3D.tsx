@@ -965,7 +965,8 @@ export default function DreamWorld3D({
       libraryMode ? .12 : 2.1,
     )
     keyLight.position.set(-5, 6, 8)
-    keyLight.castShadow = renderer.shadowMap.enabled
+    keyLight.castShadow =
+      renderer.shadowMap.enabled && !libraryMode
     keyLight.shadow.mapSize.set(
       qualityRef.current === 'cinematic' ? 2048 : 1024,
       qualityRef.current === 'cinematic' ? 2048 : 1024,
@@ -1783,6 +1784,19 @@ export default function DreamWorld3D({
       metalness: .06,
       envMapIntensity: settings.environmentIntensity * .38,
     })
+    const shelfContactShadowGeometry =
+      new THREE.PlaneGeometry(4.95, 1.18)
+    const shelfContactShadowMaterial =
+      new THREE.MeshBasicMaterial({
+        color: 0x050509,
+        transparent: true,
+        opacity: .15,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        toneMapped: true,
+      })
+    const shelfContactShadows: THREE.Mesh[] = []
+
     const shelfBookMaterials = [
       new THREE.MeshStandardMaterial({
         color: 0x26336f,
@@ -2535,6 +2549,21 @@ export default function DreamWorld3D({
             ? node.libraryYaw
             : 0
         group.rotation.y = baseYaw
+
+        const shelfContactShadow = new THREE.Mesh(
+          shelfContactShadowGeometry,
+          shelfContactShadowMaterial,
+        )
+        shelfContactShadow.position.set(start.x, .014, start.z)
+        shelfContactShadow.rotation.set(
+          -Math.PI / 2,
+          0,
+          -baseYaw,
+        )
+        shelfContactShadow.renderOrder = 1
+        shelfContactShadow.userData.libraryDecorative = true
+        world.add(shelfContactShadow)
+        shelfContactShadows.push(shelfContactShadow)
         const shelfFloatId = node.libraryFloatId ?? node._id
         const shelfFloatSeed = hashString(shelfFloatId)
         const wallBoundShelf =
@@ -7308,6 +7337,9 @@ export default function DreamWorld3D({
       shelfBackGeometry.dispose()
       shelfBookGeometry.dispose()
       shelfCoverGeometry.dispose()
+      shelfContactShadows.forEach((shadow) => world.remove(shadow))
+      shelfContactShadowGeometry.dispose()
+      shelfContactShadowMaterial.dispose()
       shelfAccentGeometry.dispose()
       shelfPickGeometry.dispose()
       shelfBookmarkGeometry.dispose()
