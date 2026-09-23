@@ -2577,22 +2577,30 @@ export default function DreamWorld3D({
         libraryFloatingProps.register(group, {
           phase: floatingPhase(shelfFloatId),
           hoverAmplitude: wallBoundShelf
-            ? .018 + seededUnit(shelfFloatSeed, 143) * .012
-            : .045 + seededUnit(shelfFloatSeed, 143) * .035,
+            ? .02 + seededUnit(shelfFloatSeed, 143) * .014
+            : .072 + seededUnit(shelfFloatSeed, 143) * .045,
           hoverSpeed: wallBoundShelf
-            ? .055 + seededUnit(shelfFloatSeed, 144) * .025
-            : .07 + seededUnit(shelfFloatSeed, 144) * .045,
-          // Freestanding shelves visibly drift in 3D; wall-bound shelves
-          // remain much calmer so they do not clip through architecture.
+            ? .048 + seededUnit(shelfFloatSeed, 144) * .022
+            : .052 + seededUnit(shelfFloatSeed, 144) * .04,
+          // Freestanding shelves now feel genuinely suspended: they translate
+          // slightly as well as turning on all three axes. Wall-bound shelves
+          // keep the same language at a much smaller amplitude so they never
+          // visibly leave the architecture.
           tiltX: wallBoundShelf
-            ? .004 + seededUnit(shelfFloatSeed, 145) * .004
-            : .018 + seededUnit(shelfFloatSeed, 145) * .018,
+            ? .005 + seededUnit(shelfFloatSeed, 145) * .004
+            : .032 + seededUnit(shelfFloatSeed, 145) * .024,
           tiltY: wallBoundShelf
-            ? .002 + seededUnit(shelfFloatSeed, 147) * .002
-            : .006 + seededUnit(shelfFloatSeed, 147) * .008,
+            ? .003 + seededUnit(shelfFloatSeed, 147) * .003
+            : .022 + seededUnit(shelfFloatSeed, 147) * .022,
           tiltZ: wallBoundShelf
-            ? .003 + seededUnit(shelfFloatSeed, 146) * .003
-            : .012 + seededUnit(shelfFloatSeed, 146) * .014,
+            ? .004 + seededUnit(shelfFloatSeed, 146) * .004
+            : .022 + seededUnit(shelfFloatSeed, 146) * .02,
+          driftX: wallBoundShelf
+            ? .008 + seededUnit(shelfFloatSeed, 148) * .008
+            : .075 + seededUnit(shelfFloatSeed, 148) * .055,
+          driftZ: wallBoundShelf
+            ? .006 + seededUnit(shelfFloatSeed, 149) * .006
+            : .06 + seededUnit(shelfFloatSeed, 149) * .045,
         })
       }
 
