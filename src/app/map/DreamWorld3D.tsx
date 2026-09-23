@@ -73,7 +73,10 @@ import {
   createLibraryReadingRitual,
   type LibraryBookVisual,
 } from './libraryReadingRitual'
-import {createLibraryAtmosphere} from './libraryAtmosphere'
+import {
+  createLibraryAtmosphere,
+  getLibraryAtmosphereVisualPreset,
+} from './libraryAtmosphere'
 
 export type DreamWorldNode = {
   _id: string
@@ -777,20 +780,27 @@ export default function DreamWorld3D({
     )
 
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color(0x030611)
-    const libraryFogColor =
-      activeLibraryConfig.atmosphere === 'deep-void'
-        ? 0x100817
-        : activeLibraryConfig.atmosphere === 'industrial'
-          ? 0x10151c
-          : activeLibraryConfig.atmosphere === 'crystalline'
-            ? 0x10172b
-            : 0x1b0d26
+    const globalAtmospherePreset =
+      getLibraryAtmosphereVisualPreset(
+        activeLibraryConfig.atmosphere,
+      )
+    const sceneBackgroundColor = new THREE.Color(
+      libraryMode
+        ? globalAtmospherePreset.background
+        : 0x030611,
+    )
+    const atmosphereBackgroundTarget = new THREE.Color()
+    const atmosphereFogTarget = new THREE.Color()
+    const atmosphereLightTarget = new THREE.Color()
+    scene.background = sceneBackgroundColor
     scene.fog = new THREE.FogExp2(
-      libraryMode ? libraryFogColor : 0x07101f,
+      libraryMode
+        ? globalAtmospherePreset.fog
+        : 0x07101f,
       settings.fogDensity *
         (libraryMode
-          ? .68 + activeLibraryConfig.hazeIntensity * .24
+          ? globalAtmospherePreset.fogScale *
+            (.55 + activeLibraryConfig.hazeIntensity * .85)
           : 1),
     )
 
@@ -5985,17 +5995,39 @@ export default function DreamWorld3D({
           (settings.maxBlur - depthOfFieldUniforms.maxblur.value) * 0.05
       }
 
+      let atmospherePreset =
+        globalAtmospherePreset
+
+      if (libraryMode && activeDistricts.length > 0) {
+        const atmosphereBay = archiveBayFromWorldZ(
+          camera.position.z,
+        )
+        const nearestAtmosphereDistrict =
+          activeDistricts.reduce((nearest, candidate) =>
+            Math.abs(candidate.bay - atmosphereBay) <
+            Math.abs(nearest.bay - atmosphereBay)
+              ? candidate
+              : nearest,
+          )
+
+        atmospherePreset =
+          getLibraryAtmosphereVisualPreset(
+            nearestAtmosphereDistrict.atmosphere,
+          )
+      }
+
       const libraryBloomStrength =
         settings.bloomStrength *
         (selectedVisual?.group.userData.libraryKind === 'shelf'
           ? .47
           : .55)
-      bloom.strength +=
-        ((selectedVisual
+      const bloomTarget =
+        (selectedVisual
           ? libraryBloomStrength * 1.05
-          : settings.bloomStrength * .52) -
-          bloom.strength) *
-        0.04
+          : settings.bloomStrength * .52) *
+        (libraryMode ? atmospherePreset.bloomScale : 1)
+      bloom.strength +=
+        (bloomTarget - bloom.strength) * .045
 
       dreamPost.uniforms.uTime.value = elapsed
       if (diveMode !== 'entering') {
@@ -6003,35 +6035,98 @@ export default function DreamWorld3D({
           ((selectedVisual ? .12 : 0) - dreamPost.uniforms.uTravel.value) *
           .03
       }
+
       const readingRitualActive =
         libraryReadingRitual?.isActive() ?? false
-      renderer.toneMappingExposure +=
-        (((readingRitualActive
+      const baseExposure =
+        readingRitualActive
           ? .66
           : selectedVisual?.group.userData.libraryKind === 'shelf'
             ? .82
             : selectedVisual
               ? .88
-              : .9)) -
-          renderer.toneMappingExposure) *
-        .045
+              : .9
+      const exposureTarget = libraryMode
+        ? Math.max(
+            .5,
+            baseExposure *
+              atmospherePreset.exposureScale,
+          )
+        : baseExposure
+      renderer.toneMappingExposure +=
+        (exposureTarget - renderer.toneMappingExposure) *
+        .05
 
       if (scene.fog instanceof THREE.FogExp2) {
         const sceneReveal = Math.min(1, elapsed / 1.7)
-        const birthFog = (1 - sceneReveal) * 0.072
-        const libraryFogScale = libraryMode ? 1.18 : 1
+        const birthFog = (1 - sceneReveal) * .072
+        const hazeScale = libraryMode
+          ? .55 +
+            activeLibraryConfig.hazeIntensity * .85
+          : 1
+        const selectedFogScale = selectedVisual
+          ? 1.1
+          : 1
+        const fogTarget =
+          settings.fogDensity *
+            (libraryMode
+              ? atmospherePreset.fogScale * hazeScale
+              : 1) *
+            selectedFogScale +
+          birthFog
+
         scene.fog.density +=
-          ((selectedVisual
-            ? settings.fogDensity * libraryFogScale * 1.12 + birthFog
-            : settings.fogDensity * libraryFogScale + birthFog) -
-            scene.fog.density) *
-          0.04
+          (fogTarget - scene.fog.density) * .05
+
+        if (libraryMode) {
+          atmosphereFogTarget.setHex(
+            atmospherePreset.fog,
+          )
+          scene.fog.color.lerp(
+            atmosphereFogTarget,
+            .045,
+          )
+        }
       }
 
+      if (libraryMode) {
+        atmosphereBackgroundTarget.setHex(
+          atmospherePreset.background,
+        )
+        sceneBackgroundColor.lerp(
+          atmosphereBackgroundTarget,
+          .035,
+        )
+        atmosphereLightTarget.setHex(
+          atmospherePreset.tint,
+        )
+        violetLight.color.lerp(
+          atmosphereLightTarget,
+          .035,
+        )
+        cyanLight.color.lerp(
+          atmosphereLightTarget,
+          .022,
+        )
+      }
+
+      const atmosphereLightScale = libraryMode
+        ? atmospherePreset.lightStrength
+        : 1
       violetLight.intensity +=
-        ((selectedVisual ? 8.5 : 7) - violetLight.intensity) * .03
+        (
+          (selectedVisual ? 8.5 : 7) *
+            atmosphereLightScale -
+          violetLight.intensity
+        ) *
+        .035
       cyanLight.intensity +=
-        ((selectedVisual ? 8 : 6.5) - cyanLight.intensity) * .03
+        (
+          (selectedVisual ? 8 : 6.5) *
+            atmosphereLightScale -
+          cyanLight.intensity
+        ) *
+        .035
 
       if (flightActive && flightInitialized) {
         const routeActive = Boolean(flightRoute)
