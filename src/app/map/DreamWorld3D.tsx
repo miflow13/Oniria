@@ -5541,7 +5541,11 @@ export default function DreamWorld3D({
       }
 
       const currentArchiveBay = libraryMode
-        ? archiveBayFromWorldZ(camera.position.z)
+        ? cityNearestDistrict(
+            camera.position.x,
+            camera.position.z,
+            activeDistricts,
+          )?.district.bay ?? 0
         : 0
 
       libraryAudio?.update({
@@ -6570,21 +6574,19 @@ export default function DreamWorld3D({
         globalAtmospherePreset
 
       if (libraryMode && activeDistricts.length > 0) {
-        const atmosphereBay = archiveBayFromWorldZ(
-          camera.position.z,
-        )
         const nearestAtmosphereDistrict =
-          activeDistricts.reduce((nearest, candidate) =>
-            Math.abs(candidate.bay - atmosphereBay) <
-            Math.abs(nearest.bay - atmosphereBay)
-              ? candidate
-              : nearest,
-          )
+          cityNearestDistrict(
+            camera.position.x,
+            camera.position.z,
+            activeDistricts,
+          )?.district
 
-        atmospherePreset =
-          getLibraryAtmosphereVisualPreset(
-            nearestAtmosphereDistrict.atmosphere,
-          )
+        if (nearestAtmosphereDistrict) {
+          atmospherePreset =
+            getLibraryAtmosphereVisualPreset(
+              nearestAtmosphereDistrict.atmosphere,
+            )
+        }
       }
 
       const libraryBloomStrength =
@@ -6840,22 +6842,26 @@ export default function DreamWorld3D({
           )
         } else if (libraryWalking) {
           const walkSurface =
-            archiveWalkSurfaceAtPosition(
+            cityWalkSurfaceAtPosition(
               flightPosition.x,
               flightPosition.z,
               activeDistricts,
-              libraryGridSegments,
             )
 
           if (walkSurface) {
             const offsetX =
-              flightPosition.x - walkSurface.centerX
+              flightPosition.x -
+              walkSurface.centerX
             const offsetZ =
-              flightPosition.z - walkSurface.centerZ
-            const distance =
-              Math.hypot(offsetX, offsetZ)
+              flightPosition.z -
+              walkSurface.centerZ
+            const distance = Math.hypot(
+              offsetX,
+              offsetZ,
+            )
 
             if (
+              walkSurface.kind === 'road' &&
               distance >
                 walkSurface.halfWidth + .0001 &&
               distance > .0001
@@ -6865,41 +6871,48 @@ export default function DreamWorld3D({
               const correction =
                 distance - walkSurface.halfWidth
 
-              flightPosition.x -= normalX * correction
-              flightPosition.z -= normalZ * correction
+              flightPosition.x -=
+                normalX * correction
+              flightPosition.z -=
+                normalZ * correction
 
               const outwardVelocity =
                 flightVelocity.x * normalX +
                 flightVelocity.z * normalZ
               if (outwardVelocity > 0) {
                 flightVelocity.x -=
-                  normalX * outwardVelocity * .86
+                  normalX *
+                  outwardVelocity *
+                  .86
                 flightVelocity.z -=
-                  normalZ * outwardVelocity * .86
+                  normalZ *
+                  outwardVelocity *
+                  .86
               }
+            } else if (
+              walkSurface.kind === 'plaza' &&
+              walkSurface.outsideDistance > .0001
+            ) {
+              flightPosition.x =
+                walkSurface.centerX
+              flightPosition.z =
+                walkSurface.centerZ
+              flightVelocity.multiplyScalar(.72)
             }
 
-            const eyeHeight = 1.64
             const groundY =
+              CITY_GROUND_Y +
               walkSurface.groundY +
-              ARCHIVE_WALKWAY_Y_OFFSET +
-              eyeHeight
+              1.64
             flightPosition.y = THREE.MathUtils.lerp(
               flightPosition.y,
               groundY,
               1 - Math.exp(-delta * 11),
             )
           } else {
-            const fallbackBay =
-              archiveBayFromWorldZ(flightPosition.z)
-            const fallbackPoint = archivePathPoint(
-              fallbackBay,
-            )
             flightPosition.y = THREE.MathUtils.lerp(
               flightPosition.y,
-              fallbackPoint[1] +
-                ARCHIVE_WALKWAY_Y_OFFSET +
-                1.64,
+              CITY_GROUND_Y + 1.64,
               1 - Math.exp(-delta * 11),
             )
           }
