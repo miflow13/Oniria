@@ -33,12 +33,12 @@ const SECTION_COPY: Record<
   {title: string; subtitle: string; accent: string}
 > = {
   atrium: {
-    title: 'DEV Library',
-    subtitle: 'information atrium',
+    title: 'The Infinite Stacks',
+    subtitle: 'index hall',
     accent: '#f5f5f5',
   },
   featured: {
-    title: 'Featured Reading Hall',
+    title: 'Featured Stacks',
     subtitle: 'popular this week',
     accent: '#3b49df',
   },
@@ -48,23 +48,23 @@ const SECTION_COPY: Record<
     accent: '#5b6cff',
   },
   topics: {
-    title: 'Topic Wings',
+    title: 'Topic Stacks',
     subtitle: 'browse by tag',
     accent: '#3b49df',
   },
   creators: {
-    title: 'Creator Studies',
+    title: 'Creator Stacks',
     subtitle: 'authors and their collections',
     accent: '#7c83ff',
   },
   search: {
-    title: 'Card Catalog',
+    title: 'Index Terminal',
     subtitle: 'search the live collection',
     accent: '#3b49df',
   },
   archive: {
     title: 'Deep Archive',
-    subtitle: 'older shelves and long-tail pages',
+    subtitle: 'the collection receding into the dark',
     accent: '#a3a3a3',
   },
 }
@@ -319,8 +319,8 @@ function buildLibraryGraph(
   addNode({
     id: 'dev-home',
     kind: 'home',
-    title: 'DEV Library',
-    subtitle: 'information atrium',
+    title: 'The Infinite Stacks',
+    subtitle: 'index hall',
     href: 'https://dev.to/',
     section: 'atrium',
     position: [0, .55, 7],
@@ -436,7 +436,7 @@ function buildLibraryGraph(
       id,
       kind: 'tag',
       title: '#' + tag.name,
-      subtitle: 'topic doorway',
+      subtitle: 'topic index',
       href: 'https://dev.to/t/' + tag.name,
       tag: tag.name,
       section: 'topics',
@@ -891,7 +891,7 @@ export default function DevWebSurf() {
       id: 'tag:' + tag,
       kind: 'tag',
       title: '#' + tag,
-      subtitle: 'topic doorway',
+      subtitle: 'topic index',
       href: 'https://dev.to/t/' + tag,
       tag,
       section: 'topics',
@@ -1111,7 +1111,7 @@ export default function DevWebSurf() {
           id: 'search:active',
           kind: 'search',
           title: 'search: ' + value,
-          subtitle: 'temporary search aisle',
+          subtitle: 'temporary search stack',
           section: 'search',
           position: [-13, 1.1, -22.4],
           importance: 1.8,
@@ -1131,8 +1131,8 @@ export default function DevWebSurf() {
     return (
       <main className={styles.loadingScreen}>
         <div className={styles.loadingCore} aria-hidden="true" />
-        <span>opening the dev library</span>
-        <strong>Cataloging the live collection…</strong>
+        <span>opening the infinite stacks</span>
+        <strong>Indexing the live DEV collection…</strong>
         {error && <small>{error}</small>}
       </main>
     )
@@ -1281,7 +1281,7 @@ export default function DevWebSurf() {
             ref={searchInputRef}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Ask the card catalog: article, @creator, #topic"
+            placeholder="Search the infinite stacks: article, @creator, #topic"
             aria-label="Search the DEV library"
           />
           <kbd>↵</kbd>
@@ -1303,7 +1303,7 @@ export default function DevWebSurf() {
       </nav>
 
       {currentFloor === 0 && (
-        <nav className={styles.wingRail} aria-label="Browse library wings">
+        <nav className={styles.wingRail} aria-label="Browse library stacks">
           {wingLinks.map((item) => (
             <button
               type="button"
