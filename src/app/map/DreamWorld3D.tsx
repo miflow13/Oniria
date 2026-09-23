@@ -6902,6 +6902,11 @@ export default function DreamWorld3D({
       libraryWalkwayPanelMaterial?.dispose()
       libraryWalkwayUnderlayMaterial?.dispose()
       libraryWalkwayRailMaterial?.dispose()
+      libraryGridRoadGeometry?.dispose()
+      libraryGridRailGeometry?.dispose()
+      libraryGridRoadMaterial?.dispose()
+      libraryGridUnderlayMaterial?.dispose()
+      libraryGridRailMaterial?.dispose()
       libraryArrowGeometry?.dispose()
       libraryArrowMaterial?.dispose()
       libraryGuardGeometry?.dispose()
@@ -6930,6 +6935,11 @@ export default function DreamWorld3D({
       }
       if (libraryWalkway) world.remove(libraryWalkway)
       if (libraryWalkwayRails) world.remove(libraryWalkwayRails)
+      if (libraryGridUnderlay) {
+        world.remove(libraryGridUnderlay)
+      }
+      if (libraryGridRoads) world.remove(libraryGridRoads)
+      if (libraryGridRails) world.remove(libraryGridRails)
       shaftGeometries.forEach((geometry) => geometry.dispose())
       shaftMaterials.forEach((material) => material.dispose())
 
