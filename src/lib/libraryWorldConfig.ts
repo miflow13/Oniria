@@ -182,24 +182,32 @@ export const DEFAULT_LIBRARY_DISTRICTS: LibraryDistrictConfig[] = [
   },
 ]
 
+export const PACKED_DISTRICT_START_BAY = 1
+export const PACKED_DISTRICT_GAP_BAYS = 2.65
+
 /**
- * Keep Sanity-authored route positions authoritative.
- *
- * The previous implementation repacked every district at a fixed interval,
- * which made Studio's routeBay field appear to save while the rendered
- * archive ignored it. We still normalize ordering and clamp to the renderer's
- * supported route range, but never rewrite authored spacing.
+ * Sanity controls district identity and ordering, while the renderer keeps the
+ * physical archive intentionally dense. We preserve authored bay order, then
+ * project that ordered sequence onto compact display bays so Studio edits keep
+ * affecting what appears without recreating giant empty stretches.
  */
 export function packLibraryDistricts(
   districts: LibraryDistrictConfig[],
 ): LibraryDistrictConfig[] {
-  return [...districts]
+  const ordered = [...districts]
     .filter((district) => district.enabled)
     .map((district) => ({
       ...district,
       bay: Math.max(0, Math.min(72, district.bay)),
     }))
     .sort((a, b) => a.bay - b.bay)
+
+  return ordered.map((district, index) => ({
+    ...district,
+    bay:
+      PACKED_DISTRICT_START_BAY +
+      index * PACKED_DISTRICT_GAP_BAYS,
+  }))
 }
 
 export const DEFAULT_LIBRARY_WORLD_CONFIG: LibraryWorldConfig = {
