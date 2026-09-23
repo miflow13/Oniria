@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import InfiniteStacks3D from './InfiniteStacks3D'
+import Stackwell3D from './InfiniteStacks3D'
 import type {
   DevArticle,
   DevArticleSummary,
@@ -1193,7 +1193,7 @@ export default function DevWebSurf() {
 
   return (
     <main className={styles.page}>
-      <InfiniteStacks3D
+      <Stackwell3D
         nodes={graph.nodes}
         edges={graph.edges}
         selectedId={selectedId}
@@ -1238,7 +1238,7 @@ export default function DevWebSurf() {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search the Stackwell: article, @creator, #topic"
-            aria-label="Search the DEV library"
+            aria-label="Search the Stackwell"
           />
           <kbd>↵</kbd>
         </form>
@@ -1371,12 +1371,12 @@ export default function DevWebSurf() {
                 window.setTimeout(() => searchInputRef.current?.focus(), 120)
               }}
             >
-              <b>Search</b>
+              <b>Query archive</b>
               <small>query the live archive index</small>
             </button>
             <button type="button" onClick={surpriseMe}>
               <b>Surprise me</b>
-              <small>jump to an unread page</small>
+              <small>drift to an unread volume</small>
             </button>
           </div>
 
