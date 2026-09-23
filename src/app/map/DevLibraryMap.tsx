@@ -431,6 +431,29 @@ export default function DevLibraryMap() {
       )
     }
 
+    const handleLayoutRendered = (event: Event) => {
+      const detail = (
+        event as CustomEvent<{
+          label?: string
+          x?: number
+          z?: number
+          visualCount?: number
+        }>
+      ).detail
+      const x =
+        typeof detail?.x === 'number'
+          ? detail.x.toFixed(2)
+          : '?'
+      const z =
+        typeof detail?.z === 'number'
+          ? detail.z.toFixed(2)
+          : '?'
+      setLayoutHudVisible(true)
+      setLayoutHudStatus(
+        `RENDERED ${detail?.label ?? 'PIN'} @ ${x}, ${z} · ${detail?.visualCount ?? 0} VISIBLE`,
+      )
+    }
+
     const handleLayoutButton = (event: Event) => {
       const detail = (
         event as CustomEvent<{remove?: boolean}>
@@ -447,6 +470,10 @@ export default function DevLibraryMap() {
       handleLayoutResult,
     )
     window.addEventListener(
+      'oniria:layout-pin-rendered',
+      handleLayoutRendered,
+    )
+    window.addEventListener(
       'oniria:layout-pin-button',
       handleLayoutButton,
     )
@@ -460,6 +487,10 @@ export default function DevLibraryMap() {
       window.removeEventListener(
         'oniria:layout-pin-result',
         handleLayoutResult,
+      )
+      window.removeEventListener(
+        'oniria:layout-pin-rendered',
+        handleLayoutRendered,
       )
       window.removeEventListener(
         'oniria:layout-pin-button',
