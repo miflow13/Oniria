@@ -2766,9 +2766,10 @@ export default function DreamWorld3D({
           addDevBar(.24, 0, .52, .15)
           addDevBar(.28, -.48, .62, .16)
 
-          // V
-          addDevBar(.9, .03, .16, 1.08, -.23)
-          addDevBar(1.34, .03, .16, 1.08, .23)
+          // V — left stroke leans inward toward the bottom,
+          // right stroke mirrors it. The previous signs made a Λ.
+          addDevBar(.9, .03, .16, 1.08, .23)
+          addDevBar(1.34, .03, .16, 1.08, -.23)
 
           libraryDistrictLandmarkMaterials.push(
             devLetterMaterial,
