@@ -5243,6 +5243,19 @@ export default function DreamWorld3D({
       )
     }
 
+    function handleLibraryLayoutExportRequest() {
+      const markers =
+        libraryLayoutAuthoring?.markers() ?? []
+      window.dispatchEvent(
+        new CustomEvent('oniria:layout-pin-export', {
+          detail: {
+            markers,
+            count: markers.length,
+          },
+        }),
+      )
+    }
+
     function handleLibraryLayoutRequest(event: Event) {
       if (
         !libraryMode ||
@@ -5506,6 +5519,10 @@ export default function DreamWorld3D({
     window.addEventListener(
       'oniria:layout-pin-request',
       handleLibraryLayoutRequest,
+    )
+    window.addEventListener(
+      'oniria:layout-pin-export-request',
+      handleLibraryLayoutExportRequest,
     )
     window.addEventListener('keydown', handleFlightKeyDown)
     window.addEventListener('keyup', handleFlightKeyUp)
@@ -7570,6 +7587,10 @@ export default function DreamWorld3D({
       window.removeEventListener(
         'oniria:layout-pin-request',
         handleLibraryLayoutRequest,
+      )
+      window.removeEventListener(
+        'oniria:layout-pin-export-request',
+        handleLibraryLayoutExportRequest,
       )
       window.removeEventListener('keydown', handleFlightKeyDown)
       window.removeEventListener('keyup', handleFlightKeyUp)
