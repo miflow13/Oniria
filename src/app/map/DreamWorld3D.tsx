@@ -890,7 +890,7 @@ export default function DreamWorld3D({
     )
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = libraryMode ? .82 : .94
+    renderer.toneMappingExposure = libraryMode ? .66 : .94
     renderer.shadowMap.enabled = settings.miniWorldDetail > 0
     renderer.shadowMap.type = THREE.PCFShadowMap
     renderer.domElement.className = styles.webglCanvas
@@ -905,7 +905,11 @@ export default function DreamWorld3D({
     composer.addPass(renderPass)
 
     const ssao = new SSAOPass(scene, camera, 1, 1)
-    ssao.enabled = settings.ssao
+    // Screen-space AO produces crawling halos on the library's thin book
+    // covers, bright wall panels and fake contact-shadow planes. The library
+    // already has deliberate contact grounding, so keep SSAO for the dream
+    // worlds and disable it for this interior.
+    ssao.enabled = settings.ssao && !libraryMode
     ssao.kernelRadius = settings.ssaoKernelRadius
     ssao.minDistance = 0.002
     ssao.maxDistance = 0.12
@@ -951,9 +955,9 @@ export default function DreamWorld3D({
       // authored pendant/sconce point lights provide the actual room shape.
       scene.add(
         new THREE.HemisphereLight(
-          0xf3eee4,
-          0x11151d,
-          .28,
+          0xe9ddc9,
+          0x080a0f,
+          .14,
         ),
       )
     } else {
@@ -962,7 +966,7 @@ export default function DreamWorld3D({
 
     const keyLight = new THREE.DirectionalLight(
       libraryMode ? 0xfff3df : 0xd4e5ff,
-      libraryMode ? .12 : 2.1,
+      libraryMode ? .045 : 2.1,
     )
     keyLight.position.set(-5, 6, 8)
     keyLight.castShadow =
@@ -977,7 +981,7 @@ export default function DreamWorld3D({
 
     const violetLight = new THREE.PointLight(
       0xb791ff,
-      libraryMode ? .38 : 12,
+      libraryMode ? .14 : 12,
       20,
       2,
     )
@@ -986,7 +990,7 @@ export default function DreamWorld3D({
 
     const cyanLight = new THREE.PointLight(
       0x72e2df,
-      libraryMode ? .3 : 11,
+      libraryMode ? .1 : 11,
       20,
       2,
     )
@@ -2568,6 +2572,7 @@ export default function DreamWorld3D({
         const shelfFloatSeed = hashString(shelfFloatId)
         const wallBoundShelf =
           shelfFloatId.includes(':back-wall:') ||
+          shelfFloatId.includes(':entry-wall:') ||
           shelfFloatId.startsWith('hallway:')
         libraryFloatingProps.register(group, {
           phase: floatingPhase(shelfFloatId),
@@ -4616,7 +4621,7 @@ export default function DreamWorld3D({
       diveComposer.addPass(diveRenderPass)
 
       diveSsao = new SSAOPass(activeDive.scene, activeDive.camera, 1, 1)
-      diveSsao.enabled = settings.ssao
+      diveSsao.enabled = settings.ssao && !libraryMode
       diveSsao.kernelRadius = Math.max(4, settings.ssaoKernelRadius * .8)
       diveSsao.minDistance = 0.002
       diveSsao.maxDistance = 0.1
@@ -6772,8 +6777,15 @@ export default function DreamWorld3D({
 
       const readingRitualActive =
         libraryReadingRitual?.isActive() ?? false
-      const baseExposure =
-        readingRitualActive
+      const baseExposure = libraryMode
+        ? readingRitualActive
+          ? .54
+          : selectedVisual?.group.userData.libraryKind === 'shelf'
+            ? .67
+            : selectedVisual
+              ? .7
+              : .62
+        : readingRitualActive
           ? .66
           : selectedVisual?.group.userData.libraryKind === 'shelf'
             ? .82
@@ -6783,8 +6795,8 @@ export default function DreamWorld3D({
       const exposureTarget = libraryMode
         ? THREE.MathUtils.clamp(
             baseExposure * atmospherePreset.exposureScale,
-            .5,
-            .88,
+            .42,
+            .72,
           )
         : baseExposure
       renderer.toneMappingExposure +=
@@ -6851,16 +6863,16 @@ export default function DreamWorld3D({
       const violetTarget =
         (libraryMode
           ? selectedVisual
-            ? .52
-            : .38
+            ? .24
+            : .13
           : selectedVisual
             ? 4.7
             : 4) * atmosphereLightScale
       const cyanTarget =
         (libraryMode
           ? selectedVisual
-            ? .44
-            : .3
+            ? .2
+            : .09
           : selectedVisual
             ? 4.3
             : 3.6) * atmosphereLightScale
