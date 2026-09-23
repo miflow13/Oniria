@@ -1818,6 +1818,99 @@ export default function DreamWorld3D({
     const shelfCoverTextures: THREE.Texture[] = []
     const shelfTextureLoader = new THREE.TextureLoader()
     shelfTextureLoader.setCrossOrigin('anonymous')
+    const shelfCoverTextureCache = new Map<string, THREE.Texture>()
+    const shelfCoverWaiters = new Map<
+      string,
+      THREE.MeshStandardMaterial[]
+    >()
+    const shelfCoverQueue: string[] = []
+    let shelfCoverLoadsInFlight = 0
+    const MAX_SHELF_COVER_LOADS = 4
+
+    const applyShelfCoverTexture = (
+      material: THREE.MeshStandardMaterial,
+      texture: THREE.Texture,
+    ) => {
+      material.map = texture
+      material.color.setHex(0xffffff)
+      material.emissive.setHex(0x080b10)
+      material.emissiveIntensity = .055
+      material.needsUpdate = true
+    }
+
+    const pumpShelfCoverQueue = () => {
+      if (sceneDisposed) return
+      while (
+        shelfCoverLoadsInFlight < MAX_SHELF_COVER_LOADS &&
+        shelfCoverQueue.length > 0
+      ) {
+        const url = shelfCoverQueue.shift()
+        if (!url) break
+
+        shelfCoverLoadsInFlight += 1
+        shelfTextureLoader.load(
+          url,
+          (texture) => {
+            shelfCoverLoadsInFlight -= 1
+            if (sceneDisposed) {
+              texture.dispose()
+              return
+            }
+
+            texture.colorSpace = THREE.SRGBColorSpace
+            texture.minFilter = THREE.LinearFilter
+            texture.magFilter = THREE.LinearFilter
+            texture.anisotropy = Math.min(
+              4,
+              renderer.capabilities.getMaxAnisotropy(),
+            )
+            shelfCoverTextures.push(texture)
+            shelfCoverTextureCache.set(url, texture)
+
+            const waiting =
+              shelfCoverWaiters.get(url) ?? []
+            waiting.forEach((material) =>
+              applyShelfCoverTexture(material, texture),
+            )
+            shelfCoverWaiters.delete(url)
+            pumpShelfCoverQueue()
+          },
+          undefined,
+          () => {
+            shelfCoverLoadsInFlight -= 1
+            const waiting =
+              shelfCoverWaiters.get(url) ?? []
+            waiting.forEach((material) => {
+              material.color.setHex(0x303746)
+            })
+            shelfCoverWaiters.delete(url)
+            pumpShelfCoverQueue()
+          },
+        )
+      }
+    }
+
+    const queueShelfCover = (
+      url: string,
+      material: THREE.MeshStandardMaterial,
+    ) => {
+      const cached = shelfCoverTextureCache.get(url)
+      if (cached) {
+        applyShelfCoverTexture(material, cached)
+        return
+      }
+
+      const waiting = shelfCoverWaiters.get(url)
+      if (waiting) {
+        waiting.push(material)
+        return
+      }
+
+      shelfCoverWaiters.set(url, [material])
+      shelfCoverQueue.push(url)
+      pumpShelfCoverQueue()
+    }
+
     const shelfPickMaterial = new THREE.MeshBasicMaterial({
       transparent: true,
       opacity: 0,
@@ -1900,6 +1993,13 @@ export default function DreamWorld3D({
       libraryShelfSparkles.renderOrder = 4
       world.add(libraryShelfSparkles)
     }
+
+    const pendingShelfHydrators = new Map<
+      string,
+      () => void
+    >()
+    const hydratedShelfIds = new Set<string>()
+    let lastShelfHydrationAt = -Infinity
 
     for (const node of nodeRef.current) {
       const seed = hashString(node._id)
@@ -2162,27 +2262,9 @@ export default function DreamWorld3D({
           shelfCoverMaterials.push(coverMaterial)
 
           if (bookData.coverUrl) {
-            shelfTextureLoader.load(
+            queueShelfCover(
               bookData.coverUrl,
-              (texture) => {
-                texture.colorSpace = THREE.SRGBColorSpace
-                texture.minFilter = THREE.LinearFilter
-                texture.magFilter = THREE.LinearFilter
-                texture.anisotropy = Math.min(
-                  4,
-                  renderer.capabilities.getMaxAnisotropy(),
-                )
-                shelfCoverTextures.push(texture)
-                coverMaterial.map = texture
-                coverMaterial.color.setHex(0xffffff)
-                coverMaterial.emissive.setHex(0x080b10)
-                coverMaterial.emissiveIntensity = .055
-                coverMaterial.needsUpdate = true
-              },
-              undefined,
-              () => {
-                coverMaterial.color.setHex(0x303746)
-              },
+              coverMaterial,
             )
           }
 
@@ -2237,13 +2319,31 @@ export default function DreamWorld3D({
           })
         }
 
-        shelfBooks.forEach((bookData, index) => {
-          addShelfBook(
-            bookData,
-            index,
-            node.libraryDoubleSided && index >= 9 ? -1 : 1,
-          )
-        })
+        const hydrateShelfBooks = () => {
+          if (
+            hydratedShelfIds.has(node._id) ||
+            sceneDisposed
+          ) {
+            return
+          }
+
+          hydratedShelfIds.add(node._id)
+          pendingShelfHydrators.delete(node._id)
+          shelfBooks.forEach((bookData, index) => {
+            addShelfBook(
+              bookData,
+              index,
+              node.libraryDoubleSided && index >= 9
+                ? -1
+                : 1,
+            )
+          })
+        }
+
+        pendingShelfHydrators.set(
+          node._id,
+          hydrateShelfBooks,
+        )
 
         const accentRail = new THREE.Mesh(
           shelfAccentGeometry,
@@ -5871,6 +5971,36 @@ export default function DreamWorld3D({
           } else {
             selected.shockwave.visible = false
           }
+        }
+      }
+
+      if (
+        libraryMode &&
+        pendingShelfHydrators.size > 0 &&
+        elapsed - lastShelfHydrationAt > .12
+      ) {
+        let hydrateId: string | null = null
+        let hydrateDistance = Infinity
+
+        pendingShelfHydrators.forEach((_, nodeId) => {
+          const visual = nodeVisuals.get(nodeId)
+          if (!visual) return
+          const distance =
+            camera.position.distanceTo(
+              visual.group.position,
+            )
+          if (distance < hydrateDistance) {
+            hydrateDistance = distance
+            hydrateId = nodeId
+          }
+        })
+
+        // Only hydrate shelves near the player's current zone. Shelf frames
+        // remain visible everywhere, while books and covers stream in as the
+        // player approaches instead of all being built during first paint.
+        if (hydrateId && hydrateDistance < 34) {
+          pendingShelfHydrators.get(hydrateId)?.()
+          lastShelfHydrationAt = elapsed
         }
       }
 
