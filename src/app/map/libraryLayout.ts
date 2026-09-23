@@ -8,6 +8,9 @@ export const ARCHIVE_WALKWAY_HALF_WIDTH = 4.1
 export const ARCHIVE_WALKWAY_Y_OFFSET = -2.08
 
 export const ARCHIVE_BAY_SPACING = 6.8
+export const ARCHIVE_GRID_LANE_OFFSET = 13.25
+export const ARCHIVE_GRID_ROAD_HALF_WIDTH = 2.15
+export const ARCHIVE_GRID_CROSSROAD_HALF_WIDTH = 2.35
 const ARCHIVE_LANE_MIN = 8.15
 const ARCHIVE_LANE_VARIATION = .9
 
@@ -76,6 +79,210 @@ export function archivePathFrame(bay: number) {
     normalX: -tangentZ,
     normalZ: tangentX,
   }
+}
+
+
+export function archiveOffsetPathPoint(
+  bay: number,
+  lateralOffset: number,
+): [number, number, number] {
+  const point = archivePathPoint(bay)
+  const frame = archivePathFrame(bay)
+
+  return [
+    point[0] + frame.normalX * lateralOffset,
+    point[1],
+    point[2] + frame.normalZ * lateralOffset,
+  ]
+}
+
+export type ArchiveGridRoadSegment = {
+  id: string
+  kind: 'main' | 'side' | 'cross'
+  start: [number, number, number]
+  end: [number, number, number]
+  halfWidth: number
+  startBay: number
+  endBay: number
+}
+
+export function archiveGridRoadSegments(
+  districts: ArchiveDistrict[] = ARCHIVE_DISTRICTS,
+): ArchiveGridRoadSegment[] {
+  const enabled = [...districts]
+    .filter((district) => district.enabled)
+    .sort((a, b) => a.bay - b.bay)
+
+  const firstBay = enabled[0]?.bay ?? 1
+  const lastBay = enabled.at(-1)?.bay ?? 18
+  const startBay = Math.max(0, firstBay - 1.05)
+  const endBay = Math.min(
+    ARCHIVE_PATH_RENDER_BAYS,
+    lastBay + 1.15,
+  )
+  const longitudinalStep = .42
+  const segments: ArchiveGridRoadSegment[] = []
+
+  const addLongitudinalLane = (
+    lateralOffset: number,
+    kind: 'main' | 'side',
+  ) => {
+    let bay = startBay
+    let index = 0
+
+    while (bay < endBay - .0001) {
+      const nextBay = Math.min(
+        endBay,
+        bay + longitudinalStep,
+      )
+      const midBay = (bay + nextBay) * .5
+      segments.push({
+        id:
+          'grid:' +
+          kind +
+          ':' +
+          String(lateralOffset) +
+          ':' +
+          index,
+        kind,
+        start: archiveOffsetPathPoint(
+          bay,
+          lateralOffset,
+        ),
+        end: archiveOffsetPathPoint(
+          nextBay,
+          lateralOffset,
+        ),
+        halfWidth:
+          kind === 'main'
+            ? archiveWalkwayHalfWidthAtBay(
+                midBay,
+                districts,
+              )
+            : ARCHIVE_GRID_ROAD_HALF_WIDTH,
+        startBay: bay,
+        endBay: nextBay,
+      })
+      bay = nextBay
+      index += 1
+    }
+  }
+
+  // The center avenue remains the strongest visual route, while matching
+  // left/right avenues turn the archive into a navigable three-column grid.
+  addLongitudinalLane(0, 'main')
+  addLongitudinalLane(
+    -ARCHIVE_GRID_LANE_OFFSET,
+    'side',
+  )
+  addLongitudinalLane(
+    ARCHIVE_GRID_LANE_OFFSET,
+    'side',
+  )
+
+  const crossBays = [
+    Math.max(startBay, .15),
+    ...enabled.map((district) => district.bay),
+  ]
+
+  crossBays.forEach((bay, index) => {
+    segments.push({
+      id: 'grid:cross:' + index,
+      kind: 'cross',
+      start: archiveOffsetPathPoint(
+        bay,
+        -ARCHIVE_GRID_LANE_OFFSET,
+      ),
+      end: archiveOffsetPathPoint(
+        bay,
+        ARCHIVE_GRID_LANE_OFFSET,
+      ),
+      halfWidth: ARCHIVE_GRID_CROSSROAD_HALF_WIDTH,
+      startBay: bay,
+      endBay: bay,
+    })
+  })
+
+  return segments
+}
+
+export type ArchiveWalkSurface = {
+  centerX: number
+  centerZ: number
+  groundY: number
+  halfWidth: number
+  distance: number
+  outsideDistance: number
+  bay: number
+  kind: ArchiveGridRoadSegment['kind']
+}
+
+export function archiveWalkSurfaceAtPosition(
+  x: number,
+  z: number,
+  districts: ArchiveDistrict[] = ARCHIVE_DISTRICTS,
+): ArchiveWalkSurface | null {
+  const segments = archiveGridRoadSegments(districts)
+  let best: ArchiveWalkSurface | null = null
+
+  segments.forEach((segment) => {
+    const [sx, sy, sz] = segment.start
+    const [ex, ey, ez] = segment.end
+    const dx = ex - sx
+    const dz = ez - sz
+    const lengthSq = dx * dx + dz * dz
+    const t =
+      lengthSq > .000001
+        ? Math.max(
+            0,
+            Math.min(
+              1,
+              ((x - sx) * dx + (z - sz) * dz) /
+                lengthSq,
+            ),
+          )
+        : 0
+    const centerX = sx + dx * t
+    const centerZ = sz + dz * t
+    const groundY = sy + (ey - sy) * t
+    const distance = Math.hypot(
+      x - centerX,
+      z - centerZ,
+    )
+    const outsideDistance = Math.max(
+      0,
+      distance - segment.halfWidth,
+    )
+    const bay =
+      segment.startBay +
+      (segment.endBay - segment.startBay) * t
+
+    const candidate: ArchiveWalkSurface = {
+      centerX,
+      centerZ,
+      groundY,
+      halfWidth: segment.halfWidth,
+      distance,
+      outsideDistance,
+      bay,
+      kind: segment.kind,
+    }
+
+    if (
+      !best ||
+      candidate.outsideDistance <
+        best.outsideDistance - .0001 ||
+      (Math.abs(
+        candidate.outsideDistance -
+          best.outsideDistance,
+      ) < .0001 &&
+        candidate.distance < best.distance)
+    ) {
+      best = candidate
+    }
+  })
+
+  return best
 }
 
 export function archiveDistrictInfluence(
