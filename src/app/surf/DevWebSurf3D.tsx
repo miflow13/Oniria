@@ -1535,7 +1535,11 @@ export default function DevWebSurf3D({
         // atmospheric lighting. The bath-tile GLB supplies the authored
         // geometry; this unlit material supplies the intended library finish.
         const ceilingMaterial = new THREE.MeshBasicMaterial({
-          color: 0xf4f4f1,
+          // The source GLB carries the tile/grout contrast in COLOR_0 vertex
+          // colors. Keep the ceiling white, but preserve those authored
+          // vertex colors so the divider lines remain visible.
+          color: 0xffffff,
+          vertexColors: true,
           side: THREE.DoubleSide,
           toneMapped: false,
         })
