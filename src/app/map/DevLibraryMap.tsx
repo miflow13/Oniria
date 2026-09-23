@@ -306,6 +306,7 @@ export default function DevLibraryMap() {
   const catalogNextPageRef = useRef(1)
   const catalogLoadingRef = useRef(false)
   const catalogHasMoreRef = useRef(true)
+  const catalogInitializedRef = useRef(false)
   const bootstrapRefreshingRef = useRef(false)
   const [devRefreshTick, setDevRefreshTick] = useState(0)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -501,7 +502,8 @@ export default function DevLibraryMap() {
         setBootstrap(payload)
         setDevRefreshTick((current) => current + 1)
 
-        if (initial && catalog.length === 0) {
+        if (initial && !catalogInitializedRef.current) {
+          catalogInitializedRef.current = true
           void loadMoreCatalog()
         }
       } catch (caught) {
@@ -517,7 +519,7 @@ export default function DevLibraryMap() {
         if (initial) setLoading(false)
       }
     },
-    [catalog.length, loadMoreCatalog],
+    [loadMoreCatalog],
   )
 
   useEffect(() => {
@@ -530,7 +532,7 @@ export default function DevLibraryMap() {
       if (document.visibilityState === 'visible') {
         void refreshWorldConfig(false, true)
       }
-    }, 4000)
+    }, 15_000)
 
     const refreshOnFocus = () => {
       void refreshWorldConfig(false, true)
