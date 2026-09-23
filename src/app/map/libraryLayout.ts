@@ -221,8 +221,10 @@ export function archiveWalkSurfaceAtPosition(
   x: number,
   z: number,
   districts: ArchiveDistrict[] = ARCHIVE_DISTRICTS,
+  roadSegments?: ArchiveGridRoadSegment[],
 ): ArchiveWalkSurface | null {
-  const segments = archiveGridRoadSegments(districts)
+  const segments =
+    roadSegments ?? archiveGridRoadSegments(districts)
   let best: ArchiveWalkSurface | null = null
 
   segments.forEach((segment) => {
