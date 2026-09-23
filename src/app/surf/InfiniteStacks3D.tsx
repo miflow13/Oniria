@@ -610,67 +610,6 @@ export default function Stackwell3D({
     floor.position.set(0, -.12, -59)
     scene.add(floor)
 
-    // The Well is the Stackwell's permanent orientation landmark: a vertical
-    // light/void column that continues beyond the playable bounds.
-    const wellVoidGeometry = new THREE.CircleGeometry(WELL_RADIUS, 64)
-    const wellVoidMaterial = new THREE.MeshBasicMaterial({
-      color: 0x010204,
-      transparent: true,
-      opacity: .98,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-    })
-    geometries.push(wellVoidGeometry)
-    materials.push(wellVoidMaterial)
-    const wellVoid = new THREE.Mesh(wellVoidGeometry, wellVoidMaterial)
-    wellVoid.rotation.x = -Math.PI / 2
-    wellVoid.position.set(0, .025, WELL_Z)
-    scene.add(wellVoid)
-
-    const wellRingGeometry = new THREE.TorusGeometry(WELL_RADIUS + .18, .09, 12, 72)
-    const wellRingMaterial = new THREE.MeshStandardMaterial({
-      color: 0x26384a,
-      emissive: 0x75dfff,
-      emissiveIntensity: .62,
-      metalness: .8,
-      roughness: .28,
-    })
-    geometries.push(wellRingGeometry)
-    materials.push(wellRingMaterial)
-    const wellRing = new THREE.Mesh(wellRingGeometry, wellRingMaterial)
-    wellRing.rotation.x = Math.PI / 2
-    wellRing.position.set(0, .08, WELL_Z)
-    scene.add(wellRing)
-
-    const wellBeamGeometry = new THREE.CylinderGeometry(1.05, 1.8, 52, 28, 1, true)
-    const wellBeamMaterial = new THREE.MeshBasicMaterial({
-      color: 0x8bdfff,
-      transparent: true,
-      opacity: .055,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-    })
-    geometries.push(wellBeamGeometry)
-    materials.push(wellBeamMaterial)
-    const wellBeam = new THREE.Mesh(wellBeamGeometry, wellBeamMaterial)
-    wellBeam.position.set(0, 8, WELL_Z)
-    scene.add(wellBeam)
-
-    const wellCoreGeometry = new THREE.CylinderGeometry(.08, .08, 60, 8)
-    const wellCoreMaterial = new THREE.MeshBasicMaterial({
-      color: 0xc7f4ff,
-      transparent: true,
-      opacity: .72,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    })
-    geometries.push(wellCoreGeometry)
-    materials.push(wellCoreMaterial)
-    const wellCore = new THREE.Mesh(wellCoreGeometry, wellCoreMaterial)
-    wellCore.position.set(0, 8, WELL_Z)
-    scene.add(wellCore)
-
     // Inaccessible archive strata above and below the playable levels imply
     // that the excavation continues past what the player can reach.
     const distantTierGeometry = new THREE.BoxGeometry(12.8, .18, 18)
@@ -1929,12 +1868,6 @@ export default function Stackwell3D({
           1 - Math.exp(-delta * 12),
         )
       }
-
-      wellRing.rotation.z += delta * .035
-      wellCoreMaterial.opacity =
-        .58 + Math.max(0, Math.sin(now * .72)) * .22
-      wellBeamMaterial.opacity =
-        .04 + Math.max(0, Math.sin(now * .31)) * .028
 
       renderer.render(scene, camera)
     }
