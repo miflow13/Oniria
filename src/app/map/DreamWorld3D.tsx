@@ -2009,9 +2009,15 @@ export default function DreamWorld3D({
       const group = new THREE.Group()
       group.userData.nodeId = node._id
       group.userData.libraryKind = node.libraryKind
+      const shelfNode = node.libraryKind === 'shelf'
 
       const shellMaterial = createLivingOrbMaterial(color, node.category)
-      const shell = new THREE.Mesh(nodeGeometry(node.category), shellMaterial)
+      const shell = new THREE.Mesh(
+        shelfNode
+          ? new THREE.BufferGeometry()
+          : nodeGeometry(node.category),
+        shellMaterial,
+      )
       shell.userData.nodeId = node._id
       shell.castShadow = renderer.shadowMap.enabled
       shell.receiveShadow = renderer.shadowMap.enabled
@@ -2035,19 +2041,27 @@ export default function DreamWorld3D({
         depthWrite: false,
       })
       const reflectionShell = new THREE.Mesh(
-        nodeGeometry(node.category),
+        shelfNode
+          ? new THREE.BufferGeometry()
+          : nodeGeometry(node.category),
         reflectionMaterial,
       )
       reflectionShell.scale.setScalar(1.035)
       reflectionShell.renderOrder = 4
       group.add(reflectionShell)
 
-      const miniWorld = createMiniWorld(
-        node.category,
-        color,
-        settings,
-        seed,
-      )
+      const miniWorld: MiniWorld = shelfNode
+        ? {
+            group: new THREE.Group(),
+            update: () => {},
+            dispose: () => {},
+          }
+        : createMiniWorld(
+            node.category,
+            color,
+            settings,
+            seed,
+          )
       miniWorld.group.position.z = 0.02
       group.add(miniWorld.group)
 
@@ -2059,7 +2073,12 @@ export default function DreamWorld3D({
         depthWrite: false,
         side: THREE.BackSide,
       })
-      const glow = new THREE.Mesh(nodeGeometry(node.category), glowMaterial)
+      const glow = new THREE.Mesh(
+        shelfNode
+          ? new THREE.BufferGeometry()
+          : nodeGeometry(node.category),
+        glowMaterial,
+      )
       glow.scale.setScalar(1.28)
       glow.userData.nodeId = node._id
       group.add(glow)
@@ -2077,7 +2096,12 @@ export default function DreamWorld3D({
         envMapIntensity: settings.environmentIntensity,
       })
       const core = new THREE.Mesh(
-        new THREE.IcosahedronGeometry(.22 + Math.min(node.frequency, 5) * .025, 2),
+        shelfNode
+          ? new THREE.BufferGeometry()
+          : new THREE.IcosahedronGeometry(
+              .22 + Math.min(node.frequency, 5) * .025,
+              2,
+            ),
         coreMaterial,
       )
       core.userData.nodeId = node._id
@@ -2093,7 +2117,9 @@ export default function DreamWorld3D({
         depthWrite: false,
       })
       const orbit = new THREE.Mesh(
-        new THREE.TorusGeometry(.79, .008, 6, 80),
+        shelfNode
+          ? new THREE.BufferGeometry()
+          : new THREE.TorusGeometry(.79, .008, 6, 80),
         orbitMaterial,
       )
       orbit.rotation.x = Math.PI * .54
@@ -2108,7 +2134,9 @@ export default function DreamWorld3D({
         depthWrite: false,
       })
       const shockwave = new THREE.Mesh(
-        new THREE.RingGeometry(.7, .735, 72),
+        shelfNode
+          ? new THREE.BufferGeometry()
+          : new THREE.RingGeometry(.7, .735, 72),
         shockwaveMaterial,
       )
       shockwave.visible = false
