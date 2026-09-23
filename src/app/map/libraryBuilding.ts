@@ -40,6 +40,9 @@ const LIBRARY_SKYLIGHT_CENTERS = [
   -52,
   -68,
 ] as const
+const LIBRARY_SKYLIGHT_HALF_WIDTH = 3.2
+const LIBRARY_SKYLIGHT_HALF_DEPTH = 3.15
+const LIBRARY_SKYLIGHT_GLASS_INSET = .08
 
 export function createLibraryBuilding(
   scene: THREE.Scene,
@@ -708,8 +711,15 @@ export function createLibraryBuilding(
     skyParticleMaterial,
   )
 
+  // Derive the glazing directly from the authored roof cutout. The old pane
+  // was visibly undersized, leaving a raw dark border around each opening.
   const skylightGlassGeometry =
-    new THREE.PlaneGeometry(5.45, 5.9)
+    new THREE.PlaneGeometry(
+      LIBRARY_SKYLIGHT_HALF_WIDTH * 2 -
+        LIBRARY_SKYLIGHT_GLASS_INSET * 2,
+      LIBRARY_SKYLIGHT_HALF_DEPTH * 2 -
+        LIBRARY_SKYLIGHT_GLASS_INSET * 2,
+    )
   const skyRockLargeGeometry =
     new THREE.IcosahedronGeometry(.44, 1)
   const skyRockSmallGeometry =
@@ -1761,9 +1771,11 @@ export function createLibraryBuilding(
           const x = -24.45 + cellX * (ix + .5)
           const z = -74.95 + cellZ * (iz + .5)
           const insideSkylight =
-            Math.abs(x) < 3.2 &&
+            Math.abs(x) < LIBRARY_SKYLIGHT_HALF_WIDTH &&
             LIBRARY_SKYLIGHT_CENTERS.some(
-              (centerZ) => Math.abs(z - centerZ) < 3.15,
+              (centerZ) =>
+                Math.abs(z - centerZ) <
+                LIBRARY_SKYLIGHT_HALF_DEPTH,
             )
           if (insideSkylight) continue
 
@@ -1843,7 +1855,9 @@ export function createLibraryBuilding(
           skylightGlassMaterial,
         )
         glass.rotation.x = Math.PI / 2
-        glass.position.set(0, 5.115, z)
+        // Seat the pane just above the ceiling plane so the glass closes the
+        // opening cleanly without floating noticeably above the roof trim.
+        glass.position.set(0, 5.065, z)
         glass.renderOrder = 2
         glass.castShadow = false
         glass.receiveShadow = false
