@@ -16,7 +16,7 @@ export const libraryConfigType = defineType({
       name: 'welcomeSubtitle',
       title: 'Welcome subtitle',
       type: 'string',
-      initialValue: 'An explorable archive of DEV Community writing',
+      initialValue: 'Six rooms. One live DEV collection.',
       validation: (rule) => rule.required().max(140),
     }),
     defineField({
@@ -25,7 +25,7 @@ export const libraryConfigType = defineType({
       type: 'text',
       rows: 4,
       initialValue:
-        'Walk the archive, browse shelves, inspect books, and open real DEV posts.',
+        'Walk the building, browse shelves, inspect books, and open real DEV posts.',
       validation: (rule) => rule.max(420),
     }),
     defineField({
@@ -68,7 +68,7 @@ export const libraryConfigType = defineType({
       name: 'hazeIntensity',
       title: 'Haze intensity',
       type: 'number',
-      initialValue: 0.7,
+      initialValue: 0.45,
       validation: (rule) => rule.required().min(0).max(1),
     }),
     defineField({
