@@ -19,6 +19,7 @@ export type DreamDive = {
   secret: DreamProfile['secret']
   setLookTarget: (x: number, y: number) => void
   setTimeline: (progress: number) => void
+  setAudioEnergy: (energy: number) => void
   renderPreviews: (renderer: THREE.WebGLRenderer, time: number) => void
   pick: (ndcX: number, ndcY: number) => DiveInteraction
   update: (time: number, delta: number) => void
@@ -48,12 +49,17 @@ function dreamMaterial(
   solidity: number,
   options: {metal?: number; glow?: number} = {},
 ) {
-  return new THREE.MeshStandardMaterial({
+  return new THREE.MeshPhysicalMaterial({
     color,
     emissive: color.clone().multiplyScalar(options.glow ?? 0.12),
-    emissiveIntensity: 0.55 + solidity * 0.45,
-    roughness: 0.78 - solidity * 0.44,
+    emissiveIntensity: 0.48 + solidity * 0.42,
+    roughness: 0.82 - solidity * 0.5,
     metalness: options.metal ?? 0.08,
+    clearcoat: 0.08 + solidity * 0.34,
+    clearcoatRoughness: 0.18 + (1 - solidity) * 0.38,
+    sheen: 0.08 + solidity * 0.12,
+    sheenColor: color.clone().lerp(new THREE.Color(0xffffff), .16),
+    envMapIntensity: 0.55 + solidity * 0.75,
     transparent: solidity < 0.98,
     opacity: 0.42 + solidity * 0.54,
   })
@@ -126,35 +132,82 @@ function createJournalFragment(
   return {sprite, texture, material}
 }
 
-function createWaterMaterial(accent: THREE.Color) {
-  return new THREE.ShaderMaterial({
+function createWaterNormalTexture() {
+  const canvas = document.createElement('canvas')
+  canvas.width = 256
+  canvas.height = 256
+  const context = canvas.getContext('2d')
+
+  if (context) {
+    context.fillStyle = 'rgb(128,128,255)'
+    context.fillRect(0, 0, 256, 256)
+    context.globalCompositeOperation = 'screen'
+
+    for (let row = 0; row < 18; row += 1) {
+      const y = row * 16 + (row % 2) * 5
+      const gradient = context.createLinearGradient(0, y, 256, y + 12)
+      gradient.addColorStop(0, 'rgba(70,40,255,.08)')
+      gradient.addColorStop(.5, 'rgba(210,225,255,.36)')
+      gradient.addColorStop(1, 'rgba(80,50,255,.08)')
+      context.strokeStyle = gradient
+      context.lineWidth = 7
+      context.beginPath()
+
+      for (let x = 0; x <= 256; x += 8) {
+        const waveY = y + Math.sin(x * .08 + row) * 5
+        if (x === 0) context.moveTo(x, waveY)
+        else context.lineTo(x, waveY)
+      }
+      context.stroke()
+    }
+  }
+
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.wrapS = THREE.RepeatWrapping
+  texture.wrapT = THREE.RepeatWrapping
+  texture.repeat.set(5, 5)
+  return texture
+}
+
+function createWaterMaterial(
+  accent: THREE.Color,
+  normalMap: THREE.Texture,
+) {
+  const material = new THREE.MeshPhysicalMaterial({
+    color: accent.clone().multiplyScalar(.34),
+    emissive: accent.clone().multiplyScalar(.025),
+    emissiveIntensity: .25,
+    roughness: .08,
+    metalness: .02,
+    transmission: .38,
+    thickness: .72,
+    ior: 1.333,
+    clearcoat: 1,
+    clearcoatRoughness: .06,
+    envMapIntensity: 1.35,
+    normalMap,
+    normalScale: new THREE.Vector2(.45, .45),
     transparent: true,
+    opacity: .82,
     side: THREE.DoubleSide,
-    uniforms: {
-      uTime: {value: 0},
-      uColor: {value: accent.clone()},
-    },
-    vertexShader: `
-      uniform float uTime;
-      varying vec3 vPosition;
-      void main() {
-        vec3 p = position;
-        p.z += sin(p.x * 1.4 + uTime * .55) * .08;
-        p.z += cos(p.y * 1.8 - uTime * .42) * .055;
-        vPosition = p;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
-      }
-    `,
-    fragmentShader: `
-      uniform vec3 uColor;
-      varying vec3 vPosition;
-      void main() {
-        float bands = .5 + .5 * sin((vPosition.x + vPosition.y) * 2.5);
-        vec3 color = mix(uColor * .16, uColor * .62, bands);
-        gl_FragColor = vec4(color, .52);
-      }
-    `,
   })
+
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uTime = {value: 0}
+    shader.vertexShader = `uniform float uTime;\n${shader.vertexShader}`
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <begin_vertex>',
+      `
+        vec3 transformed = vec3(position);
+        transformed.z += sin(position.x * .72 + uTime * .55) * .09;
+        transformed.z += cos(position.y * .94 - uTime * .38) * .065;
+        transformed.z += sin((position.x + position.y) * .31 + uTime * .22) * .035;
+      `,
+    )
+    material.userData.waveShader = shader
+  }
+
+  return material
 }
 
 function addHouse(
@@ -476,6 +529,7 @@ export function createDreamDive(
     relations: DreamRelation[]
     depth?: number
     maxDepth?: number
+    environmentMap?: THREE.Texture | null
   },
 ): DreamDive {
   const depth = options.depth ?? 0
@@ -488,7 +542,12 @@ export function createDreamDive(
   const background = cold.clone().lerp(warm, Math.max(0, profile.warmth) * .42)
   if (profile.lucid) background.lerp(new THREE.Color(0x06131c), .28)
   scene.background = background
-  scene.fog = new THREE.FogExp2(background.clone().lerp(accent, .18), profile.fogDensity)
+  scene.environment = options.environmentMap ?? null
+  scene.environmentIntensity = settings.environmentIntensity
+  scene.fog = new THREE.FogExp2(
+    background.clone().lerp(accent, .18),
+    profile.fogDensity,
+  )
 
   const camera = new THREE.PerspectiveCamera(58, 1, .04, 80)
   camera.position.set(0, 1.4, 4.8)
@@ -509,6 +568,7 @@ export function createDreamDive(
     seed,
     depth,
     maxDepth,
+    environmentMap: options.environmentMap ?? null,
   })
   scene.add(impossibleSpace.group)
 
@@ -524,24 +584,66 @@ export function createDreamDive(
     1.8 + profile.mood * .28,
   )
   moonLight.position.set(-5, 8, 5)
+  moonLight.castShadow = settings.miniWorldDetail > 0
+  moonLight.shadow.mapSize.set(
+    settings.miniWorldDetail > 1 ? 2048 : 1024,
+    settings.miniWorldDetail > 1 ? 2048 : 1024,
+  )
+  moonLight.shadow.bias = -0.0002
+  moonLight.shadow.normalBias = .035
   scene.add(moonLight)
+
+  const rimLight = new THREE.PointLight(
+    profile.lucid ? 0xb9fbff : profile.warmth > .35 ? 0xf2abc7 : 0x7d77ca,
+    5.5 + profile.recurrence * .7,
+    26,
+    2,
+  )
+  rimLight.position.set(-5.5, 2.6, -8)
+  scene.add(rimLight)
 
   const localLight = new THREE.PointLight(accent, 14 + profile.recurrence * 2, 22, 2)
   localLight.position.set(2, 3.5, -2)
   scene.add(localLight)
 
   const groundGeometry = new THREE.PlaneGeometry(44, 44, 48, 48)
-  let waterMaterial: THREE.ShaderMaterial | null = null
+  let waterMaterial: THREE.MeshPhysicalMaterial | null = null
+  let waterNormal: THREE.Texture | null = null
+  let waterCaustic: THREE.PointLight | null = null
 
   if (profile.motifs.water) {
-    waterMaterial = createWaterMaterial(accent)
+    waterNormal = createWaterNormalTexture()
+    waterMaterial = createWaterMaterial(accent, waterNormal)
     const water = new THREE.Mesh(groundGeometry, waterMaterial)
     water.rotation.x = -Math.PI / 2
     water.position.y = -.05
+    water.receiveShadow = true
     root.add(water)
-    disposables.push(groundGeometry, waterMaterial)
-    animated.push((time) => {
-      if (waterMaterial) waterMaterial.uniforms.uTime.value = time
+
+    waterCaustic = new THREE.PointLight(
+      accent.clone().lerp(new THREE.Color(0xffffff), .42),
+      4.2,
+      14,
+      2,
+    )
+    waterCaustic.position.set(0, 1.2, -5)
+    scene.add(waterCaustic)
+
+    disposables.push(groundGeometry, waterMaterial, waterNormal)
+    animated.push((time, delta) => {
+      if (!waterMaterial || !waterNormal) return
+
+      waterNormal.offset.x =
+        (waterNormal.offset.x + delta * .012) % 1
+      waterNormal.offset.y =
+        (waterNormal.offset.y - delta * .007) % 1
+
+      const shader = waterMaterial.userData.waveShader as
+        | {uniforms?: {uTime?: {value: number}}}
+        | undefined
+      if (shader?.uniforms?.uTime) {
+        shader.uniforms.uTime.value = time
+      }
     })
   } else {
     const groundMaterial = dreamMaterial(
@@ -551,6 +653,7 @@ export function createDreamDive(
     )
     const ground = new THREE.Mesh(groundGeometry, groundMaterial)
     ground.rotation.x = -Math.PI / 2
+    ground.receiveShadow = true
     root.add(ground)
     disposables.push(groundGeometry, groundMaterial)
   }
@@ -795,6 +898,68 @@ export function createDreamDive(
   scene.add(lightShaft)
   disposables.push(lightShaftGeometry, lightShaftMaterial)
 
+  const atmosphereTexture = createSoftCircleTexture(
+    accent.clone().lerp(background, .62),
+  )
+  disposables.push(atmosphereTexture)
+  const atmosphereLayers: Array<{
+    sprite: THREE.Sprite
+    material: THREE.SpriteMaterial
+    baseOpacity: number
+    phase: number
+  }> = []
+
+  for (let index = 0; index < settings.atmosphereLayers; index += 1) {
+    const material = new THREE.SpriteMaterial({
+      map: atmosphereTexture,
+      transparent: true,
+      opacity: .025 + index * .006,
+      depthWrite: false,
+      depthTest: index > 1,
+      blending: THREE.NormalBlending,
+    })
+    const sprite = new THREE.Sprite(material)
+    const depth = 1.8 - index * 4.3
+    sprite.position.set(
+      (seeded(seed + index, 81) - .5) * 12,
+      .8 + (seeded(seed + index, 82) - .5) * 5,
+      depth,
+    )
+    const scale = 9 + index * 3.2
+    sprite.scale.set(scale * 1.65, scale, 1)
+    scene.add(sprite)
+    disposables.push(material)
+    atmosphereLayers.push({
+      sprite,
+      material,
+      baseOpacity: .022 + index * .006,
+      phase: seeded(seed + index, 83) * Math.PI * 2,
+    })
+  }
+
+  const heroMaterial = new THREE.MeshBasicMaterial({
+    color: accent.clone().lerp(new THREE.Color(0xffffff), .35),
+    transparent: true,
+    opacity: 0,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  })
+  const heroGeometry = new THREE.TorusGeometry(
+    profile.motifs.eye ? 1.75 : 1.2,
+    .025,
+    8,
+    96,
+  )
+  const heroMoment = new THREE.Mesh(heroGeometry, heroMaterial)
+  heroMoment.position.set(
+    profile.motifs.eye ? 3.4 : profile.motifs.library ? -2.2 : 0,
+    profile.motifs.eye ? 5.3 : profile.motifs.library ? 3.8 : 2.7,
+    profile.motifs.eye ? -13.2 : -9.5,
+  )
+  heroMoment.rotation.x = profile.motifs.water ? Math.PI / 2.3 : 0
+  scene.add(heroMoment)
+  disposables.push(heroGeometry, heroMaterial)
+
   const journalFragments = profile.body
     .split(/[.!?]+/)
     .map((fragment) => fragment.trim())
@@ -813,12 +978,35 @@ export function createDreamDive(
       return item
     })
 
+  if (settings.miniWorldDetail > 0) {
+    const applyDreamShadows = (container: THREE.Object3D) => {
+      container.traverse((object) => {
+        const mesh = object as THREE.Mesh
+        if (!mesh.isMesh) return
+
+        const material = mesh.material as
+          | THREE.Material
+          | THREE.Material[]
+        const transparent = Array.isArray(material)
+          ? material.some((item) => item.transparent)
+          : material?.transparent
+
+        mesh.castShadow = !transparent
+        mesh.receiveShadow = true
+      })
+    }
+
+    applyDreamShadows(root)
+    applyDreamShadows(impossibleSpace.group)
+  }
+
   let lookX = 0
   let lookY = 0
   let currentYaw = 0
   let currentPitch = 0
   let temporalProgress = 1
   let entryTime = 0
+  let audioEnergy = 0
 
   return {
     scene,
@@ -834,6 +1022,9 @@ export function createDreamDive(
     },
     setTimeline: (progress) => {
       temporalProgress = THREE.MathUtils.clamp(progress, 0, 1)
+    },
+    setAudioEnergy: (energy) => {
+      audioEnergy = THREE.MathUtils.clamp(energy, 0, 1)
     },
     renderPreviews: (renderer, time) => {
       impossibleSpace.renderPreviews(renderer, time)
@@ -887,6 +1078,62 @@ export function createDreamDive(
           (.16 + (1 - profile.decay * temporalProgress) * .42) *
           (profile.lucid ? .86 : .64)
       })
+
+      atmosphereLayers.forEach((layer, index) => {
+        layer.sprite.position.x +=
+          Math.sin(time * (.035 + index * .004) + layer.phase) *
+          delta *
+          (.05 + profile.wind * .08)
+        layer.sprite.position.y +=
+          Math.cos(time * (.028 + index * .003) + layer.phase) *
+          delta *
+          .035
+        layer.material.opacity =
+          layer.baseOpacity *
+          (1 + audioEnergy * .38) *
+          (profile.lucid ? .74 : 1)
+      })
+
+      const heroStart = profile.secret ? .8 : 1.45
+      const heroProgress = THREE.MathUtils.clamp(
+        (entryTime - heroStart) / 2.2,
+        0,
+        1,
+      )
+      heroMaterial.opacity =
+        Math.sin(heroProgress * Math.PI) *
+        (.12 + audioEnergy * .09)
+      heroMoment.scale.setScalar(.6 + heroProgress * 1.55)
+      heroMoment.rotation.z +=
+        delta * (.035 + audioEnergy * .05)
+
+      localLight.intensity =
+        12 +
+        profile.recurrence * 1.7 +
+        profile.mood * .38 +
+        audioEnergy * 7
+      rimLight.intensity =
+        4.6 +
+        profile.recurrence * .55 +
+        audioEnergy * 4.2
+
+      if (waterCaustic) {
+        waterCaustic.position.x = Math.sin(time * .31) * 3.8
+        waterCaustic.position.z = -5 + Math.cos(time * .27) * 3.2
+        waterCaustic.position.y = .8 + Math.sin(time * .43) * .45
+        waterCaustic.intensity =
+          2.8 +
+          Math.max(0, Math.sin(time * .9)) * 1.6 +
+          audioEnergy * 4.4
+      }
+
+      particleMaterial.size =
+        (profile.lucid ? .028 : .038) *
+        (1 + audioEnergy * .36)
+      lightShaftMaterial.opacity =
+        (profile.lucid ? .046 : .022) +
+        Math.max(0, Math.sin(time * .2)) * .01 +
+        audioEnergy * .026
 
       impossibleSpace.update(
         time,
@@ -945,9 +1192,6 @@ export function createDreamDive(
       }
 
       lightShaft.material = lightShaftMaterial
-      lightShaftMaterial.opacity =
-        (profile.lucid ? .05 : .024) +
-        Math.max(0, Math.sin(time * .2)) * .012
 
       root.rotation.y =
         Math.sin(time * .025) *

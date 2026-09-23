@@ -6,9 +6,14 @@ import {EffectComposer} from 'three/examples/jsm/postprocessing/EffectComposer.j
 import {RenderPass} from 'three/examples/jsm/postprocessing/RenderPass.js'
 import {UnrealBloomPass} from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 import {BokehPass} from 'three/examples/jsm/postprocessing/BokehPass.js'
+import {SSAOPass} from 'three/examples/jsm/postprocessing/SSAOPass.js'
 import {ShaderPass} from 'three/examples/jsm/postprocessing/ShaderPass.js'
 import {OutputPass} from 'three/examples/jsm/postprocessing/OutputPass.js'
 import type {Dream, SymbolCategory} from '@/types/dream'
+import {
+  DEFAULT_LIBRARY_WORLD_CONFIG,
+  type LibraryWorldConfig,
+} from '@/lib/libraryWorldConfig'
 import styles from './map.module.css'
 import {
   getQualitySettings,
@@ -48,6 +53,34 @@ import {
   type DreamDive,
 } from './dreamworld/dive/createDreamDive'
 import {DreamPostShader} from './dreamworld/effects/dreamPostShader'
+import {createCinematicEnvironment} from './dreamworld/rendering/createCinematicEnvironment'
+import {
+  createPortalSceneTransition,
+  type PortalSceneTransition,
+} from './dreamworld/effects/createPortalSceneTransition'
+import {
+  ARCHIVE_PATH_RENDER_BAYS,
+  ARCHIVE_WALKWAY_HALF_WIDTH,
+  ARCHIVE_WALKWAY_Y_OFFSET,
+  archiveBayFromWorldZ,
+  archiveDistrictGridLaneOffset,
+  archiveDistrictInfluence,
+  archiveGridRoadSegments,
+  archiveOffsetPathPoint,
+  archivePathFrame,
+  archivePathPoint,
+  archiveWalkSurfaceAtPosition,
+  archiveWalkwayHalfWidthAtBay,
+} from './libraryLayout'
+import {createLibraryAudio} from './libraryAudio'
+import {
+  createLibraryReadingRitual,
+  type LibraryBookVisual,
+} from './libraryReadingRitual'
+import {
+  createLibraryAtmosphere,
+  getLibraryAtmosphereVisualPreset,
+} from './libraryAtmosphere'
 
 export type DreamWorldNode = {
   _id: string
@@ -58,6 +91,21 @@ export type DreamWorldNode = {
   y: number
   frequency: number
   dreamIds: string[]
+  libraryKind?: 'shelf'
+  subtitle?: string
+  articleCount?: number
+  accent?: string
+  world?: [number, number, number]
+  libraryYaw?: number
+  libraryPathBay?: number
+  libraryDistrictId?: string
+  libraryBooks?: Array<{
+    id: string
+    title: string
+    coverUrl?: string
+    activity?: number
+    fresh?: boolean
+  }>
 }
 
 export type DreamWorldEdge = {
@@ -78,6 +126,13 @@ type ProjectionPoint = {
   visible: boolean
 }
 
+export type LibraryMovementMode = 'walk' | 'fly'
+export type LibraryReadingBook = {
+  nodeId: string
+  index: number
+}
+
+
 type Props = {
   nodes: DreamWorldNode[]
   edges: DreamWorldEdge[]
@@ -97,20 +152,35 @@ type Props = {
   diveBackRequest: number
   diveTimelineProgress: number
   observatoryMode: boolean
+  flightMode: boolean
+  libraryMovementMode?: LibraryMovementMode
+  libraryWorldConfig?: LibraryWorldConfig
+  libraryReadingBook?: LibraryReadingBook | null
+  inputBlocked?: boolean
   onZoomChange: (zoom: number) => void
   onPanChange: (pan: Pan) => void
   onNodeHover: (node: DreamWorldNode | null) => void
   onNodeSelect: (node: DreamWorldNode) => void
+  onBookSelect?: (nodeId: string, bookIndex: number) => void
+  onFlightNavigationChange?: (state: {
+    nearestId: string | null
+    routeTargetId: string | null
+  }) => void
   onBackgroundClick: () => void
   onProjectionChange: (projection: ProjectionPoint | null) => void
   onDiveStateChange: (active: boolean, title?: string) => void
   onDiveDreamChange: (dreamId: string, title: string, depth: number) => void
+  onFlightModeChange: (active: boolean) => void
+  onLibraryMovementModeChange?: (
+    mode: LibraryMovementMode,
+  ) => void
 }
 
 type NodeVisual = {
   group: THREE.Group
   shell: THREE.Mesh
   shellMaterial: LivingOrbMaterial
+  reflectionShell: THREE.Mesh
   miniWorld: MiniWorld
   glow: THREE.Mesh
   core: THREE.Mesh
@@ -121,6 +191,12 @@ type NodeVisual = {
   pulseStartedAt: number
   phase: number
   z: number
+}
+
+type BokehUniformMap = {
+  focus: {value: number}
+  aperture: {value: number}
+  maxblur: {value: number}
 }
 
 type EdgeVisual = {
@@ -161,6 +237,10 @@ function worldPosition(
   node: DreamWorldNode,
   positions: Record<string, {x: number; y: number}>,
 ) {
+  if (node.world) {
+    return new THREE.Vector3(...node.world)
+  }
+
   const point = positions[node._id] ?? {x: node.x * 10, y: node.y * 7}
   const seed = hashString(node._id)
   const z = -1.6 + seededUnit(seed, 19) * 3.2
@@ -203,7 +283,9 @@ function createLabelTexture(node: DreamWorldNode) {
   const context = canvas.getContext('2d')
   if (!context) return new THREE.CanvasTexture(canvas)
 
-  const color = new THREE.Color(CATEGORY_COLORS[node.category])
+  const color = new THREE.Color(
+    node.accent ?? CATEGORY_COLORS[node.category],
+  )
   const rgb = {
     r: Math.round(color.r * 255),
     g: Math.round(color.g * 255),
@@ -213,15 +295,15 @@ function createLabelTexture(node: DreamWorldNode) {
   context.clearRect(0, 0, canvas.width, canvas.height)
 
   const gradient = context.createLinearGradient(68, 16, 560, 128)
-  gradient.addColorStop(0, 'rgba(7, 11, 27, .88)')
-  gradient.addColorStop(.72, 'rgba(12, 18, 39, .72)')
-  gradient.addColorStop(1, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, .12)`)
+  gradient.addColorStop(0, 'rgba(4, 8, 20, .97)')
+  gradient.addColorStop(.72, 'rgba(8, 14, 31, .94)')
+  gradient.addColorStop(1, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, .2)`)
 
   roundedRect(context, 26, 20, 588, 102, 38)
   context.fillStyle = gradient
   context.fill()
-  context.strokeStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, .28)`
-  context.lineWidth = 2
+  context.strokeStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, .58)`
+  context.lineWidth = 3
   context.stroke()
 
   context.shadowColor = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, .48)`
@@ -233,16 +315,256 @@ function createLabelTexture(node: DreamWorldNode) {
 
   context.shadowBlur = 0
   context.fillStyle = '#e5ecfb'
-  context.font = '600 27px system-ui, sans-serif'
+  context.font = '700 31px system-ui, sans-serif'
   const title = node.name.length > 25 ? `${node.name.slice(0, 24)}…` : node.name
   context.fillText(title, 110, 61)
 
-  context.fillStyle = 'rgba(170, 183, 210, .82)'
-  context.font = '500 17px system-ui, sans-serif'
+  context.fillStyle = 'rgba(205, 217, 235, .92)'
+  context.font = '600 18px system-ui, sans-serif'
   context.fillText(
-    `${node.frequency} dream${node.frequency === 1 ? '' : 's'} · ${node.category}`,
+    node.libraryKind === 'shelf'
+      ? `${node.articleCount ?? node.frequency} articles · ${node.subtitle ?? 'floating shelf'}`
+      : `${node.frequency} dream${node.frequency === 1 ? '' : 's'} · ${node.category}`,
     110,
     92,
+  )
+
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.colorSpace = THREE.SRGBColorSpace
+  texture.minFilter = THREE.LinearFilter
+  texture.magFilter = THREE.LinearFilter
+  return texture
+}
+
+function createLibraryRouteLabelTexture(
+  title: string,
+  code: string,
+  accent = '#80deeb',
+) {
+  const canvas = document.createElement('canvas')
+  canvas.width = 768
+  canvas.height = 192
+  const context = canvas.getContext('2d')
+  if (!context) return new THREE.CanvasTexture(canvas)
+
+  context.clearRect(0, 0, canvas.width, canvas.height)
+  const gradient = context.createLinearGradient(0, 0, canvas.width, 0)
+  gradient.addColorStop(0, accent + '12')
+  gradient.addColorStop(.5, accent + '42')
+  gradient.addColorStop(1, accent + '12')
+  context.fillStyle = gradient
+  context.fillRect(0, 18, canvas.width, 156)
+
+  context.strokeStyle = accent
+  context.globalAlpha = .72
+  context.lineWidth = 4
+  context.strokeRect(18, 34, canvas.width - 36, 124)
+
+  context.globalAlpha = 1
+  context.textAlign = 'center'
+  context.textBaseline = 'middle'
+  context.fillStyle = 'rgba(229, 247, 255, .94)'
+  context.font = '800 58px system-ui, sans-serif'
+  context.fillText(title, canvas.width / 2, 82)
+
+  context.fillStyle = 'rgba(151, 207, 233, .84)'
+  context.font = '700 26px ui-monospace, monospace'
+  context.fillText(code, canvas.width / 2, 132)
+
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.colorSpace = THREE.SRGBColorSpace
+  texture.minFilter = THREE.LinearFilter
+  texture.magFilter = THREE.LinearFilter
+  return texture
+}
+
+function createLibraryWelcomeTexture(config: LibraryWorldConfig) {
+  const canvas = document.createElement('canvas')
+  canvas.width = 1680
+  canvas.height = 960
+  const context = canvas.getContext('2d')
+  if (!context) return new THREE.CanvasTexture(canvas)
+
+  const drawWrappedText = (
+    text: string,
+    x: number,
+    y: number,
+    maxWidth: number,
+    lineHeight: number,
+  ) => {
+    const words = text.split(' ')
+    let line = ''
+    let cursorY = y
+
+    words.forEach((word, index) => {
+      const candidate = line ? line + ' ' + word : word
+      const measured = context.measureText(candidate).width
+      if (measured > maxWidth && line) {
+        context.fillText(line, x, cursorY)
+        cursorY += lineHeight
+        line = word
+      } else {
+        line = candidate
+      }
+
+      if (index === words.length - 1 && line) {
+        context.fillText(line, x, cursorY)
+        cursorY += lineHeight
+      }
+    })
+
+    return cursorY
+  }
+
+  context.clearRect(0, 0, canvas.width, canvas.height)
+
+  const background = context.createLinearGradient(
+    0,
+    0,
+    canvas.width,
+    canvas.height,
+  )
+  background.addColorStop(0, 'rgba(3, 8, 18, .985)')
+  background.addColorStop(.56, 'rgba(8, 16, 32, .97)')
+  background.addColorStop(1, 'rgba(30, 18, 55, .955)')
+
+  roundedRect(context, 36, 36, 1608, 888, 48)
+  context.fillStyle = background
+  context.fill()
+  context.strokeStyle = 'rgba(99, 220, 236, .58)'
+  context.lineWidth = 5
+  context.stroke()
+
+  context.textAlign = 'left'
+  context.textBaseline = 'top'
+
+  context.fillStyle = '#f5fbff'
+  context.font = '800 86px system-ui, sans-serif'
+  context.fillText(config.welcomeTitle, 96, 82)
+
+  context.fillStyle = 'rgba(158, 225, 238, .94)'
+  context.font = '700 30px ui-monospace, monospace'
+  context.fillText(
+    config.welcomeSubtitle.toUpperCase(),
+    102,
+    188,
+  )
+
+  context.strokeStyle = 'rgba(115, 195, 227, .22)'
+  context.lineWidth = 2
+  context.beginPath()
+  context.moveTo(100, 250)
+  context.lineTo(1580, 250)
+  context.stroke()
+
+  const cards = [
+    {
+      x: 92,
+      width: 456,
+      title: 'WHAT THIS IS',
+      accent: 'rgba(101, 212, 223, .18)',
+      body: [
+        config.welcomeBody,
+        config.source === 'sanity'
+          ? 'This archive is structured and curated live through Sanity.'
+          : 'Sanity can author the districts, curation, atmosphere, and journeys.',
+      ],
+    },
+    {
+      x: 612,
+      width: 456,
+      title: 'HOW IT IS BUILT',
+      accent: 'rgba(140, 124, 255, .18)',
+      body: [
+        'Next.js + React + TypeScript + Three.js.',
+        'DEV API data is streamed into seeded districts, shelves, paths, covers, and atmosphere.',
+      ],
+    },
+    {
+      x: 1132,
+      width: 456,
+      title: 'CONTROLS',
+      accent: 'rgba(207, 140, 255, .18)',
+      controls: [
+        ['WASD', 'move'],
+        ['Mouse', 'look'],
+        ['E', 'inspect / close'],
+        ['G', 'toggle WALK / FLY'],
+        ['R', 'auto-route while flying'],
+        ['Click book', 'open article'],
+        ['Esc', 'release mouse'],
+      ],
+    },
+  ] as const
+
+  cards.forEach((card) => {
+    roundedRect(context, card.x, 300, card.width, 490, 28)
+    context.fillStyle = card.accent
+    context.fill()
+    context.strokeStyle = 'rgba(121, 191, 224, .2)'
+    context.lineWidth = 2
+    context.stroke()
+
+    context.fillStyle = 'rgba(145, 220, 237, .96)'
+    context.font = '800 31px system-ui, sans-serif'
+    context.fillText(card.title, card.x + 34, 336)
+
+    context.strokeStyle = 'rgba(121, 191, 224, .22)'
+    context.beginPath()
+    context.moveTo(card.x + 34, 388)
+    context.lineTo(card.x + card.width - 34, 388)
+    context.stroke()
+
+    if ('body' in card) {
+      context.fillStyle = 'rgba(230, 239, 249, .92)'
+      context.font = '500 27px system-ui, sans-serif'
+      let cursorY = 424
+      card.body.forEach((paragraph) => {
+        cursorY = drawWrappedText(
+          paragraph,
+          card.x + 34,
+          cursorY,
+          card.width - 68,
+          41,
+        )
+        cursorY += 22
+      })
+    }
+
+    if ('controls' in card) {
+      let cursorY = 422
+      card.controls.forEach(([key, action]) => {
+        context.fillStyle = 'rgba(194, 178, 242, .98)'
+        context.font = '800 25px ui-monospace, monospace'
+        context.fillText(key, card.x + 34, cursorY)
+
+        context.fillStyle = 'rgba(229, 239, 248, .92)'
+        context.font = '500 25px system-ui, sans-serif'
+        context.fillText(
+          action,
+          card.x + 178,
+          cursorY,
+        )
+        cursorY += 50
+      })
+    }
+  })
+
+  context.fillStyle = 'rgba(193, 177, 239, .94)'
+  context.font = '700 25px ui-monospace, monospace'
+  context.fillText(
+    config.archiveStatus +
+      ' · follow the holographic boulevard · district signs float overhead',
+    100,
+    846,
+  )
+
+  context.fillStyle = 'rgba(150, 204, 224, .78)'
+  context.font = '600 22px system-ui, sans-serif'
+  context.fillText(
+    'Press G anytime to switch between grounded exploration and free flight.',
+    100,
+    886,
   )
 
   const texture = new THREE.CanvasTexture(canvas)
@@ -259,11 +581,32 @@ function createNebulaTexture(color: string) {
   const context = canvas.getContext('2d')
   if (!context) return new THREE.CanvasTexture(canvas)
 
-  const gradient = context.createRadialGradient(256, 256, 0, 256, 256, 256)
-  gradient.addColorStop(0, color)
-  gradient.addColorStop(.25, color.replace('0.36', '0.17'))
-  gradient.addColorStop(.58, color.replace('0.36', '0.055'))
-  gradient.addColorStop(1, 'rgba(0,0,0,0)')
+  const rgbaMatch = color.match(
+    /rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*,\s*([\d.]+))?\s*\)/,
+  )
+  const red = rgbaMatch?.[1] ?? '120'
+  const green = rgbaMatch?.[2] ?? '120'
+  const blue = rgbaMatch?.[3] ?? '180'
+  const alpha = Number(rgbaMatch?.[4] ?? .36)
+  const rgba = (multiplier: number) =>
+    `rgba(${red}, ${green}, ${blue}, ${Math.max(
+      0,
+      Math.min(1, alpha * multiplier),
+    )})`
+
+  const gradient = context.createRadialGradient(
+    256,
+    256,
+    0,
+    256,
+    256,
+    256,
+  )
+  gradient.addColorStop(0, rgba(1))
+  gradient.addColorStop(.22, rgba(.58))
+  gradient.addColorStop(.5, rgba(.24))
+  gradient.addColorStop(.76, rgba(.07))
+  gradient.addColorStop(1, 'rgba(0, 0, 0, 0)')
   context.fillStyle = gradient
   context.fillRect(0, 0, 512, 512)
 
@@ -299,14 +642,23 @@ export default function DreamWorld3D({
   diveBackRequest,
   diveTimelineProgress,
   observatoryMode,
+  flightMode,
+  libraryMovementMode = 'walk',
+  libraryWorldConfig = DEFAULT_LIBRARY_WORLD_CONFIG,
+  libraryReadingBook = null,
+  inputBlocked = false,
   onZoomChange,
   onPanChange,
   onNodeHover,
   onNodeSelect,
+  onBookSelect,
+  onFlightNavigationChange,
   onBackgroundClick,
   onProjectionChange,
   onDiveStateChange,
   onDiveDreamChange,
+  onFlightModeChange,
+  onLibraryMovementModeChange,
 }: Props) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const nodeRef = useRef(nodes)
@@ -323,6 +675,8 @@ export default function DreamWorld3D({
   const onPanChangeRef = useRef(onPanChange)
   const onNodeHoverRef = useRef(onNodeHover)
   const onNodeSelectRef = useRef(onNodeSelect)
+  const onBookSelectRef = useRef(onBookSelect)
+  const onFlightNavigationChangeRef = useRef(onFlightNavigationChange)
   const onBackgroundClickRef = useRef(onBackgroundClick)
   const onProjectionChangeRef = useRef(onProjectionChange)
   const qualityRef = useRef(quality)
@@ -332,8 +686,22 @@ export default function DreamWorld3D({
   const diveBackRequestRef = useRef(diveBackRequest)
   const diveTimelineProgressRef = useRef(diveTimelineProgress)
   const observatoryModeRef = useRef(observatoryMode)
+  const flightModeRef = useRef(flightMode)
+  const libraryMovementModeRef =
+    useRef<LibraryMovementMode>(libraryMovementMode)
+  const libraryReadingBookRef =
+    useRef<LibraryReadingBook | null>(libraryReadingBook)
+  const inputBlockedRef = useRef(inputBlocked)
+  const libraryFlightStateRef = useRef<{
+    position: [number, number, number]
+    quaternion: [number, number, number, number]
+  } | null>(null)
   const onDiveStateChangeRef = useRef(onDiveStateChange)
   const onDiveDreamChangeRef = useRef(onDiveDreamChange)
+  const onFlightModeChangeRef = useRef(onFlightModeChange)
+  const onLibraryMovementModeChangeRef = useRef(
+    onLibraryMovementModeChange,
+  )
 
   nodeRef.current = nodes
   positionsRef.current = positions
@@ -349,6 +717,8 @@ export default function DreamWorld3D({
   onPanChangeRef.current = onPanChange
   onNodeHoverRef.current = onNodeHover
   onNodeSelectRef.current = onNodeSelect
+  onBookSelectRef.current = onBookSelect
+  onFlightNavigationChangeRef.current = onFlightNavigationChange
   onBackgroundClickRef.current = onBackgroundClick
   onProjectionChangeRef.current = onProjectionChange
   qualityRef.current = quality
@@ -358,12 +728,24 @@ export default function DreamWorld3D({
   diveBackRequestRef.current = diveBackRequest
   diveTimelineProgressRef.current = diveTimelineProgress
   observatoryModeRef.current = observatoryMode
+  flightModeRef.current = flightMode
+  libraryMovementModeRef.current = libraryMovementMode
+  libraryReadingBookRef.current = libraryReadingBook
+  inputBlockedRef.current = inputBlocked
   onDiveStateChangeRef.current = onDiveStateChange
   onDiveDreamChangeRef.current = onDiveDreamChange
+  onFlightModeChangeRef.current = onFlightModeChange
+  onLibraryMovementModeChangeRef.current =
+    onLibraryMovementModeChange
 
   const graphKey = useMemo(
     () =>
-      `${quality}::${nodes.map((node) => node._id).join('|')}::${edges
+      `${quality}::${nodes
+        .map(
+          (node) =>
+            `${node._id}:${node.articleCount ?? 0}:${node.libraryBooks?.map((book) => book.id + ':' + (book.coverUrl ?? '')).join('|') ?? ''}:${node.world?.join(',') ?? ''}:${node.libraryYaw ?? ''}:${node.libraryPathBay ?? ''}`,
+        )
+        .join('|')}::${edges
         .map((edge) => `${edge.id}:${edge.weight}`)
         .join('|')}::${dreams
         .map(
@@ -376,21 +758,87 @@ export default function DreamWorld3D({
     [dreams, edges, nodes, quality],
   )
 
+  const libraryWorldKey = useMemo(
+    // Include the complete Sanity payload (including sanityRevision) so any
+    // authored world change invalidates the scene. Previously only a subset
+    // of fields participated in the key, allowing valid Sanity edits to land
+    // in React state without rebuilding the Three.js world.
+    () => JSON.stringify(libraryWorldConfig),
+    [libraryWorldConfig],
+  )
+
   useEffect(() => {
     const host = hostRef.current
     if (!host) return
+    const container: HTMLDivElement = host
 
     const settings = getQualitySettings(qualityRef.current)
+    const activeLibraryConfig =
+      libraryWorldConfig ?? DEFAULT_LIBRARY_WORLD_CONFIG
+    const activeDistricts =
+      activeLibraryConfig.districts.length > 0
+        ? activeLibraryConfig.districts
+        : DEFAULT_LIBRARY_WORLD_CONFIG.districts
+    const libraryMode = nodeRef.current.some(
+      (node) => node.libraryKind === 'shelf',
+    )
+    const libraryGridSegments = libraryMode
+      ? archiveGridRoadSegments(activeDistricts)
+      : []
 
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color(0x030611)
-    scene.fog = new THREE.FogExp2(0x07101f, settings.fogDensity)
+    const globalAtmospherePreset =
+      getLibraryAtmosphereVisualPreset(
+        activeLibraryConfig.atmosphere,
+      )
+    const sceneBackgroundColor = new THREE.Color(
+      libraryMode
+        ? globalAtmospherePreset.background
+        : 0x030611,
+    )
+    const atmosphereBackgroundTarget = new THREE.Color()
+    const atmosphereFogTarget = new THREE.Color()
+    const atmosphereLightTarget = new THREE.Color()
+    scene.background = sceneBackgroundColor
+    scene.fog = new THREE.FogExp2(
+      libraryMode
+        ? globalAtmospherePreset.fog
+        : 0x07101f,
+      settings.fogDensity *
+        (libraryMode
+          ? globalAtmospherePreset.fogScale *
+            (.55 + activeLibraryConfig.hazeIntensity * .85)
+          : 1),
+    )
 
-    const camera = new THREE.PerspectiveCamera(43, 1, 0.05, 80)
-    camera.position.set(0, 0, 10.8)
+    const camera = new THREE.PerspectiveCamera(
+      43,
+      1,
+      0.05,
+      libraryMode ? 900 : 80,
+    )
+    const savedLibraryFlightState =
+      libraryMode ? libraryFlightStateRef.current : null
+    if (savedLibraryFlightState) {
+      camera.position.fromArray(savedLibraryFlightState.position)
+      camera.quaternion.fromArray(savedLibraryFlightState.quaternion)
+    } else if (libraryMode) {
+      const arrival = archivePathPoint(0)
+      camera.position.set(
+        arrival[0],
+        arrival[1] + ARCHIVE_WALKWAY_Y_OFFSET + 1.64,
+        arrival[2],
+      )
+    } else {
+      camera.position.set(0, 0, 10.8)
+    }
 
     const listener = new THREE.AudioListener()
     camera.add(listener)
+
+    const libraryAudio = libraryMode
+      ? createLibraryAudio(listener)
+      : null
 
     const renderer = new THREE.WebGLRenderer({
       antialias: true,
@@ -402,30 +850,42 @@ export default function DreamWorld3D({
     )
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = 0.94
-    renderer.shadowMap.enabled = false
+    renderer.toneMappingExposure = libraryMode ? .84 : .94
+    renderer.shadowMap.enabled = settings.miniWorldDetail > 0
+    renderer.shadowMap.type = THREE.PCFShadowMap
     renderer.domElement.className = styles.webglCanvas
-    host.appendChild(renderer.domElement)
+    container.appendChild(renderer.domElement)
+
+    const cinematicEnvironment = createCinematicEnvironment(renderer)
+    scene.environment = cinematicEnvironment.texture
+    scene.environmentIntensity = settings.environmentIntensity
 
     const composer = new EffectComposer(renderer)
     const renderPass = new RenderPass(scene, camera)
     composer.addPass(renderPass)
 
+    const ssao = new SSAOPass(scene, camera, 1, 1)
+    ssao.enabled = settings.ssao
+    ssao.kernelRadius = settings.ssaoKernelRadius
+    ssao.minDistance = 0.002
+    ssao.maxDistance = 0.12
+    composer.addPass(ssao)
+
     const depthOfField = new BokehPass(scene, camera, {
       focus: 10,
       aperture: 0.000035,
       maxblur: settings.maxBlur,
-      width: 1,
-      height: 1,
     })
     depthOfField.enabled = false
     composer.addPass(depthOfField)
 
     const bloom = new UnrealBloomPass(
       new THREE.Vector2(1, 1),
-      settings.bloomStrength,
-      settings.bloomRadius,
-      settings.bloomThreshold,
+      settings.bloomStrength * (libraryMode ? .44 : 1),
+      settings.bloomRadius * (libraryMode ? .72 : 1),
+      libraryMode
+        ? Math.max(.82, settings.bloomThreshold)
+        : settings.bloomThreshold,
     )
     composer.addPass(bloom)
 
@@ -433,21 +893,52 @@ export default function DreamWorld3D({
     dreamPost.uniforms.uCinematic.value =
       qualityRef.current === 'cinematic' ? 1 : 0
     dreamPost.uniforms.uIntensity.value =
-      qualityRef.current === 'cinematic' ? 0.72 : 0.32
+      qualityRef.current === 'cinematic'
+        ? libraryMode
+          ? .5
+          : .72
+        : libraryMode
+          ? .22
+          : .32
     composer.addPass(dreamPost)
     composer.addPass(new OutputPass())
 
-    scene.add(new THREE.AmbientLight(0x7182b6, 0.75))
+    scene.add(
+      new THREE.AmbientLight(
+        0x7182b6,
+        libraryMode ? .46 : .75,
+      ),
+    )
 
-    const keyLight = new THREE.DirectionalLight(0xd4e5ff, 2.1)
+    const keyLight = new THREE.DirectionalLight(
+      0xd4e5ff,
+      libraryMode ? 1.22 : 2.1,
+    )
     keyLight.position.set(-5, 6, 8)
+    keyLight.castShadow = renderer.shadowMap.enabled
+    keyLight.shadow.mapSize.set(
+      qualityRef.current === 'cinematic' ? 2048 : 1024,
+      qualityRef.current === 'cinematic' ? 2048 : 1024,
+    )
+    keyLight.shadow.bias = -0.00015
+    keyLight.shadow.normalBias = 0.025
     scene.add(keyLight)
 
-    const violetLight = new THREE.PointLight(0xb791ff, 12, 20, 2)
+    const violetLight = new THREE.PointLight(
+      0xb791ff,
+      libraryMode ? 7 : 12,
+      20,
+      2,
+    )
     violetLight.position.set(-5, 1, 3)
     scene.add(violetLight)
 
-    const cyanLight = new THREE.PointLight(0x72e2df, 11, 20, 2)
+    const cyanLight = new THREE.PointLight(
+      0x72e2df,
+      libraryMode ? 6.5 : 11,
+      20,
+      2,
+    )
     cyanLight.position.set(5, -1, 2)
     scene.add(cyanLight)
 
@@ -479,6 +970,396 @@ export default function DreamWorld3D({
     })
     const stars = new THREE.Points(starGeometry, starMaterial)
     farWorld.add(stars)
+
+    let libraryFarParticleGeometry: THREE.BufferGeometry | null = null
+    let libraryFarParticleMaterial: THREE.ShaderMaterial | null = null
+    let libraryFarParticles: THREE.Points | null = null
+
+    if (libraryMode) {
+      const cinematicParticles = qualityRef.current === 'cinematic'
+      const highParticles = qualityRef.current === 'high'
+      const tinyParticleCount = cinematicParticles
+        ? 820
+        : highParticles
+          ? 640
+          : 340
+      const moteCount = cinematicParticles
+        ? 72
+        : highParticles
+          ? 56
+          : 42
+      const particleCount = tinyParticleCount + moteCount
+
+      const positions = new Float32Array(particleCount * 3)
+      const colors = new Float32Array(particleCount * 3)
+      const sizes = new Float32Array(particleCount)
+      const phases = new Float32Array(particleCount)
+      const palette = [
+        new THREE.Color(0xdcecff),
+        new THREE.Color(0xa9e4ea),
+        new THREE.Color(0xc9b7ee),
+      ]
+
+      for (let index = 0; index < particleCount; index += 1) {
+        const offset = index * 3
+        const seed = index + 1703
+        const isMote = index >= tinyParticleCount
+        const depth = Math.pow(seededUnit(seed, 3), .58)
+
+        positions[offset] = (seededUnit(seed, 1) - .5) * 180
+        positions[offset + 1] = (seededUnit(seed, 2) - .5) * 88
+        positions[offset + 2] = -42 - depth * 215
+
+        const color =
+          palette[Math.floor(seededUnit(seed, 4) * palette.length)] ??
+          palette[0]
+        colors[offset] = color.r
+        colors[offset + 1] = color.g
+        colors[offset + 2] = color.b
+
+        sizes[index] = isMote
+          ? 3.2 + seededUnit(seed, 5) * 2.8
+          : .9 + seededUnit(seed, 5) * 1.25
+        phases[index] = seededUnit(seed, 6) * Math.PI * 2
+      }
+
+      libraryFarParticleGeometry = new THREE.BufferGeometry()
+      libraryFarParticleGeometry.setAttribute(
+        'position',
+        new THREE.BufferAttribute(positions, 3),
+      )
+      libraryFarParticleGeometry.setAttribute(
+        'color',
+        new THREE.BufferAttribute(colors, 3),
+      )
+      libraryFarParticleGeometry.setAttribute(
+        'aSize',
+        new THREE.BufferAttribute(sizes, 1),
+      )
+      libraryFarParticleGeometry.setAttribute(
+        'aPhase',
+        new THREE.BufferAttribute(phases, 1),
+      )
+      libraryFarParticleGeometry.computeBoundingSphere()
+
+      libraryFarParticleMaterial = new THREE.ShaderMaterial({
+        uniforms: {
+          uTime: {value: 0},
+          uOpacity: {value: cinematicParticles ? .34 : .27},
+        },
+        vertexShader: `
+          attribute float aSize;
+          attribute float aPhase;
+          varying vec3 vColor;
+          varying float vAlpha;
+          uniform float uTime;
+
+          void main() {
+            vec3 drifted = position;
+            drifted.x += sin(uTime * 0.035 + aPhase) * 0.7;
+            drifted.y += cos(uTime * 0.028 + aPhase * 1.37) * 0.45;
+
+            vec4 mvPosition = modelViewMatrix * vec4(drifted, 1.0);
+            gl_Position = projectionMatrix * mvPosition;
+            gl_PointSize = aSize * clamp(150.0 / max(22.0, -mvPosition.z), 0.55, 2.0);
+            vColor = color;
+            vAlpha = smoothstep(-280.0, -35.0, drifted.z);
+          }
+        `,
+        fragmentShader: `
+          varying vec3 vColor;
+          varying float vAlpha;
+          uniform float uOpacity;
+
+          void main() {
+            vec2 centered = gl_PointCoord - vec2(0.5);
+            float radius = length(centered);
+            float softDisc = smoothstep(0.5, 0.08, radius);
+            float core = smoothstep(0.22, 0.0, radius) * 0.18;
+            float alpha = (softDisc + core) * uOpacity * (0.38 + vAlpha * 0.62);
+            if (alpha < 0.004) discard;
+            gl_FragColor = vec4(vColor, alpha);
+          }
+        `,
+        transparent: true,
+        depthWrite: false,
+        vertexColors: true,
+        blending: THREE.NormalBlending,
+        toneMapped: true,
+      })
+
+      libraryFarParticles = new THREE.Points(
+        libraryFarParticleGeometry,
+        libraryFarParticleMaterial,
+      )
+      libraryFarParticles.renderOrder = -3
+      farWorld.add(libraryFarParticles)
+    }
+
+    const librarySkyways: Array<{
+      group: THREE.Group
+      phase: number
+      laneMaterial: THREE.LineBasicMaterial
+      edgeMaterial: THREE.LineBasicMaterial
+    }> = []
+    const librarySkywayGeometries: THREE.BufferGeometry[] = []
+    const librarySkywayMaterials: THREE.Material[] = []
+
+    if (libraryMode) {
+      // Replace the old archive skyscrapers with unreachable floating
+      // expressways. They are deliberately placed in farWorld only, so they
+      // never become walkable surfaces, raycast targets, or collision bodies.
+      const up = new THREE.Vector3(0, 1, 0)
+      const tangent = new THREE.Vector3()
+      const side = new THREE.Vector3()
+      const center = new THREE.Vector3()
+
+      const buildSkywayRibbon = (
+        curve: THREE.CatmullRomCurve3,
+        width: number,
+      ) => {
+        const samples = 96
+        const positions = new Float32Array((samples + 1) * 2 * 3)
+        const indices: number[] = []
+        const leftPoints: THREE.Vector3[] = []
+        const rightPoints: THREE.Vector3[] = []
+        const centerPoints: THREE.Vector3[] = []
+
+        for (let sample = 0; sample <= samples; sample += 1) {
+          const t = sample / samples
+          center.copy(curve.getPointAt(t))
+          tangent.copy(curve.getTangentAt(t)).normalize()
+          side.crossVectors(up, tangent)
+          if (side.lengthSq() < .0001) {
+            side.set(1, 0, 0)
+          } else {
+            side.normalize()
+          }
+
+          const left = center
+            .clone()
+            .addScaledVector(side, width * .5)
+          const right = center
+            .clone()
+            .addScaledVector(side, -width * .5)
+          const offset = sample * 6
+
+          positions[offset] = left.x
+          positions[offset + 1] = left.y
+          positions[offset + 2] = left.z
+          positions[offset + 3] = right.x
+          positions[offset + 4] = right.y
+          positions[offset + 5] = right.z
+
+          leftPoints.push(left)
+          rightPoints.push(right)
+          centerPoints.push(center.clone())
+
+          if (sample > 0) {
+            const previousLeft = (sample - 1) * 2
+            const previousRight = previousLeft + 1
+            const currentLeft = sample * 2
+            const currentRight = currentLeft + 1
+            indices.push(
+              previousLeft,
+              previousRight,
+              currentLeft,
+              previousRight,
+              currentRight,
+              currentLeft,
+            )
+          }
+        }
+
+        const ribbonGeometry = new THREE.BufferGeometry()
+        ribbonGeometry.setAttribute(
+          'position',
+          new THREE.BufferAttribute(positions, 3),
+        )
+        ribbonGeometry.setIndex(indices)
+        ribbonGeometry.computeVertexNormals()
+        ribbonGeometry.computeBoundingSphere()
+
+        const leftGeometry =
+          new THREE.BufferGeometry().setFromPoints(leftPoints)
+        const rightGeometry =
+          new THREE.BufferGeometry().setFromPoints(rightPoints)
+        const centerGeometry =
+          new THREE.BufferGeometry().setFromPoints(centerPoints)
+
+        return {
+          ribbonGeometry,
+          leftGeometry,
+          rightGeometry,
+          centerGeometry,
+        }
+      }
+
+      const skywayColors = [
+        0x5fd8e6,
+        0x9b7fea,
+        0xd782e8,
+        0x6f8dff,
+        0x77d7bd,
+        0xb88cf0,
+        0x83c9ef,
+      ]
+
+      // Give every expressway its own piece of sky. The old procedural
+      // formula pushed several routes through the same center/height band,
+      // which made them read as one knot above the landmarks.
+      const skywayBands = [
+        {lateral: -62, altitude: 16, wave: 5.5, phase: .2},
+        {lateral: -45, altitude: 25, wave: 7, phase: 1.05},
+        {lateral: -28, altitude: 11, wave: 6.5, phase: 2.1},
+        {lateral: -10, altitude: 31, wave: 5.5, phase: 3.0},
+        {lateral: 11, altitude: 19, wave: 6.5, phase: 3.85},
+        {lateral: 29, altitude: 28, wave: 7, phase: 4.7},
+        {lateral: 47, altitude: 13, wave: 5.8, phase: 5.55},
+        {lateral: 64, altitude: 23, wave: 5.2, phase: 6.35},
+      ] as const
+
+      for (
+        let routeIndex = 0;
+        routeIndex < skywayBands.length;
+        routeIndex += 1
+      ) {
+        const band = skywayBands[routeIndex]
+        const startBay =
+          .75 + (routeIndex % 4) * 1.15
+        const endBay = Math.min(
+          ARCHIVE_PATH_RENDER_BAYS - 1,
+          51 + routeIndex * 2.4,
+        )
+        const curvePoints: THREE.Vector3[] = []
+        const interchangeRoute =
+          routeIndex === 2 || routeIndex === 5
+
+        for (let step = 0; step <= 11; step += 1) {
+          const t = step / 11
+          const bay = THREE.MathUtils.lerp(startBay, endBay, t)
+          const pathPoint = new THREE.Vector3(...archivePathPoint(bay))
+          const frame = archivePathFrame(bay)
+          const normal = new THREE.Vector3(
+            frame.normalX,
+            0,
+            frame.normalZ,
+          )
+
+          // Most routes stay inside a dedicated lateral band. Two routes
+          // make broad interchange sweeps toward one another, providing the
+          // "intertwined" moment without collapsing the whole network into
+          // the same center point.
+          const interchangeSweep = interchangeRoute
+            ? Math.sin(t * Math.PI) *
+              (routeIndex === 2 ? 14 : -14)
+            : 0
+          const lateral =
+            band.lateral +
+            Math.sin(
+              t * Math.PI * 2.05 + band.phase,
+            ) *
+              band.wave +
+            interchangeSweep
+
+          pathPoint.addScaledVector(normal, lateral)
+          pathPoint.y +=
+            band.altitude +
+            Math.sin(
+              t * Math.PI * 2.45 + band.phase,
+            ) *
+              2.25 +
+            (interchangeRoute
+              ? Math.sin(t * Math.PI) * 2.8
+              : 0)
+          curvePoints.push(pathPoint)
+        }
+
+        const curve = new THREE.CatmullRomCurve3(
+          curvePoints,
+          false,
+          'catmullrom',
+          .36,
+        )
+        const width = 2.45 + (routeIndex % 3) * .42
+        const {
+          ribbonGeometry,
+          leftGeometry,
+          rightGeometry,
+          centerGeometry,
+        } = buildSkywayRibbon(curve, width)
+
+        const accent = new THREE.Color(
+          skywayColors[routeIndex % skywayColors.length],
+        )
+        const roadMaterial = new THREE.MeshBasicMaterial({
+          color: accent.clone().multiplyScalar(.22),
+          transparent: true,
+          opacity: .42,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+          blending: THREE.NormalBlending,
+          toneMapped: false,
+          fog: false,
+        })
+        const edgeMaterial = new THREE.LineBasicMaterial({
+          color: accent,
+          transparent: true,
+          opacity: .62,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          toneMapped: false,
+          fog: false,
+        })
+        const laneMaterial = new THREE.LineBasicMaterial({
+          color: accent.clone().lerp(new THREE.Color(0xffffff), .46),
+          transparent: true,
+          opacity: .24,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          toneMapped: false,
+          fog: false,
+        })
+
+        const group = new THREE.Group()
+        const road = new THREE.Mesh(ribbonGeometry, roadMaterial)
+        const leftEdge = new THREE.Line(leftGeometry, edgeMaterial)
+        const rightEdge = new THREE.Line(rightGeometry, edgeMaterial)
+        const lane = new THREE.Line(centerGeometry, laneMaterial)
+
+        road.renderOrder = -4
+        leftEdge.renderOrder = -3
+        rightEdge.renderOrder = -3
+        lane.renderOrder = -2
+        road.userData.libraryDecorative = true
+        leftEdge.userData.libraryDecorative = true
+        rightEdge.userData.libraryDecorative = true
+        lane.userData.libraryDecorative = true
+
+        group.add(road, leftEdge, rightEdge, lane)
+        group.userData.librarySkyway = true
+        group.userData.libraryDecorative = true
+        farWorld.add(group)
+
+        librarySkyways.push({
+          group,
+          phase: routeIndex * 1.41,
+          laneMaterial,
+          edgeMaterial,
+        })
+        librarySkywayGeometries.push(
+          ribbonGeometry,
+          leftGeometry,
+          rightGeometry,
+          centerGeometry,
+        )
+        librarySkywayMaterials.push(
+          roadMaterial,
+          edgeMaterial,
+          laneMaterial,
+        )
+      }
+    }
 
     const nebulaTextures = [
       createNebulaTexture('rgba(108, 76, 181, 0.36)'),
@@ -631,20 +1512,296 @@ export default function DreamWorld3D({
       return sprite
     })
 
+    const libraryAtmosphere = libraryMode
+      ? createLibraryAtmosphere({
+          world,
+          farWorld,
+          quality: qualityRef.current,
+          createNebulaTexture,
+          seededUnit,
+        })
+      : null
+
+    const nearDustCount =
+      qualityRef.current === 'cinematic'
+        ? 180
+        : qualityRef.current === 'high'
+          ? 110
+          : qualityRef.current === 'medium'
+            ? 64
+            : 24
+    const nearDustPositions = new Float32Array(nearDustCount * 3)
+    for (let index = 0; index < nearDustCount; index += 1) {
+      const offset = index * 3
+      nearDustPositions[offset] = (seededUnit(index + 211, 1) - .5) * 18
+      nearDustPositions[offset + 1] = (seededUnit(index + 211, 2) - .5) * 11
+      nearDustPositions[offset + 2] = 1.6 + seededUnit(index + 211, 3) * 7.4
+    }
+    const nearDustGeometry = new THREE.BufferGeometry()
+    nearDustGeometry.setAttribute(
+      'position',
+      new THREE.BufferAttribute(nearDustPositions, 3),
+    )
+    const nearDustMaterial = new THREE.PointsMaterial({
+      color: 0xd9eef3,
+      size: qualityRef.current === 'cinematic' ? .026 : .02,
+      transparent: true,
+      opacity: .18,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    })
+    const nearDust = new THREE.Points(nearDustGeometry, nearDustMaterial)
+    nearDust.renderOrder = 7
+    scene.add(nearDust)
+
+    const shaftGeometries: THREE.BufferGeometry[] = []
+    const shaftMaterials: THREE.Material[] = []
+    const worldLightShafts: THREE.Mesh[] = []
+
+    // These theatrical shafts belong to the original dream scene. Keeping
+    // them out of library mode makes the archive read as open cosmic space
+    // instead of a stage while preserving the dream-world presentation.
+    if (!libraryMode) {
+      for (
+        let index = 0;
+        index < Math.max(2, settings.atmosphereLayers - 1);
+        index += 1
+      ) {
+        const geometry = new THREE.CylinderGeometry(
+          .18 + index * .08,
+          1.8 + index * .45,
+          13 + index * 2,
+          28,
+          1,
+          true,
+        )
+        const material = new THREE.MeshBasicMaterial({
+          color: index % 2 ? 0x8bded9 : 0xb69ce7,
+          transparent: true,
+          opacity: .012 + index * .004,
+          side: THREE.DoubleSide,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        })
+        const shaft = new THREE.Mesh(geometry, material)
+        shaft.position.set(
+          -7 + index * 6.5,
+          2 + index * .8,
+          -10 - index * 2.2,
+        )
+        shaft.rotation.z = -.22 + index * .11
+        farWorld.add(shaft)
+        shaftGeometries.push(geometry)
+        shaftMaterials.push(material)
+        worldLightShafts.push(shaft)
+      }
+    }
+
     const nodeVisuals = new Map<string, NodeVisual>()
     const interactive: THREE.Object3D[] = []
+    const libraryBookVisuals: LibraryBookVisual[] = []
+    const bookInteractives: THREE.Object3D[] = []
+    let hoveredBook: LibraryBookVisual | null = null
+
+    // Reusable shelf kit for cinematic library mode.
+    const shelfSideGeometry = new THREE.BoxGeometry(.18, 2.65, .56)
+    const shelfBoardGeometry = new THREE.BoxGeometry(3.45, .12, .62)
+    const shelfBackGeometry = new THREE.BoxGeometry(3.45, 2.65, .1)
+    const shelfBookGeometry = new THREE.BoxGeometry(.78, .54, .1)
+    const shelfCoverGeometry = new THREE.PlaneGeometry(.7, .46)
+    const shelfAccentGeometry = new THREE.BoxGeometry(3.34, .035, .68)
+    const shelfPickGeometry = new THREE.BoxGeometry(3.8, 2.9, .95)
+    const shelfBookmarkGeometry = new THREE.PlaneGeometry(.12, .34)
+    const shelfBookmarkMaterial = new THREE.MeshBasicMaterial({
+      color: 0xd782e8,
+      transparent: true,
+      opacity: .82,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      toneMapped: true,
+    })
+    const shelfActivityGeometry = new THREE.BoxGeometry(
+      .045,
+      .34,
+      .025,
+    )
+    const shelfFreshMaterial = new THREE.MeshBasicMaterial({
+      color: 0x73f1ff,
+      transparent: true,
+      opacity: .82,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      toneMapped: false,
+    })
+    const shelfActiveMaterial = new THREE.MeshBasicMaterial({
+      color: 0xc28cff,
+      transparent: true,
+      opacity: .66,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      toneMapped: false,
+    })
+    const shelfFrameMaterial = new THREE.MeshStandardMaterial({
+      color: 0x080b11,
+      emissive: 0x000000,
+      emissiveIntensity: 0,
+      roughness: .94,
+      metalness: .08,
+      envMapIntensity: settings.environmentIntensity * .34,
+    })
+    const shelfBoardMaterial = new THREE.MeshStandardMaterial({
+      color: 0x111722,
+      emissive: 0x020307,
+      emissiveIntensity: .02,
+      roughness: .9,
+      metalness: .06,
+      envMapIntensity: settings.environmentIntensity * .38,
+    })
+    const shelfBookMaterials = [
+      new THREE.MeshStandardMaterial({
+        color: 0x26336f,
+        emissive: 0x050714,
+        emissiveIntensity: .025,
+        roughness: .86,
+      }),
+      new THREE.MeshStandardMaterial({
+        color: 0x24505a,
+        emissive: 0x041013,
+        emissiveIntensity: .025,
+        roughness: .88,
+      }),
+      new THREE.MeshStandardMaterial({
+        color: 0x4c3b70,
+        emissive: 0x0d0814,
+        emissiveIntensity: .02,
+        roughness: .88,
+      }),
+      new THREE.MeshStandardMaterial({
+        color: 0x656b78,
+        emissive: 0x08090b,
+        emissiveIntensity: .01,
+        roughness: .9,
+      }),
+      new THREE.MeshStandardMaterial({
+        color: 0x171b24,
+        emissive: 0x020306,
+        emissiveIntensity: .01,
+        roughness: .92,
+      }),
+    ]
+    const shelfAccentMaterial = new THREE.MeshBasicMaterial({
+      color: 0x5263c8,
+      transparent: true,
+      opacity: .07,
+      blending: THREE.NormalBlending,
+      depthWrite: false,
+      toneMapped: true,
+    })
+    const shelfReactiveMaterials: THREE.Material[] = []
+    const shelfCoverMaterials: THREE.MeshStandardMaterial[] = []
+    const shelfCoverTextures: THREE.Texture[] = []
+    const shelfTextureLoader = new THREE.TextureLoader()
+    shelfTextureLoader.setCrossOrigin('anonymous')
+    const shelfPickMaterial = new THREE.MeshBasicMaterial({
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+    })
+
+    const libraryShelfLight = libraryMode
+      ? new THREE.PointLight(0x8fe9f3, 0, 13, 2)
+      : null
+    if (libraryShelfLight) scene.add(libraryShelfLight)
+
+    const libraryReadingRitual = libraryMode
+      ? createLibraryReadingRitual(scene)
+      : null
+
+    const libraryShelfSparkleGeometry = libraryMode
+      ? new THREE.BufferGeometry()
+      : null
+    const libraryShelfSparkleMaterial = libraryMode
+      ? new THREE.PointsMaterial({
+          color: 0xc8f8ff,
+          size: .045,
+          transparent: true,
+          opacity: .62,
+          depthWrite: false,
+          sizeAttenuation: true,
+        })
+      : null
+    let libraryShelfSparkles: THREE.Points | null = null
+
+    if (
+      libraryShelfSparkleGeometry &&
+      libraryShelfSparkleMaterial
+    ) {
+      const sparkleCount = 24
+      const positions = new Float32Array(sparkleCount * 3)
+      for (let index = 0; index < sparkleCount; index += 1) {
+        const sparkleSeed = hashString('library-sparkle:' + index)
+        const offset = index * 3
+        positions[offset] =
+          (seededUnit(sparkleSeed, 1) - .5) * 4.6
+        positions[offset + 1] =
+          (seededUnit(sparkleSeed, 2) - .5) * 3.4
+        positions[offset + 2] =
+          (seededUnit(sparkleSeed, 3) - .5) * 2.2
+      }
+      libraryShelfSparkleGeometry.setAttribute(
+        'position',
+        new THREE.BufferAttribute(positions, 3),
+      )
+      libraryShelfSparkles = new THREE.Points(
+        libraryShelfSparkleGeometry,
+        libraryShelfSparkleMaterial,
+      )
+      libraryShelfSparkles.visible = false
+      libraryShelfSparkles.renderOrder = 4
+      world.add(libraryShelfSparkles)
+    }
 
     for (const node of nodeRef.current) {
       const seed = hashString(node._id)
-      const color = new THREE.Color(CATEGORY_COLORS[node.category])
+      const color = new THREE.Color(
+        node.accent ?? CATEGORY_COLORS[node.category],
+      )
       const group = new THREE.Group()
       group.userData.nodeId = node._id
+      group.userData.libraryKind = node.libraryKind
 
       const shellMaterial = createLivingOrbMaterial(color, node.category)
       const shell = new THREE.Mesh(nodeGeometry(node.category), shellMaterial)
       shell.userData.nodeId = node._id
+      shell.castShadow = renderer.shadowMap.enabled
+      shell.receiveShadow = renderer.shadowMap.enabled
       group.add(shell)
-      interactive.push(shell)
+      if (node.libraryKind !== 'shelf') {
+        interactive.push(shell)
+      }
+
+      const reflectionMaterial = new THREE.MeshPhysicalMaterial({
+        color: color.clone().lerp(new THREE.Color(0xffffff), .16),
+        roughness: .055,
+        metalness: .02,
+        transmission: .34,
+        thickness: .42,
+        ior: 1.22,
+        clearcoat: 1,
+        clearcoatRoughness: .045,
+        envMapIntensity: settings.environmentIntensity * 1.18,
+        transparent: true,
+        opacity: .14,
+        depthWrite: false,
+      })
+      const reflectionShell = new THREE.Mesh(
+        nodeGeometry(node.category),
+        reflectionMaterial,
+      )
+      reflectionShell.scale.setScalar(1.035)
+      reflectionShell.renderOrder = 4
+      group.add(reflectionShell)
 
       const miniWorld = createMiniWorld(
         node.category,
@@ -668,19 +1825,25 @@ export default function DreamWorld3D({
       glow.userData.nodeId = node._id
       group.add(glow)
 
-      const coreMaterial = new THREE.MeshStandardMaterial({
+      const coreMaterial = new THREE.MeshPhysicalMaterial({
         color: color.clone().lerp(new THREE.Color(0xffffff), .2),
         emissive: color,
-        emissiveIntensity: 2.6,
+        emissiveIntensity: 2.25,
         transparent: true,
-        opacity: .88,
-        roughness: .35,
+        opacity: .9,
+        roughness: .24,
+        metalness: node.category === 'object' ? .24 : .08,
+        clearcoat: .55,
+        clearcoatRoughness: .12,
+        envMapIntensity: settings.environmentIntensity,
       })
       const core = new THREE.Mesh(
         new THREE.IcosahedronGeometry(.22 + Math.min(node.frequency, 5) * .025, 2),
         coreMaterial,
       )
       core.userData.nodeId = node._id
+      core.castShadow = renderer.shadowMap.enabled
+      core.receiveShadow = renderer.shadowMap.enabled
       group.add(core)
 
       const orbitMaterial = new THREE.MeshBasicMaterial({
@@ -725,13 +1888,242 @@ export default function DreamWorld3D({
       label.scale.set(2.2, .5, 1)
       group.add(label)
 
+      if (node.libraryKind === 'shelf') {
+        shell.visible = false
+        reflectionShell.visible = false
+        miniWorld.group.visible = false
+        glow.visible = false
+        core.visible = false
+        orbit.visible = false
+
+        const shelf = new THREE.Group()
+        shelf.rotation.y = 0
+
+        const reactiveFrameMaterial =
+          shelfFrameMaterial.clone()
+        reactiveFrameMaterial.emissive.copy(color)
+        reactiveFrameMaterial.emissiveIntensity = .018
+        reactiveFrameMaterial.envMapIntensity =
+          settings.environmentIntensity * .4
+
+        const reactiveBoardMaterial =
+          shelfBoardMaterial.clone()
+        reactiveBoardMaterial.emissive.copy(color)
+        reactiveBoardMaterial.emissiveIntensity = .016
+
+        const reactiveAccentMaterial =
+          shelfAccentMaterial.clone()
+        reactiveAccentMaterial.color.copy(color)
+        reactiveAccentMaterial.opacity = .11
+
+        shelfReactiveMaterials.push(
+          reactiveFrameMaterial,
+          reactiveBoardMaterial,
+          reactiveAccentMaterial,
+        )
+        group.userData.libraryShelfFrameMaterial =
+          reactiveFrameMaterial
+        group.userData.libraryShelfBoardMaterial =
+          reactiveBoardMaterial
+        group.userData.libraryShelfAccentMaterial =
+          reactiveAccentMaterial
+
+        ;[-1.64, 1.64].forEach((x) => {
+          const side = new THREE.Mesh(
+            shelfSideGeometry,
+            reactiveFrameMaterial,
+          )
+          side.position.set(x, 0, 0)
+          shelf.add(side)
+        })
+
+        const back = new THREE.Mesh(
+          shelfBackGeometry,
+          reactiveFrameMaterial,
+        )
+        back.position.z = .28
+        shelf.add(back)
+
+        ;[-1.28, -.43, .42, 1.27].forEach((y) => {
+          const board = new THREE.Mesh(
+            shelfBoardGeometry,
+            reactiveBoardMaterial,
+          )
+          board.position.set(0, y, 0)
+          shelf.add(board)
+        })
+
+        ;(node.libraryBooks ?? []).slice(0, 9).forEach(
+          (bookData, index) => {
+            const row = Math.floor(index / 3)
+            const column = index % 3
+            const bookGroup = new THREE.Group()
+            const basePosition = new THREE.Vector3(
+              -.98 + column * .98,
+              -.84 + row * .84,
+              -.255,
+            )
+            bookGroup.position.copy(basePosition)
+
+            const backing = new THREE.Mesh(
+              shelfBookGeometry,
+              shelfBookMaterials[
+                (seed + index * 7) % shelfBookMaterials.length
+              ],
+            )
+            backing.scale.set(
+              1,
+              .94 + seededUnit(seed, index + 90) * .06,
+              1,
+            )
+            backing.userData.bookNodeId = node._id
+            backing.userData.bookIndex = index
+            bookGroup.add(backing)
+            bookInteractives.push(backing)
+
+            const coverHinge = new THREE.Group()
+            coverHinge.position.set(-.39, 0, -.056)
+            bookGroup.add(coverHinge)
+
+            const coverMaterial = new THREE.MeshStandardMaterial({
+              color: 0x555b67,
+              roughness: .98,
+              metalness: 0,
+              emissive: 0x000000,
+              emissiveIntensity: 0,
+              side: THREE.DoubleSide,
+              toneMapped: true,
+            })
+            shelfCoverMaterials.push(coverMaterial)
+
+            if (bookData.coverUrl) {
+              shelfTextureLoader.load(
+                bookData.coverUrl,
+                (texture) => {
+                  texture.colorSpace = THREE.SRGBColorSpace
+                  texture.minFilter = THREE.LinearFilter
+                  texture.magFilter = THREE.LinearFilter
+                  texture.anisotropy = Math.min(
+                    4,
+                    renderer.capabilities.getMaxAnisotropy(),
+                  )
+                  shelfCoverTextures.push(texture)
+                  coverMaterial.map = texture
+                  // Texture color is multiplied by the material color.
+                  // Keep it white so real DEV covers are not crushed into
+                  // near-black rectangles under the shelf lighting.
+                  coverMaterial.color.setHex(0xffffff)
+                  coverMaterial.emissive.setHex(0x080b10)
+                  coverMaterial.emissiveIntensity = .055
+                  coverMaterial.needsUpdate = true
+                },
+                undefined,
+                () => {
+                  coverMaterial.color.setHex(0x303746)
+                },
+              )
+            }
+
+            const cover = new THREE.Mesh(
+              shelfCoverGeometry,
+              coverMaterial,
+            )
+            cover.position.set(.35, 0, -.002)
+            cover.rotation.y = Math.PI
+            cover.renderOrder = 5
+            cover.userData.bookNodeId = node._id
+            cover.userData.bookIndex = index
+            coverHinge.add(cover)
+            bookInteractives.push(cover)
+
+            const bookmark = new THREE.Mesh(
+              shelfBookmarkGeometry,
+              shelfBookmarkMaterial,
+            )
+            bookmark.position.set(.28, .34, -.072)
+            bookmark.rotation.y = Math.PI
+            bookmark.visible = false
+            bookmark.renderOrder = 6
+            bookGroup.add(bookmark)
+
+            if (bookData.fresh || (bookData.activity ?? 0) >= .16) {
+              const activityMarker = new THREE.Mesh(
+                shelfActivityGeometry,
+                bookData.fresh
+                  ? shelfFreshMaterial
+                  : shelfActiveMaterial,
+              )
+              activityMarker.position.set(
+                .33,
+                0,
+                -.073,
+              )
+              activityMarker.scale.y =
+                .7 + (bookData.activity ?? 0) * .55
+              activityMarker.renderOrder = 6
+              activityMarker.userData.libraryDecorative = true
+              bookGroup.add(activityMarker)
+            }
+
+            shelf.add(bookGroup)
+            libraryBookVisuals.push({
+              nodeId: node._id,
+              index,
+              group: bookGroup,
+              coverHinge,
+              coverMaterial,
+              bookmark,
+              basePosition,
+            })
+          },
+        )
+
+        const accentRail = new THREE.Mesh(
+          shelfAccentGeometry,
+          reactiveAccentMaterial,
+        )
+        accentRail.position.set(0, 1.34, -.02)
+        shelf.add(accentRail)
+
+        const pick = new THREE.Mesh(
+          shelfPickGeometry,
+          shelfPickMaterial,
+        )
+        pick.userData.nodeId = node._id
+        shelf.add(pick)
+        interactive.push(pick)
+
+        shelf.scale.setScalar(1)
+        group.add(shelf)
+        const labelStagger =
+          seededUnit(seed, 141) > .5 ? .12 : -.08
+        label.position.set(0, -1.82 + labelStagger, .2)
+        label.scale.set(3.08, .7, 1)
+      }
+
       const start = worldPosition(node, positionsRef.current)
       group.position.copy(start)
+      if (node.libraryKind === 'shelf') {
+        const baseYaw =
+          typeof node.libraryYaw === 'number'
+            ? node.libraryYaw
+            : Math.atan2(
+                camera.position.x - start.x,
+                camera.position.z - start.z,
+              ) + Math.PI
+        group.userData.libraryBaseYaw = baseYaw
+        group.rotation.y = baseYaw
+      }
 
       const baseScale =
-        .72 +
-        Math.min(node.frequency, 6) * .095 +
-        Math.min(0.18, Math.max(0, node.frequency - 2) * .035)
+        node.libraryKind === 'shelf'
+          ? 1.22
+          : .72 +
+            Math.min(node.frequency, 6) * .095 +
+            Math.min(
+              0.18,
+              Math.max(0, node.frequency - 2) * .035,
+            )
       group.scale.setScalar(baseScale)
       world.add(group)
 
@@ -739,6 +2131,7 @@ export default function DreamWorld3D({
         group,
         shell,
         shellMaterial,
+        reflectionShell,
         miniWorld,
         glow,
         core,
@@ -750,6 +2143,1212 @@ export default function DreamWorld3D({
         phase: seededUnit(seed, 31) * Math.PI * 2,
         z: start.z,
       })
+    }
+
+    let libraryWalkwayGeometry: THREE.BufferGeometry | null = null
+    let libraryWalkwayRailGeometry: THREE.BufferGeometry | null = null
+    let libraryWalkwayPanelMaterial: THREE.MeshBasicMaterial | null = null
+    let libraryWalkwayUnderlayMaterial: THREE.MeshBasicMaterial | null = null
+    let libraryWalkwayRailMaterial: THREE.LineBasicMaterial | null = null
+    let libraryWalkway: THREE.Mesh | null = null
+    let libraryWalkwayUnderlay: THREE.Mesh | null = null
+    let libraryWalkwayRails: THREE.LineSegments | null = null
+    let libraryGridRoadGeometry: THREE.BufferGeometry | null = null
+    let libraryGridRailGeometry: THREE.BufferGeometry | null = null
+    let libraryGridRoadMaterial: THREE.MeshBasicMaterial | null = null
+    let libraryGridUnderlayMaterial: THREE.MeshBasicMaterial | null = null
+    let libraryGridRailMaterial: THREE.LineBasicMaterial | null = null
+    let libraryGridRoads: THREE.Mesh | null = null
+    let libraryGridUnderlay: THREE.Mesh | null = null
+    let libraryGridRails: THREE.LineSegments | null = null
+    const libraryRouteTextures: THREE.Texture[] = []
+    const libraryRouteMaterials: THREE.Material[] = []
+    const libraryRouteObjects: THREE.Object3D[] = []
+    const libraryDistrictLandmarkGeometries: THREE.BufferGeometry[] = []
+    const libraryDistrictLandmarkMaterials: THREE.Material[] = []
+    let libraryArrowGeometry: THREE.BufferGeometry | null = null
+    let libraryArrowMaterial: THREE.MeshBasicMaterial | null = null
+    let libraryArrows: THREE.InstancedMesh | null = null
+    const libraryArrowBays: number[] = []
+    let libraryGuardGeometry: THREE.BoxGeometry | null = null
+    let libraryGuardMaterial: THREE.MeshBasicMaterial | null = null
+    let libraryGuards: THREE.InstancedMesh | null = null
+    let libraryJunctionGeometry: THREE.TorusGeometry | null = null
+    let libraryJunctionMaterial: THREE.MeshBasicMaterial | null = null
+    let libraryJunctions: THREE.InstancedMesh | null = null
+    let libraryRouteDotGeometry: THREE.BufferGeometry | null = null
+    let libraryRouteDotMaterial: THREE.PointsMaterial | null = null
+    let libraryRouteDots: THREE.Points | null = null
+    const libraryRouteDotCount = 54
+
+    if (libraryMode) {
+      const subdivisionsPerBay = 4
+      const sampleCount =
+        ARCHIVE_PATH_RENDER_BAYS * subdivisionsPerBay + 1
+      const panelPositions = new Float32Array(sampleCount * 2 * 3)
+      const panelIndices: number[] = []
+      const railPositions: number[] = []
+
+      const point = new THREE.Vector3()
+      const before = new THREE.Vector3()
+      const after = new THREE.Vector3()
+      const tangent = new THREE.Vector3()
+      const side = new THREE.Vector3()
+
+      const setSample = (index: number, bay: number) => {
+        point.fromArray(archivePathPoint(bay))
+        before.fromArray(archivePathPoint(bay - .04))
+        after.fromArray(archivePathPoint(bay + .04))
+        tangent.copy(after).sub(before)
+        tangent.y = 0
+        if (tangent.lengthSq() < .0001) tangent.set(0, 0, -1)
+        tangent.normalize()
+        side.set(-tangent.z, 0, tangent.x)
+
+        const pathY = point.y + ARCHIVE_WALKWAY_Y_OFFSET
+        const localHalfWidth =
+          archiveWalkwayHalfWidthAtBay(bay, activeDistricts)
+        const left = point
+          .clone()
+          .addScaledVector(side, localHalfWidth)
+        const right = point
+          .clone()
+          .addScaledVector(side, -localHalfWidth)
+        left.y = pathY
+        right.y = pathY
+
+        const leftOffset = index * 6
+        panelPositions[leftOffset] = left.x
+        panelPositions[leftOffset + 1] = left.y
+        panelPositions[leftOffset + 2] = left.z
+        panelPositions[leftOffset + 3] = right.x
+        panelPositions[leftOffset + 4] = right.y
+        panelPositions[leftOffset + 5] = right.z
+
+        if (index > 0) {
+          const previousLeft = (index - 1) * 2
+          const previousRight = previousLeft + 1
+          const currentLeft = index * 2
+          const currentRight = currentLeft + 1
+          panelIndices.push(
+            previousLeft,
+            previousRight,
+            currentLeft,
+            previousRight,
+            currentRight,
+            currentLeft,
+          )
+
+          const previousOffset = (index - 1) * 6
+          railPositions.push(
+            panelPositions[previousOffset],
+            panelPositions[previousOffset + 1] + .035,
+            panelPositions[previousOffset + 2],
+            left.x,
+            left.y + .035,
+            left.z,
+            panelPositions[previousOffset + 3],
+            panelPositions[previousOffset + 4] + .035,
+            panelPositions[previousOffset + 5],
+            right.x,
+            right.y + .035,
+            right.z,
+          )
+        }
+
+        if (index % subdivisionsPerBay === 0) {
+          railPositions.push(
+            left.x,
+            left.y + .026,
+            left.z,
+            right.x,
+            right.y + .026,
+            right.z,
+          )
+        }
+      }
+
+      for (let index = 0; index < sampleCount; index += 1) {
+        setSample(index, index / subdivisionsPerBay)
+      }
+
+      const first = 0
+      const last = (sampleCount - 1) * 6
+      railPositions.push(
+        panelPositions[first],
+        panelPositions[first + 1] + .045,
+        panelPositions[first + 2],
+        panelPositions[first + 3],
+        panelPositions[first + 4] + .045,
+        panelPositions[first + 5],
+        panelPositions[last],
+        panelPositions[last + 1] + .045,
+        panelPositions[last + 2],
+        panelPositions[last + 3],
+        panelPositions[last + 4] + .045,
+        panelPositions[last + 5],
+      )
+
+      libraryWalkwayGeometry = new THREE.BufferGeometry()
+      libraryWalkwayGeometry.setAttribute(
+        'position',
+        new THREE.BufferAttribute(panelPositions, 3),
+      )
+      libraryWalkwayGeometry.setIndex(panelIndices)
+      libraryWalkwayGeometry.computeVertexNormals()
+      libraryWalkwayGeometry.computeBoundingSphere()
+
+      libraryWalkwayRailGeometry = new THREE.BufferGeometry()
+      libraryWalkwayRailGeometry.setAttribute(
+        'position',
+        new THREE.Float32BufferAttribute(railPositions, 3),
+      )
+      libraryWalkwayRailGeometry.computeBoundingSphere()
+
+      libraryWalkwayPanelMaterial = new THREE.MeshBasicMaterial({
+        color: 0x78dce8,
+        transparent: true,
+        opacity: .075,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        blending: THREE.NormalBlending,
+        toneMapped: true,
+      })
+      libraryWalkwayUnderlayMaterial =
+        new THREE.MeshBasicMaterial({
+          color: 0x6654b8,
+          transparent: true,
+          opacity: .04,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          toneMapped: false,
+        })
+      libraryWalkwayRailMaterial = new THREE.LineBasicMaterial({
+        color: 0xa99be8,
+        transparent: true,
+        opacity: .24,
+        depthWrite: false,
+        blending: THREE.NormalBlending,
+        toneMapped: true,
+      })
+
+      libraryWalkwayUnderlay = new THREE.Mesh(
+        libraryWalkwayGeometry,
+        libraryWalkwayUnderlayMaterial,
+      )
+      libraryWalkwayUnderlay.position.y = -.085
+      libraryWalkwayUnderlay.renderOrder = 0
+      libraryWalkwayUnderlay.userData.libraryDecorative = true
+
+      libraryWalkway = new THREE.Mesh(
+        libraryWalkwayGeometry,
+        libraryWalkwayPanelMaterial,
+      )
+      libraryWalkwayRails = new THREE.LineSegments(
+        libraryWalkwayRailGeometry,
+        libraryWalkwayRailMaterial,
+      )
+      libraryWalkway.renderOrder = 1
+      libraryWalkwayRails.renderOrder = 2
+      libraryWalkway.userData.walkableSurface = true
+      libraryWalkway.userData.libraryDecorative = true
+      libraryWalkwayRails.userData.libraryDecorative = true
+      world.add(
+        libraryWalkwayUnderlay,
+        libraryWalkway,
+        libraryWalkwayRails,
+      )
+
+      // Build a real three-avenue street grid around the original archive
+      // spine. Cross streets occur at the arrival foyer and every district,
+      // so walkers can leave the center route, loop around a block, and
+      // re-enter the library from a different direction.
+      const visibleGridSegments = libraryGridSegments.filter(
+        (segment) => segment.kind !== 'main',
+      )
+      const gridPositions: number[] = []
+      const gridColors: number[] = []
+      const gridIndices: number[] = []
+      const gridRailPositions: number[] = []
+      const sideRoadColor = new THREE.Color(0x4ebbc8)
+      const crossRoadColor = new THREE.Color(0x8c76cf)
+
+      visibleGridSegments.forEach((segment) => {
+        const [sx, sy, sz] = segment.start
+        const [ex, ey, ez] = segment.end
+        const dx = ex - sx
+        const dz = ez - sz
+        const length = Math.hypot(dx, dz) || 1
+        const sideX = -dz / length
+        const sideZ = dx / length
+        const halfWidth = segment.halfWidth
+        const startY = sy + ARCHIVE_WALKWAY_Y_OFFSET + .012
+        const endY = ey + ARCHIVE_WALKWAY_Y_OFFSET + .012
+        const vertexBase = gridPositions.length / 3
+
+        gridPositions.push(
+          sx + sideX * halfWidth,
+          startY,
+          sz + sideZ * halfWidth,
+          sx - sideX * halfWidth,
+          startY,
+          sz - sideZ * halfWidth,
+          ex + sideX * halfWidth,
+          endY,
+          ez + sideZ * halfWidth,
+          ex - sideX * halfWidth,
+          endY,
+          ez - sideZ * halfWidth,
+        )
+        gridIndices.push(
+          vertexBase,
+          vertexBase + 1,
+          vertexBase + 2,
+          vertexBase + 1,
+          vertexBase + 3,
+          vertexBase + 2,
+        )
+
+        const roadColor =
+          segment.kind === 'cross'
+            ? crossRoadColor
+            : sideRoadColor
+        for (let slot = 0; slot < 4; slot += 1) {
+          gridColors.push(
+            roadColor.r,
+            roadColor.g,
+            roadColor.b,
+          )
+        }
+
+        // Keep side avenues visually bounded but leave the cross streets
+        // open at intersections; rails through a junction read like walls.
+        if (segment.kind === 'side') {
+          gridRailPositions.push(
+            sx + sideX * halfWidth,
+            startY + .024,
+            sz + sideZ * halfWidth,
+            ex + sideX * halfWidth,
+            endY + .024,
+            ez + sideZ * halfWidth,
+            sx - sideX * halfWidth,
+            startY + .024,
+            sz - sideZ * halfWidth,
+            ex - sideX * halfWidth,
+            endY + .024,
+            ez - sideZ * halfWidth,
+          )
+        }
+      })
+
+      libraryGridRoadGeometry = new THREE.BufferGeometry()
+      libraryGridRoadGeometry.setAttribute(
+        'position',
+        new THREE.Float32BufferAttribute(gridPositions, 3),
+      )
+      libraryGridRoadGeometry.setAttribute(
+        'color',
+        new THREE.Float32BufferAttribute(gridColors, 3),
+      )
+      libraryGridRoadGeometry.setIndex(gridIndices)
+      libraryGridRoadGeometry.computeVertexNormals()
+      libraryGridRoadGeometry.computeBoundingSphere()
+
+      libraryGridRailGeometry = new THREE.BufferGeometry()
+      libraryGridRailGeometry.setAttribute(
+        'position',
+        new THREE.Float32BufferAttribute(
+          gridRailPositions,
+          3,
+        ),
+      )
+      libraryGridRailGeometry.computeBoundingSphere()
+
+      libraryGridRoadMaterial = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        vertexColors: true,
+        transparent: true,
+        opacity: .078,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        blending: THREE.NormalBlending,
+        toneMapped: true,
+      })
+      libraryGridUnderlayMaterial = new THREE.MeshBasicMaterial({
+        color: 0x5546a7,
+        transparent: true,
+        opacity: .028,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        toneMapped: false,
+      })
+      libraryGridRailMaterial = new THREE.LineBasicMaterial({
+        color: 0x8eeaf2,
+        transparent: true,
+        opacity: .145,
+        depthWrite: false,
+        blending: THREE.NormalBlending,
+        toneMapped: true,
+      })
+
+      libraryGridUnderlay = new THREE.Mesh(
+        libraryGridRoadGeometry,
+        libraryGridUnderlayMaterial,
+      )
+      libraryGridUnderlay.position.y = -.065
+      libraryGridUnderlay.renderOrder = 0
+      libraryGridUnderlay.userData.libraryDecorative = true
+
+      libraryGridRoads = new THREE.Mesh(
+        libraryGridRoadGeometry,
+        libraryGridRoadMaterial,
+      )
+      libraryGridRoads.renderOrder = 1
+      libraryGridRoads.userData.walkableSurface = true
+      libraryGridRoads.userData.libraryDecorative = true
+
+      libraryGridRails = new THREE.LineSegments(
+        libraryGridRailGeometry,
+        libraryGridRailMaterial,
+      )
+      libraryGridRails.renderOrder = 2
+      libraryGridRails.userData.libraryDecorative = true
+
+      world.add(
+        libraryGridUnderlay,
+        libraryGridRoads,
+        libraryGridRails,
+      )
+
+      activeDistricts.forEach((district, index) => {
+        // Landmarks are punctuation, not mandatory furniture. Keep the
+        // opening DEV monument, then render one hero landmark every other
+        // district so the boulevard has visual breathing room.
+        const hasLandmark = index % 2 === 0
+
+        const districtLaneOffset =
+          archiveDistrictGridLaneOffset(index)
+        const center = new THREE.Vector3(
+          ...archiveOffsetPathPoint(
+            district.bay,
+            districtLaneOffset,
+          ),
+        )
+        const expectedLandmarkHeight =
+          district.landmarkType === 'archive-tower'
+            ? 4.8
+            : district.landmarkType === 'syntax-tree'
+              ? 4.2
+              : district.landmarkType === 'neural-lattice'
+                ? 3.7
+                : district.landmarkType === 'index'
+                  ? 3.2
+                  : district.landmarkType === 'dev-monument'
+                    ? 2.25
+                    : 2.7
+
+        // Compose signs for a walking-height camera, not an overhead map.
+        // The tallest archive towers get extra breathing room so their
+        // silhouette never tangles with the district label in screenshots.
+        center.y +=
+          ARCHIVE_WALKWAY_Y_OFFSET +
+          (hasLandmark
+            ? Math.max(6.55, expectedLandmarkHeight + 1.72)
+            : 5.45)
+
+        const texture = createLibraryRouteLabelTexture(
+          district.label,
+          district.code,
+          district.accent,
+        )
+        const material = new THREE.SpriteMaterial({
+          map: texture,
+          transparent: true,
+          opacity: .84,
+          depthWrite: false,
+          blending: THREE.NormalBlending,
+          toneMapped: true,
+        })
+        const marker = new THREE.Sprite(material)
+        marker.position.copy(center)
+        marker.scale.set(6.2, 1.55, 1)
+        marker.renderOrder = 4
+        marker.userData.libraryDecorative = true
+        marker.userData.routeMarkerBaseY = center.y
+        marker.userData.routeMarkerPhase = index * 1.43
+        marker.userData.routeMarkerBay = district.bay
+        marker.userData.routeMarkerBaseScale = 6.2
+        world.add(marker)
+        libraryRouteTextures.push(texture)
+        libraryRouteMaterials.push(material)
+        libraryRouteObjects.push(marker)
+
+        // Every district keeps its sign, shelves, atmosphere, route guards,
+        // and junction marker. Only alternate districts get the large hero
+        // landmark/aura stack.
+        if (!hasLandmark) return
+
+        const pathCenter = new THREE.Vector3(
+          ...archiveOffsetPathPoint(
+            district.bay,
+            districtLaneOffset,
+          ),
+        )
+        const frame = archivePathFrame(district.bay)
+
+        // Landmarks are the visual anchor of each district, so place them on
+        // the main causeway centerline directly beneath the district sign.
+        // They remain decorative-only and are intentionally excluded from
+        // collision/raycast systems so the center path stays traversable.
+        const landmarkPosition = pathCenter.clone()
+
+        let landmarkGeometry: THREE.BufferGeometry
+        const landmarkHeight = expectedLandmarkHeight
+        switch (district.landmarkType) {
+          case 'neural-lattice':
+            landmarkGeometry = new THREE.IcosahedronGeometry(1.85, 1)
+            break
+          case 'terminal-wall':
+            landmarkGeometry = new THREE.BoxGeometry(3.35, 2.55, .2)
+            break
+          case 'syntax-tree':
+            landmarkGeometry = new THREE.ConeGeometry(1.65, 4.2, 6)
+            break
+          case 'dev-monument':
+            landmarkGeometry = new THREE.BoxGeometry(3.7, 2.25, .42)
+            break
+          case 'archive-tower':
+            landmarkGeometry = new THREE.CylinderGeometry(
+              1.05,
+              1.45,
+              4.8,
+              8,
+            )
+            break
+          case 'index':
+          default:
+            landmarkGeometry = new THREE.TorusGeometry(1.6, .24, 10, 48)
+            break
+        }
+
+        landmarkPosition.y +=
+          ARCHIVE_WALKWAY_Y_OFFSET +
+          .34 +
+          landmarkHeight * .5
+
+        const landmarkCoreMaterial = new THREE.MeshBasicMaterial({
+          color: district.accent,
+          transparent: true,
+          opacity:
+            district.landmarkType === 'terminal-wall'
+              ? .14
+              : district.landmarkType === 'dev-monument'
+                ? .72
+                : .24,
+          depthWrite: false,
+          blending: THREE.NormalBlending,
+          toneMapped: false,
+          side: THREE.DoubleSide,
+        })
+        const landmarkWireMaterial = new THREE.MeshBasicMaterial({
+          color: district.accent,
+          transparent: true,
+          opacity: .96,
+          wireframe:
+            district.landmarkType !== 'dev-monument',
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          toneMapped: false,
+        })
+
+        const landmarkGroup = new THREE.Group()
+        landmarkGroup.position.copy(landmarkPosition)
+        landmarkGroup.rotation.y =
+          Math.atan2(frame.tangentX, frame.tangentZ)
+        landmarkGroup.userData.libraryLandmark = true
+        landmarkGroup.userData.libraryLandmarkBaseY =
+          landmarkPosition.y
+        landmarkGroup.userData.libraryLandmarkBaseRotationY =
+          landmarkGroup.rotation.y
+        landmarkGroup.userData.libraryLandmarkPhase =
+          index * 1.37
+        landmarkGroup.userData.libraryLandmarkHeight =
+          landmarkHeight
+        landmarkGroup.userData.libraryLandmarkBay =
+          district.bay
+        const landmarkBaseScale =
+          district.landmarkType === 'archive-tower'
+            ? 1.28
+            : district.landmarkType === 'terminal-wall'
+              ? 1.2
+              : district.landmarkType === 'neural-lattice'
+                ? 1.18
+                : district.landmarkType === 'syntax-tree'
+                  ? 1.16
+                  : district.landmarkType === 'dev-monument'
+                    ? 1.14
+                    : 1.08
+        landmarkGroup.userData.libraryLandmarkBaseScale =
+          landmarkBaseScale
+        landmarkGroup.scale.setScalar(landmarkBaseScale)
+
+        const landmarkCore = new THREE.Mesh(
+          landmarkGeometry,
+          landmarkCoreMaterial,
+        )
+        landmarkCore.renderOrder = 4
+        landmarkCore.userData.libraryDecorative = true
+        landmarkGroup.add(landmarkCore)
+
+        const landmarkWire = new THREE.Mesh(
+          landmarkGeometry,
+          landmarkWireMaterial,
+        )
+        landmarkWire.scale.setScalar(1.035)
+        landmarkWire.renderOrder = 5
+        landmarkWire.userData.libraryDecorative = true
+        landmarkWire.userData.libraryLandmarkWire = true
+        landmarkCore.userData.libraryLandmarkCore = true
+        landmarkGroup.add(landmarkWire)
+
+        const heroHaloGeometry = new THREE.RingGeometry(
+          Math.max(2.05, landmarkHeight * .5),
+          Math.max(2.62, landmarkHeight * .62),
+          56,
+        )
+        const heroHaloMaterial = new THREE.MeshBasicMaterial({
+          color: district.accent,
+          transparent: true,
+          opacity: .105,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          toneMapped: false,
+        })
+        const heroHalo = new THREE.Mesh(
+          heroHaloGeometry,
+          heroHaloMaterial,
+        )
+        heroHalo.position.set(0, .08, .72)
+        heroHalo.userData.libraryLandmarkHalo = true
+        heroHalo.userData.libraryDecorative = true
+        landmarkGroup.add(heroHalo)
+
+        // A moving scan ring, orbit motes, and one lightweight motif group
+        // give every Sanity-authored district a readable identity without
+        // adding colliders, raycast targets, or a shader-heavy effect stack.
+        const scanRingGeometry = new THREE.TorusGeometry(
+          Math.max(1.25, landmarkHeight * .31),
+          .018,
+          6,
+          48,
+        )
+        const scanRingMaterial = new THREE.MeshBasicMaterial({
+          color: district.accent,
+          transparent: true,
+          opacity: .48,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          toneMapped: false,
+        })
+        const scanRing = new THREE.Mesh(
+          scanRingGeometry,
+          scanRingMaterial,
+        )
+        scanRing.rotation.x = Math.PI / 2
+        scanRing.userData.libraryLandmarkScan = true
+        scanRing.userData.libraryDecorative = true
+        landmarkGroup.add(scanRing)
+
+        const orbitParticleCount = 14
+        const orbitPositions = new Float32Array(
+          orbitParticleCount * 3,
+        )
+        for (
+          let orbitIndex = 0;
+          orbitIndex < orbitParticleCount;
+          orbitIndex += 1
+        ) {
+          const angle =
+            (orbitIndex / orbitParticleCount) * Math.PI * 2
+          const radius =
+            1.65 +
+            seededUnit(index + 4400, orbitIndex + 1) * .62
+          const offset = orbitIndex * 3
+          orbitPositions[offset] = Math.cos(angle) * radius
+          orbitPositions[offset + 1] =
+            (seededUnit(index + 4400, orbitIndex + 20) - .5) *
+            Math.min(2.8, landmarkHeight * .72)
+          orbitPositions[offset + 2] = Math.sin(angle) * radius
+        }
+        const orbitGeometry = new THREE.BufferGeometry()
+        orbitGeometry.setAttribute(
+          'position',
+          new THREE.BufferAttribute(orbitPositions, 3),
+        )
+        const orbitMaterial = new THREE.PointsMaterial({
+          color: district.accent,
+          size: .065,
+          transparent: true,
+          opacity: .64,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          sizeAttenuation: true,
+          toneMapped: false,
+        })
+        const orbitParticles = new THREE.Points(
+          orbitGeometry,
+          orbitMaterial,
+        )
+        orbitParticles.userData.libraryLandmarkOrbit = true
+        orbitParticles.userData.libraryDecorative = true
+        landmarkGroup.add(orbitParticles)
+
+        const motifMaterial = new THREE.MeshBasicMaterial({
+          color: district.accent,
+          transparent: true,
+          opacity: .34,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          toneMapped: false,
+          wireframe:
+            district.id === 'web-dev' ||
+            district.id === 'front-page',
+        })
+        const motifGroup = new THREE.Group()
+        motifGroup.userData.libraryDistrictMotif = true
+        motifGroup.userData.libraryDecorative = true
+
+        if (district.id === 'web-dev') {
+          ;[-1, 0, 1].forEach((slot) => {
+            const geometry = new THREE.BoxGeometry(
+              .72 + Math.abs(slot) * .12,
+              .5,
+              .045,
+            )
+            const panel = new THREE.Mesh(
+              geometry,
+              motifMaterial,
+            )
+            panel.position.set(
+              slot * .86,
+              .32 + Math.abs(slot) * .28,
+              -1.58,
+            )
+            motifGroup.add(panel)
+            libraryDistrictLandmarkGeometries.push(geometry)
+          })
+        } else if (district.id === 'ai') {
+          ;[0, 1, 2].forEach((slot) => {
+            const geometry = new THREE.TorusGeometry(
+              1.16 + slot * .24,
+              .012,
+              5,
+              40,
+            )
+            const neuralRing = new THREE.Mesh(
+              geometry,
+              motifMaterial,
+            )
+            neuralRing.rotation.set(
+              Math.PI * (.18 + slot * .17),
+              Math.PI * (.12 + slot * .21),
+              slot * .5,
+            )
+            motifGroup.add(neuralRing)
+            libraryDistrictLandmarkGeometries.push(geometry)
+          })
+        } else if (district.id === 'linux') {
+          ;[-.72, -.24, .24, .72].forEach(
+            (row, rowIndex) => {
+              const geometry = new THREE.BoxGeometry(
+                2.25 - rowIndex * .22,
+                .045,
+                .045,
+              )
+              const line = new THREE.Mesh(
+                geometry,
+                motifMaterial,
+              )
+              line.position.set(-.32 + rowIndex * .1, row, -.3)
+              motifGroup.add(line)
+              libraryDistrictLandmarkGeometries.push(geometry)
+            },
+          )
+          const cursorGeometry = new THREE.BoxGeometry(
+            .22,
+            .12,
+            .05,
+          )
+          const cursor = new THREE.Mesh(
+            cursorGeometry,
+            motifMaterial,
+          )
+          cursor.position.set(.92, -.72, -.31)
+          motifGroup.add(cursor)
+          libraryDistrictLandmarkGeometries.push(
+            cursorGeometry,
+          )
+        } else if (district.id === 'javascript') {
+          const branchPositions = new Float32Array([
+            0, -1.3, 0,
+            0, -.2, 0,
+            0, -.2, 0,
+            -.9, .72, 0,
+            0, -.2, 0,
+            .9, .72, 0,
+            -.9, .72, 0,
+            -1.25, 1.18, 0,
+            .9, .72, 0,
+            1.25, 1.18, 0,
+          ])
+          const branchGeometry = new THREE.BufferGeometry()
+          branchGeometry.setAttribute(
+            'position',
+            new THREE.BufferAttribute(branchPositions, 3),
+          )
+          const branchMaterial = new THREE.LineBasicMaterial({
+            color: district.accent,
+            transparent: true,
+            opacity: .72,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending,
+            toneMapped: false,
+          })
+          const branches = new THREE.LineSegments(
+            branchGeometry,
+            branchMaterial,
+          )
+          branches.position.z = -1.2
+          motifGroup.add(branches)
+          libraryDistrictLandmarkGeometries.push(
+            branchGeometry,
+          )
+          libraryDistrictLandmarkMaterials.push(
+            branchMaterial,
+          )
+        } else if (district.id === 'front-page') {
+          const devLetterMaterial = new THREE.MeshBasicMaterial({
+            color: 0xf5f7ff,
+            transparent: true,
+            opacity: .96,
+            depthWrite: false,
+            toneMapped: false,
+          })
+
+          const addDevBar = (
+            x: number,
+            y: number,
+            width: number,
+            height: number,
+            rotationZ = 0,
+          ) => {
+            const geometry = new THREE.BoxGeometry(
+              width,
+              height,
+              .12,
+            )
+            ;[-1, 1].forEach((face) => {
+              const bar = new THREE.Mesh(
+                geometry,
+                devLetterMaterial,
+              )
+              bar.position.set(x, y, face * .285)
+              bar.rotation.z = rotationZ
+              bar.userData.libraryDecorative = true
+              motifGroup.add(bar)
+            })
+            libraryDistrictLandmarkGeometries.push(geometry)
+          }
+
+          // D
+          addDevBar(-1.18, 0, .16, 1.12)
+          addDevBar(-.82, .48, .72, .16)
+          addDevBar(-.82, -.48, .72, .16)
+          addDevBar(-.48, 0, .16, 1.12)
+
+          // E
+          addDevBar(-.02, 0, .16, 1.12)
+          addDevBar(.28, .48, .62, .16)
+          addDevBar(.24, 0, .52, .15)
+          addDevBar(.28, -.48, .62, .16)
+
+          // V — left stroke leans inward toward the bottom,
+          // right stroke mirrors it. The previous signs made a Λ.
+          addDevBar(.9, .03, .16, 1.08, .23)
+          addDevBar(1.34, .03, .16, 1.08, -.23)
+
+          libraryDistrictLandmarkMaterials.push(
+            devLetterMaterial,
+          )
+        } else {
+          ;[0, 1].forEach((ringIndex) => {
+            const geometry = new THREE.TorusGeometry(
+              1.3 + ringIndex * .42,
+              .016,
+              5,
+              40,
+            )
+            const archiveRing = new THREE.Mesh(
+              geometry,
+              motifMaterial,
+            )
+            archiveRing.rotation.x = Math.PI / 2
+            archiveRing.position.y =
+              -.55 + ringIndex * 1.05
+            motifGroup.add(archiveRing)
+            libraryDistrictLandmarkGeometries.push(geometry)
+          })
+        }
+
+        landmarkGroup.add(motifGroup)
+
+        const pedestalGeometry = new THREE.CylinderGeometry(
+          1.75,
+          2.05,
+          .42,
+          20,
+        )
+        const pedestalMaterial = new THREE.MeshBasicMaterial({
+          color: district.accent,
+          transparent: true,
+          opacity: .32,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          toneMapped: false,
+        })
+        const pedestal = new THREE.Mesh(
+          pedestalGeometry,
+          pedestalMaterial,
+        )
+        pedestal.position.y = -.5 * landmarkHeight - .12
+        pedestal.renderOrder = 3
+        pedestal.userData.libraryDecorative = true
+        pedestal.userData.libraryLandmarkPedestal = true
+        landmarkGroup.add(pedestal)
+
+        world.add(landmarkGroup)
+        libraryRouteObjects.push(landmarkGroup)
+        libraryDistrictLandmarkGeometries.push(
+          landmarkGeometry,
+          pedestalGeometry,
+          scanRingGeometry,
+          orbitGeometry,
+          heroHaloGeometry,
+        )
+        libraryDistrictLandmarkMaterials.push(
+          landmarkCoreMaterial,
+          landmarkWireMaterial,
+          pedestalMaterial,
+          scanRingMaterial,
+          orbitMaterial,
+          heroHaloMaterial,
+          motifMaterial,
+        )
+
+        const atmosphereColor =
+          district.atmosphere === 'crystalline'
+            ? 0x70f3ff
+            : district.atmosphere === 'industrial'
+              ? 0x7892a8
+              : district.atmosphere === 'deep-void'
+                ? 0x8c63d8
+                : 0xd782e8
+        const auraGeometry = new THREE.RingGeometry(2.05, 2.75, 48)
+        const auraMaterial = new THREE.MeshBasicMaterial({
+          color: atmosphereColor,
+          transparent: true,
+          opacity:
+            district.atmosphere === 'deep-void'
+              ? .24
+              : district.atmosphere === 'industrial'
+                ? .3
+                : .42,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          toneMapped: false,
+        })
+        const aura = new THREE.Mesh(auraGeometry, auraMaterial)
+        aura.position.copy(landmarkPosition)
+        aura.position.y =
+          pathCenter.y + ARCHIVE_WALKWAY_Y_OFFSET + .065
+        aura.rotation.x = -Math.PI / 2
+        aura.renderOrder = 3
+        aura.userData.libraryDecorative = true
+        world.add(aura)
+        libraryRouteObjects.push(aura)
+        libraryDistrictLandmarkGeometries.push(auraGeometry)
+        libraryDistrictLandmarkMaterials.push(auraMaterial)
+      })
+
+      const welcomeBay = .08
+      const welcomePoint = new THREE.Vector3(
+        ...archivePathPoint(welcomeBay),
+      )
+      const welcomeFrame = archivePathFrame(welcomeBay)
+      const welcomeSide = new THREE.Vector3(
+        welcomeFrame.normalX,
+        0,
+        welcomeFrame.normalZ,
+      )
+      const welcomeTexture =
+        createLibraryWelcomeTexture(activeLibraryConfig)
+      const welcomeMaterial = new THREE.SpriteMaterial({
+        map: welcomeTexture,
+        transparent: true,
+        opacity: .96,
+        depthWrite: false,
+        blending: THREE.NormalBlending,
+        toneMapped: true,
+      })
+      const welcomeBoard = new THREE.Sprite(welcomeMaterial)
+      welcomeBoard.position
+        .copy(welcomePoint)
+        .addScaledVector(welcomeSide, -5.15)
+      welcomeBoard.position.y +=
+        ARCHIVE_WALKWAY_Y_OFFSET + 3.85
+      welcomeBoard.scale.set(7.35, 4.2, 1)
+      welcomeBoard.renderOrder = 5
+      welcomeBoard.userData.libraryDecorative = true
+      welcomeBoard.userData.libraryWelcome = true
+      welcomeBoard.userData.routeMarkerBaseY = welcomeBoard.position.y
+      welcomeBoard.userData.routeMarkerPhase = -1.2
+      world.add(welcomeBoard)
+      libraryRouteTextures.push(welcomeTexture)
+      libraryRouteMaterials.push(welcomeMaterial)
+      libraryRouteObjects.push(welcomeBoard)
+
+      const welcomeRingGeometry = new THREE.RingGeometry(1.7, 1.86, 64)
+      const welcomeRingMaterial = new THREE.MeshBasicMaterial({
+        color: 0x7edfea,
+        transparent: true,
+        opacity: .16,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        toneMapped: true,
+      })
+      const welcomeRing = new THREE.Mesh(
+        welcomeRingGeometry,
+        welcomeRingMaterial,
+      )
+      welcomeRing.position
+        .copy(welcomePoint)
+        .addScaledVector(welcomeSide, -5.15)
+      welcomeRing.position.y +=
+        ARCHIVE_WALKWAY_Y_OFFSET + .04
+      welcomeRing.rotation.x = -Math.PI / 2
+      welcomeRing.renderOrder = 3
+      welcomeRing.userData.libraryDecorative = true
+      world.add(welcomeRing)
+      libraryRouteMaterials.push(welcomeRingMaterial)
+      libraryRouteObjects.push(welcomeRing)
+
+      const arrowVertices = new Float32Array([
+        -.2, 0, .16,
+        .2, 0, .16,
+        0, 0, -.28,
+      ])
+      libraryArrowGeometry = new THREE.BufferGeometry()
+      libraryArrowGeometry.setAttribute(
+        'position',
+        new THREE.BufferAttribute(arrowVertices, 3),
+      )
+      libraryArrowGeometry.setIndex([0, 1, 2])
+      libraryArrowMaterial = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        vertexColors: true,
+        transparent: true,
+        opacity: .38,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        toneMapped: true,
+      })
+      for (let bay = 2.5; bay < ARCHIVE_PATH_RENDER_BAYS; bay += 2.75) {
+        if (archiveDistrictInfluence(bay, activeDistricts) < .68) {
+          libraryArrowBays.push(bay)
+        }
+      }
+      libraryArrows = new THREE.InstancedMesh(
+        libraryArrowGeometry,
+        libraryArrowMaterial,
+        libraryArrowBays.length,
+      )
+      const arrowDummy = new THREE.Object3D()
+      const arrowIdleColor = new THREE.Color(0x24465a)
+      libraryArrowBays.forEach((bay, index) => {
+        const center = new THREE.Vector3(...archivePathPoint(bay))
+        const frame = archivePathFrame(bay)
+        center.y += ARCHIVE_WALKWAY_Y_OFFSET + .055
+        arrowDummy.position.copy(center)
+        arrowDummy.rotation.set(
+          0,
+          Math.atan2(frame.tangentX, frame.tangentZ),
+          0,
+        )
+        arrowDummy.updateMatrix()
+        libraryArrows?.setMatrixAt(index, arrowDummy.matrix)
+        libraryArrows?.setColorAt(index, arrowIdleColor)
+      })
+      libraryArrows.instanceMatrix.needsUpdate = true
+      if (libraryArrows.instanceColor) {
+        libraryArrows.instanceColor.needsUpdate = true
+      }
+      libraryArrows.renderOrder = 3
+      libraryArrows.userData.libraryDecorative = true
+      world.add(libraryArrows)
+
+      libraryGuardGeometry = new THREE.BoxGeometry(1, .32, .035)
+      libraryGuardMaterial = new THREE.MeshBasicMaterial({
+        color: 0x8fc8f4,
+        transparent: true,
+        opacity: .12,
+        depthWrite: false,
+        toneMapped: true,
+      })
+      libraryGuards = new THREE.InstancedMesh(
+        libraryGuardGeometry,
+        libraryGuardMaterial,
+        activeDistricts.length * 2,
+      )
+      const guardDummy = new THREE.Object3D()
+      activeDistricts.forEach((district, index) => {
+        const laneOffset =
+          archiveDistrictGridLaneOffset(index)
+        const center = new THREE.Vector3(
+          ...archiveOffsetPathPoint(
+            district.bay,
+            laneOffset,
+          ),
+        )
+        const frame = archivePathFrame(district.bay)
+        const halfWidth =
+          laneOffset === 0
+            ? ARCHIVE_WALKWAY_HALF_WIDTH +
+              archiveDistrictInfluence(
+                district.bay,
+                activeDistricts,
+              ) *
+                2.4
+            : 2.15
+        const sideVector = new THREE.Vector3(
+          frame.normalX,
+          0,
+          frame.normalZ,
+        )
+        const yaw = Math.atan2(frame.tangentX, frame.tangentZ)
+        ;[-1, 1].forEach((sideSign, sideIndex) => {
+          guardDummy.position
+            .copy(center)
+            .addScaledVector(sideVector, halfWidth * sideSign)
+          guardDummy.position.y +=
+            ARCHIVE_WALKWAY_Y_OFFSET + .24
+          guardDummy.rotation.set(0, yaw, 0)
+          guardDummy.scale.set(3.2, 1, 1)
+          guardDummy.updateMatrix()
+          libraryGuards?.setMatrixAt(
+            index * 2 + sideIndex,
+            guardDummy.matrix,
+          )
+        })
+      })
+      libraryGuards.instanceMatrix.needsUpdate = true
+      libraryGuards.renderOrder = 2
+      libraryGuards.userData.libraryDecorative = true
+      world.add(libraryGuards)
+
+      libraryJunctionGeometry = new THREE.TorusGeometry(
+        .48,
+        .028,
+        6,
+        32,
+      )
+      libraryJunctionMaterial = new THREE.MeshBasicMaterial({
+        color: 0xb19cf0,
+        transparent: true,
+        opacity: .3,
+        depthWrite: false,
+        toneMapped: true,
+      })
+      libraryJunctions = new THREE.InstancedMesh(
+        libraryJunctionGeometry,
+        libraryJunctionMaterial,
+        activeDistricts.length,
+      )
+      const junctionDummy = new THREE.Object3D()
+      activeDistricts.forEach((district, index) => {
+        const center = new THREE.Vector3(
+          ...archiveOffsetPathPoint(
+            district.bay,
+            archiveDistrictGridLaneOffset(index),
+          ),
+        )
+        center.y += ARCHIVE_WALKWAY_Y_OFFSET + .07
+        junctionDummy.position.copy(center)
+        junctionDummy.rotation.set(Math.PI / 2, 0, 0)
+        junctionDummy.updateMatrix()
+        libraryJunctions?.setMatrixAt(index, junctionDummy.matrix)
+      })
+      libraryJunctions.instanceMatrix.needsUpdate = true
+      libraryJunctions.renderOrder = 3
+      libraryJunctions.userData.libraryDecorative = true
+      world.add(libraryJunctions)
+
+      libraryRouteDotGeometry = new THREE.BufferGeometry()
+      libraryRouteDotGeometry.setAttribute(
+        'position',
+        new THREE.BufferAttribute(
+          new Float32Array(libraryRouteDotCount * 3),
+          3,
+        ),
+      )
+      const routeDotColors = new Float32Array(
+        libraryRouteDotCount * 3,
+      )
+      const centerEnergyColor = new THREE.Color(0xb9f7ff)
+      const leftEdgeEnergyColor = new THREE.Color(0xa99bff)
+      const rightEdgeEnergyColor = new THREE.Color(0xff8ed8)
+      for (
+        let index = 0;
+        index < libraryRouteDotCount;
+        index += 1
+      ) {
+        const lane = (index % 3) - 1
+        const color =
+          lane === 0
+            ? centerEnergyColor
+            : lane < 0
+              ? leftEdgeEnergyColor
+              : rightEdgeEnergyColor
+        routeDotColors[index * 3] = color.r
+        routeDotColors[index * 3 + 1] = color.g
+        routeDotColors[index * 3 + 2] = color.b
+      }
+      libraryRouteDotGeometry.setAttribute(
+        'color',
+        new THREE.BufferAttribute(routeDotColors, 3),
+      )
+      libraryRouteDotMaterial = new THREE.PointsMaterial({
+        color: 0xffffff,
+        vertexColors: true,
+        size: .085,
+        transparent: true,
+        opacity: .78,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        sizeAttenuation: true,
+        toneMapped: false,
+      })
+      libraryRouteDots = new THREE.Points(
+        libraryRouteDotGeometry,
+        libraryRouteDotMaterial,
+      )
+      libraryRouteDots.renderOrder = 4
+      libraryRouteDots.userData.libraryDecorative = true
+      world.add(libraryRouteDots)
+
     }
 
     const nodeDataById = new Map(nodeRef.current.map((node) => [node._id, node]))
@@ -1023,14 +3622,7 @@ export default function DreamWorld3D({
         return {sprite, material, texture, phase: index * 1.7}
       })
       .filter(
-        (
-          value,
-        ): value is {
-          sprite: THREE.Sprite
-          material: THREE.SpriteMaterial
-          texture: THREE.Texture
-          phase: number
-        } => Boolean(value),
+        (value): value is NonNullable<typeof value> => value !== null,
       )
 
     const lucidDreamIds = new Set(
@@ -1113,15 +3705,7 @@ export default function DreamWorld3D({
         }
       })
       .filter(
-        (
-          value,
-        ): value is {
-          nodeId: string
-          group: THREE.Group
-          geometry: THREE.BufferGeometry
-          material: THREE.MeshBasicMaterial
-          phase: number
-        } => Boolean(value),
+        (value): value is NonNullable<typeof value> => value !== null,
       )
 
     const clusterAudios = [...nodeRef.current]
@@ -1154,14 +3738,7 @@ export default function DreamWorld3D({
         }
       })
       .filter(
-        (
-          value,
-        ): value is {
-          nodeId: string
-          visual: NodeVisual
-          audio: SpatialDreamAudio
-          started: boolean
-        } => Boolean(value),
+        (value): value is NonNullable<typeof value> => value !== null,
       )
 
     const edgeVisuals: EdgeVisual[] = []
@@ -1175,7 +3752,7 @@ export default function DreamWorld3D({
       const material = new THREE.LineBasicMaterial({
         color: edge.weight > 2 ? 0xc2a7ff : 0x7ecfd8,
         transparent: true,
-        opacity: Math.min(.42, .1 + edge.weight * .07),
+        opacity: .045,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
       })
@@ -1186,7 +3763,7 @@ export default function DreamWorld3D({
       const pulseMaterial = new THREE.MeshBasicMaterial({
         color: edge.weight > 2 ? 0xe0c9ff : 0xa4f2ef,
         transparent: true,
-        opacity: .75,
+        opacity: .11,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
       })
@@ -1218,6 +3795,36 @@ export default function DreamWorld3D({
     let dragging = false
     let lastProjection = {x: -999, y: -999, visible: false}
 
+    const flightKeys = new Set<string>()
+    const flightPosition = new THREE.Vector3()
+    const flightVelocity = new THREE.Vector3()
+    const flightForward = new THREE.Vector3()
+    const flightRight = new THREE.Vector3()
+    const flightMove = new THREE.Vector3()
+    const flightUp = new THREE.Vector3(0, 1, 0)
+    const flightEuler = new THREE.Euler(0, 0, 0, 'YXZ')
+    const flightCollisionPoint = new THREE.Vector3()
+    const flightCollisionDelta = new THREE.Vector3()
+    let flightYaw = 0
+    let flightPitch = 0
+    let libraryWalkBobPhase = 0
+    let libraryWalkBobStrength = 0
+    let flightInitialized = false
+    let previousFlightMode = false
+    let flightNearestId: string | null = null
+    let lastPublishedNavigation = ''
+    let flightRoute:
+      | {
+          source: THREE.Vector3
+          control: THREE.Vector3
+          target: THREE.Vector3
+          sourceId: string
+          targetId: string
+          startedAt: number
+          duration: number
+        }
+      | null = null
+
     let activeCellId: string | null = null
     let activeCellDreamId: string | null = null
     let activeCell: DreamCell | null = null
@@ -1228,10 +3835,17 @@ export default function DreamWorld3D({
     let diveComposer: EffectComposer | null = null
     let divePost: ShaderPass | null = null
     let diveBokeh: BokehPass | null = null
+    let diveSsao: SSAOPass | null = null
     let diveAudio: SpatialDreamAudio | null = null
     let diveAudioStarted = false
     let diveMusic: DreamMusic | null = null
     let diveMusicStarted = false
+    let diveMusicAnalyser: THREE.AudioAnalyser | null = null
+    let portalLeakAudio: SpatialDreamAudio | null = null
+    let portalLeakDreamId: string | null = null
+    let portalLeakStarted = false
+    let portalPreviewDive: DreamDive | null = null
+    let portalSceneTransition: PortalSceneTransition | null = null
     let diveMode:
       | 'none'
       | 'entering'
@@ -1301,6 +3915,7 @@ export default function DreamWorld3D({
         color,
         settings,
         hashString(`${node._id}:${dream._id}`),
+        cinematicEnvironment.texture,
       )
       activeCellId = node._id
       activeCellDreamId = dream._id
@@ -1339,6 +3954,69 @@ export default function DreamWorld3D({
       )[0] ?? 'place'
     }
 
+    function releasePortalLeak() {
+      if (portalLeakAudio && activeDive) {
+        activeDive.scene.remove(portalLeakAudio.audio)
+      }
+      portalLeakAudio?.dispose()
+      portalLeakAudio = null
+      portalLeakDreamId = null
+      portalLeakStarted = false
+    }
+
+    function ensurePortalLeak(
+      dreamId: string,
+      focus?: {x: number; y: number; z: number},
+    ) {
+      if (!activeDive) return
+      if (portalLeakDreamId === dreamId && portalLeakAudio) {
+        if (focus) {
+          portalLeakAudio.audio.position.set(
+            focus.x,
+            focus.y,
+            focus.z,
+          )
+        }
+        return
+      }
+
+      releasePortalLeak()
+
+      const dream = dreamsRef.current.find(
+        (candidate) => candidate._id === dreamId,
+      )
+      if (!dream) return
+
+      const recurrence = dreamRecurrence(dream, dreamsRef.current)
+      const profile = createDreamProfile(dream, recurrence)
+      portalLeakAudio = createSpatialDreamAudio(
+        listener,
+        categoryForDream(dream),
+        hashString(`portal-leak:${dream._id}`),
+        {
+          mood: profile.mood,
+          lucid: profile.lucid,
+          recurrence: profile.recurrence,
+          mode: 'cluster',
+        },
+      )
+      portalLeakDreamId = dream._id
+      portalLeakAudio.setFocus(.22)
+      portalLeakAudio.audio.position.set(
+        focus?.x ?? 0,
+        focus?.y ?? 1.3,
+        focus?.z ?? -5,
+      )
+      activeDive.scene.add(portalLeakAudio.audio)
+
+      if (soundEnabledRef.current) {
+        portalLeakStarted = true
+        void portalLeakAudio.ensurePlaying().catch(() => {
+          portalLeakStarted = false
+        })
+      }
+    }
+
     function disposeDive(options: {
       restoreListener?: boolean
       clearMode?: boolean
@@ -1357,6 +4035,17 @@ export default function DreamWorld3D({
       diveMusic?.dispose()
       diveMusic = null
       diveMusicStarted = false
+      diveMusicAnalyser = null
+
+      portalLeakAudio?.dispose()
+      portalLeakAudio = null
+      portalLeakDreamId = null
+      portalLeakStarted = false
+
+      portalPreviewDive?.dispose()
+      portalPreviewDive = null
+      portalSceneTransition?.dispose()
+      portalSceneTransition = null
 
       if (restoreListener && listener.parent !== camera) {
         listener.removeFromParent()
@@ -1367,6 +4056,7 @@ export default function DreamWorld3D({
       diveComposer = null
       divePost = null
       diveBokeh = null
+      diveSsao = null
       activeDive?.dispose()
       activeDive = null
       pendingPortal = null
@@ -1400,6 +4090,7 @@ export default function DreamWorld3D({
           relations,
           depth,
           maxDepth: 2,
+          environmentMap: cinematicEnvironment.texture,
         },
       )
 
@@ -1429,6 +4120,7 @@ export default function DreamWorld3D({
         },
       )
       activeDive.scene.add(diveMusic.audio)
+      diveMusicAnalyser = new THREE.AudioAnalyser(diveMusic.audio, 64)
 
       if (spatialAudio?.audio.isPlaying) spatialAudio.audio.pause()
       spatialAudioStarted = false
@@ -1441,12 +4133,17 @@ export default function DreamWorld3D({
       const diveRenderPass = new RenderPass(activeDive.scene, activeDive.camera)
       diveComposer.addPass(diveRenderPass)
 
+      diveSsao = new SSAOPass(activeDive.scene, activeDive.camera, 1, 1)
+      diveSsao.enabled = settings.ssao
+      diveSsao.kernelRadius = Math.max(4, settings.ssaoKernelRadius * .8)
+      diveSsao.minDistance = 0.002
+      diveSsao.maxDistance = 0.1
+      diveComposer.addPass(diveSsao)
+
       diveBokeh = new BokehPass(activeDive.scene, activeDive.camera, {
         focus: 7,
         aperture: 0.00005,
         maxblur: settings.maxBlur * 1.1,
-        width: 1,
-        height: 1,
       })
       diveBokeh.enabled = false
       diveComposer.addPass(diveBokeh)
@@ -1467,7 +4164,7 @@ export default function DreamWorld3D({
       diveComposer.addPass(divePost)
       diveComposer.addPass(new OutputPass())
 
-      const rect = host.getBoundingClientRect()
+      const rect = container.getBoundingClientRect()
       activeDive.resize(rect.width / Math.max(1, rect.height))
       diveComposer.setSize(rect.width, rect.height)
       activeDive.setTimeline(diveTimelineProgressRef.current)
@@ -1502,6 +4199,43 @@ export default function DreamWorld3D({
       if (!activeDive || diveMode !== 'inside') return
       if (action.depth > 2) return
       if (diveStack.length >= 3 && !diveStack.includes(action.dreamId)) return
+
+      const destination = dreamsRef.current.find(
+        (dream) => dream._id === action.dreamId,
+      )
+      if (!destination) return
+
+      releasePortalLeak()
+
+      portalPreviewDive?.dispose()
+      portalPreviewDive = null
+      portalSceneTransition?.dispose()
+      portalSceneTransition = null
+
+      const recurrence = dreamRecurrence(destination, dreamsRef.current)
+      const profile = createDreamProfile(destination, recurrence)
+      const relations = getDreamRelations(destination, dreamsRef.current, 4)
+      portalPreviewDive = createDreamDive(
+        profile,
+        settings,
+        hashString(`portal-preview:${destination._id}:${action.depth}`),
+        {
+          currentDream: destination,
+          dreams: dreamsRef.current,
+          relations,
+          depth: action.depth,
+          maxDepth: 2,
+          environmentMap: cinematicEnvironment.texture,
+        },
+      )
+      portalPreviewDive.setTimeline(diveTimelineProgressRef.current)
+
+      const rect = container.getBoundingClientRect()
+      portalPreviewDive.resize(rect.width / Math.max(1, rect.height))
+      portalSceneTransition = createPortalSceneTransition(
+        Math.max(1, Math.floor(rect.width * settings.portalBlendResolution)),
+        Math.max(1, Math.floor(rect.height * settings.portalBlendResolution)),
+      )
 
       pendingPortal = action
       diveMode = 'portal'
@@ -1542,7 +4276,7 @@ export default function DreamWorld3D({
     }
 
     function resize() {
-      const rect = host.getBoundingClientRect()
+      const rect = container.getBoundingClientRect()
       if (!rect.width || !rect.height) return
       renderer.setSize(rect.width, rect.height, false)
       composer.setSize(rect.width, rect.height)
@@ -1554,10 +4288,18 @@ export default function DreamWorld3D({
         activeDive.resize(rect.width / rect.height)
         diveComposer.setSize(rect.width, rect.height)
       }
+
+      if (portalPreviewDive) {
+        portalPreviewDive.resize(rect.width / rect.height)
+      }
+      portalSceneTransition?.resize(
+        Math.max(1, Math.floor(rect.width * settings.portalBlendResolution)),
+        Math.max(1, Math.floor(rect.height * settings.portalBlendResolution)),
+      )
     }
 
     const resizeObserver = new ResizeObserver(resize)
-    resizeObserver.observe(host)
+    resizeObserver.observe(container)
     resize()
 
     function normalizedPointer(event: PointerEvent) {
@@ -1576,7 +4318,98 @@ export default function DreamWorld3D({
       return nodeRef.current.find((node) => node._id === id) ?? null
     }
 
+    function pickCenterNode() {
+      pointer.set(0, 0)
+      raycaster.setFromCamera(pointer, camera)
+      const intersections = raycaster.intersectObjects(interactive, false)
+      if (!intersections.length) return null
+      const id = intersections[0].object.userData.nodeId as string | undefined
+      return nodeRef.current.find((node) => node._id === id) ?? null
+    }
+
+    function bookVisualFromObject(object: THREE.Object3D) {
+      const nodeId = object.userData.bookNodeId as string | undefined
+      const index = object.userData.bookIndex as number | undefined
+      if (nodeId === undefined || index === undefined) return null
+      return (
+        libraryBookVisuals.find(
+          (visual) =>
+            visual.nodeId === nodeId &&
+            visual.index === index,
+        ) ?? null
+      )
+    }
+
+    function pickBook(event: PointerEvent) {
+      normalizedPointer(event)
+      raycaster.setFromCamera(pointer, camera)
+      const intersections = raycaster.intersectObjects(
+        bookInteractives,
+        false,
+      )
+      if (!intersections.length) return null
+      return bookVisualFromObject(intersections[0].object)
+    }
+
+    function pickCenterBook() {
+      pointer.set(0, 0)
+      raycaster.setFromCamera(pointer, camera)
+      const intersections = raycaster.intersectObjects(
+        bookInteractives,
+        false,
+      )
+      if (!intersections.length) return null
+      return bookVisualFromObject(intersections[0].object)
+    }
+
+    function beginBookOpen(visual: LibraryBookVisual) {
+      if (
+        libraryReadingRitual?.begin(
+          visual,
+          performance.now() / 1000,
+        )
+      ) {
+        hoveredBook = visual
+      }
+    }
+
+    function nearestFlightNode(maxDistance = 4.2) {
+      let nearest:
+        | {node: DreamWorldNode; distance: number}
+        | null = null
+      const worldPoint = new THREE.Vector3()
+
+      if (
+        flightModeRef.current &&
+        diveMode === 'none' &&
+        document.pointerLockElement === renderer.domElement &&
+        !(libraryReadingRitual?.isActive() ?? false)
+      ) {
+        hoveredBook = pickCenterBook()
+      }
+
+      for (const node of nodeRef.current) {
+        const visual = nodeVisuals.get(node._id)
+        if (!visual) continue
+        visual.group.getWorldPosition(worldPoint)
+        const distance = worldPoint.distanceTo(camera.position)
+        if (
+          distance <= maxDistance &&
+          (!nearest || distance < nearest.distance)
+        ) {
+          nearest = {node, distance}
+        }
+      }
+
+      return nearest ? nearest.node : null
+    }
+
     function handlePointerMove(event: PointerEvent) {
+      if (flightModeRef.current && diveMode === 'none') {
+        renderer.domElement.style.cursor = 'none'
+        return
+      }
+
       normalizedPointer(event)
 
       if (diveMode !== 'none') {
@@ -1585,6 +4418,34 @@ export default function DreamWorld3D({
           diveMode === 'inside'
             ? activeDive?.pick(pointer.x, pointer.y)
             : null
+
+        if (interaction?.dreamId) {
+          ensurePortalLeak(interaction.dreamId, interaction.focus)
+          portalLeakAudio?.setFocus(.28)
+
+          if (
+            portalLeakAudio &&
+            soundEnabledRef.current &&
+            !portalLeakStarted
+          ) {
+            portalLeakStarted = true
+            void portalLeakAudio.ensurePlaying().catch(() => {
+              portalLeakStarted = false
+            })
+          } else if (
+            portalLeakAudio &&
+            !soundEnabledRef.current &&
+            portalLeakStarted
+          ) {
+            if (portalLeakAudio.audio.isPlaying) {
+              portalLeakAudio.audio.pause()
+            }
+            portalLeakStarted = false
+          }
+        } else {
+          releasePortalLeak()
+        }
+
         renderer.domElement.style.cursor = interaction ? 'pointer' : 'crosshair'
         return
       }
@@ -1610,16 +4471,36 @@ export default function DreamWorld3D({
         }
       }
 
-      const node = pickNode(event)
+      const book = pickBook(event)
+      hoveredBook = book
+      const node = book
+        ? nodeRef.current.find((item) => item._id === book.nodeId) ?? null
+        : pickNode(event)
       const nextId = node?._id ?? null
       if (nextId !== hoveredId) {
         hoveredId = nextId
         onNodeHoverRef.current(node)
       }
-      renderer.domElement.style.cursor = node ? 'pointer' : 'grab'
+      renderer.domElement.style.cursor =
+        book || node ? 'pointer' : 'grab'
     }
 
     function handlePointerDown(event: PointerEvent) {
+      if (flightModeRef.current && diveMode === 'none') {
+        if (document.pointerLockElement !== renderer.domElement) {
+          void renderer.domElement.requestPointerLock()
+        } else {
+          const book = pickCenterBook()
+          if (book) {
+            beginBookOpen(book)
+          } else {
+            const node = pickCenterNode()
+            if (node) onNodeSelectRef.current(node)
+          }
+        }
+        return
+      }
+
       if (diveMode !== 'none') {
         normalizedPointer(event)
         activeDive?.setLookTarget(pointer.x, pointer.y)
@@ -1658,6 +4539,16 @@ export default function DreamWorld3D({
         holdNodeId = null
       }
 
+      // First-person interactions are completed on pointerdown using the
+      // center-screen ray. Do not run the regular pointerup picker afterward:
+      // it can hit the parent shelf, trigger onNodeSelect, and exit pointer
+      // lock immediately after a book was picked up.
+      if (flightModeRef.current && diveMode === 'none') {
+        pointerDown = null
+        dragging = false
+        return
+      }
+
       if (diveMode !== 'none') {
         normalizedPointer(event)
         if (diveMode === 'inside') {
@@ -1674,9 +4565,14 @@ export default function DreamWorld3D({
       }
 
       if (!dragging) {
-        const node = pickNode(event)
-        if (node) onNodeSelectRef.current(node)
-        else onBackgroundClickRef.current()
+        const book = pickBook(event)
+        if (book) {
+          beginBookOpen(book)
+        } else {
+          const node = pickNode(event)
+          if (node) onNodeSelectRef.current(node)
+          else onBackgroundClickRef.current()
+        }
       }
 
       pointerDown = null
@@ -1692,6 +4588,8 @@ export default function DreamWorld3D({
       }
       pointerDown = null
       dragging = false
+      hoveredBook = null
+      releasePortalLeak()
       if (hoveredId !== null) {
         hoveredId = null
         onNodeHoverRef.current(null)
@@ -1700,7 +4598,7 @@ export default function DreamWorld3D({
 
     function handleWheel(event: WheelEvent) {
       event.preventDefault()
-      if (diveMode !== 'none') return
+      if (flightModeRef.current || diveMode !== 'none') return
 
       const next = Math.min(
         2.8,
@@ -1710,13 +4608,16 @@ export default function DreamWorld3D({
     }
 
     function handleDoubleClick(event: MouseEvent) {
-      if (diveMode !== 'none') return
+      if (flightModeRef.current || diveMode !== 'none') return
       const pointerEvent = event as unknown as PointerEvent
       const node = pickNode(pointerEvent)
       if (node && selectedRef.current === node._id) {
         beginDreamDive(node)
       }
     }
+
+    renderer.domElement.dataset.oniriaLibraryFps = 'true'
+    renderer.domElement.tabIndex = -1
 
     renderer.domElement.addEventListener('pointermove', handlePointerMove)
     renderer.domElement.addEventListener('pointerdown', handlePointerDown)
@@ -1725,6 +4626,158 @@ export default function DreamWorld3D({
     renderer.domElement.addEventListener('pointerleave', handlePointerLeave)
     renderer.domElement.addEventListener('wheel', handleWheel, {passive: false})
     renderer.domElement.addEventListener('dblclick', handleDoubleClick)
+
+    function handleFlightMouse(event: MouseEvent) {
+      if (
+        !flightModeRef.current ||
+        diveMode !== 'none' ||
+        document.pointerLockElement !== renderer.domElement
+      ) {
+        return
+      }
+
+      flightYaw -= event.movementX * .00175
+      flightPitch -= event.movementY * .00155
+      flightPitch = THREE.MathUtils.clamp(
+        flightPitch,
+        -Math.PI * .46,
+        Math.PI * .46,
+      )
+    }
+
+    function handleFlightKeyDown(event: KeyboardEvent) {
+      if (
+        !flightModeRef.current ||
+        diveMode !== 'none' ||
+        inputBlockedRef.current
+      ) {
+        return
+      }
+
+      if (libraryMode && event.code === 'KeyG') {
+        event.preventDefault()
+        const nextMode: LibraryMovementMode =
+          libraryMovementModeRef.current === 'walk'
+            ? 'fly'
+            : 'walk'
+        libraryMovementModeRef.current = nextMode
+        onLibraryMovementModeChangeRef.current?.(nextMode)
+        flightRoute = null
+        flightVelocity.set(0, 0, 0)
+        libraryWalkBobStrength = 0
+        flightKeys.clear()
+        return
+      }
+
+      flightKeys.add(event.code)
+
+      if (
+        [
+          'KeyW',
+          'KeyA',
+          'KeyS',
+          'KeyD',
+          'Space',
+          'KeyQ',
+          'ControlLeft',
+          'ControlRight',
+        ].includes(event.code)
+      ) {
+        flightRoute = null
+      }
+
+      if (event.code === 'KeyR') {
+        event.preventDefault()
+        if (
+          libraryMode &&
+          libraryMovementModeRef.current === 'walk'
+        ) {
+          return
+        }
+        const sourceNode = nearestFlightNode(12)
+        if (sourceNode) {
+          const strongest = edges
+            .filter(
+              (edge) =>
+                edge.source === sourceNode._id ||
+                edge.target === sourceNode._id,
+            )
+            .sort((a, b) => b.weight - a.weight)[0]
+
+          if (strongest) {
+            const targetId =
+              strongest.source === sourceNode._id
+                ? strongest.target
+                : strongest.source
+            const targetVisual = nodeVisuals.get(targetId)
+            if (targetVisual) {
+              const start = camera.position.clone()
+              const target = targetVisual.group
+                .getWorldPosition(new THREE.Vector3())
+                .add(new THREE.Vector3(0, 0, 1.2))
+              const controlPoint = start.clone().lerp(target, .5)
+              controlPoint.y += 1.2 + strongest.weight * .16
+              controlPoint.z += .8
+              const distance = start.distanceTo(target)
+
+              flightRoute = {
+                source: start,
+                control: controlPoint,
+                target,
+                sourceId: sourceNode._id,
+                targetId,
+                startedAt: performance.now() / 1000,
+                duration: THREE.MathUtils.clamp(
+                  distance / 4.2,
+                  1.2,
+                  3.8,
+                ),
+              }
+            }
+          }
+        }
+      }
+
+      if (event.code === 'KeyE') {
+        event.preventDefault()
+        const book = pickCenterBook()
+        if (book) {
+          beginBookOpen(book)
+        } else {
+          const node = pickCenterNode() ?? nearestFlightNode(5.5)
+          if (node) onNodeSelectRef.current(node)
+        }
+      }
+
+      if (event.code === 'KeyF') {
+        event.preventDefault()
+        const selectedNode = selectedRef.current
+          ? nodeRef.current.find(
+              (node) => node._id === selectedRef.current,
+            ) ?? null
+          : null
+        const node =
+          pickCenterNode() ??
+          selectedNode ??
+          nearestFlightNode(3.2)
+
+        if (node) {
+          beginDreamDive(node)
+        }
+      }
+
+      if (event.code === 'Escape') {
+        document.exitPointerLock?.()
+      }
+    }
+
+    function handleFlightKeyUp(event: KeyboardEvent) {
+      flightKeys.delete(event.code)
+    }
+
+    document.addEventListener('mousemove', handleFlightMouse)
+    window.addEventListener('keydown', handleFlightKeyDown)
+    window.addEventListener('keyup', handleFlightKeyUp)
 
     const cameraTarget = new THREE.Vector3()
     const lookTarget = new THREE.Vector3(0, 0, 0)
@@ -1737,12 +4790,79 @@ export default function DreamWorld3D({
     let relationTravel: {from: string; to: string; startedAt: number} | null = null
     const startedAt = performance.now()
     let lastFrameAt = startedAt
+    let adaptivePixelRatio = Math.min(
+      window.devicePixelRatio,
+      settings.pixelRatio,
+    )
+    let frameTimeAccumulator = 0
+    let frameTimeSamples = 0
+    let lastAdaptiveCheck = 0
 
     function animate(now: number) {
       animationFrame = requestAnimationFrame(animate)
       const elapsed = (now - startedAt) / 1000
       const delta = Math.min(.05, Math.max(.001, (now - lastFrameAt) / 1000))
       lastFrameAt = now
+
+      if (
+        qualityRef.current === 'high' ||
+        qualityRef.current === 'cinematic'
+      ) {
+        frameTimeAccumulator += delta
+        frameTimeSamples += 1
+
+        if (elapsed - lastAdaptiveCheck > 1.6 && frameTimeSamples > 30) {
+          const averageMs =
+            (frameTimeAccumulator / frameTimeSamples) * 1000
+          const maxDpr = Math.min(
+            window.devicePixelRatio,
+            settings.pixelRatio,
+          )
+          let nextDpr = adaptivePixelRatio
+
+          if (averageMs > 24) {
+            nextDpr = Math.max(1, adaptivePixelRatio - .12)
+          } else if (averageMs < 17.2) {
+            nextDpr = Math.min(maxDpr, adaptivePixelRatio + .06)
+          }
+
+          if (Math.abs(nextDpr - adaptivePixelRatio) > .02) {
+            adaptivePixelRatio = nextDpr
+            renderer.setPixelRatio(adaptivePixelRatio)
+            composer.setPixelRatio(adaptivePixelRatio)
+            diveComposer?.setPixelRatio(adaptivePixelRatio)
+            resize()
+          }
+
+          frameTimeAccumulator = 0
+          frameTimeSamples = 0
+          lastAdaptiveCheck = elapsed
+        }
+      }
+
+      const flightActive =
+        flightModeRef.current &&
+        diveMode === 'none' &&
+        !observatoryModeRef.current
+
+      if (flightActive && !previousFlightMode) {
+        flightPosition.copy(camera.position)
+        flightEuler.setFromQuaternion(camera.quaternion, 'YXZ')
+        flightYaw = flightEuler.y
+        flightPitch = flightEuler.x
+        flightVelocity.set(0, 0, 0)
+        flightInitialized = true
+        previousFlightMode = true
+        onProjectionChangeRef.current(null)
+      } else if (!flightActive && previousFlightMode) {
+        if (document.pointerLockElement === renderer.domElement) {
+          document.exitPointerLock?.()
+        }
+        flightKeys.clear()
+        flightVelocity.set(0, 0, 0)
+        previousFlightMode = false
+        flightInitialized = false
+      }
 
       if (diveExitRequestRef.current !== lastDiveExitRequest) {
         lastDiveExitRequest = diveExitRequestRef.current
@@ -1762,7 +4882,26 @@ export default function DreamWorld3D({
       ) {
         activeDive.setLookTarget(pointerTarget.x, pointerTarget.y)
         activeDive.setTimeline(diveTimelineProgressRef.current)
+
+        const musicEnergy =
+          soundEnabledRef.current &&
+          diveMusic?.audio.isPlaying &&
+          diveMusicAnalyser
+            ? THREE.MathUtils.clamp(
+                diveMusicAnalyser.getAverageFrequency() / 150,
+                0,
+                1,
+              )
+            : 0
+        activeDive.setAudioEnergy(musicEnergy)
         activeDive.update(elapsed, delta)
+
+        if (portalPreviewDive && diveMode === 'portal') {
+          portalPreviewDive.setTimeline(diveTimelineProgressRef.current)
+          portalPreviewDive.setAudioEnergy(musicEnergy * .72)
+          portalPreviewDive.update(elapsed, delta)
+          portalPreviewDive.renderPreviews(renderer, elapsed)
+        }
 
         if (diveMode === 'portal' && pendingPortal?.focus) {
           const portalProgress = Math.min(
@@ -1838,11 +4977,14 @@ export default function DreamWorld3D({
               diveMode === 'portal'
                 ? 6.2 - portalProgress * 2.4
                 : 4.8 + exitProgress * 2.8
-            diveBokeh.uniforms.focus.value +=
-              (focusTarget - diveBokeh.uniforms.focus.value) * .09
-            diveBokeh.uniforms.aperture.value +=
+            const diveBokehUniforms =
+              diveBokeh.uniforms as BokehUniformMap
+
+            diveBokehUniforms.focus.value +=
+              (focusTarget - diveBokehUniforms.focus.value) * .09
+            diveBokehUniforms.aperture.value +=
               ((diveMode === 'portal' ? .000085 : .000055) -
-                diveBokeh.uniforms.aperture.value) *
+                diveBokehUniforms.aperture.value) *
               .08
           }
         }
@@ -1878,6 +5020,11 @@ export default function DreamWorld3D({
           pendingPortal = null
 
           if (destination) {
+            portalSceneTransition?.dispose()
+            portalSceneTransition = null
+            portalPreviewDive?.dispose()
+            portalPreviewDive = null
+
             installDive(destination, depth, {fromPortal: true})
             pointerTarget.set(0, 0)
             renderer.domElement.style.cursor = 'crosshair'
@@ -1903,13 +5050,55 @@ export default function DreamWorld3D({
           pointerTarget.set(0, 0)
           pointerParallax.set(0, 0)
         } else {
-          diveComposer?.render()
+          if (
+            diveMode === 'portal' &&
+            portalPreviewDive &&
+            portalSceneTransition
+          ) {
+            portalSceneTransition.render(
+              renderer,
+              activeDive.scene,
+              activeDive.camera,
+              portalPreviewDive.scene,
+              portalPreviewDive.camera,
+              portalProgress,
+              elapsed,
+            )
+          } else {
+            diveComposer?.render()
+          }
           return
         }
       }
 
       farWorld.rotation.y = Math.sin(elapsed * .025) * .035
       stars.rotation.z = elapsed * .002
+
+      if (libraryFarParticles && libraryFarParticleMaterial) {
+        libraryFarParticleMaterial.uniforms.uTime.value = elapsed
+        libraryFarParticles.rotation.z = Math.sin(elapsed * .018) * .008
+        libraryFarParticles.position.x = Math.sin(elapsed * .021) * .24
+        libraryFarParticles.position.y = Math.cos(elapsed * .017) * .16
+      }
+
+      librarySkyways.forEach((skyway, index) => {
+        skyway.group.position.y =
+          Math.sin(elapsed * .055 + skyway.phase) * .16
+        skyway.group.rotation.y =
+          Math.sin(elapsed * .014 + skyway.phase) * .004
+        skyway.edgeMaterial.opacity =
+          .54 +
+          Math.max(
+            0,
+            Math.sin(elapsed * .23 + skyway.phase),
+          ) * .16
+        skyway.laneMaterial.opacity =
+          .18 +
+          Math.max(
+            0,
+            Math.sin(elapsed * .38 + skyway.phase),
+          ) * .14
+      })
 
       nebulae.forEach((sprite, index) => {
         sprite.material.opacity = .22 + Math.sin(elapsed * .13 + index) * .06
@@ -1953,6 +5142,343 @@ export default function DreamWorld3D({
         material.opacity =
           (index === 0 ? 0.04 : 0.03) +
           Math.sin(elapsed * 0.16 + index) * 0.008
+      })
+
+      libraryAtmosphere?.update({
+        elapsed,
+        camera,
+        districts: activeDistricts,
+      })
+
+      nearDust.rotation.y = Math.sin(elapsed * .045) * .05
+      nearDust.position.x = pointerParallax.x * .16
+      nearDust.position.y = pointerParallax.y * .1
+      nearDustMaterial.opacity =
+        .14 + Math.max(0, Math.sin(elapsed * .19)) * .06
+
+      if (
+        libraryWalkwayPanelMaterial &&
+        libraryWalkwayRailMaterial
+      ) {
+        const walkwayPulse = Math.sin(elapsed * .42) * .008
+        const walkwayBay =
+          archiveBayFromWorldZ(camera.position.z)
+        const forwardEnergy =
+          Math.max(
+            0,
+            Math.sin(elapsed * .56 - walkwayBay * .16),
+          ) * .012
+        libraryWalkwayPanelMaterial.opacity =
+          .075 + walkwayPulse + forwardEnergy
+        libraryWalkwayRailMaterial.opacity =
+          .22 +
+          Math.max(
+            0,
+            Math.sin(elapsed * .64 - walkwayBay * .22 + .8),
+          ) * .065
+        if (libraryWalkwayUnderlayMaterial) {
+          libraryWalkwayUnderlayMaterial.opacity =
+            .035 +
+            Math.max(
+              0,
+              Math.sin(elapsed * .34 - walkwayBay * .12 + 1.4),
+            ) * .022
+        }
+      }
+
+      const currentArchiveBay = libraryMode
+        ? archiveBayFromWorldZ(camera.position.z)
+        : 0
+
+      libraryAudio?.update({
+        enabled: soundEnabledRef.current,
+        movementMode: libraryMovementModeRef.current,
+        speed: Math.hypot(
+          flightVelocity.x,
+          flightVelocity.z,
+        ),
+        elapsed,
+        currentBay: currentArchiveBay,
+        districts: activeDistricts,
+      })
+
+      libraryRouteObjects.forEach((object) => {
+        if (object.userData.libraryLandmark) {
+          const phase =
+            object.userData.libraryLandmarkPhase as number
+          const baseY =
+            object.userData.libraryLandmarkBaseY as number
+          const baseRotationY =
+            object.userData
+              .libraryLandmarkBaseRotationY as number
+          const landmarkHeight =
+            object.userData.libraryLandmarkHeight as number
+          const landmarkBay =
+            object.userData.libraryLandmarkBay as number
+          const landmarkDistance =
+            Math.abs(landmarkBay - currentArchiveBay)
+          const heroWake =
+            1 -
+            THREE.MathUtils.smoothstep(
+              landmarkDistance,
+              .45,
+              5.2,
+            )
+          const passThroughFade =
+            THREE.MathUtils.smoothstep(
+              landmarkDistance,
+              .08,
+              .62,
+            )
+          const landmarkBaseScale =
+            (object.userData.libraryLandmarkBaseScale as
+              | number
+              | undefined) ?? 1
+          const heroScale =
+            landmarkBaseScale *
+            (1 +
+              heroWake * .055 +
+              Math.max(
+                0,
+                Math.sin(elapsed * .48 + phase),
+              ) *
+                .008)
+
+          object.position.y =
+            baseY +
+            Math.sin(elapsed * .48 + phase) * .085
+          object.rotation.y =
+            baseRotationY +
+            Math.sin(elapsed * .18 + phase) * .07
+          object.scale.lerp(
+            new THREE.Vector3(
+              heroScale,
+              heroScale,
+              heroScale,
+            ),
+            .075,
+          )
+
+          object.children.forEach((child) => {
+            if (child.userData.libraryLandmarkHalo) {
+              const halo = child as THREE.Mesh
+              const material =
+                halo.material as THREE.MeshBasicMaterial
+              const haloScale =
+                1 +
+                heroWake * .12 +
+                Math.sin(elapsed * .34 + phase) * .018
+              halo.scale.setScalar(haloScale)
+              material.opacity +=
+                (((.08 + heroWake * .17) *
+                  passThroughFade) -
+                  material.opacity) *
+                .08
+              halo.rotation.z =
+                Math.sin(elapsed * .12 + phase) * .035
+            } else if (child.userData.libraryLandmarkScan) {
+              const cycle =
+                (elapsed * .18 + phase * .13) % 1
+              child.position.y =
+                -landmarkHeight * .34 +
+                cycle * landmarkHeight * .68
+              child.rotation.z =
+                elapsed * .14 + phase
+              const material =
+                (child as THREE.Mesh)
+                  .material as THREE.MeshBasicMaterial
+              material.opacity =
+                (.22 +
+                  heroWake * .16 +
+                  Math.max(
+                    0,
+                    Math.sin(elapsed * 1.4 + phase),
+                  ) * .28) *
+                passThroughFade
+            } else if (
+              child.userData.libraryLandmarkOrbit
+            ) {
+              child.rotation.y =
+                elapsed * .22 + phase
+              child.rotation.x =
+                Math.sin(elapsed * .12 + phase) * .12
+              const material =
+                (child as THREE.Points)
+                  .material as THREE.PointsMaterial
+              material.opacity =
+                (.4 +
+                  heroWake * .22 +
+                  Math.max(
+                    0,
+                    Math.sin(elapsed * .7 + phase),
+                  ) * .2) *
+                passThroughFade
+            } else if (
+              child.userData.libraryDistrictMotif
+            ) {
+              child.rotation.y =
+                Math.sin(elapsed * .16 + phase) * .09
+              child.position.y =
+                Math.sin(elapsed * .32 + phase) * .055
+              child.scale.setScalar(
+                1 + heroWake * .06,
+              )
+            } else if (
+              child.userData.libraryLandmarkWire
+            ) {
+              const material =
+                (child as THREE.Mesh)
+                  .material as THREE.MeshBasicMaterial
+              material.opacity +=
+                (((.7 + heroWake * .24) *
+                  passThroughFade) -
+                  material.opacity) *
+                .1
+            } else if (
+              child.userData.libraryLandmarkPedestal
+            ) {
+              const material =
+                (child as THREE.Mesh)
+                  .material as THREE.MeshBasicMaterial
+              material.opacity =
+                (.27 +
+                  heroWake * .16 +
+                  Math.max(
+                    0,
+                    Math.sin(elapsed * .68 + phase),
+                  ) * .16) *
+                (.45 + passThroughFade * .55)
+            } else if (
+              child.userData.libraryLandmarkCore
+            ) {
+              const material =
+                (child as THREE.Mesh)
+                  .material as THREE.MeshBasicMaterial
+              material.opacity =
+                (.16 +
+                  heroWake * .12 +
+                  Math.max(
+                    0,
+                    Math.sin(elapsed * .52 + phase),
+                  ) * .12) *
+                passThroughFade
+            }
+          })
+          return
+        }
+
+        if (!object.userData.routeMarkerBaseY) return
+        const phase = object.userData.routeMarkerPhase as number
+        const baseY = object.userData.routeMarkerBaseY as number
+        object.position.y =
+          baseY + Math.sin(elapsed * .42 + phase) * .08
+
+        const markerBay = object.userData.routeMarkerBay
+        if (
+          typeof markerBay === 'number' &&
+          object instanceof THREE.Sprite
+        ) {
+          const distance = Math.abs(markerBay - currentArchiveBay)
+          const wake = 1 - THREE.MathUtils.smoothstep(
+            distance,
+            1.2,
+            5.5,
+          )
+          const material = object.material as THREE.SpriteMaterial
+          material.opacity +=
+            ((.42 + wake * .52) - material.opacity) * .09
+          const baseScale =
+            (object.userData.routeMarkerBaseScale as number) || 6.2
+          const scale = baseScale * (1 + wake * .07)
+          object.scale.lerp(
+            new THREE.Vector3(scale, scale / 4, 1),
+            .08,
+          )
+        }
+      })
+
+      if (libraryArrows) {
+        const awakeColor = new THREE.Color(0xb7f8ff)
+        const idleColor = new THREE.Color(0x24465a)
+        const color = new THREE.Color()
+        libraryArrowBays.forEach((bay, index) => {
+          const deltaBay = bay - currentArchiveBay
+          const aheadBias = deltaBay >= -.5 ? 1 : .62
+          const wake =
+            (1 - THREE.MathUtils.smoothstep(
+              Math.abs(deltaBay),
+              .4,
+              5.8,
+            )) * aheadBias
+          color.copy(idleColor).lerp(awakeColor, wake)
+          libraryArrows?.setColorAt(index, color)
+        })
+        if (libraryArrows.instanceColor) {
+          libraryArrows.instanceColor.needsUpdate = true
+        }
+      }
+
+      if (libraryRouteDots && libraryRouteDotGeometry) {
+        const routePositions =
+          libraryRouteDotGeometry.getAttribute(
+            'position',
+          ) as THREE.BufferAttribute
+        const pulseGroups = Math.max(
+          1,
+          Math.floor(libraryRouteDotCount / 3),
+        )
+
+        for (
+          let index = 0;
+          index < libraryRouteDotCount;
+          index += 1
+        ) {
+          const lane = (index % 3) - 1
+          const pulseIndex = Math.floor(index / 3)
+          const laneOffset = lane === 0 ? 0 : lane * .18
+          const bay =
+            (elapsed * .46 +
+              pulseIndex *
+                (ARCHIVE_PATH_RENDER_BAYS / pulseGroups) +
+              laneOffset +
+              ARCHIVE_PATH_RENDER_BAYS) %
+            ARCHIVE_PATH_RENDER_BAYS
+          const point = archivePathPoint(bay)
+          const frame = archivePathFrame(bay)
+          const halfWidth =
+            archiveWalkwayHalfWidthAtBay(
+              bay,
+              activeDistricts,
+            )
+          const lateral =
+            lane === 0
+              ? 0
+              : lane * Math.max(.4, halfWidth - .3)
+
+          routePositions.setXYZ(
+            index,
+            point[0] + frame.normalX * lateral,
+            point[1] +
+              ARCHIVE_WALKWAY_Y_OFFSET +
+              (lane === 0 ? .095 : .13),
+            point[2] + frame.normalZ * lateral,
+          )
+        }
+        routePositions.needsUpdate = true
+        if (libraryRouteDotMaterial) {
+          libraryRouteDotMaterial.opacity =
+            .7 +
+            Math.max(0, Math.sin(elapsed * .72)) * .16
+        }
+      }
+
+      worldLightShafts.forEach((shaft, index) => {
+        shaft.rotation.y += .00022 + index * .00005
+        const material = shaft.material as THREE.MeshBasicMaterial
+        material.opacity =
+          .012 +
+          index * .003 +
+          Math.max(0, Math.sin(elapsed * .11 + index)) * .007
       })
 
       pointerParallax.lerp(pointerTarget, 0.035)
@@ -2072,24 +5598,167 @@ export default function DreamWorld3D({
         }
       }
 
+      libraryReadingRitual?.update({
+        nowSeconds: now / 1000,
+        books: libraryBookVisuals,
+        hoveredBook,
+        approachedShelfId: flightNearestId,
+        readerActive: Boolean(libraryReadingBookRef.current),
+        getShelfDistance: (nodeId) => {
+          const shelfVisual = nodeVisuals.get(nodeId)
+          return shelfVisual
+            ? camera.position.distanceTo(
+                shelfVisual.group.position,
+              )
+            : Infinity
+        },
+        onOpen: (nodeId, bookIndex) => {
+          onBookSelectRef.current?.(nodeId, bookIndex)
+        },
+      })
+
+      let nearestLibraryShelfId: string | null = null
+      let nearestLibraryShelfDistance = Infinity
+      const nearestShelfPoint = new THREE.Vector3()
+
+      if (libraryMode) {
+        nodeRef.current.forEach((node) => {
+          if (node.libraryKind !== 'shelf') return
+          const visual = nodeVisuals.get(node._id)
+          if (!visual) return
+          visual.group.getWorldPosition(nearestShelfPoint)
+          const distance = nearestShelfPoint.distanceTo(camera.position)
+          if (distance < nearestLibraryShelfDistance) {
+            nearestLibraryShelfDistance = distance
+            nearestLibraryShelfId = node._id
+          }
+        })
+
+        const nearestVisual = nearestLibraryShelfId
+          ? nodeVisuals.get(nearestLibraryShelfId)
+          : null
+        const focusStrength = THREE.MathUtils.clamp(
+          1 - (nearestLibraryShelfDistance - 7) / 12,
+          0,
+          1,
+        )
+
+        libraryAudio?.updateShelfFocus({
+          enabled: soundEnabledRef.current,
+          shelfId: nearestLibraryShelfId,
+          focusStrength,
+        })
+
+        if (libraryShelfLight && nearestVisual) {
+          libraryShelfLight.position
+            .copy(nearestVisual.group.position)
+            .add(new THREE.Vector3(0, 1.35, 1.2))
+          libraryShelfLight.intensity +=
+            (focusStrength * 2.1 - libraryShelfLight.intensity) * .08
+        } else if (libraryShelfLight) {
+          libraryShelfLight.intensity *= .9
+        }
+
+        if (libraryShelfSparkles && nearestVisual) {
+          libraryShelfSparkles.visible = focusStrength > .04
+          libraryShelfSparkles.position.copy(nearestVisual.group.position)
+          libraryShelfSparkles.rotation.y += .0018
+          if (libraryShelfSparkleMaterial) {
+            libraryShelfSparkleMaterial.opacity =
+              .18 + focusStrength * .48
+          }
+        } else if (libraryShelfSparkles) {
+          libraryShelfSparkles.visible = false
+        }
+
+        libraryBookVisuals.forEach((bookVisual) => {
+          const shelfVisual = nodeVisuals.get(bookVisual.nodeId)
+          const shelfDistance = shelfVisual
+            ? camera.position.distanceTo(shelfVisual.group.position)
+            : Infinity
+          const awake =
+            bookVisual.nodeId === nearestLibraryShelfId
+              ? focusStrength
+              : 0
+          const presented =
+            libraryReadingRitual?.isPresenting(bookVisual) ?? false
+
+          bookVisual.coverMaterial.emissive.setHex(
+            presented ? 0x6d2f73 : 0x163744,
+          )
+          const targetEmissive = presented
+            ? 1.35
+            : awake * .5
+          bookVisual.coverMaterial.emissiveIntensity +=
+            (targetEmissive -
+              bookVisual.coverMaterial.emissiveIntensity) *
+            .1
+
+          const distanceWake =
+            1 -
+            THREE.MathUtils.smoothstep(
+              shelfDistance,
+              10,
+              42,
+            )
+          const neighborDim =
+            nearestLibraryShelfId &&
+            bookVisual.nodeId !== nearestLibraryShelfId &&
+            focusStrength > .2
+              ? THREE.MathUtils.lerp(
+                  1,
+                  .72,
+                  focusStrength,
+                )
+              : 1
+          const targetTint =
+            (presented
+              ? .76
+              : .26 +
+                Math.max(
+                  awake,
+                  distanceWake * .5,
+                ) *
+                  .42) *
+            neighborDim
+          const tint = bookVisual.coverMaterial.color
+          tint.r += (targetTint - tint.r) * .08
+          tint.g += (targetTint - tint.g) * .08
+          tint.b += ((targetTint * 1.04) - tint.b) * .08
+        })
+
+      }
+
       for (const node of nodeRef.current) {
         const visual = nodeVisuals.get(node._id)
         if (!visual) continue
 
         const target = worldPosition(node, positionsRef.current)
         const memoryAge = nodeMemoryAge.get(node._id) ?? 0
-        target.z =
-          visual.z -
-          memoryAge * (node.frequency <= 1 ? 1.35 : .48) +
-          Math.sin(elapsed * .21 + visual.phase) * .22
-        target.y +=
-          Math.sin(elapsed * .37 + visual.phase) * .08 +
-          Math.cos(elapsed * .105) * .055
-        target.x +=
-          Math.cos(elapsed * .29 + visual.phase) * .05 +
-          Math.sin(elapsed * .12) * .07
+        if (node.libraryKind === 'shelf') {
+          target.y +=
+            Math.sin(elapsed * .18 + visual.phase) * .075
+          target.x +=
+            Math.cos(elapsed * .12 + visual.phase) * .012
+          target.z +=
+            Math.sin(elapsed * .1 + visual.phase) * .012
+        } else {
+          target.z =
+            visual.z -
+            memoryAge * (node.frequency <= 1 ? 1.35 : .48) +
+            Math.sin(elapsed * .21 + visual.phase) * .22
+          target.y +=
+            Math.sin(elapsed * .37 + visual.phase) * .08 +
+            Math.cos(elapsed * .105) * .055
+          target.x +=
+            Math.cos(elapsed * .29 + visual.phase) * .05 +
+            Math.sin(elapsed * .12) * .07
+        }
 
-        const gravity = gravityParents.get(node._id)
+        const gravity =
+          node.libraryKind === 'shelf'
+            ? undefined
+            : gravityParents.get(node._id)
         if (gravity) {
           const parentVisual = nodeVisuals.get(gravity.parentId)
           if (parentVisual) {
@@ -2143,20 +5812,148 @@ export default function DreamWorld3D({
                     : .015
                   : .006
 
-        const scaleBoost = selected ? 1.32 : hoveredId === node._id ? 1.14 : 1
+        const shelfDistance =
+          node.libraryKind === 'shelf'
+            ? camera.position.distanceTo(visual.group.position)
+            : Infinity
+        const isNearestLibraryShelf =
+          node.libraryKind === 'shelf' &&
+          nearestLibraryShelfId === node._id &&
+          nearestLibraryShelfDistance < 18
+        const nearbyShelfFocusActive =
+          node.libraryKind === 'shelf' &&
+          nearestLibraryShelfDistance < 16
+
+        const scaleBoost =
+          node.libraryKind === 'shelf'
+            ? selected
+              ? 1.045
+              : hoveredId === node._id
+                ? 1.025
+                : isNearestLibraryShelf
+                  ? 1.035
+                  : nearbyShelfFocusActive && shelfDistance < 30
+                    ? .965
+                    : 1
+            : selected
+              ? 1.32
+              : hoveredId === node._id
+                ? 1.14
+                : 1
         const desiredScale = visual.baseScale * scaleBoost
         visual.group.scale.lerp(
           new THREE.Vector3(desiredScale, desiredScale, desiredScale),
           selected ? .13 : .08,
         )
 
-        visual.group.rotation.y += selected ? .007 : .0022
-        visual.group.rotation.x =
-          Math.sin(elapsed * .22 + visual.phase) * .045
+        if (node.libraryKind === 'shelf') {
+          const frameMaterial =
+            visual.group.userData
+              .libraryShelfFrameMaterial as
+              | THREE.MeshStandardMaterial
+              | undefined
+          const boardMaterial =
+            visual.group.userData
+              .libraryShelfBoardMaterial as
+              | THREE.MeshStandardMaterial
+              | undefined
+          const accentMaterial =
+            visual.group.userData
+              .libraryShelfAccentMaterial as
+              | THREE.MeshBasicMaterial
+              | undefined
+          const proximityWake =
+            1 -
+            THREE.MathUtils.smoothstep(
+              shelfDistance,
+              8,
+              30,
+            )
+          const focalWake = isNearestLibraryShelf
+            ? THREE.MathUtils.clamp(
+                1 -
+                  (nearestLibraryShelfDistance - 5) /
+                    14,
+                0,
+                1,
+              )
+            : 0
+          const neighborDim =
+            nearbyShelfFocusActive &&
+            !isNearestLibraryShelf
+              ? .58
+              : 1
+          const reactiveStrength =
+            Math.max(
+              proximityWake * .58,
+              focalWake,
+            ) * neighborDim
+
+          if (frameMaterial) {
+            frameMaterial.emissiveIntensity +=
+              ((.018 + reactiveStrength * .42) -
+                frameMaterial.emissiveIntensity) *
+              .09
+            frameMaterial.envMapIntensity +=
+              ((settings.environmentIntensity *
+                (.4 + reactiveStrength * .42)) -
+                frameMaterial.envMapIntensity) *
+              .08
+          }
+          if (boardMaterial) {
+            boardMaterial.emissiveIntensity +=
+              ((.016 + reactiveStrength * .3) -
+                boardMaterial.emissiveIntensity) *
+              .09
+          }
+          if (accentMaterial) {
+            accentMaterial.opacity +=
+              ((.1 + reactiveStrength * .7) -
+                accentMaterial.opacity) *
+              .11
+          }
+        }
+
+        if (node.libraryKind === 'shelf') {
+          const baseYaw =
+            typeof visual.group.userData.libraryBaseYaw === 'number'
+              ? visual.group.userData.libraryBaseYaw
+              : Math.PI
+          const cameraFacingYaw =
+            Math.atan2(
+              camera.position.x - visual.group.position.x,
+              camera.position.z - visual.group.position.z,
+            ) + Math.PI
+          const yawDelta = Math.atan2(
+            Math.sin(cameraFacingYaw - baseYaw),
+            Math.cos(cameraFacingYaw - baseYaw),
+          )
+          const approachStrength = isNearestLibraryShelf
+            ? THREE.MathUtils.clamp(
+                1 - (nearestLibraryShelfDistance - 6) / 12,
+                0,
+                1,
+              )
+            : 0
+          visual.group.rotation.y =
+            baseYaw +
+            yawDelta * approachStrength * .28 +
+            Math.sin(elapsed * .085 + visual.phase) * .009
+          visual.group.rotation.x =
+            Math.sin(elapsed * .07 + visual.phase) * .003
+          visual.group.rotation.z =
+            Math.cos(elapsed * .065 + visual.phase) * .002
+        } else {
+          visual.group.rotation.y += selected ? .007 : .0022
+          visual.group.rotation.x =
+            Math.sin(elapsed * .22 + visual.phase) * .045
+        }
 
         const shellMaterial = visual.shellMaterial
+        const reflectionMaterial =
+          visual.reflectionShell.material as THREE.MeshPhysicalMaterial
         const glowMaterial = visual.glow.material as THREE.MeshBasicMaterial
-        const coreMaterial = visual.core.material as THREE.MeshStandardMaterial
+        const coreMaterial = visual.core.material as THREE.MeshPhysicalMaterial
         const orbitMaterial = visual.orbit.material as THREE.MeshBasicMaterial
         const labelMaterial = visual.label.material as THREE.SpriteMaterial
 
@@ -2175,10 +5972,30 @@ export default function DreamWorld3D({
           elapsed,
           selected ? 1 : hoveredId === node._id ? 0.55 : 0,
         )
-        if (!selected) {
+        if (!selected && node.libraryKind !== 'shelf') {
           visual.miniWorld.group.visible = true
           visual.core.visible = true
+        } else if (node.libraryKind === 'shelf') {
+          visual.miniWorld.group.visible = false
+          visual.core.visible = false
         }
+        reflectionMaterial.opacity +=
+          ((selected
+            ? .24
+            : hoveredId === node._id
+              ? .19
+              : visible
+                ? .12
+                : .035) -
+            reflectionMaterial.opacity) *
+          .07
+        reflectionMaterial.envMapIntensity +=
+          ((selected
+            ? settings.environmentIntensity * 1.5
+            : settings.environmentIntensity * 1.08) -
+            reflectionMaterial.envMapIntensity) *
+          .05
+
         glowMaterial.opacity +=
           ((selected ? .2 : hoveredId === node._id ? .14 : visible ? .06 : .01) -
             glowMaterial.opacity) *
@@ -2191,16 +6008,41 @@ export default function DreamWorld3D({
           ((selected ? .68 : hoveredId === node._id ? .42 : .13) -
             orbitMaterial.opacity) *
           .08
+        const labelDistance = camera.position.distanceTo(
+          visual.group.position,
+        )
+        const shelfDistanceOpacity =
+          labelDistance < 24
+            ? .96
+            : labelDistance < 50
+              ? THREE.MathUtils.lerp(
+                  .58,
+                  .14,
+                  (labelDistance - 24) / 26,
+                )
+              : labelDistance < 78
+                ? .045
+                : .012
+        if (node.libraryKind === 'shelf') {
+          visual.label.visible =
+            labelDistance < 88 ||
+            selected ||
+            hoveredId === node._id
+        }
         const labelTarget =
-          selected || hoveredId === node._id
-            ? .9
-            : observatoryModeRef.current
-              ? node.frequency >= 4
-                ? .24
-                : .015
-              : node.frequency >= 3
-                ? .42
-                : .07
+          node.libraryKind === 'shelf'
+            ? selected || hoveredId === node._id
+              ? 1
+              : shelfDistanceOpacity
+            : selected || hoveredId === node._id
+              ? .9
+              : observatoryModeRef.current
+                ? node.frequency >= 4
+                  ? .24
+                  : .015
+                : node.frequency >= 3
+                  ? .42
+                  : .07
         labelMaterial.opacity +=
           (((visible ? labelTarget : .04) * introVisibility) -
             labelMaterial.opacity) *
@@ -2256,17 +6098,28 @@ export default function DreamWorld3D({
               : introStageRef.current === 2
                 ? .12
                 : .015
-        const desiredOpacity = edgeHighlighted
-          ? Math.min(
-              .5,
-              (.1 +
-                edgeVisual.weight * .07 +
-                (touchesSelected ? selectionPulseStrength * .22 : 0)) *
-                introEdgeFactor,
-            )
-          : .028 * introEdgeFactor
+        const isFlightRouteEdge = Boolean(
+          flightRoute &&
+            ((edgeVisual.source === flightRoute.sourceId &&
+              edgeVisual.target === flightRoute.targetId) ||
+              (edgeVisual.target === flightRoute.sourceId &&
+                edgeVisual.source === flightRoute.targetId)),
+        )
+        const desiredOpacity = isFlightRouteEdge
+          ? .82 * introEdgeFactor
+          : touchesSelected
+            ? .11 * introEdgeFactor
+            : edgeHighlighted
+              ? .035 * introEdgeFactor
+              : .016 * introEdgeFactor
         edgeVisual.material.opacity +=
-          (desiredOpacity - edgeVisual.material.opacity) * .08
+          (desiredOpacity - edgeVisual.material.opacity) * .1
+        edgeVisual.material.color.lerp(
+          new THREE.Color(
+            isFlightRouteEdge ? 0xcaf7ff : 0x52758a,
+          ),
+          .12,
+        )
 
         const isRelationEdge = Boolean(
           relationTravel &&
@@ -2295,11 +6148,13 @@ export default function DreamWorld3D({
           .addScaledVector(control, 2 * oneMinus * pulseT)
           .addScaledVector(target, pulseT * pulseT)
         ;(edgeVisual.pulse.material as THREE.MeshBasicMaterial).opacity =
-          isRelationEdge
-            ? .92 * (1 - relationProgress * .3)
-            : edgeHighlighted
-              ? Math.min(.5, .34 + (touchesSelected ? selectionPulseStrength * .3 : 0))
-              : .05
+          isFlightRouteEdge
+            ? .96
+            : isRelationEdge
+              ? .46 * (1 - relationProgress * .3)
+              : touchesSelected
+                ? .16
+                : .035
       })
 
       if (
@@ -2346,20 +6201,50 @@ export default function DreamWorld3D({
         const focusDistance = camera.position.distanceTo(
           selectedVisual.group.position,
         )
-        depthOfField.uniforms.focus.value +=
-          (focusDistance - depthOfField.uniforms.focus.value) * 0.08
-        depthOfField.uniforms.aperture.value +=
-          (0.000065 - depthOfField.uniforms.aperture.value) * 0.05
-        depthOfField.uniforms.maxblur.value +=
-          (settings.maxBlur - depthOfField.uniforms.maxblur.value) * 0.05
+        const depthOfFieldUniforms =
+          depthOfField.uniforms as BokehUniformMap
+
+        depthOfFieldUniforms.focus.value +=
+          (focusDistance - depthOfFieldUniforms.focus.value) * 0.08
+        depthOfFieldUniforms.aperture.value +=
+          (0.000065 - depthOfFieldUniforms.aperture.value) * 0.05
+        depthOfFieldUniforms.maxblur.value +=
+          (settings.maxBlur - depthOfFieldUniforms.maxblur.value) * 0.05
       }
 
+      let atmospherePreset =
+        globalAtmospherePreset
+
+      if (libraryMode && activeDistricts.length > 0) {
+        const atmosphereBay = archiveBayFromWorldZ(
+          camera.position.z,
+        )
+        const nearestAtmosphereDistrict =
+          activeDistricts.reduce((nearest, candidate) =>
+            Math.abs(candidate.bay - atmosphereBay) <
+            Math.abs(nearest.bay - atmosphereBay)
+              ? candidate
+              : nearest,
+          )
+
+        atmospherePreset =
+          getLibraryAtmosphereVisualPreset(
+            nearestAtmosphereDistrict.atmosphere,
+          )
+      }
+
+      const libraryBloomStrength =
+        settings.bloomStrength *
+        (selectedVisual?.group.userData.libraryKind === 'shelf'
+          ? .47
+          : .55)
+      const bloomTarget =
+        (selectedVisual
+          ? libraryBloomStrength * 1.05
+          : settings.bloomStrength * .52) *
+        (libraryMode ? atmospherePreset.bloomScale : 1)
       bloom.strength +=
-        ((selectedVisual
-          ? settings.bloomStrength * 1.1
-          : settings.bloomStrength) -
-          bloom.strength) *
-        0.035
+        (bloomTarget - bloom.strength) * .045
 
       dreamPost.uniforms.uTime.value = elapsed
       if (diveMode !== 'entering') {
@@ -2367,27 +6252,427 @@ export default function DreamWorld3D({
           ((selectedVisual ? .12 : 0) - dreamPost.uniforms.uTravel.value) *
           .03
       }
+
+      const readingRitualActive =
+        libraryReadingRitual?.isActive() ?? false
+      const baseExposure =
+        readingRitualActive
+          ? .66
+          : selectedVisual?.group.userData.libraryKind === 'shelf'
+            ? .82
+            : selectedVisual
+              ? .88
+              : .9
+      const exposureTarget = libraryMode
+        ? Math.max(
+            .5,
+            baseExposure *
+              atmospherePreset.exposureScale,
+          )
+        : baseExposure
       renderer.toneMappingExposure +=
-        ((selectedVisual ? 0.9 : 0.94) - renderer.toneMappingExposure) *
-        .025
+        (exposureTarget - renderer.toneMappingExposure) *
+        .05
 
       if (scene.fog instanceof THREE.FogExp2) {
         const sceneReveal = Math.min(1, elapsed / 1.7)
-        const birthFog = (1 - sceneReveal) * 0.072
+        const birthFog = (1 - sceneReveal) * .072
+        const hazeScale = libraryMode
+          ? .55 +
+            activeLibraryConfig.hazeIntensity * .85
+          : 1
+        const selectedFogScale = selectedVisual
+          ? 1.1
+          : 1
+        const fogTarget =
+          settings.fogDensity *
+            (libraryMode
+              ? atmospherePreset.fogScale * hazeScale
+              : 1) *
+            selectedFogScale +
+          birthFog
+
         scene.fog.density +=
-          ((selectedVisual
-            ? settings.fogDensity * 1.18 + birthFog
-            : settings.fogDensity + birthFog) -
-            scene.fog.density) *
-          0.04
+          (fogTarget - scene.fog.density) * .05
+
+        if (libraryMode) {
+          atmosphereFogTarget.setHex(
+            atmospherePreset.fog,
+          )
+          scene.fog.color.lerp(
+            atmosphereFogTarget,
+            .045,
+          )
+        }
       }
 
-      violetLight.intensity +=
-        ((selectedVisual ? 16 : 12) - violetLight.intensity) * 0.025
-      cyanLight.intensity +=
-        ((selectedVisual ? 15 : 11) - cyanLight.intensity) * 0.025
+      if (libraryMode) {
+        atmosphereBackgroundTarget.setHex(
+          atmospherePreset.background,
+        )
+        sceneBackgroundColor.lerp(
+          atmosphereBackgroundTarget,
+          .035,
+        )
+        atmosphereLightTarget.setHex(
+          atmospherePreset.tint,
+        )
+        violetLight.color.lerp(
+          atmosphereLightTarget,
+          .035,
+        )
+        cyanLight.color.lerp(
+          atmosphereLightTarget,
+          .022,
+        )
+      }
 
-      if (selectedVisual) {
+      const atmosphereLightScale = libraryMode
+        ? atmospherePreset.lightStrength
+        : 1
+      violetLight.intensity +=
+        (
+          (selectedVisual ? 8.5 : 7) *
+            atmosphereLightScale -
+          violetLight.intensity
+        ) *
+        .035
+      cyanLight.intensity +=
+        (
+          (selectedVisual ? 8 : 6.5) *
+            atmosphereLightScale -
+          cyanLight.intensity
+        ) *
+        .035
+
+      if (flightActive && flightInitialized) {
+        const routeActive = Boolean(flightRoute)
+        const routeProgress = flightRoute
+          ? THREE.MathUtils.clamp(
+              (elapsed - flightRoute.startedAt) / flightRoute.duration,
+              0,
+              1,
+            )
+          : 0
+
+        if (flightRoute) {
+          const oneMinus = 1 - routeProgress
+          const routePoint = new THREE.Vector3()
+            .copy(flightRoute.source)
+            .multiplyScalar(oneMinus * oneMinus)
+            .addScaledVector(
+              flightRoute.control,
+              2 * oneMinus * routeProgress,
+            )
+            .addScaledVector(
+              flightRoute.target,
+              routeProgress * routeProgress,
+            )
+
+          const lookProgress = Math.min(1, routeProgress + .035)
+          const lookOneMinus = 1 - lookProgress
+          const routeLook = new THREE.Vector3()
+            .copy(flightRoute.source)
+            .multiplyScalar(lookOneMinus * lookOneMinus)
+            .addScaledVector(
+              flightRoute.control,
+              2 * lookOneMinus * lookProgress,
+            )
+            .addScaledVector(
+              flightRoute.target,
+              lookProgress * lookProgress,
+            )
+
+          flightPosition.copy(routePoint)
+          camera.position.copy(routePoint)
+          camera.lookAt(routeLook)
+          camera.fov +=
+            ((50 + Math.sin(routeProgress * Math.PI) * 7) - camera.fov) *
+            .12
+          camera.updateProjectionMatrix()
+          dreamPost.uniforms.uTravel.value +=
+            ((.6 + Math.sin(routeProgress * Math.PI) * .34) -
+              dreamPost.uniforms.uTravel.value) *
+            .12
+
+          if (routeProgress >= 1) {
+            const arrived = nodeRef.current.find(
+              (node) => node._id === flightRoute?.targetId,
+            )
+            if (arrived) {
+              flightNearestId = arrived._id
+              hoveredId = arrived._id
+              onNodeHoverRef.current(arrived)
+            }
+            flightEuler.setFromQuaternion(camera.quaternion, 'YXZ')
+            flightYaw = flightEuler.y
+            flightPitch = flightEuler.x
+            flightRoute = null
+            flightVelocity.set(0, 0, 0)
+          }
+        }
+
+        const libraryWalking =
+          libraryMode &&
+          libraryMovementModeRef.current === 'walk'
+
+        if (libraryWalking) {
+          flightForward.set(
+            -Math.sin(flightYaw),
+            0,
+            -Math.cos(flightYaw),
+          ).normalize()
+        } else {
+          flightForward.set(
+            -Math.sin(flightYaw) * Math.cos(flightPitch),
+            Math.sin(flightPitch),
+            -Math.cos(flightYaw) * Math.cos(flightPitch),
+          ).normalize()
+        }
+
+        flightRight.crossVectors(flightForward, flightUp).normalize()
+        flightMove.set(0, 0, 0)
+
+        if (flightKeys.has('KeyW')) flightMove.add(flightForward)
+        if (flightKeys.has('KeyS')) flightMove.sub(flightForward)
+        if (flightKeys.has('KeyD')) flightMove.add(flightRight)
+        if (flightKeys.has('KeyA')) flightMove.sub(flightRight)
+
+        if (!libraryWalking) {
+          if (flightKeys.has('Space')) flightMove.add(flightUp)
+          if (
+            flightKeys.has('ControlLeft') ||
+            flightKeys.has('ControlRight') ||
+            flightKeys.has('KeyQ')
+          ) {
+            flightMove.sub(flightUp)
+          }
+        }
+
+        if (flightMove.lengthSq() > 0) flightMove.normalize()
+
+        const boosted =
+          flightKeys.has('ShiftLeft') ||
+          flightKeys.has('ShiftRight')
+        const movementSpeed = libraryWalking
+          ? boosted
+            ? 4.25
+            : 2.55
+          : boosted
+            ? 7.2
+            : 3.15
+        const desiredVelocity =
+          flightMove.multiplyScalar(movementSpeed)
+        const damping =
+          1 - Math.exp(-delta * (libraryWalking ? 10.5 : 7.5))
+
+        if (!routeActive) {
+          flightVelocity.lerp(desiredVelocity, damping)
+          flightPosition.addScaledVector(flightVelocity, delta)
+        } else {
+          flightVelocity.multiplyScalar(.72)
+        }
+
+        if (!libraryMode) {
+          const distanceFromOrigin = flightPosition.length()
+          if (distanceFromOrigin > 34) {
+            flightPosition.multiplyScalar(34 / distanceFromOrigin)
+            flightVelocity.multiplyScalar(.35)
+          }
+          flightPosition.y = THREE.MathUtils.clamp(
+            flightPosition.y,
+            -12,
+            14,
+          )
+        } else if (libraryWalking) {
+          const walkSurface =
+            archiveWalkSurfaceAtPosition(
+              flightPosition.x,
+              flightPosition.z,
+              activeDistricts,
+              libraryGridSegments,
+            )
+
+          if (walkSurface) {
+            const offsetX =
+              flightPosition.x - walkSurface.centerX
+            const offsetZ =
+              flightPosition.z - walkSurface.centerZ
+            const distance =
+              Math.hypot(offsetX, offsetZ)
+
+            if (
+              distance >
+                walkSurface.halfWidth + .0001 &&
+              distance > .0001
+            ) {
+              const normalX = offsetX / distance
+              const normalZ = offsetZ / distance
+              const correction =
+                distance - walkSurface.halfWidth
+
+              flightPosition.x -= normalX * correction
+              flightPosition.z -= normalZ * correction
+
+              const outwardVelocity =
+                flightVelocity.x * normalX +
+                flightVelocity.z * normalZ
+              if (outwardVelocity > 0) {
+                flightVelocity.x -=
+                  normalX * outwardVelocity * .86
+                flightVelocity.z -=
+                  normalZ * outwardVelocity * .86
+              }
+            }
+
+            const eyeHeight = 1.64
+            const groundY =
+              walkSurface.groundY +
+              ARCHIVE_WALKWAY_Y_OFFSET +
+              eyeHeight
+            flightPosition.y = THREE.MathUtils.lerp(
+              flightPosition.y,
+              groundY,
+              1 - Math.exp(-delta * 11),
+            )
+          } else {
+            const fallbackBay =
+              archiveBayFromWorldZ(flightPosition.z)
+            const fallbackPoint = archivePathPoint(
+              fallbackBay,
+            )
+            flightPosition.y = THREE.MathUtils.lerp(
+              flightPosition.y,
+              fallbackPoint[1] +
+                ARCHIVE_WALKWAY_Y_OFFSET +
+                1.64,
+              1 - Math.exp(-delta * 11),
+            )
+          }
+
+          flightVelocity.y = 0
+        } else {
+          // The DEV catalogue extends as the user explores, so free flight
+          // must not inherit the dream-map's finite spherical boundary.
+          flightPosition.y = THREE.MathUtils.clamp(
+            flightPosition.y,
+            -48,
+            64,
+          )
+        }
+
+        if (!routeActive) {
+          nodeVisuals.forEach((visual) => {
+            visual.group.getWorldPosition(flightCollisionPoint)
+            flightCollisionDelta
+              .copy(flightPosition)
+              .sub(flightCollisionPoint)
+
+            const distance = flightCollisionDelta.length()
+            const minimumDistance =
+              .68 + visual.baseScale * .62
+
+            if (distance > .001 && distance < minimumDistance) {
+              flightCollisionDelta
+                .normalize()
+                .multiplyScalar(minimumDistance - distance)
+              flightPosition.add(flightCollisionDelta)
+              flightVelocity.multiplyScalar(.58)
+            }
+          })
+        }
+
+        if (!routeActive) {
+          camera.position.copy(flightPosition)
+
+          if (libraryWalking) {
+            const planarSpeed = Math.hypot(
+              flightVelocity.x,
+              flightVelocity.z,
+            )
+            const movingStrength = THREE.MathUtils.clamp(
+              planarSpeed / Math.max(.001, movementSpeed),
+              0,
+              1,
+            )
+            libraryWalkBobStrength +=
+              (movingStrength - libraryWalkBobStrength) *
+              (1 - Math.exp(-delta * 9))
+
+            if (libraryWalkBobStrength > .001) {
+              libraryWalkBobPhase +=
+                delta *
+                (boosted ? 10.2 : 7.7) *
+                (.45 + libraryWalkBobStrength * .55)
+            }
+
+            const bobY =
+              Math.sin(libraryWalkBobPhase * 2) *
+              .032 *
+              libraryWalkBobStrength
+            const sway =
+              Math.sin(libraryWalkBobPhase) *
+              .016 *
+              libraryWalkBobStrength
+            camera.position.y += bobY
+            camera.position.addScaledVector(flightRight, sway)
+          } else {
+            libraryWalkBobStrength *=
+              Math.exp(-delta * 10)
+          }
+
+          camera.rotation.order = 'YXZ'
+          camera.rotation.y = flightYaw
+          camera.rotation.x = flightPitch
+        }
+
+        camera.rotation.z = THREE.MathUtils.lerp(
+          camera.rotation.z,
+          -flightVelocity.dot(flightRight) *
+            (libraryWalking ? .0025 : .008),
+          .08,
+        )
+
+        const speedRatio = routeActive
+          ? .72 + Math.sin(routeProgress * Math.PI) * .28
+          : Math.min(
+              1,
+              flightVelocity.length() /
+                (libraryWalking ? 4.25 : 7.2),
+            )
+        const fovBoost =
+          libraryWalking ? speedRatio * 2.2 : speedRatio * 9
+        camera.fov +=
+          ((43 + fovBoost) - camera.fov) * .065
+        camera.updateProjectionMatrix()
+
+        const nearest = nearestFlightNode(10)
+        const nearestId = nearest?._id ?? null
+        if (nearestId !== flightNearestId) {
+          flightNearestId = nearestId
+          hoveredId = nearestId
+          onNodeHoverRef.current(nearest)
+        }
+
+        const navigationKey =
+          (nearestId ?? '') +
+          '|' +
+          (flightRoute?.targetId ?? '')
+        if (navigationKey !== lastPublishedNavigation) {
+          lastPublishedNavigation = navigationKey
+          onFlightNavigationChangeRef.current?.({
+            nearestId,
+            routeTargetId: flightRoute?.targetId ?? null,
+          })
+        }
+
+        depthOfField.enabled = false
+        dreamPost.uniforms.uTravel.value +=
+          ((speedRatio * .72) - dreamPost.uniforms.uTravel.value) * .08
+        dreamPost.uniforms.uFlareStrength.value +=
+          ((speedRatio * .09) - dreamPost.uniforms.uFlareStrength.value) *
+          .06
+      } else if (selectedVisual) {
         const position = selectedVisual.group.position
 
         if (diveMode === 'entering' && activeDive) {
@@ -2445,10 +6730,14 @@ export default function DreamWorld3D({
         )
       }
 
-      camera.position.lerp(cameraTarget, selectedVisual ? .075 : .055)
-      camera.lookAt(lookTarget)
+      if (!flightActive) {
+        camera.position.lerp(cameraTarget, selectedVisual ? .075 : .055)
+        camera.lookAt(lookTarget)
+        camera.fov += (43 - camera.fov) * .06
+        camera.updateProjectionMatrix()
+      }
 
-      if (selectedVisual) {
+      if (selectedVisual && !flightActive) {
         const projected = selectedVisual.group.position.clone().project(camera)
         const selectedProfile = selectedNode
           ? getProfileForNode(selectedNode)
@@ -2487,7 +6776,7 @@ export default function DreamWorld3D({
           lastProjection = nextProjection
           onProjectionChangeRef.current(nextProjection)
         }
-      } else {
+      } else if (!flightActive) {
         dreamPost.uniforms.uFlareStrength.value +=
           (0 - dreamPost.uniforms.uFlareStrength.value) * .05
 
@@ -2503,6 +6792,22 @@ export default function DreamWorld3D({
     animationFrame = requestAnimationFrame(animate)
 
     return () => {
+      if (libraryMode && flightModeRef.current) {
+        libraryFlightStateRef.current = {
+          position: [
+            camera.position.x,
+            camera.position.y,
+            camera.position.z,
+          ],
+          quaternion: [
+            camera.quaternion.x,
+            camera.quaternion.y,
+            camera.quaternion.z,
+            camera.quaternion.w,
+          ],
+        }
+      }
+
       cancelAnimationFrame(animationFrame)
       resizeObserver.disconnect()
 
@@ -2513,6 +6818,12 @@ export default function DreamWorld3D({
       renderer.domElement.removeEventListener('pointerleave', handlePointerLeave)
       renderer.domElement.removeEventListener('wheel', handleWheel)
       renderer.domElement.removeEventListener('dblclick', handleDoubleClick)
+      document.removeEventListener('mousemove', handleFlightMouse)
+      window.removeEventListener('keydown', handleFlightKeyDown)
+      window.removeEventListener('keyup', handleFlightKeyUp)
+      if (document.pointerLockElement === renderer.domElement) {
+        document.exitPointerLock?.()
+      }
 
       if (holdTimer !== null) window.clearTimeout(holdTimer)
       clusterAudios.forEach((cluster) => {
@@ -2522,15 +6833,46 @@ export default function DreamWorld3D({
       if (diveMode !== 'none') onDiveStateChangeRef.current(false)
       disposeDive()
       releaseDreamCell()
+
+      libraryAudio?.dispose()
+
       camera.remove(listener)
+
+      shelfSideGeometry.dispose()
+      shelfBoardGeometry.dispose()
+      shelfBackGeometry.dispose()
+      shelfBookGeometry.dispose()
+      shelfCoverGeometry.dispose()
+      shelfAccentGeometry.dispose()
+      shelfPickGeometry.dispose()
+      shelfBookmarkGeometry.dispose()
+      shelfBookmarkMaterial.dispose()
+      shelfActivityGeometry.dispose()
+      shelfFreshMaterial.dispose()
+      shelfActiveMaterial.dispose()
+      shelfFrameMaterial.dispose()
+      shelfBoardMaterial.dispose()
+      shelfBookMaterials.forEach((material) => material.dispose())
+      shelfReactiveMaterials.forEach((material) => material.dispose())
+      shelfCoverMaterials.forEach((material) => material.dispose())
+      shelfCoverTextures.forEach((texture) => texture.dispose())
+      shelfAccentMaterial.dispose()
+      shelfPickMaterial.dispose()
+      libraryShelfSparkleGeometry?.dispose()
+      libraryShelfSparkleMaterial?.dispose()
+      if (libraryShelfSparkles) world.remove(libraryShelfSparkles)
+      if (libraryShelfLight) scene.remove(libraryShelfLight)
+      libraryReadingRitual?.dispose()
 
       nodeVisuals.forEach((visual) => {
         ;(visual.shell.geometry as THREE.BufferGeometry).dispose()
+        ;(visual.reflectionShell.geometry as THREE.BufferGeometry).dispose()
         ;(visual.glow.geometry as THREE.BufferGeometry).dispose()
         ;(visual.core.geometry as THREE.BufferGeometry).dispose()
         ;(visual.orbit.geometry as THREE.BufferGeometry).dispose()
         ;(visual.shockwave.geometry as THREE.BufferGeometry).dispose()
         visual.shellMaterial.dispose()
+        ;(visual.reflectionShell.material as THREE.Material).dispose()
         visual.miniWorld.dispose()
         ;(visual.glow.material as THREE.Material).dispose()
         ;(visual.core.material as THREE.Material).dispose()
@@ -2580,19 +6922,81 @@ export default function DreamWorld3D({
         scene.remove(sprite)
       })
 
+      libraryAtmosphere?.dispose()
+
+      nearDustGeometry.dispose()
+      nearDustMaterial.dispose()
+      scene.remove(nearDust)
+      libraryWalkwayGeometry?.dispose()
+      libraryWalkwayRailGeometry?.dispose()
+      libraryWalkwayPanelMaterial?.dispose()
+      libraryWalkwayUnderlayMaterial?.dispose()
+      libraryWalkwayRailMaterial?.dispose()
+      libraryGridRoadGeometry?.dispose()
+      libraryGridRailGeometry?.dispose()
+      libraryGridRoadMaterial?.dispose()
+      libraryGridUnderlayMaterial?.dispose()
+      libraryGridRailMaterial?.dispose()
+      libraryArrowGeometry?.dispose()
+      libraryArrowMaterial?.dispose()
+      libraryGuardGeometry?.dispose()
+      libraryGuardMaterial?.dispose()
+      libraryJunctionGeometry?.dispose()
+      libraryJunctionMaterial?.dispose()
+      libraryRouteDotGeometry?.dispose()
+      libraryRouteDotMaterial?.dispose()
+      libraryRouteTextures.forEach((texture) => texture.dispose())
+      libraryRouteMaterials.forEach((material) => material.dispose())
+      libraryDistrictLandmarkGeometries.forEach((geometry) =>
+        geometry.dispose(),
+      )
+      libraryDistrictLandmarkMaterials.forEach((material) =>
+        material.dispose(),
+      )
+      libraryRouteObjects.forEach((object) => {
+        if (object instanceof THREE.Object3D) world.remove(object)
+      })
+      if (libraryArrows) world.remove(libraryArrows)
+      if (libraryGuards) world.remove(libraryGuards)
+      if (libraryJunctions) world.remove(libraryJunctions)
+      if (libraryRouteDots) world.remove(libraryRouteDots)
+      if (libraryWalkwayUnderlay) {
+        world.remove(libraryWalkwayUnderlay)
+      }
+      if (libraryWalkway) world.remove(libraryWalkway)
+      if (libraryWalkwayRails) world.remove(libraryWalkwayRails)
+      if (libraryGridUnderlay) {
+        world.remove(libraryGridUnderlay)
+      }
+      if (libraryGridRoads) world.remove(libraryGridRoads)
+      if (libraryGridRails) world.remove(libraryGridRails)
+      shaftGeometries.forEach((geometry) => geometry.dispose())
+      shaftMaterials.forEach((material) => material.dispose())
+
       nebulae.forEach((sprite) => {
         const material = sprite.material as THREE.SpriteMaterial
         material.map?.dispose()
         material.dispose()
       })
 
+      libraryFarParticleGeometry?.dispose()
+      libraryFarParticleMaterial?.dispose()
+      librarySkywayGeometries.forEach((geometry) =>
+        geometry.dispose(),
+      )
+      librarySkywayMaterials.forEach((material) =>
+        material.dispose(),
+      )
+
       starGeometry.dispose()
       starMaterial.dispose()
+      scene.environment = null
+      cinematicEnvironment.dispose()
       composer.dispose()
       renderer.dispose()
-      host.removeChild(renderer.domElement)
+      container.removeChild(renderer.domElement)
     }
-  }, [graphKey])
+  }, [graphKey, libraryWorldKey])
 
   return (
     <div

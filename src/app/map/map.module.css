@@ -4291,3 +4291,534 @@
     font-size: .62rem;
   }
 }
+
+
+/* ==========================================================================
+   Cinematic rendering + first-person constellation travel
+   ========================================================================== */
+
+.flightButton,
+.flightButtonActive {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 11px;
+  cursor: pointer;
+  color: #7f8da6;
+  background: rgba(8, 14, 28, .78);
+  border: 1px solid rgba(166, 188, 218, .1);
+  border-radius: 999px;
+  box-shadow:
+    0 12px 34px rgba(0,0,0,.18),
+    inset 0 1px rgba(255,255,255,.025);
+  backdrop-filter: blur(14px) saturate(112%);
+  font-size: .63rem;
+  transition:
+    color 180ms ease,
+    background 220ms ease,
+    border-color 220ms ease,
+    box-shadow 300ms ease,
+    transform 180ms ease;
+}
+
+.flightButton:hover,
+.flightButtonActive:hover {
+  transform: translateY(-1px);
+}
+
+.flightButtonActive {
+  color: #d9f6f4;
+  background:
+    radial-gradient(circle at 26% 50%, rgba(105, 215, 207, .12), transparent 44%),
+    rgba(9, 18, 34, .9);
+  border-color: rgba(125, 221, 216, .22);
+  box-shadow:
+    0 12px 36px rgba(0,0,0,.22),
+    0 0 30px rgba(94, 205, 199, .06);
+}
+
+.flightButton > span,
+.flightButtonActive > span {
+  font-size: .86rem;
+}
+
+.flightHud {
+  position: absolute;
+  z-index: 70;
+  inset: 0;
+  pointer-events: none;
+}
+
+.flightReticle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 28px;
+  height: 28px;
+  transform: translate(-50%, -50%);
+  opacity: .78;
+  filter: drop-shadow(0 0 8px rgba(156, 230, 226, .22));
+}
+
+.flightReticle i {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  background: rgba(214, 245, 245, .76);
+  border-radius: 999px;
+}
+
+.flightReticle i:first-child {
+  width: 18px;
+  height: 1px;
+  transform: translate(-50%, -50%);
+}
+
+.flightReticle i:last-child {
+  width: 1px;
+  height: 18px;
+  transform: translate(-50%, -50%);
+}
+
+.flightReticle::after {
+  content: '';
+  position: absolute;
+  inset: 7px;
+  border: 1px solid rgba(139, 220, 216, .24);
+  border-radius: 50%;
+  animation: flightReticleBreath 2.8s ease-in-out infinite;
+}
+
+.flightInstructions {
+  position: absolute;
+  left: 50%;
+  bottom: 26px;
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  min-width: min(430px, calc(100vw - 34px));
+  padding: 10px 16px;
+  transform: translateX(-50%);
+  color: #9caec0;
+  background:
+    linear-gradient(180deg, rgba(6, 11, 24, .56), rgba(6, 10, 21, .34));
+  border: 1px solid rgba(172, 198, 222, .075);
+  border-radius: 16px;
+  box-shadow: 0 14px 40px rgba(0,0,0,.2);
+  backdrop-filter: blur(18px);
+  text-align: center;
+}
+
+.flightInstructions span {
+  color: #75a9ae;
+  font-size: .55rem;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+
+.flightInstructions strong {
+  color: #d6e9ed;
+  font-size: .72rem;
+  font-weight: 560;
+}
+
+.flightInstructions small {
+  color: #65788d;
+  font-size: .59rem;
+}
+
+.pageFlightMode .sidebar,
+.pageFlightMode .mapHeader,
+.pageFlightMode .timeline,
+.pageFlightMode .focusBanner,
+.pageFlightMode .mapHint {
+  opacity: .08 !important;
+  pointer-events: none !important;
+  transition: opacity 420ms ease;
+}
+
+.pageFlightMode .topbar {
+  opacity: .42;
+  transition: opacity 420ms ease;
+}
+
+.pageFlightMode .mapControls {
+  opacity: .52;
+  transition: opacity 320ms ease;
+}
+
+.pageFlightMode .mapControls:hover,
+.pageFlightMode .topbar:hover {
+  opacity: .94;
+}
+
+.pageFlightMode .zoomControls,
+.pageFlightMode .observatoryButton,
+.pageFlightMode .observatoryButtonActive {
+  display: none;
+}
+
+.webglCanvas {
+  outline: none;
+}
+
+@keyframes flightReticleBreath {
+  0%, 100% {
+    opacity: .35;
+    transform: scale(.78);
+  }
+  50% {
+    opacity: .78;
+    transform: scale(1.18);
+  }
+}
+
+@media (max-width: 980px) {
+  .flightButton,
+  .flightButtonActive {
+    width: 36px;
+    justify-content: center;
+    overflow: hidden;
+    padding: 0;
+    font-size: 0;
+  }
+
+  .flightButton > span,
+  .flightButtonActive > span {
+    font-size: .86rem;
+  }
+}
+
+@media (max-width: 700px) {
+  .flightInstructions {
+    bottom: 14px;
+  }
+
+  .flightInstructions small {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .flightButton,
+  .flightButtonActive {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flightReticle::after {
+    animation: none;
+  }
+}
+
+
+/* ==========================================================================
+   First-person default + Memory Lens
+   ========================================================================== */
+
+.pageFlightMode .sidebar,
+.pageFlightMode .mapHeader,
+.pageFlightMode .timeline,
+.pageFlightMode .focusBanner,
+.pageFlightMode .mapHint {
+  opacity: 0 !important;
+  visibility: hidden;
+  pointer-events: none !important;
+}
+
+.pageFlightMode .topbar {
+  opacity: .16;
+}
+
+.pageFlightMode .mapControls {
+  opacity: .28;
+}
+
+.pageFlightMode .mapControls:hover,
+.pageFlightMode .topbar:hover {
+  opacity: .92;
+}
+
+.pageFlightMode.pageFocusMode .flightInstructions {
+  opacity: .16;
+  transform: translateX(-50%) translateY(8px);
+}
+
+.flightMemoryCard {
+  --node-accent: #9ddbd7;
+  --node-glow: rgba(132, 223, 215, .22);
+
+  position: absolute;
+  z-index: 74;
+  right: clamp(18px, 3.2vw, 52px);
+  bottom: clamp(88px, 12vh, 138px);
+  width: min(360px, calc(100vw - 36px));
+  padding: 15px 15px 13px;
+  overflow: hidden;
+  color: #dbe8ee;
+  background:
+    radial-gradient(
+      circle at 96% 0%,
+      color-mix(in srgb, var(--node-accent) 11%, transparent),
+      transparent 39%
+    ),
+    linear-gradient(
+      150deg,
+      rgba(7, 13, 27, .82),
+      rgba(10, 17, 31, .66)
+    );
+  border: 1px solid
+    color-mix(in srgb, var(--node-accent) 20%, rgba(190, 214, 228, .07));
+  border-radius: 18px 8px 20px 12px;
+  box-shadow:
+    0 24px 76px rgba(0, 0, 0, .38),
+    0 0 38px var(--node-glow),
+    inset 0 1px rgba(255, 255, 255, .035);
+  backdrop-filter: blur(22px) saturate(118%);
+  pointer-events: auto;
+  animation: flightMemoryReveal 360ms cubic-bezier(.16, 1, .3, 1);
+}
+
+.flightMemoryCard::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 1px;
+  background: linear-gradient(
+    transparent,
+    color-mix(in srgb, var(--node-accent) 58%, transparent),
+    transparent
+  );
+  opacity: .75;
+}
+
+.flightMemoryCard::after {
+  content: '';
+  position: absolute;
+  right: -42px;
+  top: -42px;
+  width: 110px;
+  height: 110px;
+  border: 1px solid
+    color-mix(in srgb, var(--node-accent) 12%, transparent);
+  border-radius: 50%;
+  box-shadow:
+    0 0 38px color-mix(in srgb, var(--node-accent) 7%, transparent),
+    inset 0 0 28px color-mix(in srgb, var(--node-accent) 5%, transparent);
+  pointer-events: none;
+}
+
+.flightMemoryEyebrow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 20px;
+  color: #7d94a8;
+  font-size: .55rem;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+
+.flightMemoryEyebrow > span:first-child {
+  color: var(--node-accent);
+  font-size: .8rem;
+  filter: drop-shadow(0 0 8px var(--node-glow));
+}
+
+.flightMemoryEyebrow i {
+  width: 3px;
+  height: 3px;
+  background: rgba(195, 218, 229, .22);
+  border-radius: 50%;
+}
+
+.flightMemoryHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.flightMemoryHeading h2 {
+  margin: 0;
+  max-width: 280px;
+  color: #eff7f8;
+  font-size: clamp(1.05rem, 1.4vw, 1.28rem);
+  font-weight: 590;
+  line-height: 1.15;
+  letter-spacing: -.025em;
+}
+
+.flightMemoryHeading p {
+  margin: 5px 0 0;
+  color: #748a9e;
+  font-size: .61rem;
+}
+
+.flightMemoryDismiss {
+  flex: 0 0 auto;
+  width: 27px;
+  height: 27px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  color: #75889b;
+  background: rgba(255,255,255,.025);
+  border: 1px solid rgba(178, 203, 220, .08);
+  border-radius: 50%;
+  font-size: .9rem;
+  line-height: 1;
+  transition:
+    color 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease;
+}
+
+.flightMemoryDismiss:hover {
+  color: #eef8f8;
+  background: rgba(255,255,255,.055);
+  border-color:
+    color-mix(in srgb, var(--node-accent) 30%, rgba(178, 203, 220, .08));
+}
+
+.flightMemoryExcerpt {
+  margin: 12px 0 11px;
+  display: -webkit-box;
+  overflow: hidden;
+  color: #9eafbd;
+  font-size: .72rem;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+
+.flightMemorySymbols {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.flightMemorySymbols > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 135px;
+  padding: 4px 7px;
+  overflow: hidden;
+  color: #8fa4b5;
+  background: rgba(255,255,255,.025);
+  border: 1px solid rgba(178, 200, 217, .055);
+  border-radius: 999px;
+  font-size: .55rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flightMemorySymbols b {
+  color: var(--node-accent);
+  font-weight: 500;
+}
+
+.flightMemoryActions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 13px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(174, 199, 216, .055);
+}
+
+.flightMemoryActions > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #61778b;
+  font-size: .54rem;
+  white-space: nowrap;
+}
+
+.flightMemoryActions kbd {
+  min-width: 19px;
+  padding: 2px 5px;
+  color: #a9c2cf;
+  background: rgba(255,255,255,.035);
+  border: 1px solid rgba(179, 205, 220, .08);
+  border-radius: 5px;
+  box-shadow: none;
+  font: inherit;
+  text-align: center;
+}
+
+.flightMemoryActions button {
+  margin-left: auto;
+  cursor: pointer;
+  color: #b7d7d8;
+  background:
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--node-accent) 10%, transparent),
+      rgba(255,255,255,.018)
+    );
+  border: 1px solid
+    color-mix(in srgb, var(--node-accent) 18%, rgba(160, 194, 211, .08));
+  border-radius: 999px;
+  padding: 7px 9px;
+  font-size: .56rem;
+  transition:
+    transform 160ms ease,
+    color 160ms ease,
+    border-color 160ms ease;
+}
+
+.flightMemoryActions button:hover {
+  transform: translateY(-1px);
+  color: #f0ffff;
+  border-color:
+    color-mix(in srgb, var(--node-accent) 34%, rgba(160, 194, 211, .08));
+}
+
+.flightMemoryCursorHint {
+  margin: 8px 0 0;
+  color: #556a7d;
+  font-size: .52rem;
+  text-align: right;
+}
+
+@keyframes flightMemoryReveal {
+  from {
+    opacity: 0;
+    transform: translate3d(18px, 9px, 0) scale(.97);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@media (max-width: 760px) {
+  .flightMemoryCard {
+    left: 14px;
+    right: 14px;
+    bottom: 72px;
+    width: auto;
+  }
+
+  .flightMemoryExcerpt {
+    -webkit-line-clamp: 3;
+  }
+
+  .flightMemoryActions > span:nth-child(2) {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flightMemoryCard {
+    animation: none;
+  }
+}

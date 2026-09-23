@@ -253,7 +253,9 @@ export default function DreamMap({
   const [diveExitRequest, setDiveExitRequest] = useState(0)
   const [diveBackRequest, setDiveBackRequest] = useState(0)
   const [observatoryMode, setObservatoryMode] = useState(false)
+  const [flightMode, setFlightMode] = useState(true)
   const [closingJournal, setClosingJournal] = useState(false)
+  const [flightCaptured, setFlightCaptured] = useState(false)
   const [motionPositions, setMotionPositions] = useState<Record<string, {x: number; y: number}>>({})
   const [enteringNodeId, setEnteringNodeId] = useState<string | null>(null)
   const [enteringDreamTitle, setEnteringDreamTitle] = useState<string | null>(null)
@@ -273,6 +275,7 @@ export default function DreamMap({
   const cameraFrameRef = useRef<number | null>(null)
   const enterTimerRef = useRef<number | null>(null)
   const closeTimerRef = useRef<number | null>(null)
+  const resumeFlightAfterDiveRef = useRef(false)
 
   const stopAmbient = useCallback(() => {
     const ambient = ambientRef.current
@@ -726,6 +729,19 @@ export default function DreamMap({
   }
 
   useEffect(() => {
+    const syncPointerLock = () => {
+      setFlightCaptured(Boolean(document.pointerLockElement))
+    }
+
+    document.addEventListener('pointerlockchange', syncPointerLock)
+    syncPointerLock()
+
+    return () => {
+      document.removeEventListener('pointerlockchange', syncPointerLock)
+    }
+  }, [])
+
+  useEffect(() => {
     return () => {
       stopAmbient()
       const context = audioContextRef.current
@@ -1042,6 +1058,30 @@ export default function DreamMap({
       .slice(0, 4)
   }, [edges, nodeById, selectedNode])
 
+  function inspectNodeInFlight(node: PositionedSymbol) {
+    const matchingDreams = visibleDreams.filter((dream) =>
+      node.dreamIds.includes(dream._id),
+    )
+    const targetDream = matchingDreams.at(-1)
+
+    setClosingJournal(false)
+    setSelectedId(node._id)
+    setOpenDreamId(targetDream?._id ?? null)
+    setFocusedDreamId(targetDream?._id ?? null)
+    setHoveredId(null)
+    setEnteringNodeId(null)
+    setEnteringDreamTitle(null)
+    setIsPlaying(false)
+
+    if (targetDream) {
+      window.history.replaceState(
+        null,
+        '',
+        `/map?dream=${encodeURIComponent(targetDream._id)}&view=flight`,
+      )
+    }
+  }
+
   function enterNode(node: PositionedSymbol) {
     const matchingDreams = visibleDreams.filter((dream) =>
       node.dreamIds.includes(dream._id),
@@ -1174,7 +1214,9 @@ export default function DreamMap({
         sidebarCollapsed ? styles.pageSidebarCollapsed : ''
       } ${selectedNode ? styles.pageFocusMode : ''} ${
         diveActive ? styles.pageDiveMode : ''
-      } ${introStage < 4 ? styles.pageIntroMode : ''}`}
+      } ${introStage < 4 ? styles.pageIntroMode : ''} ${
+        flightMode ? styles.pageFlightMode : ''
+      }`}
     >
       <header className={styles.topbar}>
         <Link href="/" className={styles.brand} aria-label="Oniria journal">
@@ -1389,6 +1431,37 @@ export default function DreamMap({
                 {observatoryMode ? 'Observatory' : 'Observe'}
               </button>
 
+              <button
+                type="button"
+                className={
+                  flightMode
+                    ? styles.flightButtonActive
+                    : styles.flightButton
+                }
+                onClick={() => {
+                  const next = !flightMode
+                  setFlightMode(next)
+                  if (next) {
+                    setObservatoryMode(false)
+                    setSelectedId(null)
+                    setHoveredId(null)
+                    setOpenDreamId(null)
+                    setFocusedDreamId(null)
+                    setPan({x: 0, y: 0})
+                    window.history.replaceState(null, '', '/map')
+                  }
+                }}
+                aria-pressed={flightMode}
+                title={
+                  flightMode
+                    ? 'Return to the classic map controls'
+                    : 'Travel through the constellation in first person'
+                }
+              >
+                <span aria-hidden="true">⌁</span>
+                {flightMode ? 'Map view' : 'First person'}
+              </button>
+
               <label className={styles.qualityControl}>
                 <span>Dream quality</span>
                 <select
@@ -1431,6 +1504,22 @@ export default function DreamMap({
                 </button>
               </div>
             </div>
+
+            {flightMode && !diveActive && (
+              <div className={styles.flightHud} aria-live="polite">
+                <div className={styles.flightReticle} aria-hidden="true">
+                  <i />
+                  <i />
+                </div>
+                <div className={styles.flightInstructions}>
+                  <span>First-person travel</span>
+                  <strong>WASD · mouse · Shift boost · R ride tether</strong>
+                  <small>
+                    E inspect · F dive · Esc releases cursor · click world to resume
+                  </small>
+                </div>
+              </div>
+            )}
 
             {enteringNodeId && (
               <div className={styles.enterDreamOverlay} aria-live="polite">
@@ -1491,6 +1580,7 @@ export default function DreamMap({
                 diveBackRequest={diveBackRequest}
                 diveTimelineProgress={diveTimelineProgress}
                 observatoryMode={observatoryMode}
+                flightMode={flightMode}
                 onZoomChange={changeZoom}
                 onPanChange={setPan}
                 onNodeHover={(node) => {
@@ -1499,7 +1589,11 @@ export default function DreamMap({
                 }}
                 onNodeSelect={(node) => {
                   setObservatoryMode(false)
-                  enterNode(node)
+                  if (flightMode) {
+                    inspectNodeInFlight(node)
+                  } else {
+                    enterNode(node)
+                  }
                 }}
                 onBackgroundClick={() => {
                   if (selectedNode) closeDreamNote()
@@ -1513,22 +1607,33 @@ export default function DreamMap({
                       : null,
                   )
                   if (active) {
+                    resumeFlightAfterDiveRef.current = flightMode
                     setObservatoryMode(false)
+                    setFlightMode(false)
                     setEnteringNodeId(null)
                     setClosingJournal(false)
                     setDiveTimelineProgress(1)
                   } else {
+                    const shouldResumeFlight =
+                      resumeFlightAfterDiveRef.current
+                    resumeFlightAfterDiveRef.current = false
                     setDiveDepth(0)
                     setDiveTimelineProgress(1)
+                    if (shouldResumeFlight) {
+                      setFlightMode(true)
+                    }
                     window.history.replaceState(
                       null,
                       '',
                       openDream
-                        ? `/map?dream=${encodeURIComponent(openDream._id)}`
+                        ? `/map?dream=${encodeURIComponent(openDream._id)}${
+                            shouldResumeFlight ? '&view=flight' : ''
+                          }`
                         : '/map',
                     )
                   }
                 }}
+                onFlightModeChange={setFlightMode}
                 onDiveDreamChange={(dreamId, title, depth) => {
                   setDiveTitle(title)
                   setDiveDepth(depth)
@@ -1617,15 +1722,108 @@ export default function DreamMap({
             <div className={styles.mapHint}>
               {focusedDream
                 ? 'Focused constellation · select a symbol to inspect it'
-                : observatoryMode
-                  ? 'Observatory · recurring concepts become stellar bodies · click any memory to descend'
-                  : 'Hover to hear · click to inspect · double-click or hold a selected orb to enter the dream'}
+                : flightMode
+                  ? 'First-person travel · E inspect · F dive · R ride tether · Esc releases cursor'
+                  : observatoryMode
+                    ? 'Observatory · recurring concepts become stellar bodies · click any memory to descend'
+                    : 'Hover to hear · click to inspect · double-click or hold a selected orb to enter the dream'}
             </div>
+
+            {flightMode &&
+              selectedNode &&
+              openDream &&
+              selectedMeta &&
+              !enteringNodeId &&
+              !diveActive && (
+                <aside
+                  className={styles.flightMemoryCard}
+                  style={
+                    {
+                      '--node-accent': selectedMeta.color,
+                      '--node-glow': selectedMeta.glow,
+                    } as CSSProperties
+                  }
+                  aria-live="polite"
+                >
+                  <div className={styles.flightMemoryEyebrow}>
+                    <span>{selectedNode.icon || '✦'}</span>
+                    <span>{selectedMeta.label} memory</span>
+                    <i />
+                    <span>{selectedNode.frequency}× recurring</span>
+                  </div>
+
+                  <div className={styles.flightMemoryHeading}>
+                    <div>
+                      <h2>{openDream.title?.trim() || 'Untitled dream'}</h2>
+                      <p>
+                        {formatShortDate(openDream.date)} · {moodName(openDream.mood)}
+                        {openDream.lucid ? ' · lucid' : ''}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className={styles.flightMemoryDismiss}
+                      onClick={() => {
+                        setSelectedId(null)
+                        setOpenDreamId(null)
+                        setFocusedDreamId(null)
+                        setHoveredId(null)
+                        window.history.replaceState(null, '', '/map')
+                      }}
+                      aria-label="Dismiss memory"
+                    >
+                      ×
+                    </button>
+                  </div>
+
+                  <p className={styles.flightMemoryExcerpt}>
+                    {openDream.body.length > 210
+                      ? `${openDream.body.slice(0, 210).trim()}…`
+                      : openDream.body}
+                  </p>
+
+                  <div className={styles.flightMemorySymbols}>
+                    {(openDream.symbols ?? []).slice(0, 4).map((symbol) => (
+                      <span key={symbol._id}>
+                        <b aria-hidden="true">{symbol.icon || '✦'}</b>
+                        {symbol.name}
+                      </span>
+                    ))}
+                  </div>
+
+                  <div className={styles.flightMemoryActions}>
+                    <span>
+                      <kbd>F</kbd> enter dream
+                    </span>
+                    <span>
+                      <kbd>R</kbd> ride relationship
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setFlightMode(false)}
+                      title={
+                        flightCaptured
+                          ? 'Press Escape first to release the cursor'
+                          : 'Open the full journal view'
+                      }
+                    >
+                      Read full journal
+                    </button>
+                  </div>
+
+                  {flightCaptured && (
+                    <p className={styles.flightMemoryCursorHint}>
+                      Press Esc to release the cursor without leaving first person.
+                    </p>
+                  )}
+                </aside>
+              )}
 
             {selectedNode &&
               openDream &&
               selectedMeta &&
               noteStyle &&
+              !flightMode &&
               !enteringNodeId &&
               !diveActive && (
                 <div

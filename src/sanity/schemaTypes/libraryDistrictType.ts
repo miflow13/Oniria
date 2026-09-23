@@ -1,0 +1,136 @@
+import {defineArrayMember, defineField, defineType} from 'sanity'
+
+export const libraryDistrictType = defineType({
+  name: 'libraryDistrict',
+  title: 'Library District',
+  type: 'document',
+  fields: [
+    defineField({
+      name: 'title',
+      title: 'District name',
+      type: 'string',
+      validation: (rule) => rule.required().max(80),
+    }),
+    defineField({
+      name: 'slug',
+      title: 'District ID',
+      type: 'slug',
+      options: {source: 'title', maxLength: 64},
+      validation: (rule) => rule.required(),
+    }),
+    defineField({
+      name: 'code',
+      title: 'Wayfinding code',
+      type: 'string',
+      description: 'Short physical marker such as A-18.',
+      validation: (rule) => rule.required().max(12),
+    }),
+    defineField({
+      name: 'description',
+      title: 'Purpose',
+      type: 'text',
+      rows: 3,
+      validation: (rule) => rule.max(300),
+    }),
+    defineField({
+      name: 'devTags',
+      title: 'DEV tags',
+      type: 'array',
+      description:
+        'Articles matching these DEV tags are candidates for this physical district.',
+      of: [defineArrayMember({type: 'string'})],
+      options: {layout: 'tags'},
+      validation: (rule) => rule.unique(),
+    }),
+    defineField({
+      name: 'routeBay',
+      title: 'Position on archive route',
+      type: 'number',
+      description: '0 is the welcome end; 72 is the current Deep Stacks limit.',
+      validation: (rule) => rule.required().min(0).max(72),
+    }),
+    defineField({
+      name: 'order',
+      title: 'Studio order',
+      type: 'number',
+      initialValue: 50,
+      validation: (rule) => rule.integer().min(0).max(999),
+    }),
+    defineField({
+      name: 'accent',
+      title: 'Accent color',
+      type: 'string',
+      description: 'Hex color used for wayfinding and district reactions.',
+      initialValue: '#8c7cff',
+      validation: (rule) =>
+        rule.regex(/^#[0-9a-fA-F]{6}$/, {
+          name: 'hex color',
+        }),
+    }),
+    defineField({
+      name: 'atmosphere',
+      title: 'Atmosphere',
+      type: 'string',
+      initialValue: 'dream-archive',
+      options: {
+        list: [
+          {title: 'Dream archive', value: 'dream-archive'},
+          {title: 'Crystalline', value: 'crystalline'},
+          {title: 'Industrial', value: 'industrial'},
+          {title: 'Deep void', value: 'deep-void'},
+        ],
+      },
+    }),
+    defineField({
+      name: 'audioProfile',
+      title: 'Audio profile',
+      type: 'string',
+      initialValue: 'ambient',
+      options: {
+        list: [
+          {title: 'Ambient archive', value: 'ambient'},
+          {title: 'Crystalline / digital', value: 'crystalline'},
+          {title: 'Mechanical / terminal', value: 'mechanical'},
+          {title: 'Warm / community', value: 'warm'},
+          {title: 'Deep / subsonic', value: 'deep'},
+        ],
+      },
+    }),
+    defineField({
+      name: 'landmarkType',
+      title: 'Landmark type',
+      type: 'string',
+      initialValue: 'index',
+      options: {
+        list: [
+          {title: 'Index structure', value: 'index'},
+          {title: 'Neural lattice', value: 'neural-lattice'},
+          {title: 'Terminal wall', value: 'terminal-wall'},
+          {title: 'Syntax tree', value: 'syntax-tree'},
+          {title: 'DEV monument', value: 'dev-monument'},
+          {title: 'Archive tower', value: 'archive-tower'},
+        ],
+      },
+    }),
+    defineField({
+      name: 'enabled',
+      title: 'Enabled',
+      type: 'boolean',
+      initialValue: true,
+    }),
+  ],
+  preview: {
+    select: {
+      title: 'title',
+      code: 'code',
+      tags: 'devTags',
+      enabled: 'enabled',
+    },
+    prepare({title, code, tags, enabled}) {
+      return {
+        title: `${enabled === false ? '○' : '●'} ${title ?? 'Untitled district'}`,
+        subtitle: `${code ?? 'No code'} · ${(tags ?? []).slice(0, 3).join(', ') || 'no DEV tags'}`,
+      }
+    },
+  },
+})
