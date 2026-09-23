@@ -777,7 +777,7 @@ export default function OutdoorLibrary3D({
       scene.add(light)
     }
 
-    libraryRooms.forEach(buildLibraryRoom)    libraryRooms.forEach(buildLibraryRoom)
+    libraryRooms.forEach(buildLibraryRoom)
 
     const terraceSegments = [
       {floor: 0, z: -23, depth: 86},
@@ -1395,7 +1395,7 @@ export default function OutdoorLibrary3D({
         }
       }
 
-      // Build each room as an actual enclosed library volume.      // Build each room as an actual enclosed library volume. Wall panels and
+      // Build each room as an actual enclosed library volume. Wall panels and
       // arched windows are alternated inside continuous runs, wall-corner GLBs
       // terminate every facade, and the grand halls receive a second tier of
       // scaled clerestory windows. Door declarations cut real openings instead
@@ -1511,7 +1511,7 @@ export default function OutdoorLibrary3D({
           }
         }
 
-        if (wallCorner) {        if (wallCorner) {
+        if (wallCorner) {
           const cornerInset = .08
           const corners = [
             {x: centerX - halfWidth, z: frontZ - cornerInset, r: Math.PI / 2},
