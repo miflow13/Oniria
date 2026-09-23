@@ -680,6 +680,7 @@ export type LibraryFurnishingAsset =
   | 'libraryChair'
   | 'chairWingback'
   | 'readingTable'
+  | 'writingDesk'
   | 'cardCatalogue'
   | 'cardCatalogueSecondary'
   | 'clockMantel'
@@ -822,15 +823,15 @@ export const LIBRARY_FURNISHINGS: LibraryFurnishingPlacement[] = [
   ...LIBRARY_HALL_READING_Z.map(
     (z, index): LibraryFurnishingPlacement => ({
       id: `hall-reading-desk-${index + 1}`,
-      asset: 'readingTable',
+      asset: 'writingDesk',
       position: [0, .24, z],
       yaw: index % 2 === 0 ? 0 : Math.PI,
-      scale: .72,
-      hoverAmplitude: .11,
-      hoverSpeed: .14 + (index % 3) * .012,
-      tiltX: .014,
-      tiltY: .01,
-      tiltZ: .013,
+      scale: .94,
+      hoverAmplitude: .24 + (index % 3) * .025,
+      hoverSpeed: .22 + (index % 4) * .018,
+      tiltX: .055,
+      tiltY: .048,
+      tiltZ: .065,
       collider: [1.95, 1.35],
       castsShadow: true,
     }),
