@@ -807,7 +807,12 @@ export default function DreamWorld3D({
         }
       })
 
-      return nearest
+      // The atrium and central circulation spine belong to the global
+      // library ambience. A room only owns the mood once the visitor has
+      // actually crossed into its physical neighborhood.
+      return nearestDistance <= 12.75 * 12.75
+        ? nearest
+        : null
     }
     const libraryMode = nodeRef.current.some(
       (node) => node.libraryKind === 'shelf',
@@ -5195,6 +5200,7 @@ export default function DreamWorld3D({
           currentRoomEntry?.district.id,
         activeRoomCenter:
           currentRoomEntry?.center,
+        roomSelectionMode: true,
         districts: activeDistricts,
       })
 
@@ -5248,7 +5254,7 @@ export default function DreamWorld3D({
         elapsed,
         currentBay: currentArchiveBay,
         activeAudioProfile:
-          currentRoomEntry?.district.audioProfile,
+          currentRoomEntry?.district.audioProfile ?? 'ambient',
         districts: activeDistricts,
       })
 
