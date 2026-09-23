@@ -41,6 +41,8 @@ const QUALITY: DreamQuality = 'cinematic'
 const CATALOG_PAGE_SIZE = 100
 const CATALOG_BOOKS_PER_SHELF = 9
 const FRONT_PAGE_SHELF_TARGET = 8
+const DISTRICT_RENDERED_SHELF_LIMIT = 4
+const DISTRICT_SHELF_PAIR_OFFSETS = [-.48, .48] as const
 
 function catalogShelfPlacement(
   index: number,
@@ -876,28 +878,50 @@ export default function DevLibraryMap() {
     districts.forEach((district) => {
       const districtArticles =
         articlesByDistrict.get(district.id) ?? []
+      const availableShelfCount = Math.ceil(
+        districtArticles.length / CATALOG_BOOKS_PER_SHELF,
+      )
+      const renderedShelfCount =
+        district.id === 'front-page'
+          ? Math.min(
+              availableShelfCount,
+              FRONT_PAGE_SHELF_TARGET,
+            )
+          : Math.min(
+              availableShelfCount,
+              DISTRICT_RENDERED_SHELF_LIMIT,
+            )
 
       for (
-        let offset = 0;
-        offset < districtArticles.length;
-        offset += CATALOG_BOOKS_PER_SHELF
+        let localIndex = 0;
+        localIndex < renderedShelfCount;
+        localIndex += 1
       ) {
+        const offset =
+          localIndex * CATALOG_BOOKS_PER_SHELF
         const shelfArticles = districtArticles.slice(
           offset,
           offset + CATALOG_BOOKS_PER_SHELF,
         )
-        const localIndex = Math.floor(
-          offset / CATALOG_BOOKS_PER_SHELF,
-        )
         const side: -1 | 1 =
           localIndex % 2 === 0 ? -1 : 1
+        const pairIndex = Math.floor(localIndex / 2)
         const bay =
           district.id === 'front-page'
-            ? .68 + Math.floor(localIndex / 2) * .46
+            ? .68 + pairIndex * .46
             : district.bay +
-              .62 +
-              Math.floor(localIndex / 2) * .46
-        const shelfId = 'shelf:catalog:' + catalogShelfIndex
+              (DISTRICT_SHELF_PAIR_OFFSETS[
+                Math.min(
+                  pairIndex,
+                  DISTRICT_SHELF_PAIR_OFFSETS.length - 1,
+                )
+              ] ?? 0)
+        const shelfId =
+          'shelf:catalog:' +
+          district.id +
+          ':' +
+          localIndex
+        const totalLoaded = districtArticles.length
         const shelf = makeShelf(
           shelfId,
           district.label +
@@ -909,7 +933,14 @@ export default function DevLibraryMap() {
                   .slice(0, 3)
                   .map((tag) => '#' + tag)
                   .join(' · ')
-              : 'long-tail archive'),
+              : 'long-tail archive') +
+            (totalLoaded >
+            renderedShelfCount *
+              CATALOG_BOOKS_PER_SHELF
+              ? ' · ' +
+                totalLoaded +
+                ' loaded'
+              : ''),
           'catalog',
           archiveShelfPlacement(
             shelfId,
@@ -923,11 +954,11 @@ export default function DevLibraryMap() {
               alongJitterScale:
                 district.id === 'front-page'
                   ? .05
-                  : .12,
+                  : .04,
               yawJitterScale:
                 district.id === 'front-page'
                   ? .12
-                  : .26,
+                  : .14,
             },
             districts,
           ),
@@ -1055,6 +1086,7 @@ export default function DevLibraryMap() {
   const catalogShelfCount = shelves.filter(
     (shelf) => shelf.kind === 'catalog',
   ).length
+  const lastCatalogLoadTriggerRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (!catalogHasMore || catalogLoading || catalogShelfCount === 0) {
@@ -1063,13 +1095,29 @@ export default function DevLibraryMap() {
 
     const candidate =
       navigation.routeTargetId ?? navigation.nearestId
-    if (!candidate?.startsWith('shelf:catalog:')) return
+    if (!candidate?.startsWith('shelf:catalog:')) {
+      lastCatalogLoadTriggerRef.current = null
+      return
+    }
 
-    const index = Number(candidate.split(':').at(-1))
+    const shelf = shelves.find(
+      (item) => item.id === candidate,
+    )
+    const deepStacksApproach =
+      shelf?.districtId === 'deep-stacks'
+    const isLastVisibleCatalogShelf =
+      shelf &&
+      shelves
+        .filter((item) => item.kind === 'catalog')
+        .slice(-3)
+        .some((item) => item.id === shelf.id)
+
     if (
-      Number.isFinite(index) &&
-      index >= catalogShelfCount - 3
+      (deepStacksApproach ||
+        isLastVisibleCatalogShelf) &&
+      lastCatalogLoadTriggerRef.current !== candidate
     ) {
+      lastCatalogLoadTriggerRef.current = candidate
       void loadMoreCatalog()
     }
   }, [
@@ -1079,6 +1127,7 @@ export default function DevLibraryMap() {
     loadMoreCatalog,
     navigation.nearestId,
     navigation.routeTargetId,
+    shelves,
   ])
 
   async function openArticle(summary: DevArticleSummary) {
