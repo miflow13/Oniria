@@ -810,6 +810,16 @@ export default function DevLibraryMap() {
       )
     }
 
+    // Utility shelves belong to the arrival foyer, not FRONT PAGE.
+    // Giving them a separate layout identity prevents the clearance resolver
+    // from treating them as part of the Featured district and nudging them
+    // back into its plaza.
+    result.forEach((shelf) => {
+      if (shelf.kind !== 'catalog') {
+        shelf.districtId = 'arrival'
+      }
+    })
+
     const fallbackDistrict =
       districts.find((district) => district.id === 'deep-stacks') ??
       districts.find((district) => district.id === 'archive-2026') ??
