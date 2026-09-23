@@ -4070,35 +4070,7 @@ export default function DreamWorld3D({
       nearDustMaterial.opacity =
         .14 + Math.max(0, Math.sin(elapsed * .19)) * .06
 
-      if (
-        libraryWalkwayPanelMaterial &&
-        libraryWalkwayRailMaterial
-      ) {
-        const walkwayPulse = Math.sin(elapsed * .42) * .008
-        const walkwayBay =
-          archiveBayFromWorldZ(camera.position.z)
-        const forwardEnergy =
-          Math.max(
-            0,
-            Math.sin(elapsed * .56 - walkwayBay * .16),
-          ) * .012
-        libraryWalkwayPanelMaterial.opacity =
-          .075 + walkwayPulse + forwardEnergy
-        libraryWalkwayRailMaterial.opacity =
-          .22 +
-          Math.max(
-            0,
-            Math.sin(elapsed * .64 - walkwayBay * .22 + .8),
-          ) * .065
-        if (libraryWalkwayUnderlayMaterial) {
-          libraryWalkwayUnderlayMaterial.opacity =
-            .035 +
-            Math.max(
-              0,
-              Math.sin(elapsed * .34 - walkwayBay * .12 + 1.4),
-            ) * .022
-        }
-      }
+
 
       const currentArchiveBay = libraryMode
         ? cityNearestDistrict(
