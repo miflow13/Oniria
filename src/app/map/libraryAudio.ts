@@ -50,7 +50,6 @@ export function createLibraryAudio(
   const musicElement = new Audio(LIBRARY_MUSIC_URL)
   musicElement.loop = true
   musicElement.preload = 'metadata'
-  musicElement.playsInline = true
   musicElement.volume = 0
 
   let soundRequested = false
