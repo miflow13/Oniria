@@ -229,8 +229,8 @@ function createDevLogo() {
 
   const v = new THREE.Group()
   v.position.x = 1.72
-  addBar(v, -.27, .02, stroke, 1.38, -.37)
-  addBar(v, .27, .02, stroke, 1.38, .37)
+  addBar(v, -.27, .02, stroke, 1.38, .37)
+  addBar(v, .27, .02, stroke, 1.38, -.37)
   group.add(v)
 
   return {
