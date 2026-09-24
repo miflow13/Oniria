@@ -1839,10 +1839,7 @@ export function createLibraryBuilding(
             )
           const insideRoomGlassRoof = LIBRARY_ROOMS.some(
             (room) => {
-              const bounds = libraryRoomBounds(
-                room,
-                Math.max(cellX, cellZ) * .42,
-              )
+              const bounds = libraryRoomBounds(room)
               return (
                 x >= bounds.minX &&
                 x <= bounds.maxX &&
@@ -1881,7 +1878,7 @@ export function createLibraryBuilding(
       // instead of opaque roof tiles. A restrained perimeter frame keeps the
       // rooms architecturally legible while leaving the Oniria sky visible.
       LIBRARY_ROOMS.forEach((room) => {
-        const bounds = libraryRoomBounds(room, -.18)
+        const bounds = libraryRoomBounds(room, -.06)
         const width = Math.max(
           .5,
           bounds.maxX - bounds.minX,
