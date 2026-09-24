@@ -2,6 +2,7 @@
 
 import {
   FormEvent,
+  UIEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -40,10 +41,18 @@ import {
   type RoomShelfPlacement,
 } from './libraryRoomLayout'
 import {resolveLivingTopicSlots} from './libraryLivingSlots'
+import type {
+  LibraryBookFocus,
+  LibraryNavigationRequest,
+  LibraryReturnState,
+  LibrarySpatialContext,
+} from './libraryExperience'
+import {emitLibraryEvent} from './libraryAnalytics'
 
 const DEFAULT_USERNAME = 'mikachu'
 const DEFAULT_LIBRARY_QUALITY: DreamQuality = 'medium'
 const GRAPHICS_STORAGE_KEY = 'oniria:library-graphics-v1'
+const CONTROLS_STORAGE_KEY = 'oniria:library-controls-seen-v1'
 const CATALOG_PAGE_SIZE = 100
 const CATALOG_BOOKS_PER_SHELF = 9
 const DISTRICT_RENDERED_SHELF_LIMIT =
@@ -382,6 +391,28 @@ export default function DevLibraryMap() {
   >([])
   const [readingBook, setReadingBook] =
     useState<LibraryReadingBook | null>(null)
+  const [focusedBook, setFocusedBook] =
+    useState<LibraryBookFocus | null>(null)
+  const [libraryReturnState, setLibraryReturnState] =
+    useState<LibraryReturnState | null>(null)
+  const [navigationRequest, setNavigationRequest] =
+    useState<LibraryNavigationRequest | null>(null)
+  const navigationRequestIdRef = useRef(0)
+  const [spatialContext, setSpatialContext] =
+    useState<LibrarySpatialContext>({
+      roomId: null,
+      shelfId: null,
+    })
+  const [roomAnnouncement, setRoomAnnouncement] =
+    useState<string | null>(null)
+  const roomAnnouncementTimerRef = useRef<number | null>(null)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [controlsHintVisible, setControlsHintVisible] =
+    useState(false)
+  const readerProgressRef = useRef({half: false, complete: false})
+  const lastRoomEventRef = useRef<string | null>(null)
+  const lastShelfEventRef = useRef<string | null>(null)
+  const lastBookEventRef = useRef<string | null>(null)
   const [layoutHudVisible, setLayoutHudVisible] =
     useState(false)
   const [layoutHudStatus, setLayoutHudStatus] =
@@ -463,6 +494,72 @@ export default function DevLibraryMap() {
       // Storage can be blocked in privacy modes; graphics still work in-memory.
     }
   }, [graphicsHydrated, graphicsOptions, quality])
+
+  useEffect(() => {
+    let seen = false
+    try {
+      seen =
+        window.localStorage.getItem(CONTROLS_STORAGE_KEY) ===
+        'true'
+    } catch {
+      // A blocked storage API should not prevent the hint from helping.
+    }
+    if (seen) return
+
+    setControlsHintVisible(true)
+    const dismiss = (event: KeyboardEvent | PointerEvent) => {
+      if (
+        event instanceof KeyboardEvent &&
+        ![
+          'KeyW',
+          'KeyA',
+          'KeyS',
+          'KeyD',
+          'KeyE',
+          'KeyG',
+        ].includes(event.code)
+      ) {
+        return
+      }
+
+      setControlsHintVisible(false)
+      try {
+        window.localStorage.setItem(
+          CONTROLS_STORAGE_KEY,
+          'true',
+        )
+      } catch {
+        // The hint still dismisses for this visit when storage is blocked.
+      }
+      window.removeEventListener('keydown', dismiss)
+      window.removeEventListener('pointerdown', dismiss)
+    }
+
+    window.addEventListener('keydown', dismiss)
+    window.addEventListener('pointerdown', dismiss)
+    return () => {
+      window.removeEventListener('keydown', dismiss)
+      window.removeEventListener('pointerdown', dismiss)
+    }
+  }, [])
+
+  const libraryEnterEmittedRef = useRef(false)
+  useEffect(() => {
+    if (loading || libraryEnterEmittedRef.current) return
+    libraryEnterEmittedRef.current = true
+    emitLibraryEvent('library_enter', {
+      source: worldConfig.source,
+    })
+  }, [loading, worldConfig.source])
+
+  useEffect(
+    () => () => {
+      if (roomAnnouncementTimerRef.current !== null) {
+        window.clearTimeout(roomAnnouncementTimerRef.current)
+      }
+    },
+    [],
+  )
 
   const [navigation, setNavigation] = useState<{
     nearestId: string | null
@@ -1075,7 +1172,12 @@ export default function DevLibraryMap() {
 
     canvas.focus({preventScroll: true})
     if (document.pointerLockElement !== canvas) {
-      void canvas.requestPointerLock()
+      void canvas.requestPointerLock().catch(() => {
+        // Pointer lock can be denied by browser policy, automation, or a
+        // recently closed permission prompt. Keyboard movement still works,
+        // so keep focus on the canvas instead of surfacing an unhandled error.
+        canvas.focus({preventScroll: true})
+      })
     }
   }, [])
 
@@ -1084,9 +1186,28 @@ export default function DevLibraryMap() {
     // gesture. Doing this before the React state update keeps the browser user
     // activation intact and restores FPS mouse-look as the reader disappears.
     resumeFirstPersonControls()
+    emitLibraryEvent('article_close', {
+      articleId: article?.id,
+      bookId: libraryReturnState?.bookId,
+    })
+    if (libraryReturnState) {
+      navigationRequestIdRef.current += 1
+      setNavigationRequest({
+        id: navigationRequestIdRef.current,
+        type: 'restore',
+        state: libraryReturnState,
+      })
+      emitLibraryEvent('return_to_shelf', {
+        roomId: libraryReturnState.roomId,
+        shelfId: libraryReturnState.shelfId,
+        bookId: libraryReturnState.bookId,
+      })
+    }
     setArticle(null)
     setReadingBook(null)
-  }, [resumeFirstPersonControls])
+    setLibraryReturnState(null)
+    readerProgressRef.current = {half: false, complete: false}
+  }, [article?.id, libraryReturnState, resumeFirstPersonControls])
 
   useEffect(() => {
     if (!article) return
@@ -1594,6 +1715,39 @@ export default function DevLibraryMap() {
     worldConfig.slotStates,
   ])
 
+  const articleLocations = useMemo(() => {
+    const locations = new Map<
+      number,
+      {
+        shelf: LibraryShelf
+        bookIndex: number
+        roomLabel: string
+      }
+    >()
+    const orderedShelves = [...shelves].sort(
+      (left, right) =>
+        Number(left.kind === 'search') -
+        Number(right.kind === 'search'),
+    )
+
+    orderedShelves.forEach((shelf) => {
+      const capacity = shelf.doubleSided ? 18 : 9
+      const district = roomWorldConfig.districts.find(
+        (candidate) => candidate.id === shelf.districtId,
+      )
+      shelf.articles.slice(0, capacity).forEach((item, bookIndex) => {
+        if (locations.has(item.id)) return
+        locations.set(item.id, {
+          shelf,
+          bookIndex,
+          roomLabel: district?.label ?? 'DEV Library',
+        })
+      })
+    })
+
+    return locations
+  }, [roomWorldConfig.districts, shelves])
+
   const nodes = useMemo<DreamWorldNode[]>(
     () =>
       shelves.map((shelf) => ({
@@ -1647,6 +1801,8 @@ export default function DevLibraryMap() {
             id: String(article.id),
             title: article.title,
             author: article.user.name || article.user.username,
+            readingTime: article.reading_time_minutes,
+            tags: (article.tag_list ?? []).slice(0, 3),
             coverUrl: devImageProxyUrl(
               article.cover_image,
               article.social_image,
@@ -1677,6 +1833,23 @@ export default function DevLibraryMap() {
     shelves.find((shelf) => shelf.id === navigation.nearestId) ?? null
   const routeShelf =
     shelves.find((shelf) => shelf.id === navigation.routeTargetId) ?? null
+  const focusedShelf = focusedBook
+    ? shelves.find((shelf) => shelf.id === focusedBook.shelfId) ?? null
+    : null
+  const focusedArticle =
+    focusedBook && focusedShelf
+      ? focusedShelf.articles[focusedBook.bookIndex] ?? null
+      : null
+  const currentDistrict = spatialContext.roomId
+    ? roomWorldConfig.districts.find(
+        (district) => district.id === spatialContext.roomId,
+      ) ?? null
+    : null
+  const currentContextShelf = spatialContext.shelfId
+    ? shelves.find(
+        (shelf) => shelf.id === spatialContext.shelfId,
+      ) ?? null
+    : null
   const catalogShelfCount = shelves.filter(
     (shelf) => shelf.kind === 'catalog',
   ).length
@@ -1770,18 +1943,31 @@ export default function DevLibraryMap() {
     shelves,
   ])
 
-  async function openArticle(summary: DevArticleSummary) {
+  async function openArticle(
+    summary: DevArticleSummary,
+    returnState: LibraryReturnState | null = null,
+  ) {
     try {
       setRouteLoading(true)
+      if (returnState) {
+        setLibraryReturnState(returnState)
+      }
       const response = await fetch(
         '/api/devto?mode=article&id=' + summary.id,
       )
       if (!response.ok) throw new Error('Could not open article')
       const payload = (await response.json()) as {article: DevArticle}
       setArticle(payload.article)
+      readerProgressRef.current = {half: false, complete: false}
+      emitLibraryEvent('article_open', {
+        articleId: summary.id,
+        shelfId: returnState?.shelfId,
+        bookId: returnState?.bookId,
+      })
       document.exitPointerLock?.()
     } catch (caught) {
       setReadingBook(null)
+      setLibraryReturnState(null)
       setError(
         caught instanceof Error
           ? caught.message
@@ -1844,6 +2030,7 @@ export default function DevLibraryMap() {
 
     try {
       setRouteLoading(true)
+      emitLibraryEvent('search_started', {query: value})
       const response = await fetch(
         '/api/devto?mode=search&q=' +
           encodeURIComponent(value),
@@ -1853,9 +2040,8 @@ export default function DevLibraryMap() {
         articles: DevArticleSummary[]
       }
       setSearchResults(payload.articles ?? [])
-      setSelectedId(
-        shelves.find((shelf) => shelf.kind === 'search')?.id ?? null,
-      )
+      setSearchOpen(true)
+      setSelectedId(null)
       document.exitPointerLock?.()
     } catch {
       setError('Could not search DEV')
@@ -1863,6 +2049,115 @@ export default function DevLibraryMap() {
       setRouteLoading(false)
     }
   }
+
+  const handleBookFocusChange = useCallback(
+    (focus: LibraryBookFocus | null) => {
+      setFocusedBook(focus)
+      if (!focus) return
+      const focusKey = `${focus.shelfId}:${focus.bookId}`
+      if (lastBookEventRef.current === focusKey) return
+      lastBookEventRef.current = focusKey
+      emitLibraryEvent('book_focus', {
+        shelfId: focus.shelfId,
+        bookId: focus.bookId,
+      })
+    },
+    [],
+  )
+
+  const handleLibraryContextChange = useCallback(
+    (context: LibrarySpatialContext) => {
+      setSpatialContext(context)
+
+      if (
+        context.roomId &&
+        context.roomId !== lastRoomEventRef.current
+      ) {
+        lastRoomEventRef.current = context.roomId
+        const district = roomWorldConfig.districts.find(
+          (candidate) => candidate.id === context.roomId,
+        )
+        const label = district?.label ?? 'DEV Library'
+        setRoomAnnouncement(label)
+        if (roomAnnouncementTimerRef.current !== null) {
+          window.clearTimeout(roomAnnouncementTimerRef.current)
+        }
+        roomAnnouncementTimerRef.current = window.setTimeout(
+          () => setRoomAnnouncement(null),
+          1_800,
+        )
+        emitLibraryEvent('room_enter', {
+          roomId: context.roomId,
+          label,
+        })
+      }
+
+      if (
+        context.shelfId &&
+        context.shelfId !== lastShelfEventRef.current
+      ) {
+        lastShelfEventRef.current = context.shelfId
+        emitLibraryEvent('shelf_focus', {
+          shelfId: context.shelfId,
+        })
+      }
+    },
+    [roomWorldConfig.districts],
+  )
+
+  const takeSearchResultToLibrary = useCallback(
+    (result: DevArticleSummary) => {
+      const location = articleLocations.get(result.id)
+      emitLibraryEvent('search_result_selected', {
+        articleId: result.id,
+        shelfId: location?.shelf.id,
+        action: location ? 'take_me_there' : 'read_fallback',
+      })
+
+      if (!location) {
+        setSearchOpen(false)
+        void openArticle(result)
+        return
+      }
+
+      resumeFirstPersonControls()
+      navigationRequestIdRef.current += 1
+      setNavigationRequest({
+        id: navigationRequestIdRef.current,
+        type: 'locate',
+        shelfId: location.shelf.id,
+        bookId: String(result.id),
+        bookIndex: location.bookIndex,
+      })
+      setSearchOpen(false)
+      setSelectedId(null)
+    },
+    [articleLocations, resumeFirstPersonControls],
+  )
+
+  const handleReaderScroll = useCallback(
+    (event: UIEvent<HTMLDivElement>) => {
+      if (!article) return
+      const target = event.currentTarget
+      const available = target.scrollHeight - target.clientHeight
+      if (available <= 0) return
+      const progress = target.scrollTop / available
+
+      if (progress >= .5 && !readerProgressRef.current.half) {
+        readerProgressRef.current.half = true
+        emitLibraryEvent('article_scroll_50', {
+          articleId: article.id,
+        })
+      }
+      if (progress >= .9 && !readerProgressRef.current.complete) {
+        readerProgressRef.current.complete = true
+        emitLibraryEvent('article_complete', {
+          articleId: article.id,
+        })
+      }
+    },
+    [article],
+  )
 
   const focusedIds = useMemo(() => new Set<string>(), [])
   const relatedEdgeIds = useMemo(
@@ -1895,8 +2190,11 @@ export default function DevLibraryMap() {
         libraryMovementMode={movementMode}
         libraryWorldConfig={roomWorldConfig}
         libraryReadingBook={readingBook}
+        libraryNavigationRequest={navigationRequest}
         libraryGraphicsOptions={graphicsOptions}
-        inputBlocked={Boolean(article) || Boolean(readingBook)}
+        inputBlocked={
+          Boolean(article) || Boolean(readingBook) || searchOpen
+        }
         onZoomChange={() => {}}
         onPanChange={() => {}}
         onNodeHover={(node) => setHoveredId(node?._id ?? null)}
@@ -1904,14 +2202,21 @@ export default function DevLibraryMap() {
           setSelectedId(node._id)
           document.exitPointerLock?.()
         }}
-        onBookSelect={(nodeId, bookIndex) => {
+        onBookSelect={(nodeId, bookIndex, returnState) => {
           const shelf = shelves.find((item) => item.id === nodeId)
           const selectedBook = shelf?.articles[bookIndex]
           if (selectedBook) {
             setReadingBook({nodeId, index: bookIndex})
-            void openArticle(selectedBook)
+            emitLibraryEvent('book_open', {
+              shelfId: nodeId,
+              bookId: returnState.bookId,
+              articleId: selectedBook.id,
+            })
+            void openArticle(selectedBook, returnState)
           }
         }}
+        onBookFocusChange={handleBookFocusChange}
+        onLibraryContextChange={handleLibraryContextChange}
         onFlightNavigationChange={setNavigation}
         onBackgroundClick={() => setSelectedId(null)}
         onProjectionChange={() => {}}
@@ -1920,6 +2225,55 @@ export default function DevLibraryMap() {
         onFlightModeChange={setFlightMode}
         onLibraryMovementModeChange={setMovementMode}
       />
+
+      {controlsHintVisible && !loading && !article && (
+        <aside className={styles.controlsHint} aria-live="polite">
+          <strong>Explore the DEV Library</strong>
+          <span>WASD — Move</span>
+          <span>Mouse — Look</span>
+          <span>E / Click — Read</span>
+        </aside>
+      )}
+
+      {roomAnnouncement && !article && (
+        <div className={styles.roomAnnouncement} aria-live="polite">
+          <span>Entering</span>
+          <strong>{roomAnnouncement}</strong>
+        </div>
+      )}
+
+      {!article && (currentDistrict || currentContextShelf) && (
+        <nav className={styles.spatialBreadcrumb} aria-label="Library location">
+          <span>DEV Library</span>
+          {currentDistrict && <strong>{currentDistrict.label}</strong>}
+          {currentContextShelf && (
+            <em>{currentContextShelf.slotId}</em>
+          )}
+        </nav>
+      )}
+
+      {focusedArticle && focusedShelf && !article && !searchOpen && (
+        <aside className={styles.bookPreview} aria-live="polite">
+          <p>{focusedShelf.title}</p>
+          <h2>{focusedArticle.title}</h2>
+          <span>
+            {focusedArticle.user.name ||
+              `@${focusedArticle.user.username}`}
+            {focusedArticle.reading_time_minutes
+              ? ` · ${focusedArticle.reading_time_minutes} min read`
+              : ''}
+          </span>
+          {focusedArticle.tag_list.length > 0 && (
+            <small>
+              {focusedArticle.tag_list
+                .slice(0, 3)
+                .map((tag) => `#${tag}`)
+                .join('  ')}
+            </small>
+          )}
+          <b>E / Click — Read</b>
+        </aside>
+      )}
 
       {layoutHudVisible && (
         <aside
@@ -2242,6 +2596,61 @@ export default function DevLibraryMap() {
         </button>
       )}
 
+      {searchOpen && !article && (
+        <aside className={styles.searchPanel} aria-label="DEV search results">
+          <button
+            className={styles.close}
+            onClick={() => {
+              resumeFirstPersonControls()
+              setSearchOpen(false)
+            }}
+            aria-label="Close search results"
+          >
+            ×
+          </button>
+          <p className={styles.eyebrow}>Physical catalogue search</p>
+          <h1>{query.trim() || 'Search results'}</h1>
+          <p className={styles.subtitle}>
+            Choose a result to travel to its book in the library.
+          </p>
+          <div className={styles.searchResultList}>
+            {searchResults.length === 0 ? (
+              <p className={styles.emptyShelf}>
+                No DEV articles matched this search.
+              </p>
+            ) : (
+              searchResults.slice(0, 24).map((result) => {
+                const location = articleLocations.get(result.id)
+                return (
+                  <article className={styles.searchResult} key={result.id}>
+                    <div>
+                      <strong>{result.title}</strong>
+                      <small>
+                        @{result.user.username}
+                        {result.reading_time_minutes
+                          ? ` · ${result.reading_time_minutes} min`
+                          : ''}
+                      </small>
+                      <span>
+                        {location
+                          ? `Located in: ${location.roomLabel} → ${location.shelf.title} → ${location.shelf.slotId}`
+                          : 'No physical shelf mapping yet'}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => takeSearchResultToLibrary(result)}
+                    >
+                      {location ? 'Take me there' : 'Read article'}
+                    </button>
+                  </article>
+                )
+              })
+            )}
+          </div>
+        </aside>
+      )}
+
       {selectedShelf && !article && (
         <aside className={styles.shelfPanel}>
           <button
@@ -2327,24 +2736,36 @@ export default function DevLibraryMap() {
 
       {article && (
         <section className={styles.reader}>
-          <div className={styles.readerCard}>
+          <div
+            className={styles.readerCard}
+            onScroll={handleReaderScroll}
+          >
             <button
-              className={styles.close}
+              className={styles.readerReturn}
               onClick={closeArticleReader}
-              aria-label="Close article"
+              aria-label="Return to the same book in the library"
             >
-              ×
+              ← Return to Library
             </button>
             <p className={styles.eyebrow}>
-              @{article.user.username} · DEV
+              {article.user.name || `@${article.user.username}`} · DEV
             </p>
             <h1>{article.title}</h1>
             <p className={styles.readerMeta}>
+              @{article.user.username}
+              {article.readable_publish_date ? ' · ' : ''}
               {article.readable_publish_date ?? ''}
               {article.reading_time_minutes
                 ? ' · ' + article.reading_time_minutes + ' min read'
                 : ''}
             </p>
+            {article.tag_list.length > 0 && (
+              <div className={styles.readerTags}>
+                {article.tag_list.slice(0, 5).map((tag) => (
+                  <span key={tag}>#{tag}</span>
+                ))}
+              </div>
+            )}
             {articleHeroImage && (
               <img
                 className={styles.readerHeroImage}

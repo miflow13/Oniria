@@ -98,6 +98,12 @@ import {
   libraryRoomContainsPoint,
   roomForDistrict,
 } from './libraryRoomLayout'
+import type {
+  LibraryBookFocus,
+  LibraryNavigationRequest,
+  LibraryReturnState,
+  LibrarySpatialContext,
+} from './libraryExperience'
 
 export type DreamWorldNode = {
   _id: string
@@ -130,6 +136,8 @@ export type DreamWorldNode = {
     title: string
     author?: string
     coverUrl?: string
+    readingTime?: number
+    tags?: string[]
     activity?: number
     fresh?: boolean
   }>
@@ -183,13 +191,22 @@ type Props = {
   libraryMovementMode?: LibraryMovementMode
   libraryWorldConfig?: LibraryWorldConfig
   libraryReadingBook?: LibraryReadingBook | null
+  libraryNavigationRequest?: LibraryNavigationRequest | null
   libraryGraphicsOptions?: LibraryGraphicsOptions
   inputBlocked?: boolean
   onZoomChange: (zoom: number) => void
   onPanChange: (pan: Pan) => void
   onNodeHover: (node: DreamWorldNode | null) => void
   onNodeSelect: (node: DreamWorldNode) => void
-  onBookSelect?: (nodeId: string, bookIndex: number) => void
+  onBookSelect?: (
+    nodeId: string,
+    bookIndex: number,
+    returnState: LibraryReturnState,
+  ) => void
+  onBookFocusChange?: (focus: LibraryBookFocus | null) => void
+  onLibraryContextChange?: (
+    context: LibrarySpatialContext,
+  ) => void
   onFlightNavigationChange?: (state: {
     nearestId: string | null
     routeTargetId: string | null
@@ -673,6 +690,7 @@ export default function DreamWorld3D({
   libraryMovementMode = 'walk',
   libraryWorldConfig = DEFAULT_LIBRARY_WORLD_CONFIG,
   libraryReadingBook = null,
+  libraryNavigationRequest = null,
   libraryGraphicsOptions = DEFAULT_LIBRARY_GRAPHICS_OPTIONS,
   inputBlocked = false,
   onZoomChange,
@@ -680,6 +698,8 @@ export default function DreamWorld3D({
   onNodeHover,
   onNodeSelect,
   onBookSelect,
+  onBookFocusChange,
+  onLibraryContextChange,
   onFlightNavigationChange,
   onBackgroundClick,
   onProjectionChange,
@@ -704,6 +724,10 @@ export default function DreamWorld3D({
   const onNodeHoverRef = useRef(onNodeHover)
   const onNodeSelectRef = useRef(onNodeSelect)
   const onBookSelectRef = useRef(onBookSelect)
+  const onBookFocusChangeRef = useRef(onBookFocusChange)
+  const onLibraryContextChangeRef = useRef(
+    onLibraryContextChange,
+  )
   const onFlightNavigationChangeRef = useRef(onFlightNavigationChange)
   const onBackgroundClickRef = useRef(onBackgroundClick)
   const onProjectionChangeRef = useRef(onProjectionChange)
@@ -719,6 +743,10 @@ export default function DreamWorld3D({
     useRef<LibraryMovementMode>(libraryMovementMode)
   const libraryReadingBookRef =
     useRef<LibraryReadingBook | null>(libraryReadingBook)
+  const libraryNavigationRequestRef =
+    useRef<LibraryNavigationRequest | null>(
+      libraryNavigationRequest,
+    )
   const inputBlockedRef = useRef(inputBlocked)
   const libraryFlightStateRef = useRef<{
     position: [number, number, number]
@@ -746,6 +774,8 @@ export default function DreamWorld3D({
   onNodeHoverRef.current = onNodeHover
   onNodeSelectRef.current = onNodeSelect
   onBookSelectRef.current = onBookSelect
+  onBookFocusChangeRef.current = onBookFocusChange
+  onLibraryContextChangeRef.current = onLibraryContextChange
   onFlightNavigationChangeRef.current = onFlightNavigationChange
   onBackgroundClickRef.current = onBackgroundClick
   onProjectionChangeRef.current = onProjectionChange
@@ -759,6 +789,8 @@ export default function DreamWorld3D({
   flightModeRef.current = flightMode
   libraryMovementModeRef.current = libraryMovementMode
   libraryReadingBookRef.current = libraryReadingBook
+  libraryNavigationRequestRef.current =
+    libraryNavigationRequest
   inputBlockedRef.current = inputBlocked
   onDiveStateChangeRef.current = onDiveStateChange
   onDiveDreamChangeRef.current = onDiveDreamChange
@@ -1966,7 +1998,69 @@ export default function DreamWorld3D({
     const libraryBookVisuals: LibraryBookVisual[] = []
     const bookInteractives: THREE.Object3D[] = []
     let hoveredBook: LibraryBookVisual | null = null
+    let lastPublishedBookFocusKey = ''
+    let lastPublishedLibraryContextKey = ''
+    let lastHandledNavigationRequestId = 0
+    let highlightedBook: LibraryBookVisual | null = null
+    let highlightedBookUntil = 0
     const BOOK_INTERACTION_DISTANCE = 2.65
+    const BOOK_FOCUS_SWITCH_DELAY = 70
+    const BOOK_FOCUS_RELEASE_DELAY = 160
+    let pendingHoveredBook: LibraryBookVisual | null = null
+    let pendingHoveredBookSince = 0
+    let hoveredBookMissedAt: number | null = null
+
+    const observeHoveredBook = (
+      next: LibraryBookVisual | null,
+      now = performance.now(),
+    ) => {
+      if (next === hoveredBook) {
+        pendingHoveredBook = null
+        hoveredBookMissedAt = null
+        return
+      }
+
+      if (!next) {
+        pendingHoveredBook = null
+        if (!hoveredBook) return
+        hoveredBookMissedAt ??= now
+        if (
+          now - hoveredBookMissedAt >=
+          BOOK_FOCUS_RELEASE_DELAY
+        ) {
+          hoveredBook = null
+          hoveredBookMissedAt = null
+        }
+        return
+      }
+
+      hoveredBookMissedAt = null
+      if (!hoveredBook) {
+        hoveredBook = next
+        pendingHoveredBook = null
+        return
+      }
+
+      if (pendingHoveredBook !== next) {
+        pendingHoveredBook = next
+        pendingHoveredBookSince = now
+        return
+      }
+
+      if (
+        now - pendingHoveredBookSince >=
+        BOOK_FOCUS_SWITCH_DELAY
+      ) {
+        hoveredBook = next
+        pendingHoveredBook = null
+      }
+    }
+
+    const clearHoveredBook = () => {
+      hoveredBook = null
+      pendingHoveredBook = null
+      hoveredBookMissedAt = null
+    }
 
     // Reusable shelf kit for cinematic library mode.
     const shelfSideGeometry = new THREE.BoxGeometry(.16, 3.56, .66)
@@ -5400,14 +5494,66 @@ export default function DreamWorld3D({
       return bookVisualFromObject(hit.object)
     }
 
+    let lastBookActivationAt = -Infinity
+
+    function captureLibraryReturnState(
+      nodeId: string,
+      bookIndex: number,
+    ): LibraryReturnState | null {
+      const node = nodeRef.current.find(
+        (candidate) => candidate._id === nodeId,
+      )
+      const book = node?.libraryBooks?.[bookIndex]
+      if (!node || !book) return null
+
+      const roomId =
+        node.libraryDistrictId ??
+        nearestRoomEntry(
+          camera.position.x,
+          camera.position.z,
+        )?.district.id
+
+      return {
+        roomId,
+        shelfId: nodeId,
+        bookId: book.id,
+        bookIndex,
+        playerPosition: [
+          flightPosition.x,
+          flightPosition.y,
+          flightPosition.z,
+        ],
+        cameraPosition: [
+          camera.position.x,
+          camera.position.y,
+          camera.position.z,
+        ],
+        cameraQuaternion: [
+          camera.quaternion.x,
+          camera.quaternion.y,
+          camera.quaternion.z,
+          camera.quaternion.w,
+        ],
+        yaw: flightYaw,
+        pitch: flightPitch,
+        movementMode: libraryMovementModeRef.current,
+      }
+    }
+
     function beginBookOpen(visual: LibraryBookVisual) {
+      const now = performance.now()
+      if (now - lastBookActivationAt < 350) return
+
       if (
         libraryReadingRitual?.begin(
           visual,
-          performance.now() / 1000,
+          now / 1000,
         )
       ) {
+        lastBookActivationAt = now
         hoveredBook = visual
+        pendingHoveredBook = null
+        hoveredBookMissedAt = null
       }
     }
 
@@ -5423,7 +5569,7 @@ export default function DreamWorld3D({
         document.pointerLockElement === renderer.domElement &&
         !(libraryReadingRitual?.isActive() ?? false)
       ) {
-        hoveredBook = pickCenterBook()
+        observeHoveredBook(pickCenterBook())
       }
 
       for (const node of nodeRef.current) {
@@ -5516,7 +5662,7 @@ export default function DreamWorld3D({
       }
 
       const book = pickBook(event)
-      hoveredBook = book
+      observeHoveredBook(book, event.timeStamp)
       const node = book
         ? nodeRef.current.find((item) => item._id === book.nodeId) ?? null
         : pickNode(event)
@@ -5632,7 +5778,7 @@ export default function DreamWorld3D({
       }
       pointerDown = null
       dragging = false
-      hoveredBook = null
+      clearHoveredBook()
       releasePortalLeak()
       if (hoveredId !== null) {
         hoveredId = null
@@ -6003,6 +6149,11 @@ export default function DreamWorld3D({
     const tempVector = new THREE.Vector3()
     const control = new THREE.Vector3()
     const curvePoint = new THREE.Vector3()
+    const navigationBookPosition = new THREE.Vector3()
+    const navigationOutward = new THREE.Vector3()
+    const navigationTarget = new THREE.Vector3()
+    const navigationQuaternion = new THREE.Quaternion()
+    const navigationEuler = new THREE.Euler(0, 0, 0, 'YXZ')
 
     let animationFrame = 0
     let lastSelectedId: string | null = null
@@ -6016,12 +6167,117 @@ export default function DreamWorld3D({
     let frameTimeAccumulator = 0
     let frameTimeSamples = 0
     let lastAdaptiveCheck = 0
+    let lastLibraryContextCheck = -Infinity
 
     function animate(now: number) {
       animationFrame = requestAnimationFrame(animate)
       const elapsed = (now - startedAt) / 1000
       const delta = Math.min(.05, Math.max(.001, (now - lastFrameAt) / 1000))
       lastFrameAt = now
+
+      const navigationRequest =
+        libraryNavigationRequestRef.current
+      if (
+        navigationRequest &&
+        navigationRequest.id !== lastHandledNavigationRequestId
+      ) {
+        lastHandledNavigationRequestId = navigationRequest.id
+        flightRoute = null
+        flightKeys.clear()
+        flightVelocity.set(0, 0, 0)
+        libraryWalkBobStrength = 0
+
+        if (navigationRequest.type === 'restore') {
+          const state = navigationRequest.state
+          libraryMovementModeRef.current = state.movementMode
+          onLibraryMovementModeChangeRef.current?.(
+            state.movementMode,
+          )
+          flightPosition.fromArray(state.playerPosition)
+          camera.position.fromArray(state.cameraPosition)
+          camera.quaternion.fromArray(state.cameraQuaternion)
+          flightYaw = state.yaw
+          flightPitch = state.pitch
+          flightInitialized = true
+
+          pendingShelfHydrators.get(state.shelfId)?.()
+          highlightedBook =
+            libraryBookVisuals.find(
+              (visual) =>
+                visual.nodeId === state.shelfId &&
+                visual.index === state.bookIndex,
+            ) ?? null
+          highlightedBookUntil = now + 1_800
+          flightNearestId = state.shelfId
+        } else {
+          const node = nodeRef.current.find(
+            (candidate) =>
+              candidate._id === navigationRequest.shelfId,
+          )
+          const matchingIndex =
+            node?.libraryBooks?.findIndex(
+              (book) => book.id === navigationRequest.bookId,
+            ) ?? -1
+          const resolvedIndex =
+            matchingIndex >= 0
+              ? matchingIndex
+              : navigationRequest.bookIndex
+
+          pendingShelfHydrators.get(
+            navigationRequest.shelfId,
+          )?.()
+          const visual =
+            libraryBookVisuals.find(
+              (candidate) =>
+                candidate.nodeId ===
+                  navigationRequest.shelfId &&
+                candidate.index === resolvedIndex,
+            ) ?? null
+
+          if (visual) {
+            visual.group.getWorldPosition(
+              navigationBookPosition,
+            )
+            visual.group.getWorldQuaternion(
+              navigationQuaternion,
+            )
+            navigationOutward
+              .set(0, 0, 1)
+              .applyQuaternion(navigationQuaternion)
+            navigationOutward.y = 0
+            if (navigationOutward.lengthSq() < .001) {
+              navigationOutward.set(0, 0, 1)
+            } else {
+              navigationOutward.normalize()
+            }
+
+            navigationTarget
+              .copy(navigationBookPosition)
+              .addScaledVector(navigationOutward, 1.9)
+            const clamped = clampLibraryWalkPosition(
+              navigationTarget.x,
+              navigationTarget.z,
+            )
+            flightPosition.set(
+              clamped.x,
+              LIBRARY_EYE_HEIGHT,
+              clamped.z,
+            )
+            camera.position.copy(flightPosition)
+            camera.lookAt(navigationBookPosition)
+            navigationEuler.setFromQuaternion(
+              camera.quaternion,
+              'YXZ',
+            )
+            flightYaw = navigationEuler.y
+            flightPitch = navigationEuler.x
+            flightInitialized = true
+            highlightedBook = visual
+            highlightedBookUntil = now + 2_000
+            flightNearestId = navigationRequest.shelfId
+          }
+        }
+      }
 
       if (
         qualityRef.current === 'high' ||
@@ -6876,7 +7132,17 @@ export default function DreamWorld3D({
             : Infinity
         },
         onOpen: (nodeId, bookIndex) => {
-          onBookSelectRef.current?.(nodeId, bookIndex)
+          const returnState = captureLibraryReturnState(
+            nodeId,
+            bookIndex,
+          )
+          if (returnState) {
+            onBookSelectRef.current?.(
+              nodeId,
+              bookIndex,
+              returnState,
+            )
+          }
         },
       })
 
@@ -6951,6 +7217,9 @@ export default function DreamWorld3D({
           // have a center farther away than the book the ray actually hit.
           const directlyHovered =
             hoveredBook === bookVisual
+          const returningHighlight =
+            highlightedBook === bookVisual &&
+            now < highlightedBookUntil
 
           bookVisual.hoverGlow.visible =
             directlyHovered && !presented
@@ -6965,10 +7234,14 @@ export default function DreamWorld3D({
           }
 
           bookVisual.coverMaterial.emissive.setHex(
-            presented ? 0x6d2f73 : 0x163744,
+            presented || returningHighlight
+              ? 0x6d2f73
+              : 0x163744,
           )
           const targetEmissive = presented
             ? 1.35
+            : returningHighlight
+              ? .68 + Math.sin(elapsed * 5) * .1
             : directlyHovered
               ? .82
               : awake * .5
@@ -8149,6 +8422,57 @@ export default function DreamWorld3D({
         if (lastProjection.visible) {
           lastProjection = {x: -999, y: -999, visible: false}
           onProjectionChangeRef.current(null)
+        }
+      }
+
+      if (libraryMode) {
+        if (
+          highlightedBook &&
+          now >= highlightedBookUntil
+        ) {
+          highlightedBook = null
+        }
+
+        const focusedNode = hoveredBook
+          ? nodeRef.current.find(
+              (node) => node._id === hoveredBook?.nodeId,
+            )
+          : null
+        const focusedBook = hoveredBook
+          ? focusedNode?.libraryBooks?.[hoveredBook.index]
+          : null
+        const focusedBookKey =
+          hoveredBook && focusedBook
+            ? `${hoveredBook.nodeId}:${focusedBook.id}`
+            : ''
+        if (focusedBookKey !== lastPublishedBookFocusKey) {
+          lastPublishedBookFocusKey = focusedBookKey
+          onBookFocusChangeRef.current?.(
+            hoveredBook && focusedBook
+              ? {
+                  shelfId: hoveredBook.nodeId,
+                  bookId: focusedBook.id,
+                  bookIndex: hoveredBook.index,
+                }
+              : null,
+          )
+        }
+
+        if (elapsed - lastLibraryContextCheck >= .2) {
+          lastLibraryContextCheck = elapsed
+          const roomId =
+            nearestRoomEntry(
+              camera.position.x,
+              camera.position.z,
+            )?.district.id ?? null
+          const contextKey = `${roomId ?? ''}|${nearestLibraryShelfId ?? ''}`
+          if (contextKey !== lastPublishedLibraryContextKey) {
+            lastPublishedLibraryContextKey = contextKey
+            onLibraryContextChangeRef.current?.({
+              roomId,
+              shelfId: nearestLibraryShelfId,
+            })
+          }
         }
       }
 
