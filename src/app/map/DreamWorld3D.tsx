@@ -925,7 +925,6 @@ export default function DreamWorld3D({
     )
     const atmosphereBackgroundTarget = new THREE.Color()
     const atmosphereFogTarget = new THREE.Color()
-    const atmosphereLightTarget = new THREE.Color()
     scene.background = sceneBackgroundColor
     scene.fog = libraryMode
       ? new THREE.FogExp2(
@@ -1064,8 +1063,11 @@ export default function DreamWorld3D({
     keyLight.shadow.normalBias = 0.025
     scene.add(keyLight)
 
+    let violetLight: THREE.PointLight | null = null
+    let cyanLight: THREE.PointLight | null = null
+
     if (!libraryMode) {
-      const violetLight = new THREE.PointLight(
+      violetLight = new THREE.PointLight(
         0xb791ff,
         12,
         20,
@@ -1074,7 +1076,7 @@ export default function DreamWorld3D({
       violetLight.position.set(-5, 1, 3)
       scene.add(violetLight)
 
-      const cyanLight = new THREE.PointLight(
+      cyanLight = new THREE.PointLight(
         0x72e2df,
         11,
         20,
@@ -4527,8 +4529,11 @@ export default function DreamWorld3D({
       })
     }
 
-    const categoryNebulae = (Object.keys(CATEGORY_COLORS) as SymbolCategory[])
-      .map((category, index) => {
+    const categoryNebulae = (
+      libraryMode
+        ? []
+        : (Object.keys(CATEGORY_COLORS) as SymbolCategory[])
+    ).map((category, index) => {
         const categoryNodes = nodeRef.current.filter(
           (node) => node.category === category,
         )
@@ -7538,42 +7543,16 @@ export default function DreamWorld3D({
           atmosphereBackgroundTarget,
           .035,
         )
-        atmosphereLightTarget.setHex(
-          atmospherePreset.tint,
-        )
-        violetLight.color.lerp(
-          atmosphereLightTarget,
-          .035,
-        )
-        cyanLight.color.lerp(
-          atmosphereLightTarget,
-          .022,
-        )
       }
 
-      const atmosphereLightScale = libraryMode
-        ? atmospherePreset.lightStrength
-        : 1
-      const violetTarget =
-        (libraryMode
-          ? selectedVisual
-            ? .12
-            : .055
-          : selectedVisual
-            ? 4.7
-            : 4) * atmosphereLightScale
-      const cyanTarget =
-        (libraryMode
-          ? selectedVisual
-            ? .09
-            : .04
-          : selectedVisual
-            ? 4.3
-            : 3.6) * atmosphereLightScale
-      violetLight.intensity +=
-        (violetTarget - violetLight.intensity) * .035
-      cyanLight.intensity +=
-        (cyanTarget - cyanLight.intensity) * .035
+      if (violetLight && cyanLight) {
+        const violetTarget = selectedVisual ? 4.7 : 4
+        const cyanTarget = selectedVisual ? 4.3 : 3.6
+        violetLight.intensity +=
+          (violetTarget - violetLight.intensity) * .035
+        cyanLight.intensity +=
+          (cyanTarget - cyanLight.intensity) * .035
+      }
 
       if (flightActive && flightInitialized) {
         const routeActive = Boolean(flightRoute)
@@ -7758,7 +7737,7 @@ export default function DreamWorld3D({
           )
         }
 
-        if (!routeActive) {
+        if (!routeActive && !libraryMode) {
           nodeVisuals.forEach((visual) => {
             visual.group.getWorldPosition(flightCollisionPoint)
             flightCollisionDelta
