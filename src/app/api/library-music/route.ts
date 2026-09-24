@@ -126,7 +126,7 @@ export async function GET() {
 
     if (!response.ok) {
       throw new Error(
-        \`Pixabay track page returned \${response.status}\`,
+        'Pixabay track page returned ' + response.status,
       )
     }
 
