@@ -49,13 +49,16 @@ function decodeHtmlEntities(value: string) {
     .replace(/&gt;/g, '>')
 }
 
+function normalizeEscapedUrl(value: string) {
+  return decodeHtmlEntities(value)
+    .replaceAll('\\u002F', '/')
+    .replaceAll('\\u0026', '&')
+    .replaceAll('\\/', '/')
+}
+
 function validatedTrackUrl(value: string) {
   try {
-    const normalized = decodeHtmlEntities(value)
-      .replaceAll('\\\\u002F', '/')
-      .replaceAll('\\\\u0026', '&')
-      .replaceAll('\\\\/', '/')
-    const url = new URL(normalized)
+    const url = new URL(normalizeEscapedUrl(value))
 
     if (
       url.protocol !== 'https:' ||
@@ -93,11 +96,13 @@ function extractTrackUrl(html: string) {
   }
 
   // Pixabay occasionally changes which structured-data block carries the
-  // media URL. Fall back to a tightly validated CDN URL found in the page so
-  // the library does not lose its ambience because of a metadata reshuffle.
-  const directCandidates = html.match(
-    /https:(?:\\\\\/|\/){2}cdn\.pixabay\.com(?:\\\\\/|\/)download(?:\\\\\/|\/)audio(?:\\\\\/|\/)[^"'<>\\s]+/g,
-  ) ?? []
+  // media URL. Normalize escaped slashes once, then fall back to a tightly
+  // validated CDN URL found elsewhere in the page.
+  const normalizedHtml = normalizeEscapedUrl(html)
+  const directCandidates =
+    normalizedHtml.match(
+      /https:\/\/cdn\.pixabay\.com\/download\/audio\/[^"'<>\s]+/g,
+    ) ?? []
 
   for (const candidate of directCandidates) {
     const url = validatedTrackUrl(candidate)
@@ -121,7 +126,7 @@ export async function GET() {
 
     if (!response.ok) {
       throw new Error(
-        `Pixabay track page returned ${response.status}`,
+        \`Pixabay track page returned \${response.status}\`,
       )
     }
 
