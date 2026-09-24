@@ -60,7 +60,8 @@ export const LIBRARY_WORLD_QUERY = defineQuery(`
       "libraryConfig",
       "libraryDistrict",
       "curatedArticle",
-      "archiveJourney"
+      "archiveJourney",
+      "librarySlotState"
     ]
   ] | order(_updatedAt desc)[0]._updatedAt,
   "config": *[_type == "libraryConfig"][0] {
@@ -106,6 +107,37 @@ export const LIBRARY_WORLD_QUERY = defineQuery(`
     featured,
     priority,
     curatorNote
+  },
+  "slotStates": *[
+    _type == "librarySlotState"
+  ]
+  | order(roomSlot asc, slotId asc) {
+    _id,
+    slotKey,
+    districtId,
+    roomSlot,
+    slotId,
+    zone,
+    configured,
+    occupantKey,
+    topic,
+    lifecycle,
+    vitality,
+    signalScore,
+    articleCount,
+    risingChecks,
+    lowChecks,
+    materializedAt,
+    lastActiveAt,
+    coolingStartedAt,
+    updatedAt,
+    history[] {
+      event,
+      topic,
+      at,
+      vitality,
+      note
+    }
   },
   "journeys": *[
     _type == "archiveJourney" &&
@@ -170,6 +202,36 @@ export const LIBRARY_WORLD_RAW_QUERY = defineQuery(`
     priority,
     curatorNote,
     enabled
+  },
+  "slotStateDocs": *[_type == "librarySlotState"] {
+    _id,
+    _rev,
+    _updatedAt,
+    slotKey,
+    districtId,
+    roomSlot,
+    slotId,
+    zone,
+    configured,
+    occupantKey,
+    topic,
+    lifecycle,
+    vitality,
+    signalScore,
+    articleCount,
+    risingChecks,
+    lowChecks,
+    materializedAt,
+    lastActiveAt,
+    coolingStartedAt,
+    updatedAt,
+    history[] {
+      event,
+      topic,
+      at,
+      vitality,
+      note
+    }
   },
   "journeyDocs": *[_type == "archiveJourney"] {
     _id,
