@@ -65,6 +65,183 @@ function createGridGeometry() {
   return geometry
 }
 
+function createDevLogo() {
+  const group = new THREE.Group()
+  group.name = 'library-holographic-dome-dev-logo'
+  group.userData.libraryDecorative = true
+  group.userData.libraryNonInteractive = true
+
+  const geometries: THREE.BufferGeometry[] = []
+  const materials: THREE.Material[] = []
+
+  const width = 6.2
+  const height = 2.7
+  const radius = .34
+  const depth = .38
+  const shape = new THREE.Shape()
+
+  shape.moveTo(-width / 2 + radius, -height / 2)
+  shape.lineTo(width / 2 - radius, -height / 2)
+  shape.quadraticCurveTo(
+    width / 2,
+    -height / 2,
+    width / 2,
+    -height / 2 + radius,
+  )
+  shape.lineTo(width / 2, height / 2 - radius)
+  shape.quadraticCurveTo(
+    width / 2,
+    height / 2,
+    width / 2 - radius,
+    height / 2,
+  )
+  shape.lineTo(-width / 2 + radius, height / 2)
+  shape.quadraticCurveTo(
+    -width / 2,
+    height / 2,
+    -width / 2,
+    height / 2 - radius,
+  )
+  shape.lineTo(-width / 2, -height / 2 + radius)
+  shape.quadraticCurveTo(
+    -width / 2,
+    -height / 2,
+    -width / 2 + radius,
+    -height / 2,
+  )
+
+  const plaqueGeometry = new THREE.ExtrudeGeometry(shape, {
+    depth,
+    bevelEnabled: true,
+    bevelSegments: 2,
+    steps: 1,
+    bevelSize: .055,
+    bevelThickness: .055,
+    curveSegments: 10,
+  })
+  plaqueGeometry.translate(0, 0, -depth / 2)
+
+  const plaqueMaterial = new THREE.MeshStandardMaterial({
+    color: 0x111216,
+    roughness: .28,
+    metalness: .34,
+    emissive: 0x07111a,
+    emissiveIntensity: .28,
+  })
+
+  const letterMaterial = new THREE.MeshStandardMaterial({
+    color: 0xf4f7fb,
+    roughness: .38,
+    metalness: .08,
+    emissive: 0x8dd9ff,
+    emissiveIntensity: .08,
+  })
+
+  const edgeMaterial = new THREE.LineBasicMaterial({
+    color: 0x78d2ff,
+    transparent: true,
+    opacity: .44,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  })
+  edgeMaterial.toneMapped = false
+
+  geometries.push(plaqueGeometry)
+  materials.push(
+    plaqueMaterial,
+    letterMaterial,
+    edgeMaterial,
+  )
+
+  const plaque = new THREE.Mesh(
+    plaqueGeometry,
+    plaqueMaterial,
+  )
+  plaque.castShadow = false
+  plaque.receiveShadow = false
+  plaque.userData.libraryDecorative = true
+  plaque.userData.libraryNonInteractive = true
+  group.add(plaque)
+
+  const edgeGeometry = new THREE.EdgesGeometry(
+    plaqueGeometry,
+    24,
+  )
+  geometries.push(edgeGeometry)
+  const edge = new THREE.LineSegments(
+    edgeGeometry,
+    edgeMaterial,
+  )
+  edge.name = 'library-dev-logo-holographic-edge'
+  edge.renderOrder = 3
+  edge.userData.libraryDecorative = true
+  edge.userData.libraryNonInteractive = true
+  group.add(edge)
+
+  const letterDepth = .24
+  const letterZ = depth / 2 + letterDepth / 2 + .035
+
+  const addBar = (
+    parent: THREE.Object3D,
+    x: number,
+    y: number,
+    barWidth: number,
+    barHeight: number,
+    rotationZ = 0,
+  ) => {
+    const geometry = new THREE.BoxGeometry(
+      barWidth,
+      barHeight,
+      letterDepth,
+    )
+    geometries.push(geometry)
+    const bar = new THREE.Mesh(
+      geometry,
+      letterMaterial,
+    )
+    bar.position.set(x, y, letterZ)
+    bar.rotation.z = rotationZ
+    bar.castShadow = false
+    bar.receiveShadow = false
+    bar.userData.libraryDecorative = true
+    bar.userData.libraryNonInteractive = true
+    parent.add(bar)
+  }
+
+  const letterHeight = 1.42
+  const stroke = .22
+
+  const d = new THREE.Group()
+  d.position.x = -1.72
+  addBar(d, -.43, 0, stroke, letterHeight)
+  addBar(d, 0, .6, .86, stroke)
+  addBar(d, 0, -.6, .86, stroke)
+  addBar(d, .43, 0, stroke, 1.03)
+  group.add(d)
+
+  const e = new THREE.Group()
+  e.position.x = 0
+  addBar(e, -.43, 0, stroke, letterHeight)
+  addBar(e, 0, .6, .86, stroke)
+  addBar(e, -.03, 0, .74, stroke)
+  addBar(e, 0, -.6, .86, stroke)
+  group.add(e)
+
+  const v = new THREE.Group()
+  v.position.x = 1.72
+  addBar(v, -.27, .02, stroke, 1.38, -.37)
+  addBar(v, .27, .02, stroke, 1.38, .37)
+  group.add(v)
+
+  return {
+    group,
+    dispose: () => {
+      geometries.forEach((geometry) => geometry.dispose())
+      materials.forEach((material) => material.dispose())
+    },
+  }
+}
+
 function createConstellationGeometry() {
   let seed = 0x4f4e4952
   const random = () => {
@@ -292,6 +469,18 @@ export function createLibraryDome(
   )
   group.add(domeLight)
 
+  const devLogo = createDevLogo()
+  devLogo.group.position.set(
+    centerX,
+    DOME_BASE_Y + DOME_HEIGHT - 3.2,
+    centerZ + 1.8,
+  )
+  // Face the entrance/main hall (+Z) so the mark reads naturally from spawn
+  // and remains a crown element rather than a floor-facing ceiling decal.
+  devLogo.group.rotation.x = -.08
+  devLogo.group.scale.setScalar(.92)
+  group.add(devLogo.group)
+
   return {
     group,
     dispose: () => {
@@ -302,6 +491,7 @@ export function createLibraryDome(
       domeMaterial.dispose()
       gridMaterial.dispose()
       constellationMaterial.dispose()
+      devLogo.dispose()
     },
   }
 }
