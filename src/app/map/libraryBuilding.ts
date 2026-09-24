@@ -42,15 +42,10 @@ const LIBRARY_SKYLIGHT_CENTERS = [
   -52,
   -68,
 ] as const
-const LIBRARY_SKYLIGHT_HALF_WIDTH = 3.2
-const LIBRARY_SKYLIGHT_HALF_DEPTH = 3.15
-const LIBRARY_SKYLIGHT_GLASS_INSET = .08
-
 export function createLibraryBuilding(
   scene: THREE.Scene,
   config: LibraryWorldConfig,
   floatingProps: FloatingPropRegistry,
-  lightDetail: 0 | 1 | 2 | 3 = 3,
 ): LibraryBuilding {
   const group = new THREE.Group()
   group.name = 'sanity-room-library-building'
@@ -794,13 +789,6 @@ export function createLibraryBuilding(
     )
   }
 
-  const roomDistrictBySlot = new Map(
-    roomDistricts.map((district) => [
-      district.roomSlot,
-      district,
-    ]),
-  )
-
   for (const room of LIBRARY_ROOMS) {
     const [x, z] = room.center
     const left = x < 0
@@ -1111,18 +1099,6 @@ export function createLibraryBuilding(
     return instance
   }
 
-  const pendantBulbGeometry =
-    new THREE.SphereGeometry(.085, 12, 10)
-  const pendantBulbMaterial =
-    new THREE.MeshStandardMaterial({
-      color: 0xffdfb5,
-      emissive: 0xffb768,
-      emissiveIntensity: 2.1,
-      roughness: .34,
-      metalness: 0,
-      toneMapped: true,
-    })
-
   const poolCanvas = document.createElement('canvas')
   poolCanvas.width = 128
   poolCanvas.height = 128
@@ -1145,23 +1121,6 @@ export function createLibraryBuilding(
   const pendantPoolTexture = new THREE.CanvasTexture(poolCanvas)
   pendantPoolTexture.colorSpace = THREE.SRGBColorSpace
   pendantPoolTexture.needsUpdate = true
-  const pendantPoolGeometry = new THREE.PlaneGeometry(1, 1)
-  const pendantPoolMaterial = new THREE.MeshBasicMaterial({
-    map: pendantPoolTexture,
-    transparent: true,
-    opacity: .28,
-    depthWrite: false,
-    depthTest: true,
-    blending: THREE.NormalBlending,
-    toneMapped: false,
-    side: THREE.DoubleSide,
-    polygonOffset: true,
-    polygonOffsetFactor: -2,
-    polygonOffsetUnits: -2,
-  })
-
-  localGeometries.push(pendantBulbGeometry, pendantPoolGeometry)
-  localMaterials.push(pendantBulbMaterial, pendantPoolMaterial)
   localTextures.push(pendantPoolTexture)
 
   const sconceHaloGeometry = new THREE.PlaneGeometry(1, 1)
