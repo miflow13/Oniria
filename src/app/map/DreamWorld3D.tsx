@@ -5911,7 +5911,19 @@ export default function DreamWorld3D({
         !flightModeRef.current ||
         diveMode !== 'none' ||
         inputBlockedRef.current ||
-        document.pointerLockElement !== renderer.domElement
+        document.pointerLockElement !== renderer.domElement ||
+        document.hidden ||
+        performance.now() < ignoreFlightMouseUntil
+      ) {
+        return
+      }
+
+      // Browser focus restoration can occasionally emit a single enormous
+      // relative-mouse delta. Treat it as stale input instead of rotating or
+      // flipping the player's view.
+      if (
+        Math.abs(event.movementX) > 500 ||
+        Math.abs(event.movementY) > 500
       ) {
         return
       }
@@ -6222,6 +6234,35 @@ export default function DreamWorld3D({
       flightKeys.delete(event.code)
     }
 
+    let tabWasHidden = document.hidden
+    let ignoreFlightMouseUntil = 0
+
+    function handleVisibilityChange() {
+      if (document.hidden) {
+        tabWasHidden = true
+        flightKeys.clear()
+        flightVelocity.set(0, 0, 0)
+        libraryWalkBobStrength = 0
+        if (document.pointerLockElement === renderer.domElement) {
+          document.exitPointerLock?.()
+        }
+        return
+      }
+
+      if (!tabWasHidden) return
+      tabWasHidden = false
+
+      // Returning from a background tab can deliver one or more stale,
+      // abnormally large pointer-lock deltas. Ignore that short burst and
+      // preserve the exact camera orientation we had before the tab hid.
+      ignoreFlightMouseUntil = performance.now() + 250
+
+      // Reset frame timing so the first visible frame does not simulate the
+      // entire hidden duration as one giant update.
+      lastFrameAt = performance.now()
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
     document.addEventListener('mousemove', handleFlightMouse)
     window.addEventListener(
       'oniria:layout-pin-request',
@@ -6261,6 +6302,15 @@ export default function DreamWorld3D({
 
     function animate(now: number) {
       animationFrame = requestAnimationFrame(animate)
+
+      if (document.hidden) {
+        // Keep the scene alive without advancing movement/physics while the
+        // tab is backgrounded. This prevents apparent environment refreshes
+        // and huge resume-time corrections.
+        lastFrameAt = now
+        return
+      }
+
       const elapsed = (now - startedAt) / 1000
       const delta = Math.min(.05, Math.max(.001, (now - lastFrameAt) / 1000))
       lastFrameAt = now
@@ -8639,6 +8689,7 @@ export default function DreamWorld3D({
       renderer.domElement.removeEventListener('pointerleave', handlePointerLeave)
       renderer.domElement.removeEventListener('wheel', handleWheel)
       renderer.domElement.removeEventListener('dblclick', handleDoubleClick)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
       document.removeEventListener('mousemove', handleFlightMouse)
       window.removeEventListener(
         'oniria:layout-pin-request',
