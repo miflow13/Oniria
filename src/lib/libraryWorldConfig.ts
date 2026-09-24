@@ -304,7 +304,14 @@ export function districtForTags(
 
 
 type SanityLibraryWorldPayload = {
-  config?: Partial<Omit<LibraryWorldConfig, 'source' | 'districts' | 'curatedArticles' | 'journeys'>>
+  config?: Partial<Omit<
+    LibraryWorldConfig,
+    | 'source'
+    | 'districts'
+    | 'curatedArticles'
+    | 'slotStates'
+    | 'journeys'
+  >>
   districts?: Array<Partial<LibraryDistrictConfig>>
   curatedArticles?: Array<Partial<CuratedDevArticleConfig>>
   slotStates?: Array<Partial<LibrarySlotStateConfig>>
