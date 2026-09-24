@@ -1922,6 +1922,103 @@ export function createLibraryBuilding(
     }
 
     if (bookcaseTall) {
+      // The infinite archive should look like the same physical library, not
+      // translucent placeholder geometry. Reuse the authored bookcase GLB so
+      // distant tiers contain real modeled shelves/books/materials.
+      const infiniteAssetRoot = new THREE.Group()
+      infiniteAssetRoot.name = 'library-infinite-asset-archive'
+      infiniteAssetRoot.userData.libraryDecorative = true
+      infiniteAssetRoot.userData.libraryNonInteractive = true
+      group.add(infiniteAssetRoot)
+
+      const placeInfiniteBookcase = (
+        x: number,
+        y: number,
+        z: number,
+        scale: number,
+        yaw: number,
+      ) => {
+        const instance = bookcaseTall.clone(true)
+        instance.position.set(x, y, z)
+        instance.scale.multiplyScalar(scale)
+        instance.rotation.y += yaw
+        instance.name = 'library-infinite-bookcase'
+        instance.userData.libraryDecorative = true
+        instance.userData.libraryNonInteractive = true
+        instance.traverse((child) => {
+          if (!(child instanceof THREE.Mesh)) return
+          child.castShadow = false
+          child.receiveShadow = false
+          child.frustumCulled = true
+          child.userData.libraryDecorative = true
+          child.userData.libraryNonInteractive = true
+        })
+        infiniteAssetRoot.add(instance)
+        return instance
+      }
+
+      // Four clearly readable upper floors. Slight staggering gives lateral
+      // parallax while preserving the existing ground-floor composition.
+      ;[6.35, 10.15, 13.95, 17.75].forEach((y, tierIndex) => {
+        const scale = 1 - tierIndex * .085
+        const inset = tierIndex * .55
+        for (const side of [-1, 1] as const) {
+          ;[-62, -52, -42, -32, -22, -12, -2].forEach(
+            (z, index) => {
+              placeInfiniteBookcase(
+                side * (22.15 - inset),
+                y,
+                z + (index % 2 === 0 ? -.45 : .45),
+                scale,
+                side < 0 ? Math.PI / 2 : -Math.PI / 2,
+              )
+            },
+          )
+        }
+      })
+
+      // Forced-perspective shelves continue behind the final hall wall. The
+      // cases shrink and converge toward the center, making the corridor read
+      // as far deeper than its actual geometry.
+      for (let index = 0; index < 10; index += 1) {
+        const scale = Math.pow(.84, index)
+        const z = -78 - index * 4.45
+        const x = 5.35 * scale
+        placeInfiniteBookcase(
+          -x,
+          .34 + .16 * scale,
+          z,
+          scale,
+          Math.PI / 2,
+        )
+        placeInfiniteBookcase(
+          x,
+          .34 + .16 * scale,
+          z,
+          scale,
+          -Math.PI / 2,
+        )
+      }
+
+      // A handful of detached archive fragments beyond the walls make the
+      // building impossible to parse as one rectangular volume.
+      ;[
+        [-30, 8.4, -18, .78, .18],
+        [31, 11.6, -39, .68, -.14],
+        [-34, 15.5, -58, .56, .24],
+        [29, 18.2, -70, .48, -.2],
+      ].forEach(([x, y, z, scale, yaw]) => {
+        for (let index = -2; index <= 2; index += 1) {
+          placeInfiniteBookcase(
+            x + index * 1.45 * scale,
+            y,
+            z,
+            scale,
+            yaw,
+          )
+        }
+      })
+
       bookcaseTall.updateMatrixWorld(true)
       const mockTemplateSize = new THREE.Box3()
         .setFromObject(bookcaseTall)
