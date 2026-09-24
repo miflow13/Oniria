@@ -810,35 +810,33 @@ export default function DreamWorld3D({
       },
     )
     const nearestRoomEntry = (x: number, z: number) => {
-      const containingRooms = roomDistrictEntries.filter(
-        (entry) =>
-          libraryRoomContainsPoint(
+      // This runs every render frame in library mode. Avoid filter/sort array
+      // allocation and select the nearest containing room in one tiny pass.
+      let nearest: (typeof roomDistrictEntries)[number] | null = null
+      let nearestDistanceSq = Infinity
+
+      for (const entry of roomDistrictEntries) {
+        if (
+          !libraryRoomContainsPoint(
             entry.room,
             x,
             z,
             .18,
-          ),
-      )
+          )
+        ) {
+          continue
+        }
 
-      if (containingRooms.length === 0) {
-        return null
+        const dx = x - entry.center[0]
+        const dz = z - entry.center[1]
+        const distanceSq = dx * dx + dz * dz
+        if (distanceSq < nearestDistanceSq) {
+          nearest = entry
+          nearestDistanceSq = distanceSq
+        }
       }
 
-      // Boundary margins can make adjacent room rectangles overlap by a tiny
-      // amount. Resolve that edge case by choosing the physically nearest
-      // room center, while still requiring the point to be inside a real
-      // rectangular room footprint.
-      return containingRooms.sort((a, b) => {
-        const aDx = x - a.center[0]
-        const aDz = z - a.center[1]
-        const bDx = x - b.center[0]
-        const bDz = z - b.center[1]
-        return (
-          aDx * aDx +
-          aDz * aDz -
-          (bDx * bDx + bDz * bDz)
-        )
-      })[0] ?? null
+      return nearest
     }
 
     const nearestAuthoringRoomEntry = (
@@ -927,7 +925,6 @@ export default function DreamWorld3D({
     )
     const atmosphereBackgroundTarget = new THREE.Color()
     const atmosphereFogTarget = new THREE.Color()
-    const atmosphereLightTarget = new THREE.Color()
     scene.background = sceneBackgroundColor
     scene.fog = libraryMode
       ? new THREE.FogExp2(
@@ -974,7 +971,10 @@ export default function DreamWorld3D({
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.toneMapping = THREE.ACESFilmicToneMapping
     renderer.toneMappingExposure = libraryMode ? .51 : .94
-    renderer.shadowMap.enabled = settings.miniWorldDetail > 0
+    // Library fixtures intentionally cast no realtime shadows; enabling the
+    // shadow subsystem there only adds renderer bookkeeping and texture state.
+    renderer.shadowMap.enabled =
+      settings.miniWorldDetail > 0 && !libraryMode
     renderer.shadowMap.type = THREE.PCFShadowMap
     renderer.domElement.className = styles.webglCanvas
     container.appendChild(renderer.domElement)
@@ -1063,23 +1063,28 @@ export default function DreamWorld3D({
     keyLight.shadow.normalBias = 0.025
     scene.add(keyLight)
 
-    const violetLight = new THREE.PointLight(
-      0xb791ff,
-      libraryMode ? .075 : 12,
-      20,
-      2,
-    )
-    violetLight.position.set(-5, 1, 3)
-    scene.add(violetLight)
+    let violetLight: THREE.PointLight | null = null
+    let cyanLight: THREE.PointLight | null = null
 
-    const cyanLight = new THREE.PointLight(
-      0x72e2df,
-      libraryMode ? .055 : 11,
-      20,
-      2,
-    )
-    cyanLight.position.set(5, -1, 2)
-    scene.add(cyanLight)
+    if (!libraryMode) {
+      violetLight = new THREE.PointLight(
+        0xb791ff,
+        12,
+        20,
+        2,
+      )
+      violetLight.position.set(-5, 1, 3)
+      scene.add(violetLight)
+
+      cyanLight = new THREE.PointLight(
+        0x72e2df,
+        11,
+        20,
+        2,
+      )
+      cyanLight.position.set(5, -1, 2)
+      scene.add(cyanLight)
+    }
 
     const world = new THREE.Group()
     scene.add(world)
@@ -1681,7 +1686,11 @@ export default function DreamWorld3D({
     })
 
     const fragments: THREE.Mesh[] = []
-    for (let index = 0; index < settings.debrisCount; index += 1) {
+    for (
+      let index = 0;
+      index < (libraryMode ? 0 : settings.debrisCount);
+      index += 1
+    ) {
       const geometry =
         index % 2 === 0
           ? new THREE.IcosahedronGeometry(.12 + Math.random() * .22, 0)
@@ -1775,10 +1784,12 @@ export default function DreamWorld3D({
     farWorld.add(impossibleStairs)
     landmarks.push(impossibleStairs)
 
-    const foregroundFogTextures = [
-      createNebulaTexture('rgba(166, 193, 218, 0.36)'),
-      createNebulaTexture('rgba(118, 172, 189, 0.36)'),
-    ]
+    const foregroundFogTextures = libraryMode
+      ? []
+      : [
+          createNebulaTexture('rgba(166, 193, 218, 0.36)'),
+          createNebulaTexture('rgba(118, 172, 189, 0.36)'),
+        ]
     const foregroundFog: THREE.Sprite[] = foregroundFogTextures.map((texture, index) => {
       const material = new THREE.SpriteMaterial({
         map: texture,
@@ -4518,8 +4529,11 @@ export default function DreamWorld3D({
       })
     }
 
-    const categoryNebulae = (Object.keys(CATEGORY_COLORS) as SymbolCategory[])
-      .map((category, index) => {
+    const categoryNebulae = (
+      libraryMode
+        ? []
+        : (Object.keys(CATEGORY_COLORS) as SymbolCategory[])
+    ).map((category, index) => {
         const categoryNodes = nodeRef.current.filter(
           (node) => node.category === category,
         )
@@ -5910,6 +5924,8 @@ export default function DreamWorld3D({
     const tempVector = new THREE.Vector3()
     const control = new THREE.Vector3()
     const curvePoint = new THREE.Vector3()
+    const nearestShelfPoint = new THREE.Vector3()
+    const libraryShelfDistanceById = new Map<string, number>()
 
     let animationFrame = 0
     let lastSelectedId: string | null = null
@@ -6789,16 +6805,22 @@ export default function DreamWorld3D({
 
       let nearestLibraryShelfId: string | null = null
       let nearestLibraryShelfDistance = Infinity
-      const nearestShelfPoint = new THREE.Vector3()
 
       if (libraryMode) {
+        libraryShelfDistanceById.clear()
+        let nearestLibraryShelfDistanceSq = Infinity
+
         nodeRef.current.forEach((node) => {
           if (node.libraryKind !== 'shelf') return
           const visual = nodeVisuals.get(node._id)
           if (!visual) return
           visual.group.getWorldPosition(nearestShelfPoint)
-          const distance = nearestShelfPoint.distanceTo(camera.position)
-          if (distance < nearestLibraryShelfDistance) {
+          const distanceSq =
+            nearestShelfPoint.distanceToSquared(camera.position)
+          const distance = Math.sqrt(distanceSq)
+          libraryShelfDistanceById.set(node._id, distance)
+          if (distanceSq < nearestLibraryShelfDistanceSq) {
+            nearestLibraryShelfDistanceSq = distanceSq
             nearestLibraryShelfDistance = distance
             nearestLibraryShelfId = node._id
           }
@@ -6820,9 +6842,11 @@ export default function DreamWorld3D({
         })
 
         if (libraryShelfLight && nearestVisual) {
-          libraryShelfLight.position
-            .copy(nearestVisual.group.position)
-            .add(new THREE.Vector3(0, 1.35, 1.2))
+          libraryShelfLight.position.copy(
+            nearestVisual.group.position,
+          )
+          libraryShelfLight.position.y += 1.35
+          libraryShelfLight.position.z += 1.2
           libraryShelfLight.intensity +=
             (focusStrength * 2.1 - libraryShelfLight.intensity) * .08
         } else if (libraryShelfLight) {
@@ -6844,7 +6868,8 @@ export default function DreamWorld3D({
         libraryBookVisuals.forEach((bookVisual) => {
           const shelfVisual = nodeVisuals.get(bookVisual.nodeId)
           const shelfDistance = shelfVisual
-            ? camera.position.distanceTo(shelfVisual.group.position)
+            ? (libraryShelfDistanceById.get(bookVisual.nodeId) ??
+              camera.position.distanceTo(shelfVisual.group.position))
             : Infinity
           const awake =
             bookVisual.nodeId === nearestLibraryShelfId
@@ -6999,7 +7024,8 @@ export default function DreamWorld3D({
 
         const shelfDistance =
           node.libraryKind === 'shelf'
-            ? camera.position.distanceTo(visual.group.position)
+            ? (libraryShelfDistanceById.get(node._id) ??
+              camera.position.distanceTo(visual.group.position))
             : Infinity
         const isNearestLibraryShelf =
           node.libraryKind === 'shelf' &&
@@ -7242,7 +7268,7 @@ export default function DreamWorld3D({
         visual.core.rotation.y -= .008
       }
 
-      libraryFloatingProps.update(elapsed)
+      libraryFloatingProps.update(elapsed, camera.position)
 
       if (libraryMode) {
         shelfBookLabelLayers.forEach(({shelfRoot, layer}) => {
@@ -7517,42 +7543,16 @@ export default function DreamWorld3D({
           atmosphereBackgroundTarget,
           .035,
         )
-        atmosphereLightTarget.setHex(
-          atmospherePreset.tint,
-        )
-        violetLight.color.lerp(
-          atmosphereLightTarget,
-          .035,
-        )
-        cyanLight.color.lerp(
-          atmosphereLightTarget,
-          .022,
-        )
       }
 
-      const atmosphereLightScale = libraryMode
-        ? atmospherePreset.lightStrength
-        : 1
-      const violetTarget =
-        (libraryMode
-          ? selectedVisual
-            ? .12
-            : .055
-          : selectedVisual
-            ? 4.7
-            : 4) * atmosphereLightScale
-      const cyanTarget =
-        (libraryMode
-          ? selectedVisual
-            ? .09
-            : .04
-          : selectedVisual
-            ? 4.3
-            : 3.6) * atmosphereLightScale
-      violetLight.intensity +=
-        (violetTarget - violetLight.intensity) * .035
-      cyanLight.intensity +=
-        (cyanTarget - cyanLight.intensity) * .035
+      if (violetLight && cyanLight) {
+        const violetTarget = selectedVisual ? 4.7 : 4
+        const cyanTarget = selectedVisual ? 4.3 : 3.6
+        violetLight.intensity +=
+          (violetTarget - violetLight.intensity) * .035
+        cyanLight.intensity +=
+          (cyanTarget - cyanLight.intensity) * .035
+      }
 
       if (flightActive && flightInitialized) {
         const routeActive = Boolean(flightRoute)
@@ -7737,7 +7737,7 @@ export default function DreamWorld3D({
           )
         }
 
-        if (!routeActive) {
+        if (!routeActive && !libraryMode) {
           nodeVisuals.forEach((visual) => {
             visual.group.getWorldPosition(flightCollisionPoint)
             flightCollisionDelta
