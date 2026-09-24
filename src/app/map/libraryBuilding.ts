@@ -49,6 +49,7 @@ export function createLibraryBuilding(
   scene: THREE.Scene,
   config: LibraryWorldConfig,
   floatingProps: FloatingPropRegistry,
+  lightDetail: 0 | 1 | 2 | 3 = 3,
 ): LibraryBuilding {
   const group = new THREE.Group()
   group.name = 'sanity-room-library-building'
@@ -306,6 +307,12 @@ export function createLibraryBuilding(
     localGeometries.push(plaqueGeometry, backGeometry)
 
     const signGroup = new THREE.Group()
+    const signId =
+      'library-sign:' +
+      title.toLowerCase().replace(/[^a-z0-9]+/g, '-') +
+      ':' +
+      position.map((value) => value.toFixed(2)).join(':')
+    signGroup.name = signId
     signGroup.position.set(...position)
     signGroup.rotation.y = yaw
 
@@ -325,6 +332,20 @@ export function createLibraryBuilding(
     signGroup.add(plaque)
 
     group.add(signGroup)
+    floatingProps.register(signGroup, {
+      phase: floatingPhase(signId),
+      hoverAmplitude: .11,
+      hoverSpeed: .13,
+      secondaryHoverAmplitude: .025,
+      secondaryHoverSpeed: .27,
+      tiltX: .012,
+      tiltY: .022,
+      tiltZ: .018,
+      driftSide: .09,
+      driftForward: .035,
+      driftSpeedSide: .1,
+      driftSpeedForward: .07,
+    })
     return signGroup
   }
 
@@ -854,14 +875,19 @@ export function createLibraryBuilding(
             ? .17
             : .15
 
-    const accentLight = new THREE.PointLight(
-      new THREE.Color(accent),
-      roomIntensity,
-      10,
-      2,
-    )
-    accentLight.position.set(x, 3.05, z)
-    group.add(accentLight)
+    if (
+      lightDetail >= 2 ||
+      (lightDetail === 1 && room.slot % 2 === 0)
+    ) {
+      const accentLight = new THREE.PointLight(
+        new THREE.Color(accent),
+        roomIntensity,
+        10,
+        2,
+      )
+      accentLight.position.set(x, 3.05, z)
+      group.add(accentLight)
+    }
 
     // The actual pendant mesh gets its bulb, point light, and soft downward
     // cone once the GLB finishes loading below. Keeping light generation tied
@@ -869,24 +895,26 @@ export function createLibraryBuilding(
     // their illumination.
   }
 
-  ;[
-    {position: [-18.2, 2.8, -12] as const, intensity: .22},
-    {position: [18, 2.75, -32] as const, intensity: .17},
-    {position: [-16, 2.9, -52] as const, intensity: .24},
-  ].forEach(({position, intensity}) => {
-    const readingLight = new THREE.PointLight(
-      0xffcf9e,
-      intensity,
-      5.3,
-      2,
-    )
-    readingLight.position.set(
-      position[0],
-      position[1],
-      position[2],
-    )
-    group.add(readingLight)
-  })
+  if (lightDetail >= 2) {
+    ;[
+      {position: [-18.2, 2.8, -12] as const, intensity: .22},
+      {position: [18, 2.75, -32] as const, intensity: .17},
+      {position: [-16, 2.9, -52] as const, intensity: .24},
+    ].forEach(({position, intensity}) => {
+      const readingLight = new THREE.PointLight(
+        0xffcf9e,
+        intensity,
+        5.3,
+        2,
+      )
+      readingLight.position.set(
+        position[0],
+        position[1],
+        position[2],
+      )
+      group.add(readingLight)
+    })
+  }
 
   addWall(-8, 9, .28, 11, 5)
   addWall(8, 9, .28, 11, 5)
@@ -1296,30 +1324,40 @@ export function createLibraryBuilding(
     bulb.name = `library-pendant-bulb-${id}`
     group.add(bulb)
 
-    const point = new THREE.PointLight(
-      0xffc98a,
-      pointIntensity,
-      distance,
-      2,
+    const lightPosition = new THREE.Vector3(
+      center.x,
+      bulbY - .04,
+      center.z,
     )
-    point.position.set(center.x, bulbY - .04, center.z)
-    point.castShadow = false
-    point.name = `library-pendant-point-${id}`
-    group.add(point)
 
-    const spot = new THREE.SpotLight(
-      0xffddb2,
-      spotIntensity * .58,
-      Math.max(4.6, distance - 1.1),
-      Math.PI / 4.45,
-      .9,
-      2,
-    )
-    spot.position.copy(point.position)
-    spot.castShadow = false
-    spot.target.position.set(center.x, .55, center.z)
-    spot.name = `library-pendant-spot-${id}`
-    group.add(spot, spot.target)
+    if (lightDetail >= 1) {
+      const point = new THREE.PointLight(
+        0xffc98a,
+        pointIntensity,
+        distance,
+        2,
+      )
+      point.position.copy(lightPosition)
+      point.castShadow = false
+      point.name = `library-pendant-point-${id}`
+      group.add(point)
+    }
+
+    if (lightDetail >= 2) {
+      const spot = new THREE.SpotLight(
+        0xffddb2,
+        spotIntensity * .58,
+        Math.max(4.6, distance - 1.1),
+        Math.PI / 4.45,
+        .9,
+        2,
+      )
+      spot.position.copy(lightPosition)
+      spot.castShadow = false
+      spot.target.position.set(center.x, .55, center.z)
+      spot.name = `library-pendant-spot-${id}`
+      group.add(spot, spot.target)
+    }
 
     const pool = new THREE.Mesh(
       pendantPoolGeometry,
@@ -1403,21 +1441,26 @@ export function createLibraryBuilding(
         `library-room-ceiling-lens-${room.slot}-${fixtureIndex}`
       group.add(lens)
 
-      const fill = new THREE.PointLight(
-        0xffd2a1,
-        22,
-        5.6,
-        2,
-      )
-      fill.position.set(
-        roomX,
-        4.68,
-        roomZ + zOffset,
-      )
-      fill.castShadow = false
-      fill.name =
-        `library-room-ceiling-light-${room.slot}-${fixtureIndex}`
-      group.add(fill)
+      if (
+        lightDetail >= 2 ||
+        (lightDetail === 1 && fixtureIndex === 0)
+      ) {
+        const fill = new THREE.PointLight(
+          0xffd2a1,
+          22,
+          5.6,
+          2,
+        )
+        fill.position.set(
+          roomX,
+          4.68,
+          roomZ + zOffset,
+        )
+        fill.castShadow = false
+        fill.name =
+          `library-room-ceiling-light-${room.slot}-${fixtureIndex}`
+        group.add(fill)
+      }
     })
   })
 
@@ -1456,21 +1499,23 @@ export function createLibraryBuilding(
     'library-surveyed-ceiling-lens-latest-front'
   group.add(surveyedLens)
 
-  const surveyedFill = new THREE.PointLight(
-    0xffd2a1,
-    28,
-    6.2,
-    2,
-  )
-  surveyedFill.position.set(
-    surveyedLatestLight.x,
-    4.68,
-    surveyedLatestLight.z,
-  )
-  surveyedFill.castShadow = false
-  surveyedFill.name =
-    'library-surveyed-ceiling-light-latest-front'
-  group.add(surveyedFill)
+  if (lightDetail >= 1) {
+    const surveyedFill = new THREE.PointLight(
+      0xffd2a1,
+      28,
+      6.2,
+      2,
+    )
+    surveyedFill.position.set(
+      surveyedLatestLight.x,
+      4.68,
+      surveyedLatestLight.z,
+    )
+    surveyedFill.castShadow = false
+    surveyedFill.name =
+      'library-surveyed-ceiling-light-latest-front'
+    group.add(surveyedFill)
+  }
 
   const ready = (async () => {
     const requests = await Promise.allSettled([
@@ -1865,20 +1910,26 @@ export function createLibraryBuilding(
         glass.name = `library-skylight-glass-${index}`
         group.add(glass)
 
-        // Daylight exists physically, but the old visible cone mesh is gone.
-        const daylight = new THREE.SpotLight(
-          0xc9e6ff,
-          30,
-          9.5,
-          Math.PI / 3,
-          .96,
-          2,
-        )
-        daylight.position.set(0, 6.1, z)
-        daylight.target.position.set(0, .45, z)
-        daylight.castShadow = false
-        daylight.name = `library-open-skylight-light-${index}`
-        group.add(daylight, daylight.target)
+        // Daylight exists physically, but lower graphics tiers keep the
+        // skylight itself emissive instead of paying for five extra spotlights.
+        if (
+          lightDetail >= 3 ||
+          (lightDetail === 2 && index % 2 === 0)
+        ) {
+          const daylight = new THREE.SpotLight(
+            0xc9e6ff,
+            30,
+            9.5,
+            Math.PI / 3,
+            .96,
+            2,
+          )
+          daylight.position.set(0, 6.1, z)
+          daylight.target.position.set(0, .45, z)
+          daylight.castShadow = false
+          daylight.name = `library-open-skylight-light-${index}`
+          group.add(daylight, daylight.target)
+        }
 
         // Floating stones and fragments above each opening sell that this roof
         // looks into Oniria rather than an ordinary building exterior.
@@ -2349,35 +2400,39 @@ export function createLibraryBuilding(
           .addScaledVector(forward, .22)
         lightPosition.y += .03
 
-        const sconcePoint = new THREE.PointLight(
-          0xffc07a,
-          34,
-          4.6,
-          2,
-        )
-        sconcePoint.position.copy(lightPosition)
-        sconcePoint.castShadow = false
-        sconcePoint.name =
-          `library-sconce-point-${placement.id}`
-        group.add(sconcePoint)
+        if (lightDetail >= 2) {
+          const sconcePoint = new THREE.PointLight(
+            0xffc07a,
+            34,
+            4.6,
+            2,
+          )
+          sconcePoint.position.copy(lightPosition)
+          sconcePoint.castShadow = false
+          sconcePoint.name =
+            `library-sconce-point-${placement.id}`
+          group.add(sconcePoint)
+        }
 
-        const sconceSpot = new THREE.SpotLight(
-          0xffd3a0,
-          16,
-          4.4,
-          Math.PI / 3.15,
-          .82,
-          2,
-        )
-        sconceSpot.position.copy(lightPosition)
-        sconceSpot.castShadow = false
-        sconceSpot.target.position
-          .copy(lightPosition)
-          .addScaledVector(forward, 1.55)
-        sconceSpot.target.position.y -= .72
-        sconceSpot.name =
-          `library-sconce-spot-${placement.id}`
-        group.add(sconceSpot, sconceSpot.target)
+        if (lightDetail >= 3) {
+          const sconceSpot = new THREE.SpotLight(
+            0xffd3a0,
+            16,
+            4.4,
+            Math.PI / 3.15,
+            .82,
+            2,
+          )
+          sconceSpot.position.copy(lightPosition)
+          sconceSpot.castShadow = false
+          sconceSpot.target.position
+            .copy(lightPosition)
+            .addScaledVector(forward, 1.55)
+          sconceSpot.target.position.y -= .72
+          sconceSpot.name =
+            `library-sconce-spot-${placement.id}`
+          group.add(sconceSpot, sconceSpot.target)
+        }
 
         const halo = new THREE.Mesh(
           sconceHaloGeometry,
@@ -2724,15 +2779,17 @@ export function createLibraryBuilding(
     oculusFrame.position.set(0, 4.05, -74.77)
     group.add(oculusGlass, oculusFrame)
 
-    const oculusLight = new THREE.PointLight(
-      0xffc886,
-      .18,
-      5.5,
-      2,
-    )
-    oculusLight.position.set(0, 4.05, -73.95)
-    oculusLight.castShadow = false
-    group.add(oculusLight)
+    if (lightDetail >= 1) {
+      const oculusLight = new THREE.PointLight(
+        0xffc886,
+        .18,
+        5.5,
+        2,
+      )
+      oculusLight.position.set(0, 4.05, -73.95)
+      oculusLight.castShadow = false
+      group.add(oculusLight)
+    }
 
   })().catch((error) => {
     console.warn('Library building asset pass failed', error)
