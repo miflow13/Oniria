@@ -81,6 +81,7 @@ export default defineConfig({
                   ]),
               ),
             S.documentTypeListItem('libraryLayoutMarker').title('Layout Pins · Authoring'),
+            S.documentTypeListItem('librarySlotState').title('Living Shelf Slots'),
             S.documentTypeListItem('curatedArticle').title('Curator Picks'),
             S.documentTypeListItem('archiveJourney').title('Guided Journeys'),
             S.divider(),
