@@ -113,3 +113,31 @@ sanity.cli.ts
 8. Save the dream.
 9. Confirm it appears at the top of the journal and changes the map.
 # Oniria
+
+
+## Living DEV Library evolution
+
+The Topics room can evolve persistent shelf occupancy from live DEV activity.
+
+- Physical shelf coordinates are permanent slots.
+- Sanity `librarySlotState` documents store each slot's current occupant, lifecycle, vitality, and history.
+- `/api/library-evolution` samples recent/trending DEV articles and evolves topic slots.
+- Vercel runs the evolution endpoint every 30 minutes through `vercel.json`.
+- The renderer reads the shared Sanity slot state, so visitors see the same world.
+
+Production requires:
+
+```env
+SANITY_API_WRITE_TOKEN=your_server_side_write_token
+CRON_SECRET=use_a_long_random_secret
+```
+
+Vercel sends `CRON_SECRET` to the scheduled endpoint as a Bearer token. Keep both values server-only.
+
+For local development, with Sanity configured and a write token available, force an evolution pass with:
+
+```text
+GET /api/library-evolution?force=1
+```
+
+The lifecycle is `dormant → forming → active → cooling → dormant`. Archival events remain in the slot's Sanity history even after the physical space becomes available again.
