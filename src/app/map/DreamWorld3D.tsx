@@ -2994,6 +2994,10 @@ export default function DreamWorld3D({
           node.libraryWidthScale ?? 1
         shelfContactShadow.renderOrder = 1
         shelfContactShadow.userData.libraryDecorative = true
+        shelfContactShadow.visible =
+          node.libraryShelfLifecycle !== 'forming'
+        group.userData.libraryContactShadow =
+          shelfContactShadow
         world.add(shelfContactShadow)
         shelfContactShadows.push(shelfContactShadow)
         const shelfFloatId = node.libraryFloatId ?? node._id
@@ -5366,6 +5370,12 @@ export default function DreamWorld3D({
       for (const node of nodeRef.current) {
         const visual = nodeVisuals.get(node._id)
         if (!visual) continue
+        if (
+          visual.group.userData
+            .libraryMaterializationArmed === true
+        ) {
+          continue
+        }
         visual.group.getWorldPosition(worldPoint)
         const distance = worldPoint.distanceTo(camera.position)
         if (
@@ -7069,6 +7079,12 @@ export default function DreamWorld3D({
               .libraryMaterializationStartedAt = now
             delete visual.group.userData
               .libraryMaterializationArmed
+            const contactShadow =
+              visual.group.userData
+                .libraryContactShadow as
+                | THREE.Object3D
+                | undefined
+            if (contactShadow) contactShadow.visible = true
           }
 
           if (
@@ -7839,6 +7855,12 @@ export default function DreamWorld3D({
 
         if (!routeActive) {
           nodeVisuals.forEach((visual) => {
+            if (
+              visual.group.userData
+                .libraryMaterializationArmed === true
+            ) {
+              return
+            }
             visual.group.getWorldPosition(flightCollisionPoint)
             flightCollisionDelta
               .copy(flightPosition)
