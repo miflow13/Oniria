@@ -358,7 +358,7 @@ function createInfiniteHorizonSilhouettes(
         )
         shelf.position.set(
           baseX +
-            (direction.z !== 0 ? offset : direction.x * depthIndex),
+            (direction.x === 0 ? offset : direction.x * depthIndex),
           1.6 + verticalTier * 1.25,
           baseZ +
             (direction.x !== 0 ? offset : direction.z * depthIndex),
