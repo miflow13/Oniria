@@ -1108,7 +1108,7 @@ export default function DreamWorld3D({
     )
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = libraryMode ? .51 : .94
+    renderer.toneMappingExposure = libraryMode ? .54 : .94
     renderer.shadowMap.enabled =
       settings.miniWorldDetail > 0 &&
       (!libraryMode || libraryGraphicsOptions.shadows)
@@ -1119,7 +1119,7 @@ export default function DreamWorld3D({
     const cinematicEnvironment = createCinematicEnvironment(renderer)
     scene.environment = cinematicEnvironment.texture
     scene.environmentIntensity = libraryMode
-      ? settings.environmentIntensity * .4
+      ? settings.environmentIntensity * .46
       : settings.environmentIntensity
 
     const composer = new EffectComposer(renderer)
@@ -1188,7 +1188,7 @@ export default function DreamWorld3D({
       librarySkyFill = new THREE.HemisphereLight(
         0x8fb7e8,
         0x24180f,
-        qualityRef.current === 'low' ? .72 : .9,
+        qualityRef.current === 'low' ? .82 : 1.02,
       )
       librarySkyFill.name = 'library-sky-fill'
       scene.add(librarySkyFill)
@@ -1196,12 +1196,12 @@ export default function DreamWorld3D({
       libraryMoonLight = new THREE.DirectionalLight(
         0xc8dcff,
         qualityRef.current === 'cinematic'
-          ? 1.2
+          ? 1.28
           : qualityRef.current === 'high'
-            ? 1.08
+            ? 1.16
             : qualityRef.current === 'medium'
-              ? .94
-              : .82,
+              ? 1.02
+              : .9,
       )
       libraryMoonLight.position.set(28, 42, 16)
       libraryMoonLight.target.position.set(0, 0, -28)
@@ -1223,7 +1223,7 @@ export default function DreamWorld3D({
 
       libraryHorizonFill = new THREE.DirectionalLight(
         0xffc995,
-        qualityRef.current === 'low' ? .16 : .24,
+        qualityRef.current === 'low' ? .2 : .28,
       )
       libraryHorizonFill.position.set(-26, 12, -42)
       libraryHorizonFill.target.position.set(0, 1.4, -26)
@@ -2378,7 +2378,7 @@ export default function DreamWorld3D({
     >()
     const shelfCoverQueue: string[] = []
     let shelfCoverLoadsInFlight = 0
-    const MAX_SHELF_COVER_LOADS = 4
+    const MAX_SHELF_COVER_LOADS = 3
 
     const applyShelfCoverTexture = (
       material: THREE.MeshStandardMaterial,
@@ -7195,7 +7195,7 @@ export default function DreamWorld3D({
       if (
         libraryMode &&
         pendingShelfHydrators.size > 0 &&
-        elapsed - lastShelfHydrationAt > .07
+        elapsed - lastShelfHydrationAt > .12
       ) {
         let hydrateId: string | null = null
         let hydrateDistance = Infinity
@@ -7216,7 +7216,7 @@ export default function DreamWorld3D({
         // Only hydrate shelves near the player's current zone. Shelf frames
         // remain visible everywhere, while books and covers stream in as the
         // player approaches instead of all being built during first paint.
-        if (hydrateId && hydrateDistance < 46) {
+        if (hydrateId && hydrateDistance < 34) {
           pendingShelfHydrators.get(hydrateId)?.()
           lastShelfHydrationAt = elapsed
         }
@@ -7665,7 +7665,7 @@ export default function DreamWorld3D({
                   ? .045
                   : .012
           visual.label.visible =
-            labelDistance < 88 ||
+            labelDistance < 62 ||
             selected ||
             hoveredId === node._id
           const shelfLabelTarget =
@@ -7767,7 +7767,7 @@ export default function DreamWorld3D({
                 : .012
         if (node.libraryKind === 'shelf') {
           visual.label.visible =
-            labelDistance < 88 ||
+            labelDistance < 62 ||
             selected ||
             hoveredId === node._id
         }
@@ -8007,12 +8007,12 @@ export default function DreamWorld3D({
 
       const baseExposure = libraryMode
         ? readingRitualActive
-          ? .44
+          ? .47
           : selectedVisual?.group.userData.libraryKind === 'shelf'
-            ? .55
+            ? .58
             : selectedVisual
-              ? .57
-              : .51
+              ? .6
+              : .54
         : readingRitualActive
           ? .66
           : selectedVisual?.group.userData.libraryKind === 'shelf'
@@ -8023,8 +8023,8 @@ export default function DreamWorld3D({
       const exposureTarget = libraryMode
         ? THREE.MathUtils.clamp(
             baseExposure * atmospherePreset.exposureScale,
-            .38,
-            .59,
+            .41,
+            .62,
           )
         : baseExposure
       renderer.toneMappingExposure +=
@@ -8082,7 +8082,7 @@ export default function DreamWorld3D({
             .018,
           )
           const skyTarget =
-            (qualityRef.current === 'low' ? .72 : .9) *
+            (qualityRef.current === 'low' ? .82 : 1.02) *
             atmospherePreset.lightStrength
           librarySkyFill.intensity +=
             (skyTarget - librarySkyFill.intensity) * .035
@@ -8090,7 +8090,7 @@ export default function DreamWorld3D({
 
         if (libraryMoonLight) {
           const moonTarget =
-            (selectedVisual ? 1.12 : .94) *
+            (selectedVisual ? 1.18 : 1.02) *
             atmospherePreset.lightStrength
           libraryMoonLight.intensity +=
             (moonTarget - libraryMoonLight.intensity) * .03
@@ -8098,7 +8098,7 @@ export default function DreamWorld3D({
 
         if (libraryHorizonFill) {
           const horizonTarget =
-            (selectedVisual ? .28 : .22) *
+            (selectedVisual ? .32 : .27) *
             atmospherePreset.lightStrength
           libraryHorizonFill.intensity +=
             (horizonTarget - libraryHorizonFill.intensity) * .03

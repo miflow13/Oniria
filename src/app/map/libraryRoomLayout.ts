@@ -598,6 +598,25 @@ export function surveyedRoomShelfPlacements(
     })
   }
 
+  // QA pin R5-P01: the reverse side of the Archive divider wall was
+  // visually empty from the terminal corridor. Keep the real DEV shelf tied
+  // to the surveyed marker so this wall has one meaningful interactive case
+  // instead of another guessed placement.
+  if (room.slot === 5) {
+    placements.push({
+      world: [15.497, .62, -62.431],
+      yaw: Math.PI,
+      doubleSided: false,
+      endCaps: 'none',
+      floatId: 'archive:qa-pin:R5-P01',
+      pathBay: district.bay,
+      districtId: district.id,
+      slotId: 'PIN-R5-P01',
+      zone: 'rear-wall',
+      widthScale: 1,
+    })
+  }
+
   return placements
 }
 
@@ -727,7 +746,7 @@ export const LIBRARY_FURNISHINGS: LibraryFurnishingPlacement[] = [
   // The Issue Desk is the first deliberate stop after spawn. It sits far
   // enough forward to feel like a welcome counter while leaving generous
   // space to walk around either side into the atrium.
-  {id: 'atrium-issue-desk', asset: 'issueDesk', position: [0, .08, 6.35], yaw: Math.PI, scale: 1, hoverAmplitude: .012, hoverSpeed: .075, tiltX: .0025, tiltZ: .002, collider: [3.6, 1.35], castsShadow: true},
+  {id: 'atrium-issue-desk', asset: 'issueDesk', position: [0, .08, 6.35], yaw: Math.PI, scale: 1, hoverAmplitude: .012, hoverSpeed: .075, tiltX: .0025, tiltZ: .002, collider: [3.05, .92], castsShadow: true},
 
   // Atrium threshold and one deliberately off-axis reading island.
   {id: 'atrium-column-left', asset: 'column', position: [-5.25, .05, 7], hoverAmplitude: .012, hoverSpeed: .1, tiltZ: .0006, collider: [.9, .9]},
@@ -835,7 +854,7 @@ export const LIBRARY_FURNISHINGS: LibraryFurnishingPlacement[] = [
       tiltX: .055,
       tiltY: .048,
       tiltZ: .065,
-      collider: [1.95, 1.35],
+      collider: [1.55, .88],
       castsShadow: true,
     }),
   ),

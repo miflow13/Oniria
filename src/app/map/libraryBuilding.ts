@@ -1033,6 +1033,29 @@ export function createLibraryBuilding(
     group.add(bank)
   }
 
+  // archive-rear-wall-mock-cases
+  // R5-P01 anchors a real interactive Archive shelf in libraryRoomLayout.
+  // Two cheap non-interactive cases flank it on the terminal-corridor side
+  // of the divider wall so the previously empty wall reads as a collection.
+  addInfiniteShelfBank(
+    10.35,
+    1.28,
+    -62.62,
+    Math.PI,
+    2,
+    1.38,
+    .92,
+  )
+  addInfiniteShelfBank(
+    20.65,
+    1.28,
+    -62.62,
+    Math.PI,
+    2,
+    1.38,
+    .92,
+  )
+
   // Outer-wall mega stacks. Each level is slightly narrower and dimmer so
   // the architecture appears to recede upward into the dome.
   ;[6.6, 10.1, 13.6, 17.1].forEach((tierY, tierIndex) => {

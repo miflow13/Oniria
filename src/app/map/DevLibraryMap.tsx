@@ -69,7 +69,7 @@ function emitLibraryDelight(
   )
 }
 
-const CATALOG_PAGE_SIZE = 100
+const CATALOG_PAGE_SIZE = 60
 const CATALOG_BOOKS_PER_SHELF = 9
 const DISTRICT_RENDERED_SHELF_LIMIT =
   LIBRARY_MAX_ROOM_SHELF_COUNT
@@ -365,12 +365,6 @@ function sanitizeArticleHtml(
 export default function DevLibraryMap() {
   const [bootstrap, setBootstrap] = useState<DevBootstrap | null>(null)
   const [catalog, setCatalog] = useState<DevArticleSummary[]>([])
-  const [catalogHasMore, setCatalogHasMore] = useState(true)
-  const [catalogLoading, setCatalogLoading] = useState(false)
-  const catalogNextPageRef = useRef(1)
-  const catalogLoadingRef = useRef(false)
-  const catalogHasMoreRef = useRef(true)
-  const catalogInitializedRef = useRef(false)
   const bootstrapRefreshingRef = useRef(false)
   const [devRefreshTick, setDevRefreshTick] = useState(0)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -842,68 +836,6 @@ export default function DevLibraryMap() {
     [worldConfig],
   )
 
-  const loadMoreCatalog = useCallback(async (pages = 1) => {
-    if (
-      catalogLoadingRef.current ||
-      !catalogHasMoreRef.current
-    ) {
-      return
-    }
-
-    catalogLoadingRef.current = true
-    setCatalogLoading(true)
-    const page = catalogNextPageRef.current
-
-    try {
-      const response = await fetch(
-        '/api/devto?mode=catalog&start_page=' +
-          page +
-          '&pages=' +
-          Math.max(1, Math.min(4, pages)) +
-          '&per_page=' +
-          CATALOG_PAGE_SIZE,
-      )
-      if (!response.ok) {
-        throw new Error('Could not extend DEV catalogue')
-      }
-
-      const payload = (await response.json()) as {
-        articles?: DevArticleSummary[]
-        nextPage?: number
-        hasMore?: boolean
-      }
-      const incoming = payload.articles ?? []
-
-      setCatalog((current) => {
-        const seen = new Set(current.map((article) => article.id))
-        return [
-          ...current,
-          ...incoming.filter((article) => {
-            if (seen.has(article.id)) return false
-            seen.add(article.id)
-            return true
-          }),
-        ]
-      })
-
-      catalogNextPageRef.current =
-        payload.nextPage ?? page + 1
-      const hasMore =
-        Boolean(payload.hasMore) && incoming.length > 0
-      catalogHasMoreRef.current = hasMore
-      setCatalogHasMore(hasMore)
-    } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : 'Could not extend DEV catalogue',
-      )
-    } finally {
-      catalogLoadingRef.current = false
-      setCatalogLoading(false)
-    }
-  }, [])
-
   const refreshWorldConfig = useCallback(
     async (
       applyDefaultMovement = false,
@@ -954,7 +886,7 @@ export default function DevLibraryMap() {
 
       try {
         if (initial) setLoading(true)
-        const response = await fetch(
+        const bootstrapResponse = await fetch(
           '/api/devto?mode=bootstrap&username=' +
             encodeURIComponent(DEFAULT_USERNAME) +
             '&_=' +
@@ -965,19 +897,46 @@ export default function DevLibraryMap() {
           },
         )
 
-        if (!response.ok) {
+        if (!bootstrapResponse.ok) {
           throw new Error('Could not load DEV library')
         }
 
-        const payload = (await response.json()) as DevBootstrap
-        setBootstrap(payload)
-        setDevRefreshTick((current) => current + 1)
+        const payload =
+          (await bootstrapResponse.json()) as DevBootstrap
 
-        if (initial && !catalogInitializedRef.current) {
-          // Do not compete with first render by pulling the Archive up front.
-          // The bootstrap already provides enough fallback books for the
-          // Archive facade; real catalogue pages stream in on approach.
-          catalogInitializedRef.current = true
+        // Prime one Archive page before the 3D world is revealed. Archive
+        // shelves therefore start with real long-tail content instead of
+        // fetching/rebuilding when the visitor reaches the back room.
+        let initialCatalog: DevArticleSummary[] = []
+        if (initial) {
+          try {
+            const catalogResponse = await fetch(
+              '/api/devto?mode=catalog&start_page=1&pages=1&per_page=' +
+                CATALOG_PAGE_SIZE,
+              {
+                cache: 'no-store',
+                headers: {'cache-control': 'no-cache'},
+              },
+            )
+            if (catalogResponse.ok) {
+              const catalogPayload =
+                (await catalogResponse.json()) as {
+                  articles?: DevArticleSummary[]
+                }
+              initialCatalog = catalogPayload.articles ?? []
+            }
+          } catch {
+            // Bootstrap content remains a valid Archive fallback.
+          }
+        }
+
+        // Keep the physical library session-stable. Background live DEV
+        // refreshes previously replaced shelf data underneath the active
+        // Three.js scene, which caused camera spins and flow interruptions.
+        if (initial) {
+          setCatalog(initialCatalog)
+          setBootstrap(payload)
+          setDevRefreshTick((current) => current + 1)
         }
       } catch (caught) {
         if (initial) {
@@ -992,7 +951,7 @@ export default function DevLibraryMap() {
         if (initial) setLoading(false)
       }
     },
-    [loadMoreCatalog],
+    [],
   )
 
   useEffect(() => {
@@ -1027,40 +986,10 @@ export default function DevLibraryMap() {
     }
   }, [refreshWorldConfig])
 
-  useEffect(() => {
-    if (!worldConfig.liveDevUpdates) return
-
-    const refreshIfVisible = () => {
-      if (document.visibilityState === 'visible') {
-        void refreshDevBootstrap(false)
-      }
-    }
-    const interval = window.setInterval(
-      refreshIfVisible,
-      90_000,
-    )
-
-    const refreshOnVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        void refreshDevBootstrap(false)
-      }
-    }
-
-    window.addEventListener('focus', refreshIfVisible)
-    document.addEventListener(
-      'visibilitychange',
-      refreshOnVisibility,
-    )
-
-    return () => {
-      window.clearInterval(interval)
-      window.removeEventListener('focus', refreshIfVisible)
-      document.removeEventListener(
-        'visibilitychange',
-        refreshOnVisibility,
-      )
-    }
-  }, [refreshDevBootstrap, worldConfig.liveDevUpdates])
+  // DEV content is intentionally frozen for the lifetime of the current
+  // physical library session. Search still queries DEV live, while shelf
+  // refreshes apply on the next page load instead of rebuilding the world
+  // under an active visitor.
 
   useEffect(() => {
     let cancelled = false
@@ -1863,8 +1792,6 @@ export default function DevLibraryMap() {
     shelves.find((shelf) => shelf.id === hoveredId) ?? null
   const nearestShelf =
     shelves.find((shelf) => shelf.id === navigation.nearestId) ?? null
-  const routeShelf =
-    shelves.find((shelf) => shelf.id === navigation.routeTargetId) ?? null
   const focusedShelf = focusedBook
     ? shelves.find((shelf) => shelf.id === focusedBook.shelfId) ?? null
     : null
@@ -1882,9 +1809,6 @@ export default function DevLibraryMap() {
         (shelf) => shelf.id === spatialContext.shelfId,
       ) ?? null
     : null
-  const catalogShelfCount = shelves.filter(
-    (shelf) => shelf.kind === 'catalog',
-  ).length
   const topicDistrictIndex = roomWorldConfig.districts.findIndex(
     (district) =>
       district.sourceMode === 'topics' ||
@@ -1912,68 +1836,9 @@ export default function DevLibraryMap() {
     selectedShelf?.kind === 'topics' ||
     hoveredShelf?.kind === 'topics' ||
     nearestShelf?.kind === 'topics'
-  const lastCatalogLoadTriggerRef = useRef<string | null>(null)
-
-  useEffect(() => {
-    if (!catalogHasMore || catalogLoading || catalogShelfCount === 0) {
-      return
-    }
-
-    const candidate =
-      navigation.routeTargetId ?? navigation.nearestId
-    const shelf = shelves.find(
-      (item) => item.id === candidate,
-    )
-    const archiveDistrict = shelf
-      ? roomWorldConfig.districts.find(
-          (district) => district.id === shelf.districtId,
-        )
-      : null
-    const archiveApproach =
-      shelf?.kind === 'catalog' &&
-      archiveDistrict?.sourceMode === 'catalog'
-    const isLastVisibleCatalogShelf =
-      archiveApproach &&
-      shelf &&
-      shelves
-        .filter((item) => item.kind === 'catalog')
-        .slice(-2)
-        .some((item) => item.id === shelf.id)
-
-    if (archiveApproach && catalog.length === 0) {
-      if (
-        lastCatalogLoadTriggerRef.current !== 'archive:first-page'
-      ) {
-        lastCatalogLoadTriggerRef.current = 'archive:first-page'
-        void loadMoreCatalog(1)
-      }
-      return
-    }
-
-    if (archiveApproach && isLastVisibleCatalogShelf) {
-      if (
-        lastCatalogLoadTriggerRef.current !== candidate
-      ) {
-        lastCatalogLoadTriggerRef.current = candidate
-        void loadMoreCatalog(1)
-      }
-      return
-    }
-
-    // Moving away from the Archive edge arms the trigger again, so returning
-    // to its last shelf fetches the next page without polling continuously.
-    lastCatalogLoadTriggerRef.current = null
-  }, [
-    catalog.length,
-    catalogHasMore,
-    catalogLoading,
-    catalogShelfCount,
-    loadMoreCatalog,
-    navigation.nearestId,
-    navigation.routeTargetId,
-    roomWorldConfig.districts,
-    shelves,
-  ])
+  // Archive pagination no longer triggers from player proximity. The
+  // first Archive page is loaded before reveal so reaching the back of the
+  // library never causes an in-world data mutation or camera interruption.
 
   async function openArticle(
     summary: DevArticleSummary,
@@ -2506,13 +2371,9 @@ export default function DevLibraryMap() {
           <small>
             G · {movementMode === 'walk' ? 'WALK' : 'FLY'} · WASD move
             · E inspect / close book
-            {catalogLoading
-              ? ' · extending catalogue…'
-              : catalogHasMore
-                ? ' · ' +
-                  catalog.length +
-                  ' catalogue articles loaded'
-                : ' · catalogue end reached'}
+            {' · ' +
+              catalog.length +
+              ' archive articles indexed'}
             {nearTopics && topicSlotCapacity > 0
               ? ' · LIVING TOPICS ' +
                 occupiedTopicShelfCount +

@@ -187,12 +187,12 @@ export function createLibraryAtmosphere({
   const dustTexture = new THREE.CanvasTexture(dustCanvas)
   const dustCount =
     quality === 'cinematic'
-      ? 220
+      ? 180
       : quality === 'high'
-        ? 160
+        ? 130
         : quality === 'medium'
-          ? 105
-          : 60
+          ? 90
+          : 50
   const dustGeometry = new THREE.BufferGeometry()
   const dustPositions = new Float32Array(dustCount * 3)
   const dustBaseX = new Float32Array(dustCount)

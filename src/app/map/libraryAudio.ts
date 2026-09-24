@@ -112,7 +112,6 @@ export function createLibraryAudio(
   }
 
   let nextFootstepAt = 0
-  let lastShelfId: string | null = null
   let roomOscillator: OscillatorNode | null = null
   let roomGain: GainNode | null = null
   let roomFilter: BiquadFilterNode | null = null
@@ -162,32 +161,6 @@ export function createLibraryAudio(
     gain.connect(master)
     oscillator.start(now)
     oscillator.stop(now + duration + .025)
-  }
-
-  const playShelfWake = () => {
-    createTone(520, .013, .22)
-
-    if (disposed || context.state !== 'running') return
-
-    const now = context.currentTime
-    const oscillator = context.createOscillator()
-    const gain = context.createGain()
-
-    oscillator.type = 'sine'
-    oscillator.frequency.setValueAtTime(780, now)
-    oscillator.frequency.exponentialRampToValueAtTime(
-      620,
-      now + .3,
-    )
-
-    gain.gain.setValueAtTime(.0001, now)
-    gain.gain.exponentialRampToValueAtTime(.008, now + .018)
-    gain.gain.exponentialRampToValueAtTime(.0001, now + .3)
-
-    oscillator.connect(gain)
-    gain.connect(master)
-    oscillator.start(now)
-    oscillator.stop(now + .34)
   }
 
   const playFootstep = (strength: number) => {
@@ -406,20 +379,10 @@ export function createLibraryAudio(
       }
     },
 
-    updateShelfFocus({enabled, shelfId, focusStrength}) {
-      if (disposed) return
-
-      if (
-        enabled &&
-        focusStrength > .32 &&
-        shelfId &&
-        shelfId !== lastShelfId
-      ) {
-        playShelfWake()
-        lastShelfId = shelfId
-      } else if (focusStrength < .08) {
-        lastShelfId = null
-      }
+    updateShelfFocus() {
+      // Shelf proximity is intentionally silent. Ambient room tone,
+      // footsteps and deliberate book-open cues provide enough feedback
+      // without chiming every time the visitor passes a case.
     },
 
     dispose() {
