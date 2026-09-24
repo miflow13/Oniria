@@ -655,17 +655,9 @@ export function createLibraryBuilding(
     metalness: .01,
     envMapIntensity: .05,
   })
-  const backupCeilingMaterial = new THREE.MeshStandardMaterial({
-    color: 0xbfb6aa,
-    roughness: .97,
-    metalness: 0,
-    envMapIntensity: .035,
-    side: THREE.DoubleSide,
-  })
   localMaterials.push(
     backupFloorMaterial,
     backupWallMaterial,
-    backupCeilingMaterial,
   )
 
   const floorGeometry = new THREE.BoxGeometry(48.9, .08, 89.6)
@@ -678,51 +670,8 @@ export function createLibraryBuilding(
   backupFloor.receiveShadow = true
   group.add(backupFloor)
 
-  // Fallback ceiling only spans the central hall. The six rooms are open
-  // upward from first paint so their glass roofs never flash opaque while
-  // authored roof assets are still loading.
-  const ceilingGeometry = new THREE.PlaneGeometry(16.1, 89.6)
-  localGeometries.push(ceilingGeometry)
-  const backupCeiling = new THREE.Mesh(
-    ceilingGeometry,
-    backupCeilingMaterial,
-  )
-  backupCeiling.rotation.x = Math.PI / 2
-  backupCeiling.position.set(0, 5.03, -30.15)
-  group.add(backupCeiling)
-
-  // Full-room transmission is beautiful but costly. Medium/Low use a
-  // lightweight transparent Standard material; High/Cinematic restore
-  // physical transmission and clearcoat.
-  const skylightGlassMaterial: THREE.Material =
-    lightDetail >= 2
-      ? new THREE.MeshPhysicalMaterial({
-          color: 0xf2fbff,
-          transmission: .96,
-          transparent: true,
-          opacity: .26,
-          roughness: .07,
-          metalness: 0,
-          ior: 1.46,
-          thickness: .025,
-          clearcoat: .32,
-          clearcoatRoughness: .045,
-          envMapIntensity: .55,
-          side: THREE.DoubleSide,
-          depthWrite: false,
-          toneMapped: true,
-        })
-      : new THREE.MeshStandardMaterial({
-          color: 0xcfe8f1,
-          transparent: true,
-          opacity: lightDetail === 0 ? .1 : .15,
-          roughness: .24,
-          metalness: .04,
-          envMapIntensity: .18,
-          side: THREE.DoubleSide,
-          depthWrite: false,
-          toneMapped: true,
-        })
+  // The DEV Library is intentionally open-air. There is no fallback ceiling,
+  // authored roof surface, or glass canopy: the Oniria sky is the ceiling.
   const skyRockMaterial = new THREE.MeshStandardMaterial({
     color: 0x343536,
     roughness: .94,
@@ -746,30 +695,10 @@ export function createLibraryBuilding(
     toneMapped: false,
   })
   localMaterials.push(
-    skylightGlassMaterial,
     skyRockMaterial,
     skyDebrisMaterial,
     skyParticleMaterial,
   )
-
-  // Derive the glazing directly from the authored roof cutout. The old pane
-  // was visibly undersized, leaving a raw dark border around each opening.
-  const skylightGlassGeometry =
-    new THREE.PlaneGeometry(
-      LIBRARY_SKYLIGHT_HALF_WIDTH * 2 -
-        LIBRARY_SKYLIGHT_GLASS_INSET * 2,
-      LIBRARY_SKYLIGHT_HALF_DEPTH * 2 -
-        LIBRARY_SKYLIGHT_GLASS_INSET * 2,
-    )
-  const roomSkylightFrameMaterial =
-    new THREE.MeshStandardMaterial({
-      color: 0x6f573d,
-      roughness: .48,
-      metalness: .3,
-      envMapIntensity: .24,
-      toneMapped: true,
-    })
-  localMaterials.push(roomSkylightFrameMaterial)
 
   const skyRockLargeGeometry =
     new THREE.IcosahedronGeometry(.44, 1)
@@ -778,98 +707,10 @@ export function createLibraryBuilding(
   const skyDebrisGeometry =
     new THREE.TetrahedronGeometry(.15, 0)
   localGeometries.push(
-    skylightGlassGeometry,
     skyRockLargeGeometry,
     skyRockSmallGeometry,
     skyDebrisGeometry,
   )
-
-  // The six side rooms have permanent full glass roofs. Build them before
-  // authored roof assets resolve so a slow/failed GLB can never temporarily
-  // cover the rooms with an opaque fallback ceiling.
-  LIBRARY_ROOMS.forEach((room) => {
-    const bounds = libraryRoomBounds(room, -.06)
-    const width = Math.max(.5, bounds.maxX - bounds.minX)
-    const depth = Math.max(.5, bounds.maxZ - bounds.minZ)
-    const centerX = (bounds.minX + bounds.maxX) / 2
-    const centerZ = (bounds.minZ + bounds.maxZ) / 2
-
-    const glassGeometry = new THREE.PlaneGeometry(width, depth)
-    localGeometries.push(glassGeometry)
-    const glass = new THREE.Mesh(
-      glassGeometry,
-      skylightGlassMaterial,
-    )
-    glass.rotation.x = Math.PI / 2
-    glass.position.set(centerX, 5.065, centerZ)
-    glass.renderOrder = 2
-    glass.castShadow = false
-    glass.receiveShadow = false
-    glass.name = `library-room-glass-roof-${room.slot}`
-    group.add(glass)
-
-    const frameThickness = .085
-    const frameHeight = .075
-    const horizontalFrameGeometry = new THREE.BoxGeometry(
-      width + frameThickness * 2,
-      frameHeight,
-      frameThickness,
-    )
-    const verticalFrameGeometry = new THREE.BoxGeometry(
-      frameThickness,
-      frameHeight,
-      depth,
-    )
-    localGeometries.push(
-      horizontalFrameGeometry,
-      verticalFrameGeometry,
-    )
-
-    ;[bounds.minZ, bounds.maxZ].forEach((frameZ, index) => {
-      const frame = new THREE.Mesh(
-        horizontalFrameGeometry,
-        roomSkylightFrameMaterial,
-      )
-      frame.position.set(centerX, 5.085, frameZ)
-      frame.name =
-        `library-room-skylight-frame-${room.slot}-z-${index}`
-      group.add(frame)
-    })
-
-    ;[bounds.minX, bounds.maxX].forEach((frameX, index) => {
-      const frame = new THREE.Mesh(
-        verticalFrameGeometry,
-        roomSkylightFrameMaterial,
-      )
-      frame.position.set(frameX, 5.085, centerZ)
-      frame.name =
-        `library-room-skylight-frame-${room.slot}-x-${index}`
-      group.add(frame)
-    })
-
-    // Two restrained ribs keep the large glazing visually architectural
-    // without rebuilding the old heavy ceiling grid.
-    ;[-1 / 3, 1 / 3].forEach((ratio, index) => {
-      const ribGeometry = new THREE.BoxGeometry(
-        frameThickness * .72,
-        frameHeight * .72,
-        depth - .12,
-      )
-      localGeometries.push(ribGeometry)
-      const rib = new THREE.Mesh(
-        ribGeometry,
-        roomSkylightFrameMaterial,
-      )
-      rib.position.set(
-        centerX + width * ratio,
-        5.082,
-        centerZ,
-      )
-      rib.name =
-        `library-room-skylight-rib-${room.slot}-${index}`
-      group.add(rib)
-    })
-  })
 
   const wallRuns: WallRun[] = [
     {
@@ -1417,233 +1258,21 @@ export function createLibraryBuilding(
     rugInsetMaterial,
   )
 
-  const addPendantFixtureLight = (
-    fixture: THREE.Group,
-    id: string,
-    pointIntensity: number,
-    distance: number,
-    spotIntensity: number,
-  ) => {
-    fixture.updateMatrixWorld(true)
-    const bounds = new THREE.Box3().setFromObject(fixture)
-    const center = bounds.getCenter(new THREE.Vector3())
-    const height = Math.max(.2, bounds.max.y - bounds.min.y)
-    const bulbY =
-      bounds.min.y + Math.min(.13, height * .14)
-
-    const bulb = new THREE.Mesh(
-      pendantBulbGeometry,
-      pendantBulbMaterial,
-    )
-    bulb.position.set(center.x, bulbY, center.z)
-    bulb.name = `library-pendant-bulb-${id}`
-    group.add(bulb)
-
-    const lightPosition = new THREE.Vector3(
-      center.x,
-      bulbY - .04,
-      center.z,
-    )
-
-    if (lightDetail >= 1) {
-      const point = new THREE.PointLight(
-        0xffc98a,
-        pointIntensity,
-        distance,
-        2,
-      )
-      point.position.copy(lightPosition)
-      point.castShadow = false
-      point.name = `library-pendant-point-${id}`
-      group.add(point)
-    }
-
-    if (lightDetail >= 2) {
-      const spot = new THREE.SpotLight(
-        0xffddb2,
-        spotIntensity * .58,
-        Math.max(4.6, distance - 1.1),
-        Math.PI / 4.45,
-        .9,
-        2,
-      )
-      spot.position.copy(lightPosition)
-      spot.castShadow = false
-      spot.target.position.set(center.x, .55, center.z)
-      spot.name = `library-pendant-spot-${id}`
-      group.add(spot, spot.target)
-    }
-
-    const pool = new THREE.Mesh(
-      pendantPoolGeometry,
-      pendantPoolMaterial,
-    )
-    pool.rotation.x = -Math.PI / 2
-    const poolSize = THREE.MathUtils.clamp(
-      3.9 + pointIntensity * .012,
-      4.2,
-      5.1,
-    )
-    pool.scale.set(poolSize, poolSize, 1)
-    pool.position.set(center.x, .032, center.z)
-    pool.renderOrder = 3
-    pool.name = `library-pendant-pool-${id}`
-    group.add(pool)
-
-  }
-
-  const roomCeilingFixtureGeometry =
-    new THREE.CylinderGeometry(.28, .34, .065, 20)
-  const roomCeilingLensGeometry =
-    new THREE.CircleGeometry(.245, 20)
-  const roomCeilingFixtureMaterial =
-    new THREE.MeshStandardMaterial({
-      color: 0x6f573d,
-      roughness: .58,
-      metalness: .22,
-      envMapIntensity: .2,
-    })
-  const roomCeilingLensMaterial =
-    new THREE.MeshStandardMaterial({
-      color: 0xffe6bf,
-      emissive: 0xffbd72,
-      emissiveIntensity: .72,
-      roughness: .4,
-      metalness: 0,
-      envMapIntensity: .08,
-      side: THREE.DoubleSide,
-      toneMapped: true,
-    })
-  localGeometries.push(
-    roomCeilingFixtureGeometry,
-    roomCeilingLensGeometry,
-  )
-  localMaterials.push(
-    roomCeilingFixtureMaterial,
-    roomCeilingLensMaterial,
-  )
-
-  // Two shallow ceiling fixtures per room fill the shelf faces and upper
-  // molding without flattening the warm pendant pools in the main hall.
-  LIBRARY_ROOMS.forEach((room) => {
-    const [roomX, roomZ] = room.center
-
-    ;[-4.6, 4.6].forEach((zOffset, fixtureIndex) => {
-      const fixture = new THREE.Mesh(
-        roomCeilingFixtureGeometry,
-        roomCeilingFixtureMaterial,
-      )
-      fixture.position.set(
-        roomX,
-        4.91,
-        roomZ + zOffset,
-      )
-      fixture.name =
-        `library-room-ceiling-fixture-${room.slot}-${fixtureIndex}`
-      group.add(fixture)
-
-      const lens = new THREE.Mesh(
-        roomCeilingLensGeometry,
-        roomCeilingLensMaterial,
-      )
-      lens.rotation.x = Math.PI / 2
-      lens.position.set(
-        roomX,
-        4.872,
-        roomZ + zOffset,
-      )
-      lens.name =
-        `library-room-ceiling-lens-${room.slot}-${fixtureIndex}`
-      group.add(lens)
-
-      if (
-        lightDetail >= 2 ||
-        (lightDetail === 1 && fixtureIndex === 0)
-      ) {
-        const fill = new THREE.PointLight(
-          0xffd2a1,
-          22,
-          5.6,
-          2,
-        )
-        fill.position.set(
-          roomX,
-          4.68,
-          roomZ + zOffset,
-        )
-        fill.castShadow = false
-        fill.name =
-          `library-room-ceiling-light-${room.slot}-${fixtureIndex}`
-        group.add(fill)
-      }
-    })
-  })
-
-  // Surveyed September 23 from the in-world layout pin tool. Keep the
-  // horizontal coordinates exact, but project the floor-level pin upward to
-  // the authored ceiling so the marker becomes a real architectural fixture.
-  const surveyedLatestLight = {
-    x: 16.154,
-    z: 5.369,
-  } as const
-
-  const surveyedFixture = new THREE.Mesh(
-    roomCeilingFixtureGeometry,
-    roomCeilingFixtureMaterial,
-  )
-  surveyedFixture.position.set(
-    surveyedLatestLight.x,
-    4.91,
-    surveyedLatestLight.z,
-  )
-  surveyedFixture.name =
-    'library-surveyed-ceiling-fixture-latest-front'
-  group.add(surveyedFixture)
-
-  const surveyedLens = new THREE.Mesh(
-    roomCeilingLensGeometry,
-    roomCeilingLensMaterial,
-  )
-  surveyedLens.rotation.x = Math.PI / 2
-  surveyedLens.position.set(
-    surveyedLatestLight.x,
-    4.872,
-    surveyedLatestLight.z,
-  )
-  surveyedLens.name =
-    'library-surveyed-ceiling-lens-latest-front'
-  group.add(surveyedLens)
-
-  if (lightDetail >= 1) {
-    const surveyedFill = new THREE.PointLight(
-      0xffd2a1,
-      28,
-      6.2,
-      2,
-    )
-    surveyedFill.position.set(
-      surveyedLatestLight.x,
-      4.68,
-      surveyedLatestLight.z,
-    )
-    surveyedFill.castShadow = false
-    surveyedFill.name =
-      'library-surveyed-ceiling-light-latest-front'
-    group.add(surveyedFill)
-  }
+  // Ceiling fixtures were removed with the roof. Outdoor illumination now
+  // comes from the shared sky/moon rig in DreamWorld3D.
 
   const ready = (async () => {
     const requests = await Promise.allSettled([
       loadLibraryAsset('wallPanel', 5, 'height'),
       loadLibraryAsset('wallCorner', 5, 'height'),
       loadLibraryAsset('floorParquet', 5.8, 'span'),
-      loadLibraryAsset('roofTile', 5.2, 'span'),
+      Promise.resolve(null),
       loadLibraryAsset('column', 4.55, 'height'),
       loadLibraryAsset('readingRug', 4.2, 'span'),
       loadLibraryAsset('libraryChair', .9, 'height'),
       loadLibraryAsset('readingTable', .78, 'height'),
       loadLibraryAsset('cardCatalogue', 1.55, 'height'),
-      loadLibraryAsset('pendantLight', 1.05, 'height'),
+      Promise.resolve(null),
       loadLibraryAsset('archedWindow', 5, 'height'),
       loadLibraryAsset('chairWingback', 1.15, 'height'),
       loadLibraryAsset('clockMantel', .55, 'height'),
@@ -1674,13 +1303,11 @@ export function createLibraryBuilding(
     const wallPanel = value(0)
     const wallCorner = value(1)
     const floorParquet = value(2)
-    const roofTile = value(3)
     const column = value(4)
     const readingRug = value(5)
     const libraryChair = value(6)
     const readingTable = value(7)
     const cardCatalogue = value(8)
-    const pendantLight = value(9)
     const archedWindow = value(10)
     const chairWingback = value(11)
     const clockMantel = value(12)
@@ -1905,240 +1532,127 @@ export function createLibraryBuilding(
       group.add(wearPath)
     }
 
-    if (roofTile) {
-      const ceilingMaterial = new THREE.MeshStandardMaterial({
-        color: 0xbfb6aa,
-        vertexColors: true,
-        roughness: .97,
-        metalness: 0,
-        envMapIntensity: .035,
-        side: THREE.DoubleSide,
-        toneMapped: true,
-      })
-      localMaterials.push(ceilingMaterial)
-
-      const size = new THREE.Box3()
-        .setFromObject(roofTile)
-        .getSize(new THREE.Vector3())
-      const tileX = Math.max(1.2, size.x)
-      const tileZ = Math.max(1.2, size.z)
-      const countX = Math.ceil(48.9 / tileX)
-      const countZ = Math.ceil(89.6 / tileZ)
-      const cellX = 48.9 / countX
-      const cellZ = 89.6 / countZ
-
-      for (let ix = 0; ix < countX; ix += 1) {
-        for (let iz = 0; iz < countZ; iz += 1) {
-          const x = -24.45 + cellX * (ix + .5)
-          const z = -74.95 + cellZ * (iz + .5)
-          const insideHallSkylight =
-            Math.abs(x) < LIBRARY_SKYLIGHT_HALF_WIDTH &&
-            LIBRARY_SKYLIGHT_CENTERS.some(
-              (centerZ) =>
-                Math.abs(z - centerZ) <
-                LIBRARY_SKYLIGHT_HALF_DEPTH,
-            )
-          const insideRoomGlassRoof = LIBRARY_ROOMS.some(
-            (room) => {
-              const bounds = libraryRoomBounds(room)
-              const halfCellX = cellX * .5
-              const halfCellZ = cellZ * .5
-              return (
-                x + halfCellX > bounds.minX &&
-                x - halfCellX < bounds.maxX &&
-                z + halfCellZ > bounds.minZ &&
-                z - halfCellZ < bounds.maxZ
-              )
-            },
-          )
-          if (insideHallSkylight || insideRoomGlassRoof) {
-            continue
-          }
-
-          const tile = placeAsset(
-            roofTile,
-            x,
-            5.03,
-            z,
-            1,
-            0,
-            Math.PI,
-          )
-          tile.scale.x *= (cellX / size.x) * 1.015
-          tile.scale.z *= (cellZ / size.z) * 1.015
-          tile.traverse((child) => {
-            if (!(child instanceof THREE.Mesh)) return
-            child.material = ceilingMaterial
-            child.castShadow = false
-            child.receiveShadow = true
-          })
-        }
-      }
-
-      backupCeiling.visible = false
-
-      // A single suspended particle field lives above the roof. Depth testing
-      // means it only becomes visible through the actual ceiling openings.
-      const skyParticleCount = 210
-      const skyParticlePositions =
-        new Float32Array(skyParticleCount * 3)
-      for (let particle = 0; particle < skyParticleCount; particle += 1) {
-        const phase = particle * 12.9898
-        const u = Math.sin(phase) * 43758.5453
-        const v = Math.sin(phase * 1.37 + 4.2) * 24634.6345
-        const w = Math.sin(phase * .73 + 9.1) * 19341.137
-        const unitU = u - Math.floor(u)
-        const unitV = v - Math.floor(v)
-        const unitW = w - Math.floor(w)
-        skyParticlePositions[particle * 3] =
-          -3.15 + unitU * 6.3
-        skyParticlePositions[particle * 3 + 1] =
-          5.75 + unitV * 6.8
-        skyParticlePositions[particle * 3 + 2] =
-          -72 + unitW * 71
-      }
-      const skyParticleGeometry = new THREE.BufferGeometry()
-      skyParticleGeometry.setAttribute(
-        'position',
-        new THREE.BufferAttribute(
-          skyParticlePositions,
-          3,
-        ),
-      )
-      localGeometries.push(skyParticleGeometry)
-      const skyParticles = new THREE.Points(
-        skyParticleGeometry,
-        skyParticleMaterial,
-      )
-      skyParticles.name = 'library-open-roof-particles'
-      group.add(skyParticles)
-      floatingProps.register(skyParticles, {
-        phase: floatingPhase('open-roof-particles'),
-        hoverAmplitude: .12,
-        hoverSpeed: .09,
-        driftSide: .16,
-        driftForward: .1,
-        driftSpeedSide: .07,
-        driftSpeedForward: .055,
-      })
-
-      LIBRARY_SKYLIGHT_CENTERS.forEach((z, index) => {
-        // Frameless clear pane: preserve the open view into Oniria while
-        // making the roof opening read as an intentional skylight rather than
-        // unfinished construction. No beams or mullion grid remain.
-        const glass = new THREE.Mesh(
-          skylightGlassGeometry,
-          skylightGlassMaterial,
-        )
-        glass.rotation.x = Math.PI / 2
-        // Seat the pane just above the ceiling plane so the glass closes the
-        // opening cleanly without floating noticeably above the roof trim.
-        glass.position.set(0, 5.065, z)
-        glass.renderOrder = 2
-        glass.castShadow = false
-        glass.receiveShadow = false
-        glass.name = `library-skylight-glass-${index}`
-        group.add(glass)
-
-        // Daylight exists physically, but lower graphics tiers keep the
-        // skylight itself emissive instead of paying for five extra spotlights.
-        if (
-          lightDetail >= 3 ||
-          (lightDetail === 2 && index % 2 === 0)
-        ) {
-          const daylight = new THREE.SpotLight(
-            0xc9e6ff,
-            30,
-            9.5,
-            Math.PI / 3,
-            .96,
-            2,
-          )
-          daylight.position.set(0, 6.1, z)
-          daylight.target.position.set(0, .45, z)
-          daylight.castShadow = false
-          daylight.name = `library-open-skylight-light-${index}`
-          group.add(daylight, daylight.target)
-        }
-
-        // Floating stones and fragments above each opening sell that this roof
-        // looks into Oniria rather than an ordinary building exterior.
-        for (let rockIndex = 0; rockIndex < 3; rockIndex += 1) {
-          const phase = index * 17 + rockIndex * 7
-          const rock = new THREE.Mesh(
-            rockIndex === 0
-              ? skyRockLargeGeometry
-              : skyRockSmallGeometry,
-            skyRockMaterial,
-          )
-          rock.position.set(
-            -1.7 + rockIndex * 1.65 +
-              Math.sin(phase * 1.7) * .34,
-            6.5 + rockIndex * 1.15 +
-              Math.sin(phase) * .35,
-            z - .85 + Math.cos(phase * 1.3) * 1.45,
-          )
-          rock.scale.set(
-            .78 + ((phase * 13) % 7) * .05,
-            .62 + ((phase * 5) % 5) * .08,
-            .72 + ((phase * 11) % 6) * .06,
-          )
-          rock.rotation.set(
-            phase * .19,
-            phase * .27,
-            phase * .13,
-          )
-          rock.name =
-            `library-sky-rock-${index}-${rockIndex}`
-          group.add(rock)
-          floatingProps.register(rock, {
-            phase: floatingPhase(rock.name),
-            hoverAmplitude: .28 + rockIndex * .11,
-            hoverSpeed: .08 + rockIndex * .018,
-            secondaryHoverAmplitude: .08,
-            secondaryHoverSpeed: .17,
-            tiltX: .14,
-            tiltY: .2,
-            tiltZ: .12,
-            driftSide: .38 + rockIndex * .12,
-            driftForward: .28 + rockIndex * .08,
-            driftSpeedSide: .08 + rockIndex * .018,
-            driftSpeedForward: .06 + rockIndex * .014,
-          })
-        }
-
-        for (let shardIndex = 0; shardIndex < 5; shardIndex += 1) {
-          const phase = index * 23 + shardIndex * 11 + 3
-          const shard = new THREE.Mesh(
-            skyDebrisGeometry,
-            skyDebrisMaterial,
-          )
-          shard.position.set(
-            -2.15 + (shardIndex % 3) * 2.05 +
-              Math.sin(phase) * .4,
-            6.05 + (shardIndex % 4) * .86,
-            z - 1.9 + ((shardIndex * 1.07) % 3.8),
-          )
-          const scale = .5 + (shardIndex % 3) * .24
-          shard.scale.set(scale, scale * .5, scale * .8)
-          shard.name =
-            `library-sky-debris-${index}-${shardIndex}`
-          group.add(shard)
-          floatingProps.register(shard, {
-            phase: floatingPhase(shard.name),
-            hoverAmplitude: .18 + shardIndex * .025,
-            hoverSpeed: .12 + shardIndex * .014,
-            tiltX: .32,
-            tiltY: .38,
-            tiltZ: .28,
-            driftSide: .3 + shardIndex * .055,
-            driftForward: .22 + shardIndex * .04,
-            driftSpeedSide: .12 + shardIndex * .016,
-            driftSpeedForward: .09 + shardIndex * .013,
-          })
-        }
-      })
+    // With the roof gone, the existing Oniria debris field now hangs directly
+    // above the open library instead of only appearing through skylight holes.
+    const skyParticleCount = 260
+    const skyParticlePositions =
+      new Float32Array(skyParticleCount * 3)
+    for (let particle = 0; particle < skyParticleCount; particle += 1) {
+      const phase = particle * 12.9898
+      const u = Math.sin(phase) * 43758.5453
+      const v = Math.sin(phase * 1.37 + 4.2) * 24634.6345
+      const w = Math.sin(phase * .73 + 9.1) * 19341.137
+      const unitU = u - Math.floor(u)
+      const unitV = v - Math.floor(v)
+      const unitW = w - Math.floor(w)
+      skyParticlePositions[particle * 3] =
+        -23 + unitU * 46
+      skyParticlePositions[particle * 3 + 1] =
+        6.2 + unitV * 10
+      skyParticlePositions[particle * 3 + 2] =
+        -73 + unitW * 86
     }
+    const skyParticleGeometry = new THREE.BufferGeometry()
+    skyParticleGeometry.setAttribute(
+      'position',
+      new THREE.BufferAttribute(
+        skyParticlePositions,
+        3,
+      ),
+    )
+    localGeometries.push(skyParticleGeometry)
+    const skyParticles = new THREE.Points(
+      skyParticleGeometry,
+      skyParticleMaterial,
+    )
+    skyParticles.name = 'library-open-sky-particles'
+    group.add(skyParticles)
+    floatingProps.register(skyParticles, {
+      phase: floatingPhase('open-sky-particles'),
+      hoverAmplitude: .16,
+      hoverSpeed: .07,
+      driftSide: .22,
+      driftForward: .16,
+      driftSpeedSide: .055,
+      driftSpeedForward: .045,
+    })
+
+    LIBRARY_SKYLIGHT_CENTERS.forEach((z, index) => {
+      for (let rockIndex = 0; rockIndex < 3; rockIndex += 1) {
+        const phase = index * 17 + rockIndex * 7
+        const rock = new THREE.Mesh(
+          rockIndex === 0
+            ? skyRockLargeGeometry
+            : skyRockSmallGeometry,
+          skyRockMaterial,
+        )
+        rock.position.set(
+          -1.7 + rockIndex * 1.65 +
+            Math.sin(phase * 1.7) * .34,
+          7.2 + rockIndex * 1.15 +
+            Math.sin(phase) * .35,
+          z - .85 + Math.cos(phase * 1.3) * 1.45,
+        )
+        rock.scale.set(
+          .78 + ((phase * 13) % 7) * .05,
+          .62 + ((phase * 5) % 5) * .08,
+          .72 + ((phase * 11) % 6) * .06,
+        )
+        rock.rotation.set(
+          phase * .19,
+          phase * .27,
+          phase * .13,
+        )
+        rock.name =
+          `library-sky-rock-${index}-${rockIndex}`
+        group.add(rock)
+        floatingProps.register(rock, {
+          phase: floatingPhase(rock.name),
+          hoverAmplitude: .28 + rockIndex * .11,
+          hoverSpeed: .08 + rockIndex * .018,
+          secondaryHoverAmplitude: .08,
+          secondaryHoverSpeed: .17,
+          tiltX: .14,
+          tiltY: .2,
+          tiltZ: .12,
+          driftSide: .38 + rockIndex * .12,
+          driftForward: .28 + rockIndex * .08,
+          driftSpeedSide: .08 + rockIndex * .018,
+          driftSpeedForward: .06 + rockIndex * .014,
+        })
+      }
+
+      for (let shardIndex = 0; shardIndex < 5; shardIndex += 1) {
+        const phase = index * 23 + shardIndex * 11 + 3
+        const shard = new THREE.Mesh(
+          skyDebrisGeometry,
+          skyDebrisMaterial,
+        )
+        shard.position.set(
+          -2.15 + (shardIndex % 3) * 2.05 +
+            Math.sin(phase) * .4,
+          6.8 + (shardIndex % 4) * .86,
+          z - 1.9 + ((shardIndex * 1.07) % 3.8),
+        )
+        const scale = .5 + (shardIndex % 3) * .24
+        shard.scale.set(scale, scale * .5, scale * .8)
+        shard.name =
+          `library-sky-debris-${index}-${shardIndex}`
+        group.add(shard)
+        floatingProps.register(shard, {
+          phase: floatingPhase(shard.name),
+          hoverAmplitude: .18 + shardIndex * .025,
+          hoverSpeed: .12 + shardIndex * .014,
+          tiltX: .32,
+          tiltY: .38,
+          tiltZ: .28,
+          driftSide: .3 + shardIndex * .055,
+          driftForward: .22 + shardIndex * .04,
+          driftSpeedSide: .12 + shardIndex * .016,
+          driftSpeedForward: .09 + shardIndex * .013,
+        })
+      }
+    })
 
     // Surveyed corridor rugs. Always render a thin old-library rug base so
     // layout remains visible even if the Draco GLB fails to decode locally.
@@ -2530,40 +2044,8 @@ export function createLibraryBuilding(
           .addScaledVector(forward, .22)
         lightPosition.y += .03
 
-        if (lightDetail >= 2) {
-          const sconcePoint = new THREE.PointLight(
-            0xffc07a,
-            34,
-            4.6,
-            2,
-          )
-          sconcePoint.position.copy(lightPosition)
-          sconcePoint.castShadow = false
-          sconcePoint.name =
-            `library-sconce-point-${placement.id}`
-          group.add(sconcePoint)
-        }
-
-        if (lightDetail >= 3) {
-          const sconceSpot = new THREE.SpotLight(
-            0xffd3a0,
-            16,
-            4.4,
-            Math.PI / 3.15,
-            .82,
-            2,
-          )
-          sconceSpot.position.copy(lightPosition)
-          sconceSpot.castShadow = false
-          sconceSpot.target.position
-            .copy(lightPosition)
-            .addScaledVector(forward, 1.55)
-          sconceSpot.target.position.y -= .72
-          sconceSpot.name =
-            `library-sconce-spot-${placement.id}`
-          group.add(sconceSpot, sconceSpot.target)
-        }
-
+        // Wall sconces remain as decorative emissive accents, but no longer
+        // create local point/spot lights. The open sky is the lighting source.
         const halo = new THREE.Mesh(
           sconceHaloGeometry,
           sconceHaloMaterial,
@@ -2809,62 +2291,6 @@ export function createLibraryBuilding(
       }
     })
 
-    if (pendantLight) {
-      LIBRARY_ROOMS.forEach((room) => {
-        const [x, z] = room.center
-        const fixture = placeAsset(
-          pendantLight,
-          x,
-          4.05,
-          z,
-        )
-        const sourceMode =
-          roomDistrictBySlot.get(room.slot)?.sourceMode ??
-          room.sourceMode
-        // Three r186 uses photometric light units. Sub-1 point-light
-        // intensities were effectively invisible at our .56 library exposure.
-        // These values approximate practical warm interior bulbs while the
-        // distance/decay still keeps each pool local to its fixture.
-        const pointIntensity =
-          sourceMode === 'featured'
-            ? 82
-            : sourceMode === 'catalog'
-              ? 54
-              : 68
-        const spotIntensity =
-          sourceMode === 'featured'
-            ? 34
-            : sourceMode === 'catalog'
-              ? 22
-              : 28
-        addPendantFixtureLight(
-          fixture,
-          `room-${room.slot}`,
-          pointIntensity,
-          7.8,
-          spotIntensity,
-        )
-      })
-
-      ;[6, -8, -18, -28, -38, -48, -58, -68].forEach(
-        (z, index) => {
-          const fixture = placeAsset(
-            pendantLight,
-            0,
-            4.2,
-            z,
-            .92,
-          )
-          addPendantFixtureLight(
-            fixture,
-            `hall-${index}`,
-            index === 4 ? 48 : 64,
-            7.8,
-            index === 4 ? 18 : 24,
-          )
-        },
-      )
-    }
 
     // A high rear-wall oculus gives the long hallway a destination without
     // stealing floor space from the surveyed rear shelving.
@@ -2908,18 +2334,6 @@ export function createLibraryBuilding(
     oculusGlass.position.set(0, 4.05, -74.79)
     oculusFrame.position.set(0, 4.05, -74.77)
     group.add(oculusGlass, oculusFrame)
-
-    if (lightDetail >= 1) {
-      const oculusLight = new THREE.PointLight(
-        0xffc886,
-        .18,
-        5.5,
-        2,
-      )
-      oculusLight.position.set(0, 4.05, -73.95)
-      oculusLight.castShadow = false
-      group.add(oculusLight)
-    }
 
   })().catch((error) => {
     console.warn('Library building asset pass failed', error)
