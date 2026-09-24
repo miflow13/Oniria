@@ -386,7 +386,7 @@ export default function DevLibraryMap() {
   const [flightMode, setFlightMode] = useState(true)
   const [movementMode, setMovementMode] =
     useState<LibraryMovementMode>('walk')
-  const [soundEnabled, setSoundEnabled] = useState(false)
+  const [soundEnabled, setSoundEnabled] = useState(true)
   const [quality, setQuality] =
     useState<DreamQuality>(DEFAULT_LIBRARY_QUALITY)
   const [graphicsOptions, setGraphicsOptions] =
@@ -423,6 +423,8 @@ export default function DevLibraryMap() {
     useState<string | null>(null)
   const roomAnnouncementTimerRef = useRef<number | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
+  const [searchInputFocused, setSearchInputFocused] =
+    useState(false)
   const [controlsHintVisible, setControlsHintVisible] =
     useState(false)
   const readerProgressRef = useRef({half: false, complete: false})
@@ -1307,7 +1309,6 @@ export default function DevLibraryMap() {
       bootstrap.profileArticles,
       catalog,
       dynamicArticles,
-      searchResults,
     )
     const curatorIds = new Set(
       worldConfig.curatedArticles
@@ -1359,7 +1360,13 @@ export default function DevLibraryMap() {
             ? dynamicArticles
             : creatorPreview
         case 'search':
-          return searchResults
+          // Search results live in the React overlay. Keeping the physical
+          // Search room on a stable sample prevents every query from
+          // rebuilding the Three.js world and resetting the visitor.
+          return uniqueArticles(
+            bootstrap.feed,
+            bootstrap.latest,
+          )
         case 'catalog': {
           const source = uniqueArticles(
             catalog,
@@ -1632,13 +1639,8 @@ export default function DevLibraryMap() {
             title = `NEW ARRIVALS · ${shelfNumber}`
             functionLabel = 'NEWLY PUBLISHED'
           } else if (district.sourceMode === 'search') {
-            const tag = dominantTag(articles)
-            title = tag
-              ? `SEARCH · #${tag.toUpperCase()}`
-              : `SEARCH RESULTS · ${shelfNumber}`
-            functionLabel = query.trim()
-              ? `QUERY “${query.trim().slice(0, 28)}”`
-              : 'LIVE CARD CATALOGUE'
+            title = `SEARCH INDEX · ${shelfNumber}`
+            functionLabel = 'QUERY TERMINAL · USE SEARCH BAR'
           } else if (district.sourceMode === 'catalog') {
             title = `ARCHIVE · ${shelfNumber}`
             functionLabel = 'LONG-TAIL DEV CATALOGUE'
@@ -1739,9 +1741,7 @@ export default function DevLibraryMap() {
     curatedLiveArticles,
     dynamicArticles,
     dynamicTitle,
-    query,
     roomWorldConfig,
-    searchResults,
     districtSamples,
     worldConfig.curatedArticles,
     worldConfig.slotStates,
@@ -2236,7 +2236,11 @@ export default function DevLibraryMap() {
         libraryNavigationRequest={navigationRequest}
         libraryGraphicsOptions={graphicsOptions}
         inputBlocked={
-          Boolean(article) || Boolean(readingBook) || searchOpen
+          Boolean(article) ||
+          Boolean(readingBook) ||
+          searchOpen ||
+          searchInputFocused ||
+          routeLoading
         }
         onZoomChange={() => {}}
         onPanChange={() => {}}
@@ -2406,6 +2410,11 @@ export default function DevLibraryMap() {
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
+            onFocus={() => {
+              setSearchInputFocused(true)
+              document.exitPointerLock?.()
+            }}
+            onBlur={() => setSearchInputFocused(false)}
             placeholder="Search DEV..."
             aria-label="Search DEV articles"
           />

@@ -287,9 +287,10 @@ export function createLibraryAudio(
     playCue(cue)
   }
 
-  const handleUnlock = () => {
-    if (disposed) return
-    soundRequested = true
+  const startRequestedAudio = () => {
+    if (disposed || !soundRequested) return
+
+    void context.resume()
     void musicElement.play().catch((error) => {
       if (!disposed) {
         console.warn(
@@ -298,11 +299,26 @@ export function createLibraryAudio(
         )
       }
     })
-    void context.resume()
+  }
+
+  const handleUnlock = () => {
+    if (disposed) return
+    soundRequested = true
+    startRequestedAudio()
+  }
+
+  const handleFirstGesture = () => {
+    startRequestedAudio()
   }
 
   window.addEventListener(AUDIO_ENABLE_EVENT, handleUnlock)
   window.addEventListener(AUDIO_CUE_EVENT, handleCue as EventListener)
+  window.addEventListener('pointerdown', handleFirstGesture, {
+    capture: true,
+  })
+  window.addEventListener('keydown', handleFirstGesture, {
+    capture: true,
+  })
 
   return {
     update({
@@ -414,6 +430,16 @@ export function createLibraryAudio(
       window.removeEventListener(
         AUDIO_CUE_EVENT,
         handleCue as EventListener,
+      )
+      window.removeEventListener(
+        'pointerdown',
+        handleFirstGesture,
+        {capture: true},
+      )
+      window.removeEventListener(
+        'keydown',
+        handleFirstGesture,
+        {capture: true},
       )
 
       musicElement.pause()

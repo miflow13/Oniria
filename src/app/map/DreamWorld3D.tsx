@@ -321,10 +321,39 @@ function roundedRect(
   context.closePath()
 }
 
+function fitCanvasText(
+  context: CanvasRenderingContext2D,
+  value: string,
+  maxWidth: number,
+) {
+  const text = value.trim()
+  if (context.measureText(text).width <= maxWidth) {
+    return text
+  }
+
+  const ellipsis = '…'
+  let low = 0
+  let high = text.length
+
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2)
+    const candidate =
+      text.slice(0, middle).trimEnd() + ellipsis
+    if (context.measureText(candidate).width <= maxWidth) {
+      low = middle
+    } else {
+      high = middle - 1
+    }
+  }
+
+  return text.slice(0, low).trimEnd() + ellipsis
+}
+
 function createLabelTexture(node: DreamWorldNode) {
+  const shelfLabel = node.libraryKind === 'shelf'
   const canvas = document.createElement('canvas')
-  canvas.width = 640
-  canvas.height = 144
+  canvas.width = shelfLabel ? 512 : 640
+  canvas.height = shelfLabel ? 112 : 144
   const context = canvas.getContext('2d')
   if (!context) return new THREE.CanvasTexture(canvas)
 
@@ -339,45 +368,105 @@ function createLabelTexture(node: DreamWorldNode) {
 
   context.clearRect(0, 0, canvas.width, canvas.height)
 
-  const gradient = context.createLinearGradient(68, 16, 560, 128)
-  gradient.addColorStop(0, 'rgba(4, 8, 20, .97)')
-  gradient.addColorStop(.72, 'rgba(8, 14, 31, .94)')
-  gradient.addColorStop(1, `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, .2)`)
+  if (shelfLabel) {
+    const gradient = context.createLinearGradient(
+      18,
+      18,
+      494,
+      94,
+    )
+    gradient.addColorStop(0, 'rgba(7, 10, 16, .95)')
+    gradient.addColorStop(.78, 'rgba(10, 14, 22, .92)')
+    gradient.addColorStop(
+      1,
+      `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, .14)`,
+    )
 
-  roundedRect(context, 26, 20, 588, 102, 38)
-  context.fillStyle = gradient
-  context.fill()
-  context.strokeStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, .58)`
-  context.lineWidth = 3
-  context.stroke()
+    roundedRect(context, 18, 18, 476, 76, 14)
+    context.fillStyle = gradient
+    context.fill()
+    context.strokeStyle =
+      `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, .42)`
+    context.lineWidth = 2
+    context.stroke()
 
-  context.shadowColor = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, .48)`
-  context.shadowBlur = 16
-  context.fillStyle = '#f1f6ff'
-  context.font = '500 31px system-ui, sans-serif'
-  context.textBaseline = 'middle'
-  context.fillText(node.icon || '✦', 58, 71)
+    context.fillStyle =
+      `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, .78)`
+    roundedRect(context, 28, 27, 4, 58, 2)
+    context.fill()
 
-  context.shadowBlur = 0
-  context.fillStyle = '#e5ecfb'
-  context.font = '700 31px system-ui, sans-serif'
-  const title = node.name.length > 25 ? `${node.name.slice(0, 24)}…` : node.name
-  context.fillText(title, 110, 61)
+    context.textBaseline = 'middle'
+    context.textAlign = 'left'
+    context.fillStyle = '#f0f3f7'
+    context.font = '700 25px system-ui, sans-serif'
+    context.fillText(
+      fitCanvasText(context, node.name, 430),
+      44,
+      48,
+    )
 
-  context.fillStyle = 'rgba(205, 217, 235, .92)'
-  context.font = '600 18px system-ui, sans-serif'
-  context.fillText(
-    node.libraryKind === 'shelf'
-      ? `${node.articleCount ?? node.frequency} articles · ${node.subtitle ?? 'DEV shelf'}`
-      : `${node.frequency} dream${node.frequency === 1 ? '' : 's'} · ${node.category}`,
-    110,
-    92,
-  )
+    context.fillStyle = 'rgba(192, 202, 214, .82)'
+    context.font = '500 14px system-ui, sans-serif'
+    const metadata =
+      `${node.articleCount ?? node.frequency} articles · ${node.subtitle ?? 'DEV shelf'}`
+    context.fillText(
+      fitCanvasText(context, metadata, 430),
+      44,
+      74,
+    )
+  } else {
+    const gradient = context.createLinearGradient(
+      68,
+      16,
+      560,
+      128,
+    )
+    gradient.addColorStop(0, 'rgba(4, 8, 20, .97)')
+    gradient.addColorStop(.72, 'rgba(8, 14, 31, .94)')
+    gradient.addColorStop(
+      1,
+      `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, .2)`,
+    )
+
+    roundedRect(context, 26, 20, 588, 102, 38)
+    context.fillStyle = gradient
+    context.fill()
+    context.strokeStyle =
+      `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, .58)`
+    context.lineWidth = 3
+    context.stroke()
+
+    context.shadowColor =
+      `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, .48)`
+    context.shadowBlur = 16
+    context.fillStyle = '#f1f6ff'
+    context.font = '500 31px system-ui, sans-serif'
+    context.textBaseline = 'middle'
+    context.fillText(node.icon || '✦', 58, 71)
+
+    context.shadowBlur = 0
+    context.fillStyle = '#e5ecfb'
+    context.font = '700 31px system-ui, sans-serif'
+    const title =
+      node.name.length > 25
+        ? `${node.name.slice(0, 24)}…`
+        : node.name
+    context.fillText(title, 110, 61)
+
+    context.fillStyle = 'rgba(205, 217, 235, .92)'
+    context.font = '600 18px system-ui, sans-serif'
+    context.fillText(
+      `${node.frequency} dream${node.frequency === 1 ? '' : 's'} · ${node.category}`,
+      110,
+      92,
+    )
+  }
 
   const texture = new THREE.CanvasTexture(canvas)
   texture.colorSpace = THREE.SRGBColorSpace
   texture.minFilter = THREE.LinearFilter
   texture.magFilter = THREE.LinearFilter
+  texture.generateMipmaps = false
   return texture
 }
 
@@ -986,7 +1075,7 @@ export default function DreamWorld3D({
         )
 
     const camera = new THREE.PerspectiveCamera(
-      43,
+      libraryMode ? 50 : 43,
       1,
       0.05,
       libraryMode ? 900 : 80,
@@ -3120,8 +3209,8 @@ export default function DreamWorld3D({
         group.add(shelf)
         const labelStagger =
           seededUnit(seed, 141) > .5 ? .08 : -.04
-        label.position.set(0, 3.72 + labelStagger, .2)
-        label.scale.set(3.08, .7, 1)
+        label.position.set(0, 3.62 + labelStagger * .35, .2)
+        label.scale.set(2.55, .56, 1)
       }
 
       const start = worldPosition(node, positionsRef.current)
@@ -5821,6 +5910,7 @@ export default function DreamWorld3D({
       if (
         !flightModeRef.current ||
         diveMode !== 'none' ||
+        inputBlockedRef.current ||
         document.pointerLockElement !== renderer.domElement
       ) {
         return
@@ -6318,7 +6408,8 @@ export default function DreamWorld3D({
       const flightActive =
         flightModeRef.current &&
         diveMode === 'none' &&
-        !observatoryModeRef.current
+        !observatoryModeRef.current &&
+        !inputBlockedRef.current
 
       const currentRoomEntry = libraryMode
         ? nearestRoomEntry(
