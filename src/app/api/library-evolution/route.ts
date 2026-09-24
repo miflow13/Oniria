@@ -298,7 +298,7 @@ async function evolve(request: NextRequest) {
         slotDocument(state),
       )
     })
-    await transaction.commit({visibility: 'async'})
+    await transaction.commit()
 
     return NextResponse.json(
       {
