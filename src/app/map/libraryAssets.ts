@@ -38,7 +38,11 @@ export const LIBRARY_ASSETS = {
 export type LibraryAssetKey = keyof typeof LIBRARY_ASSETS
 export type LibraryAssetFitMode = 'height' | 'span'
 
-const cache = new Map<string, Promise<THREE.Group>>()
+// Decode each GLB path once, then create lightweight prepared templates for
+// the requested fit. This avoids paying GLTF/Draco parse cost again when the
+// same authored asset is reused at a different target size elsewhere.
+const sourceCache = new Map<string, Promise<THREE.Group>>()
+const preparedCache = new Map<string, Promise<THREE.Group>>()
 const loader = new GLTFLoader()
 const dracoLoader = new DRACOLoader()
 dracoLoader.setDecoderPath('/draco/')
@@ -50,6 +54,24 @@ function prepareAsset(
   targetSize: number,
   mode: LibraryAssetFitMode,
 ) {
+  // Object3D.clone() intentionally shares geometry/material references. Keep
+  // geometry shared, but isolate materials per prepared template so later
+  // room-specific tint/emissive tuning cannot leak into another fit variant.
+  const materialClones = new Map<THREE.Material, THREE.Material>()
+  root.traverse((child) => {
+    if (!(child instanceof THREE.Mesh)) return
+    const cloneMaterial = (material: THREE.Material) => {
+      const existing = materialClones.get(material)
+      if (existing) return existing
+      const cloned = material.clone()
+      materialClones.set(material, cloned)
+      return cloned
+    }
+    child.material = Array.isArray(child.material)
+      ? child.material.map(cloneMaterial)
+      : cloneMaterial(child.material)
+  })
+
   root.updateMatrixWorld(true)
   let bounds = new THREE.Box3().setFromObject(root)
   const size = bounds.getSize(new THREE.Vector3())
@@ -88,15 +110,24 @@ export function loadLibraryAsset(
 ) {
   const path = LIBRARY_ASSETS[key]
   const cacheKey = `${path}:${targetSize}:${mode}`
-  if (!cache.has(cacheKey)) {
-    cache.set(
+
+  if (!sourceCache.has(path)) {
+    sourceCache.set(
+      path,
+      loader.loadAsync(path).then(({scene}) => scene),
+    )
+  }
+
+  if (!preparedCache.has(cacheKey)) {
+    preparedCache.set(
       cacheKey,
-      loader
-        .loadAsync(path)
-        .then(({scene}) =>
-          prepareAsset(scene, targetSize, mode),
+      sourceCache
+        .get(path)!
+        .then((source) =>
+          prepareAsset(source.clone(true), targetSize, mode),
         ),
     )
   }
-  return cache.get(cacheKey)!
+
+  return preparedCache.get(cacheKey)!
 }
