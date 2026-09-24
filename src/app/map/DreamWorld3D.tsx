@@ -1050,18 +1050,24 @@ export default function DreamWorld3D({
     composer.addPass(dreamPost)
     composer.addPass(new OutputPass())
 
+    let librarySkyFill: THREE.HemisphereLight | null = null
+    let libraryMoonLight: THREE.DirectionalLight | null = null
+    let libraryHorizonFill: THREE.DirectionalLight | null = null
+    let violetLight: THREE.PointLight | null = null
+    let cyanLight: THREE.PointLight | null = null
+
     if (libraryMode) {
       // Open-air library lighting: the sky supplies the ambient fill and a
       // broad moon/key direction supplies shape. No ceiling fixture is needed.
-      const skyFill = new THREE.HemisphereLight(
+      librarySkyFill = new THREE.HemisphereLight(
         0x8fb7e8,
         0x24180f,
         qualityRef.current === 'low' ? .72 : .9,
       )
-      skyFill.name = 'library-sky-fill'
-      scene.add(skyFill)
+      librarySkyFill.name = 'library-sky-fill'
+      scene.add(librarySkyFill)
 
-      const moonLight = new THREE.DirectionalLight(
+      libraryMoonLight = new THREE.DirectionalLight(
         0xc8dcff,
         qualityRef.current === 'cinematic'
           ? 1.2
@@ -1071,33 +1077,33 @@ export default function DreamWorld3D({
               ? .94
               : .82,
       )
-      moonLight.position.set(28, 42, 16)
-      moonLight.target.position.set(0, 0, -28)
-      moonLight.castShadow = renderer.shadowMap.enabled
-      moonLight.shadow.mapSize.set(
+      libraryMoonLight.position.set(28, 42, 16)
+      libraryMoonLight.target.position.set(0, 0, -28)
+      libraryMoonLight.castShadow = renderer.shadowMap.enabled
+      libraryMoonLight.shadow.mapSize.set(
         qualityRef.current === 'cinematic' ? 2048 : 1024,
         qualityRef.current === 'cinematic' ? 2048 : 1024,
       )
-      moonLight.shadow.camera.left = -30
-      moonLight.shadow.camera.right = 30
-      moonLight.shadow.camera.top = 48
-      moonLight.shadow.camera.bottom = -48
-      moonLight.shadow.camera.near = 1
-      moonLight.shadow.camera.far = 110
-      moonLight.shadow.bias = -0.00012
-      moonLight.shadow.normalBias = .03
-      moonLight.name = 'library-moon-key'
-      scene.add(moonLight, moonLight.target)
+      libraryMoonLight.shadow.camera.left = -30
+      libraryMoonLight.shadow.camera.right = 30
+      libraryMoonLight.shadow.camera.top = 48
+      libraryMoonLight.shadow.camera.bottom = -48
+      libraryMoonLight.shadow.camera.near = 1
+      libraryMoonLight.shadow.camera.far = 110
+      libraryMoonLight.shadow.bias = -0.00012
+      libraryMoonLight.shadow.normalBias = .03
+      libraryMoonLight.name = 'library-moon-key'
+      scene.add(libraryMoonLight, libraryMoonLight.target)
 
-      const horizonFill = new THREE.DirectionalLight(
+      libraryHorizonFill = new THREE.DirectionalLight(
         0xffc995,
         qualityRef.current === 'low' ? .16 : .24,
       )
-      horizonFill.position.set(-26, 12, -42)
-      horizonFill.target.position.set(0, 1.4, -26)
-      horizonFill.castShadow = false
-      horizonFill.name = 'library-horizon-fill'
-      scene.add(horizonFill, horizonFill.target)
+      libraryHorizonFill.position.set(-26, 12, -42)
+      libraryHorizonFill.target.position.set(0, 1.4, -26)
+      libraryHorizonFill.castShadow = false
+      libraryHorizonFill.name = 'library-horizon-fill'
+      scene.add(libraryHorizonFill, libraryHorizonFill.target)
     } else {
       scene.add(new THREE.AmbientLight(0x7182b6, .75))
 
@@ -1115,7 +1121,7 @@ export default function DreamWorld3D({
       keyLight.shadow.normalBias = 0.025
       scene.add(keyLight)
 
-      const violetLight = new THREE.PointLight(
+      violetLight = new THREE.PointLight(
         0xb791ff,
         12,
         20,
@@ -1124,7 +1130,7 @@ export default function DreamWorld3D({
       violetLight.position.set(-5, 1, 3)
       scene.add(violetLight)
 
-      const cyanLight = new THREE.PointLight(
+      cyanLight = new THREE.PointLight(
         0x72e2df,
         11,
         20,
@@ -7686,39 +7692,42 @@ export default function DreamWorld3D({
         atmosphereLightTarget.setHex(
           atmospherePreset.tint,
         )
-        violetLight.color.lerp(
-          atmosphereLightTarget,
-          .035,
-        )
-        cyanLight.color.lerp(
-          atmosphereLightTarget,
-          .022,
-        )
-      }
 
-      const atmosphereLightScale = libraryMode
-        ? atmospherePreset.lightStrength
-        : 1
-      const violetTarget =
-        (libraryMode
-          ? selectedVisual
-            ? .12
-            : .055
-          : selectedVisual
-            ? 4.7
-            : 4) * atmosphereLightScale
-      const cyanTarget =
-        (libraryMode
-          ? selectedVisual
-            ? .09
-            : .04
-          : selectedVisual
-            ? 4.3
-            : 3.6) * atmosphereLightScale
-      violetLight.intensity +=
-        (violetTarget - violetLight.intensity) * .035
-      cyanLight.intensity +=
-        (cyanTarget - cyanLight.intensity) * .035
+        if (librarySkyFill) {
+          librarySkyFill.color.lerp(
+            atmosphereLightTarget,
+            .018,
+          )
+          const skyTarget =
+            (qualityRef.current === 'low' ? .72 : .9) *
+            atmospherePreset.lightStrength
+          librarySkyFill.intensity +=
+            (skyTarget - librarySkyFill.intensity) * .035
+        }
+
+        if (libraryMoonLight) {
+          const moonTarget =
+            (selectedVisual ? 1.12 : .94) *
+            atmospherePreset.lightStrength
+          libraryMoonLight.intensity +=
+            (moonTarget - libraryMoonLight.intensity) * .03
+        }
+
+        if (libraryHorizonFill) {
+          const horizonTarget =
+            (selectedVisual ? .28 : .22) *
+            atmospherePreset.lightStrength
+          libraryHorizonFill.intensity +=
+            (horizonTarget - libraryHorizonFill.intensity) * .03
+        }
+      } else if (violetLight && cyanLight) {
+        const violetTarget = selectedVisual ? 4.7 : 4
+        const cyanTarget = selectedVisual ? 4.3 : 3.6
+        violetLight.intensity +=
+          (violetTarget - violetLight.intensity) * .035
+        cyanLight.intensity +=
+          (cyanTarget - cyanLight.intensity) * .035
+      }
 
       if (flightActive && flightInitialized) {
         const routeActive = Boolean(flightRoute)
