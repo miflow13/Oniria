@@ -948,6 +948,195 @@ export function createLibraryBuilding(
     })
   })
 
+
+  // Stronger infinity illusion: unreachable stacked galleries rise far above
+  // the playable ground floor. These are cheap primitive silhouettes only;
+  // they never participate in collision, raycasting, or interaction.
+  const infiniteTierMaterial = new THREE.MeshBasicMaterial({
+    color: 0x13212d,
+    transparent: true,
+    opacity: .3,
+    depthWrite: false,
+    fog: true,
+    toneMapped: false,
+  })
+  const infiniteShelfMaterial = new THREE.MeshBasicMaterial({
+    color: 0x20394a,
+    transparent: true,
+    opacity: .22,
+    depthWrite: false,
+    fog: true,
+    toneMapped: false,
+  })
+  const infiniteGlowMaterial = new THREE.MeshBasicMaterial({
+    color: 0x8edaff,
+    transparent: true,
+    opacity: .09,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    fog: true,
+    toneMapped: false,
+  })
+  localMaterials.push(
+    infiniteTierMaterial,
+    infiniteShelfMaterial,
+    infiniteGlowMaterial,
+  )
+
+  const infiniteDeckGeometry = new THREE.BoxGeometry(5.8, .11, 11.8)
+  const infiniteShelfGeometry = new THREE.BoxGeometry(1.5, 2.45, .42)
+  const infiniteGlowGeometry = new THREE.BoxGeometry(1.1, .055, .46)
+  const infiniteArchJambGeometry = new THREE.BoxGeometry(.32, 4.8, .42)
+  const infiniteArchLintelGeometry = new THREE.BoxGeometry(7.4, .32, .42)
+  localGeometries.push(
+    infiniteDeckGeometry,
+    infiniteShelfGeometry,
+    infiniteGlowGeometry,
+    infiniteArchJambGeometry,
+    infiniteArchLintelGeometry,
+  )
+
+  const addInfiniteShelfBank = (
+    x: number,
+    y: number,
+    z: number,
+    yaw: number,
+    columns: number,
+    spacing: number,
+    scale = 1,
+  ) => {
+    const bank = new THREE.Group()
+    bank.position.set(x, y, z)
+    bank.rotation.y = yaw
+    bank.userData.libraryDecorative = true
+    bank.userData.libraryNonInteractive = true
+
+    for (let index = 0; index < columns; index += 1) {
+      const offset = (index - (columns - 1) / 2) * spacing
+      const shelf = new THREE.Mesh(
+        infiniteShelfGeometry,
+        infiniteShelfMaterial,
+      )
+      shelf.position.x = offset
+      shelf.scale.setScalar(scale)
+      bank.add(shelf)
+
+      const glow = new THREE.Mesh(
+        infiniteGlowGeometry,
+        infiniteGlowMaterial,
+      )
+      glow.position.set(offset, -.42 * scale, .03)
+      glow.scale.setScalar(scale)
+      bank.add(glow)
+    }
+
+    group.add(bank)
+  }
+
+  // Outer-wall mega stacks. Each level is slightly narrower and dimmer so
+  // the architecture appears to recede upward into the dome.
+  ;[6.6, 10.1, 13.6, 17.1].forEach((tierY, tierIndex) => {
+    const tierScale = 1 - tierIndex * .08
+    const tierDepth = 10.8 - tierIndex * .55
+
+    for (const side of [-1, 1] as const) {
+      const deck = new THREE.Mesh(
+        infiniteDeckGeometry,
+        infiniteTierMaterial,
+      )
+      deck.position.set(
+        side * (21.6 - tierIndex * .55),
+        tierY - 1.5,
+        -31,
+      )
+      deck.scale.set(.92, 1, 4.1 - tierIndex * .25)
+      deck.userData.libraryDecorative = true
+      deck.userData.libraryNonInteractive = true
+      group.add(deck)
+
+      ;[-58, -42, -26, -10].forEach((z, bankIndex) => {
+        addInfiniteShelfBank(
+          side * (20.85 - tierIndex * .55),
+          tierY,
+          z + (bankIndex % 2 ? .9 : -.9),
+          side < 0 ? Math.PI / 2 : -Math.PI / 2,
+          5,
+          1.7,
+          tierScale,
+        )
+      })
+    }
+  })
+
+  // Forced-perspective archive extension beyond the far end of the playable
+  // hall. Successive frames and shelf banks shrink faster than their spacing,
+  // making a short physical run read like a much longer corridor.
+  const perspectiveStartZ = -76.5
+  for (let index = 0; index < 9; index += 1) {
+    const scale = Math.pow(.82, index)
+    const z = perspectiveStartZ - index * (5.4 - index * .22)
+    const y = 2.45 * scale + .05
+
+    const leftJamb = new THREE.Mesh(
+      infiniteArchJambGeometry,
+      infiniteTierMaterial,
+    )
+    leftJamb.position.set(-3.65 * scale, y, z)
+    leftJamb.scale.set(scale, scale, scale)
+    group.add(leftJamb)
+
+    const rightJamb = leftJamb.clone()
+    rightJamb.position.x = 3.65 * scale
+    group.add(rightJamb)
+
+    const lintel = new THREE.Mesh(
+      infiniteArchLintelGeometry,
+      infiniteTierMaterial,
+    )
+    lintel.position.set(0, 4.78 * scale, z)
+    lintel.scale.set(scale, scale, scale)
+    group.add(lintel)
+
+    addInfiniteShelfBank(
+      -5.15 * scale,
+      2.25 * scale,
+      z - 1.6 * scale,
+      Math.PI / 2,
+      4,
+      1.35,
+      scale,
+    )
+    addInfiniteShelfBank(
+      5.15 * scale,
+      2.25 * scale,
+      z - 1.6 * scale,
+      -Math.PI / 2,
+      4,
+      1.35,
+      scale,
+    )
+  }
+
+  // Offset floating archive fragments outside the main footprint create a
+  // second parallax layer. Their asymmetry prevents the horizon from reading
+  // as one repeated ring or a conventional rectangular building.
+  ;[
+    [-31, 8.2, -17, .18, .9],
+    [33, 11.4, -37, -.12, .72],
+    [-35, 15.8, -55, .26, .58],
+    [28, 18.6, -68, -.22, .48],
+  ].forEach(([x, y, z, yaw, scale]) => {
+    addInfiniteShelfBank(
+      x,
+      y,
+      z,
+      yaw,
+      6,
+      1.55,
+      scale,
+    )
+  })
+
   // Small architectural edges do a lot of work in a low-poly room. A dark
   // baseboard and matching crown line break the giant flat wall surfaces and
   // make each room read as intentionally constructed rather than boxed-in.
