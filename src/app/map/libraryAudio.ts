@@ -33,8 +33,23 @@ export type LibraryAudioController = {
 
 const AUDIO_ENABLE_EVENT = 'oniria:library-audio-enable'
 
-const LIBRARY_MUSIC_URL =
-  '/audio/solarflex-ambient-ambient-music-569592.mp3'
+const LIBRARY_MUSIC_PARTS = Array.from(
+  {length: 14},
+  (_, index) =>
+    '/audio/oniria-library-ambient/' +
+    String(index).padStart(2, '0') +
+    '.b64',
+)
+
+function decodeBase64Audio(parts: string[]) {
+  const encoded = parts.join('')
+  const binary = window.atob(encoded)
+  const bytes = new Uint8Array(binary.length)
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index)
+  }
+  return bytes.buffer
+}
 
 export function createLibraryAudio(
   listener: THREE.AudioListener,
@@ -82,19 +97,28 @@ export function createLibraryAudio(
     source.start()
   }
 
-  void fetch(LIBRARY_MUSIC_URL, {
-    signal: musicLoadController.signal,
-    cache: 'force-cache',
-  })
-    .then((response) => {
-      if (!response.ok) {
-        throw new Error(
-          `Library music request failed: ${response.status}`,
-        )
-      }
-      return response.arrayBuffer()
-    })
-    .then((encoded) => context.decodeAudioData(encoded))
+  void Promise.all(
+    LIBRARY_MUSIC_PARTS.map((url) =>
+      fetch(url, {
+        signal: musicLoadController.signal,
+        cache: 'force-cache',
+      }).then((response) => {
+        if (!response.ok) {
+          throw new Error(
+            `Library music request failed: ${response.status} ${url}`,
+          )
+        }
+        return response.text()
+      }),
+    ),
+  )
+    .then((parts) =>
+      context.decodeAudioData(
+        decodeBase64Audio(
+          parts.map((part) => part.trim()),
+        ),
+      ),
+    )
     .then((decoded) => {
       if (disposed) return
       musicBuffer = decoded
