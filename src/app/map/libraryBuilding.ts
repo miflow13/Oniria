@@ -1937,12 +1937,15 @@ export function createLibraryBuilding(
         z: number,
         scale: number,
         yaw: number,
+        motion: 'upper' | 'corridor' | 'fragment',
+        motionIndex: number,
       ) => {
         const instance = bookcaseTall.clone(true)
         instance.position.set(x, y, z)
         instance.scale.multiplyScalar(scale)
         instance.rotation.y += yaw
-        instance.name = 'library-infinite-bookcase'
+        instance.name =
+          `library-infinite-bookcase-${motion}-${motionIndex}`
         instance.userData.libraryDecorative = true
         instance.userData.libraryNonInteractive = true
         instance.traverse((child) => {
@@ -1954,6 +1957,53 @@ export function createLibraryBuilding(
           child.userData.libraryNonInteractive = true
         })
         infiniteAssetRoot.add(instance)
+
+        const motionBase = {
+          upper: {
+            hoverAmplitude: 1.25,
+            hoverSpeed: .16,
+            secondaryHoverAmplitude: .42,
+            secondaryHoverSpeed: .29,
+            tiltX: .12,
+            tiltY: .18,
+            tiltZ: .16,
+            driftSide: 1.5,
+            driftForward: .95,
+            driftSpeedSide: .09,
+            driftSpeedForward: .065,
+          },
+          corridor: {
+            hoverAmplitude: .42,
+            hoverSpeed: .14,
+            secondaryHoverAmplitude: .15,
+            secondaryHoverSpeed: .24,
+            tiltX: .035,
+            tiltY: .055,
+            tiltZ: .045,
+            driftSide: .32,
+            driftForward: .18,
+            driftSpeedSide: .075,
+            driftSpeedForward: .055,
+          },
+          fragment: {
+            hoverAmplitude: 2.1,
+            hoverSpeed: .11,
+            secondaryHoverAmplitude: .72,
+            secondaryHoverSpeed: .21,
+            tiltX: .28,
+            tiltY: .42,
+            tiltZ: .34,
+            driftSide: 2.8,
+            driftForward: 1.9,
+            driftSpeedSide: .07,
+            driftSpeedForward: .052,
+          },
+        }[motion]
+
+        floatingProps.register(instance, {
+          phase: floatingPhase(instance.name),
+          ...motionBase,
+        })
         return instance
       }
 
@@ -1971,6 +2021,8 @@ export function createLibraryBuilding(
                 z + (index % 2 === 0 ? -.45 : .45),
                 scale,
                 side < 0 ? Math.PI / 2 : -Math.PI / 2,
+                'upper',
+                tierIndex * 100 + (side < 0 ? 0 : 50) + index,
               )
             },
           )
@@ -1990,6 +2042,8 @@ export function createLibraryBuilding(
           z,
           scale,
           Math.PI / 2,
+          'corridor',
+          index * 2,
         )
         placeInfiniteBookcase(
           x,
@@ -1997,6 +2051,8 @@ export function createLibraryBuilding(
           z,
           scale,
           -Math.PI / 2,
+          'corridor',
+          index * 2 + 1,
         )
       }
 
@@ -2015,6 +2071,8 @@ export function createLibraryBuilding(
             z,
             scale,
             yaw,
+            'fragment',
+            Math.round((x + y + z) * 10) + index,
           )
         }
       })
