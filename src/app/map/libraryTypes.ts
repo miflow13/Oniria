@@ -59,6 +59,10 @@ export type LibraryShelfKind =
   | 'creators'
   | 'search'
 
+export type LibraryShelfLifecycle =
+  | 'forming'
+  | 'active'
+
 export type LibraryShelf = {
   id: string
   title: string
@@ -73,5 +77,10 @@ export type LibraryShelf = {
   pathBay: number
   districtId: string
   widthScale: number
+  slotId: string
+  occupancyKey: string
+  lifecycle: LibraryShelfLifecycle
+  vitality: number
+  materializedAt?: string
   articles: DevArticleSummary[]
 }
