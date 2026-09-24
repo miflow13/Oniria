@@ -7,6 +7,7 @@ import {
   LIBRARY_ROOMS,
   LIBRARY_SHELF_WIDTH,
   hallwayShelfPlacements,
+  libraryRoomBounds,
   roomCrossAisleRect,
   roomDoorwayClearanceRect,
   roomShelfBlueprintPlacements,
@@ -677,7 +678,10 @@ export function createLibraryBuilding(
   backupFloor.receiveShadow = true
   group.add(backupFloor)
 
-  const ceilingGeometry = new THREE.PlaneGeometry(48.9, 89.6)
+  // Fallback ceiling only spans the central hall. The six rooms are open
+  // upward from first paint so their glass roofs never flash opaque while
+  // authored roof assets are still loading.
+  const ceilingGeometry = new THREE.PlaneGeometry(16.1, 89.6)
   localGeometries.push(ceilingGeometry)
   const backupCeiling = new THREE.Mesh(
     ceilingGeometry,
@@ -742,6 +746,16 @@ export function createLibraryBuilding(
       LIBRARY_SKYLIGHT_HALF_DEPTH * 2 -
         LIBRARY_SKYLIGHT_GLASS_INSET * 2,
     )
+  const roomSkylightFrameMaterial =
+    new THREE.MeshStandardMaterial({
+      color: 0x6f573d,
+      roughness: .48,
+      metalness: .3,
+      envMapIntensity: .24,
+      toneMapped: true,
+    })
+  localMaterials.push(roomSkylightFrameMaterial)
+
   const skyRockLargeGeometry =
     new THREE.IcosahedronGeometry(.44, 1)
   const skyRockSmallGeometry =
@@ -1816,14 +1830,30 @@ export function createLibraryBuilding(
         for (let iz = 0; iz < countZ; iz += 1) {
           const x = -24.45 + cellX * (ix + .5)
           const z = -74.95 + cellZ * (iz + .5)
-          const insideSkylight =
+          const insideHallSkylight =
             Math.abs(x) < LIBRARY_SKYLIGHT_HALF_WIDTH &&
             LIBRARY_SKYLIGHT_CENTERS.some(
               (centerZ) =>
                 Math.abs(z - centerZ) <
                 LIBRARY_SKYLIGHT_HALF_DEPTH,
             )
-          if (insideSkylight) continue
+          const insideRoomGlassRoof = LIBRARY_ROOMS.some(
+            (room) => {
+              const bounds = libraryRoomBounds(
+                room,
+                Math.max(cellX, cellZ) * .42,
+              )
+              return (
+                x >= bounds.minX &&
+                x <= bounds.maxX &&
+                z >= bounds.minZ &&
+                z <= bounds.maxZ
+              )
+            },
+          )
+          if (insideHallSkylight || insideRoomGlassRoof) {
+            continue
+          }
 
           const tile = placeAsset(
             roofTile,
@@ -1846,6 +1876,122 @@ export function createLibraryBuilding(
       }
 
       backupCeiling.visible = false
+
+      // Each content room is now capped by one continuous glass skylight
+      // instead of opaque roof tiles. A restrained perimeter frame keeps the
+      // rooms architecturally legible while leaving the Oniria sky visible.
+      LIBRARY_ROOMS.forEach((room) => {
+        const bounds = libraryRoomBounds(room, -.18)
+        const width = Math.max(
+          .5,
+          bounds.maxX - bounds.minX,
+        )
+        const depth = Math.max(
+          .5,
+          bounds.maxZ - bounds.minZ,
+        )
+        const centerX =
+          (bounds.minX + bounds.maxX) / 2
+        const centerZ =
+          (bounds.minZ + bounds.maxZ) / 2
+
+        const glassGeometry = new THREE.PlaneGeometry(
+          width,
+          depth,
+        )
+        localGeometries.push(glassGeometry)
+        const glass = new THREE.Mesh(
+          glassGeometry,
+          skylightGlassMaterial,
+        )
+        glass.rotation.x = Math.PI / 2
+        glass.position.set(centerX, 5.065, centerZ)
+        glass.renderOrder = 2
+        glass.castShadow = false
+        glass.receiveShadow = false
+        glass.name =
+          `library-room-glass-roof-${room.slot}`
+        group.add(glass)
+
+        const frameThickness = .085
+        const frameHeight = .075
+        const horizontalFrameGeometry =
+          new THREE.BoxGeometry(
+            width + frameThickness * 2,
+            frameHeight,
+            frameThickness,
+          )
+        const verticalFrameGeometry =
+          new THREE.BoxGeometry(
+            frameThickness,
+            frameHeight,
+            depth,
+          )
+        localGeometries.push(
+          horizontalFrameGeometry,
+          verticalFrameGeometry,
+        )
+
+        ;[bounds.minZ, bounds.maxZ].forEach(
+          (frameZ, index) => {
+            const frame = new THREE.Mesh(
+              horizontalFrameGeometry,
+              roomSkylightFrameMaterial,
+            )
+            frame.position.set(
+              centerX,
+              5.085,
+              frameZ,
+            )
+            frame.name =
+              `library-room-skylight-frame-${room.slot}-z-${index}`
+            group.add(frame)
+          },
+        )
+
+        ;[bounds.minX, bounds.maxX].forEach(
+          (frameX, index) => {
+            const frame = new THREE.Mesh(
+              verticalFrameGeometry,
+              roomSkylightFrameMaterial,
+            )
+            frame.position.set(
+              frameX,
+              5.085,
+              centerZ,
+            )
+            frame.name =
+              `library-room-skylight-frame-${room.slot}-x-${index}`
+            group.add(frame)
+          },
+        )
+
+        // Two very thin ribs keep the large sheet readable as architectural
+        // glazing without turning it back into a visually heavy ceiling grid.
+        ;[-1 / 3, 1 / 3].forEach(
+          (ratio, index) => {
+            const rib = new THREE.Mesh(
+              new THREE.BoxGeometry(
+                frameThickness * .72,
+                frameHeight * .72,
+                depth - .12,
+              ),
+              roomSkylightFrameMaterial,
+            )
+            localGeometries.push(
+              rib.geometry as THREE.BufferGeometry,
+            )
+            rib.position.set(
+              centerX + width * ratio,
+              5.082,
+              centerZ,
+            )
+            rib.name =
+              `library-room-skylight-rib-${room.slot}-${index}`
+            group.add(rib)
+          },
+        )
+      })
 
       // A single suspended particle field lives above the roof. Depth testing
       // means it only becomes visible through the actual ceiling openings.
