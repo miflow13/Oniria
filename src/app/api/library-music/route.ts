@@ -49,6 +49,28 @@ function decodeHtmlEntities(value: string) {
     .replace(/&gt;/g, '>')
 }
 
+function validatedTrackUrl(value: string) {
+  try {
+    const normalized = decodeHtmlEntities(value)
+      .replaceAll('\\\\u002F', '/')
+      .replaceAll('\\\\u0026', '&')
+      .replaceAll('\\\\/', '/')
+    const url = new URL(normalized)
+
+    if (
+      url.protocol !== 'https:' ||
+      url.hostname !== ALLOWED_AUDIO_HOST ||
+      !url.pathname.includes('/download/audio/')
+    ) {
+      return null
+    }
+
+    return url
+  } catch {
+    return null
+  }
+}
+
 function extractTrackUrl(html: string) {
   const scripts = html.matchAll(
     /<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi,
@@ -63,19 +85,23 @@ function extractTrackUrl(html: string) {
       const contentUrl = findContentUrl(parsed)
       if (!contentUrl) continue
 
-      const url = new URL(contentUrl)
-      if (
-        url.protocol !== 'https:' ||
-        url.hostname !== ALLOWED_AUDIO_HOST ||
-        !url.pathname.includes('/download/audio/')
-      ) {
-        continue
-      }
-
-      return url
+      const url = validatedTrackUrl(contentUrl)
+      if (url) return url
     } catch {
       // Keep looking: pages can contain multiple JSON-LD blocks.
     }
+  }
+
+  // Pixabay occasionally changes which structured-data block carries the
+  // media URL. Fall back to a tightly validated CDN URL found in the page so
+  // the library does not lose its ambience because of a metadata reshuffle.
+  const directCandidates = html.match(
+    /https:(?:\\\\\/|\/){2}cdn\.pixabay\.com(?:\\\\\/|\/)download(?:\\\\\/|\/)audio(?:\\\\\/|\/)[^"'<>\\s]+/g,
+  ) ?? []
+
+  for (const candidate of directCandidates) {
+    const url = validatedTrackUrl(candidate)
+    if (url) return url
   }
 
   return null
