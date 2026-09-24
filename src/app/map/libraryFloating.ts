@@ -34,7 +34,10 @@ export type FloatingPropRegistry = {
     object: THREE.Object3D,
     options: FloatingPropOptions,
   ) => void
-  update: (elapsed: number) => void
+  update: (
+    elapsed: number,
+    viewerPosition?: THREE.Vector3,
+  ) => void
   clear: () => void
 }
 
@@ -49,6 +52,7 @@ export function floatingPhase(id: string) {
 
 export function createFloatingPropRegistry(): FloatingPropRegistry {
   const props: FloatingProp[] = []
+  let updateFrame = 0
 
   return {
     register(object, options) {
@@ -63,8 +67,29 @@ export function createFloatingPropRegistry(): FloatingPropRegistry {
         baseRotationZ: object.rotation.z,
       })
     },
-    update(elapsed) {
+    update(elapsed, viewerPosition) {
+      updateFrame += 1
       for (const prop of props) {
+        // Nearby props retain full-rate motion. Distant zero-gravity dressing
+        // is updated less often because sub-frame movement is imperceptible
+        // at that distance. Motion is still derived from absolute elapsed
+        // time, so throttled props never accumulate timing drift.
+        if (viewerPosition) {
+          const dx = prop.baseX - viewerPosition.x
+          const dy = prop.baseY - viewerPosition.y
+          const dz = prop.baseZ - viewerPosition.z
+          const distanceSq = dx * dx + dy * dy + dz * dz
+          const stride =
+            distanceSq > 42 * 42
+              ? 6
+              : distanceSq > 24 * 24
+                ? 3
+                : 1
+          if (stride > 1 && updateFrame % stride !== 0) {
+            continue
+          }
+        }
+
         const wave = elapsed * prop.hoverSpeed + prop.phase
         const secondaryHover =
           Math.sin(
@@ -148,6 +173,7 @@ export function createFloatingPropRegistry(): FloatingPropRegistry {
     },
     clear() {
       props.length = 0
+      updateFrame = 0
     },
   }
 }
