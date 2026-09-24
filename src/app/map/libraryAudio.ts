@@ -44,73 +44,44 @@ export function createLibraryAudio(
   master.gain.value = 0
   master.connect(listener.getInput())
 
-  // The library now uses one authored ambient song as its continuous
-  // music bed. The previous generated lofi composition and noise/drone layer
-  // are intentionally gone; interaction sounds remain separate.
-  const musicGain = context.createGain()
-  musicGain.gain.value = .17
-  musicGain.connect(master)
+  // Stream the authored SolarFLEX track instead of decoding the full
+  // five-minute file into an AudioBuffer. This keeps the continuous music bed
+  // lightweight while footsteps and shelf interaction sounds stay in Web Audio.
+  const musicElement = new Audio(LIBRARY_MUSIC_URL)
+  musicElement.loop = true
+  musicElement.preload = 'metadata'
+  musicElement.playsInline = true
+  musicElement.volume = 0
 
-  const musicSources = new Set<AudioBufferSourceNode>()
-  const musicLoadController = new AbortController()
-  let musicBuffer: AudioBuffer | null = null
-  let musicStarted = false
+  let soundRequested = false
+  let musicVolume = 0
+  let musicPlayPending = false
   let disposed = false
 
-  const startMusic = () => {
+  const ensureMusicPlaying = async () => {
     if (
       disposed ||
-      musicStarted ||
-      !musicBuffer
+      !soundRequested ||
+      !musicElement.paused ||
+      musicPlayPending
     ) {
       return
     }
 
-    const source = context.createBufferSource()
-    source.buffer = musicBuffer
-    source.loop = true
-    source.loopStart = 0
-    source.loopEnd = musicBuffer.duration
-    source.connect(musicGain)
-    musicSources.add(source)
-    musicStarted = true
-
-    source.addEventListener('ended', () => {
-      musicSources.delete(source)
-    })
-    source.start()
-  }
-
-  void fetch(LIBRARY_MUSIC_URL, {
-    signal: musicLoadController.signal,
-    cache: 'force-cache',
-  })
-    .then((response) => {
-      if (!response.ok) {
-        throw new Error(
-          `Library music request failed: ${response.status}`,
+    musicPlayPending = true
+    try {
+      await musicElement.play()
+    } catch (error) {
+      if (!disposed) {
+        console.warn(
+          '[DEV Library] Ambient music could not start.',
+          error,
         )
       }
-      return response.arrayBuffer()
-    })
-    .then((encoded) => context.decodeAudioData(encoded))
-    .then((decoded) => {
-      if (disposed) return
-      musicBuffer = decoded
-      startMusic()
-    })
-    .catch((error) => {
-      if (
-        disposed ||
-        musicLoadController.signal.aborted
-      ) {
-        return
-      }
-      console.warn(
-        '[DEV Library] Ambient music failed to load.',
-        error,
-      )
-    })
+    } finally {
+      musicPlayPending = false
+    }
+  }
 
   let nextFootstepAt = 0
   let lastShelfId: string | null = null
@@ -187,6 +158,15 @@ export function createLibraryAudio(
 
   const handleUnlock = () => {
     if (disposed) return
+    soundRequested = true
+    void musicElement.play().catch((error) => {
+      if (!disposed) {
+        console.warn(
+          '[DEV Library] Ambient music could not start.',
+          error,
+        )
+      }
+    })
     void context.resume()
   }
 
@@ -201,6 +181,7 @@ export function createLibraryAudio(
     }) {
       if (disposed) return
 
+      soundRequested = enabled
       const now = context.currentTime
       const audible = enabled && context.state === 'running'
 
@@ -210,8 +191,6 @@ export function createLibraryAudio(
         audible ? .18 : .06,
       )
 
-      if (!audible) return
-
       const walking = movementMode === 'walk'
       const speedStrength = THREE.MathUtils.clamp(
         speed / 4.25,
@@ -219,13 +198,29 @@ export function createLibraryAudio(
         1,
       )
 
-      musicGain.gain.setTargetAtTime(
-        walking
-          ? .165 - speedStrength * .025
-          : .145,
-        now,
-        .65,
+      const targetMusicVolume = audible
+        ? walking
+          ? .122 - speedStrength * .018
+          : .108
+        : 0
+      musicVolume = THREE.MathUtils.lerp(
+        musicVolume,
+        targetMusicVolume,
+        audible ? .08 : .18,
       )
+      musicElement.volume = THREE.MathUtils.clamp(
+        musicVolume,
+        0,
+        1,
+      )
+
+      if (audible) {
+        void ensureMusicPlaying()
+      } else if (!enabled && !musicElement.paused) {
+        musicElement.pause()
+      }
+
+      if (!audible) return
 
       if (
         walking &&
@@ -260,17 +255,9 @@ export function createLibraryAudio(
 
       window.removeEventListener(AUDIO_ENABLE_EVENT, handleUnlock)
 
-      musicLoadController.abort()
-      musicSources.forEach((source) => {
-        try {
-          source.stop()
-        } catch {
-          // Source may already have naturally ended during teardown.
-        }
-        source.disconnect()
-      })
-      musicSources.clear()
-      musicGain.disconnect()
+      musicElement.pause()
+      musicElement.removeAttribute('src')
+      musicElement.load()
       master.disconnect()
     },
   }
