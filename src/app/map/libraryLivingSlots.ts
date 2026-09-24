@@ -17,7 +17,7 @@ export type LivingTopicSlot = {
   articles: DevArticleSummary[]
 }
 
-type TopicSignal = {
+export type TopicSignal = {
   tag: string
   articles: DevArticleSummary[]
   score: number
@@ -58,7 +58,7 @@ function uniqueArticles(articles: DevArticleSummary[]) {
   })
 }
 
-function topicSignals(
+export function rankTopicSignals(
   articles: DevArticleSummary[],
   now: number,
 ) {
@@ -134,7 +134,7 @@ function normalizedVitality(
   return Math.max(0, Math.min(1, score / maximum))
 }
 
-function stableTagHash(value: string) {
+export function stableTopicHash(value: string) {
   let hash = 2166136261
   for (let index = 0; index < value.length; index += 1) {
     hash ^= value.charCodeAt(index)
@@ -157,7 +157,7 @@ export function resolveLivingTopicSlots(
   sourceArticles: DevArticleSummary[],
   now = Date.now(),
 ): LivingTopicSlot[] {
-  const signals = topicSignals(sourceArticles, now)
+  const signals = rankTopicSignals(sourceArticles, now)
   const signalByTag = new Map(
     signals.map((signal) => [signal.tag, signal]),
   )
@@ -212,7 +212,7 @@ export function resolveLivingTopicSlots(
   emergent.forEach((signal) => {
     if (availableIndices.length === 0) return
     const start =
-      stableTagHash(signal.tag) % availableIndices.length
+      stableTopicHash(signal.tag) % availableIndices.length
 
     for (
       let offset = 0;
