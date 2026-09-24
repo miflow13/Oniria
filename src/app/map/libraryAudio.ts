@@ -34,7 +34,7 @@ export type LibraryAudioController = {
 const AUDIO_ENABLE_EVENT = 'oniria:library-audio-enable'
 
 const LIBRARY_MUSIC_URL =
-  '/audio/oniria-library-ambient-loop.ogg'
+  '/audio/solarflex-ambient-ambient-music-569592.mp3'
 
 export function createLibraryAudio(
   listener: THREE.AudioListener,
@@ -56,6 +56,7 @@ export function createLibraryAudio(
   const musicLoadController = new AbortController()
   let musicBuffer: AudioBuffer | null = null
   let musicStarted = false
+  let disposed = false
 
   const startMusic = () => {
     if (
@@ -114,7 +115,6 @@ export function createLibraryAudio(
 
   let nextFootstepAt = 0
   let lastShelfId: string | null = null
-  let disposed = false
 
   const createTone = (
     frequency: number,
@@ -199,9 +199,6 @@ export function createLibraryAudio(
       movementMode,
       speed,
       elapsed,
-      currentBay: _currentBay,
-      activeAudioProfile: _activeAudioProfile,
-      districts: _districts,
     }) {
       if (disposed) return
 
