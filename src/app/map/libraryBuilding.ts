@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import type {LibraryWorldConfig} from '@/lib/libraryWorldConfig'
 import {loadLibraryAsset} from './libraryAssets'
+import {createLibraryDome} from './libraryDome'
 import {
   LIBRARY_FURNISHINGS,
   LIBRARY_HALL_READING_Z,
@@ -50,6 +51,8 @@ export function createLibraryBuilding(
   const group = new THREE.Group()
   group.name = 'sanity-room-library-building'
   scene.add(group)
+
+  const dome = createLibraryDome(group, floatingProps)
 
   let disposed = false
   let floorSurfaceY = .05
@@ -2254,6 +2257,7 @@ export function createLibraryBuilding(
     ready,
     dispose: () => {
       disposed = true
+      dome.dispose()
       scene.remove(group)
       localGeometries.forEach((geometry) => geometry.dispose())
       localMaterials.forEach((material) => material.dispose())
