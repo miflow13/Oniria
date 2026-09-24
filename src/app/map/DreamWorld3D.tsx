@@ -2407,8 +2407,10 @@ export default function DreamWorld3D({
         shelfNode &&
         node.libraryShelfLifecycle === 'forming'
       ) {
-        group.userData.libraryMaterializationStartedAt =
-          performance.now()
+        // A forming shelf should be witnessed in-world, not complete its
+        // animation while the player is still walking from the entrance.
+        // Keep it latent until the camera comes close enough to its slot.
+        group.userData.libraryMaterializationArmed = true
       }
 
       const shellMaterial = createLivingOrbMaterial(color, node.category)
@@ -7049,30 +7051,80 @@ export default function DreamWorld3D({
         }
 
         if (node.libraryKind === 'shelf') {
-          const materializationStartedAt =
+          const materializationArmed =
             visual.group.userData
-              .libraryMaterializationStartedAt
+              .libraryMaterializationArmed === true
+          let materializationStartedAt =
+            visual.group.userData
+              .libraryMaterializationStartedAt as
+              | number
+              | undefined
+
+          if (
+            materializationArmed &&
+            shelfDistance < 14
+          ) {
+            materializationStartedAt = now
+            visual.group.userData
+              .libraryMaterializationStartedAt = now
+            delete visual.group.userData
+              .libraryMaterializationArmed
+          }
+
           if (
             typeof materializationStartedAt === 'number'
           ) {
             const progress = THREE.MathUtils.clamp(
-              (now - materializationStartedAt) / 2200,
+              (now - materializationStartedAt) / 2400,
               0,
               1,
             )
             const eased =
-              1 - Math.pow(1 - progress, 3)
+              progress < .82
+                ? 1 - Math.pow(1 - progress / .82, 3)
+                : 1 +
+                  Math.sin(
+                    ((progress - .82) / .18) * Math.PI,
+                  ) *
+                    .035
             visual.group.scale.setScalar(
-              THREE.MathUtils.lerp(
-                .04,
-                visual.baseScale,
-                eased,
+              Math.min(
+                visual.baseScale * 1.035,
+                THREE.MathUtils.lerp(
+                  .035,
+                  visual.baseScale,
+                  eased,
+                ),
               ),
             )
+            const shelfLabelMaterial =
+              visual.label.material as THREE.SpriteMaterial
+            shelfLabelMaterial.opacity =
+              Math.max(
+                shelfLabelMaterial.opacity,
+                THREE.MathUtils.smoothstep(
+                  progress,
+                  .38,
+                  .9,
+                ) * .94,
+              )
+
             if (progress >= 1) {
+              visual.group.scale.setScalar(
+                visual.baseScale,
+              )
               delete visual.group.userData
                 .libraryMaterializationStartedAt
+              visual.group.userData
+                .libraryShelfLifecycle = 'active'
             }
+          } else if (materializationArmed) {
+            // The slot exists, but its occupant has not physically manifested
+            // yet. Keeping it nearly invisible makes the empty space legible.
+            visual.group.scale.setScalar(.035)
+            const shelfLabelMaterial =
+              visual.label.material as THREE.SpriteMaterial
+            shelfLabelMaterial.opacity = 0
           }
 
           const frameMaterial =
