@@ -379,6 +379,7 @@ export default function DevLibraryMap() {
   const [routeLoading, setRouteLoading] = useState(false)
   const [query, setQuery] = useState('')
   const [searchResults, setSearchResults] = useState<DevArticleSummary[]>([])
+  const [searchGeneration, setSearchGeneration] = useState(0)
   const [dynamicArticles, setDynamicArticles] = useState<DevArticleSummary[]>([])
   const [dynamicTitle, setDynamicTitle] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -1309,6 +1310,7 @@ export default function DevLibraryMap() {
       bootstrap.profileArticles,
       catalog,
       dynamicArticles,
+      searchResults,
     )
     const curatorIds = new Set(
       worldConfig.curatedArticles
@@ -1360,13 +1362,17 @@ export default function DevLibraryMap() {
             ? dynamicArticles
             : creatorPreview
         case 'search':
-          // Search results live in the React overlay. Keeping the physical
-          // Search room on a stable sample prevents every query from
-          // rebuilding the Three.js world and resetting the visitor.
-          return uniqueArticles(
-            bootstrap.feed,
-            bootstrap.latest,
-          )
+          // Before the first query, keep the room legible as a live catalogue
+          // preview. Once a search runs, the physical room becomes the query
+          // result set itself. DreamWorld3D preserves the visitor's flight
+          // state across this graph rebuild, so results can materialize in
+          // place without throwing the camera back to the entrance.
+          return searchGeneration > 0
+            ? searchResults
+            : uniqueArticles(
+                bootstrap.feed,
+                bootstrap.latest,
+              )
         case 'catalog': {
           const source = uniqueArticles(
             catalog,
@@ -1483,6 +1489,9 @@ export default function DevLibraryMap() {
         )
         const source = articlesForDistrict(district)
         const kind = shelfKindForSource(district.sourceMode)
+        const searchMaterializing =
+          district.sourceMode === 'search' &&
+          searchGeneration > 0
         const persistedTopicStates =
           worldConfig.slotStates.filter(
             (state) => state.districtId === district.id,
@@ -1639,8 +1648,18 @@ export default function DevLibraryMap() {
             title = `NEW ARRIVALS · ${shelfNumber}`
             functionLabel = 'NEWLY PUBLISHED'
           } else if (district.sourceMode === 'search') {
-            title = `SEARCH INDEX · ${shelfNumber}`
-            functionLabel = 'QUERY TERMINAL · USE SEARCH BAR'
+            if (searchGeneration > 0) {
+              const tag = dominantTag(articles)
+              title = tag
+                ? `SEARCH · #${tag.toUpperCase()}`
+                : `SEARCH RESULTS · ${shelfNumber}`
+              functionLabel = query.trim()
+                ? `QUERY “${query.trim().slice(0, 28)}”`
+                : 'LIVE SEARCH RESULTS'
+            } else {
+              title = `SEARCH INDEX · ${shelfNumber}`
+              functionLabel = 'QUERY TERMINAL · USE SEARCH BAR'
+            }
           } else if (district.sourceMode === 'catalog') {
             title = `ARCHIVE · ${shelfNumber}`
             functionLabel = 'LONG-TAIL DEV CATALOGUE'
@@ -1649,24 +1668,31 @@ export default function DevLibraryMap() {
           const subtitle =
             `${functionLabel} · ${shelfDateRange(articles)} · ${articles.length} VOLUMES`
 
+          const shelfOccupancyKey = searchMaterializing
+            ? `search:${district.id}:${placement.slotId}:g${searchGeneration}`
+            : slotState.occupancyKey ??
+              `static:${district.id}:${placement.slotId}`
+          const shelfIdentity = searchMaterializing
+            ? `search-g${searchGeneration}`
+            : slotState.occupancyKey ?? shelfIndex
+
           const shelf = makeShelf(
             'shelf:room:' +
               district.id +
               ':' +
               placement.slotId +
               ':' +
-              (slotState.occupancyKey ?? shelfIndex),
+              shelfIdentity,
             title,
             subtitle,
             kind,
             placement,
             articles,
             {
-              occupancyKey:
-                slotState.occupancyKey ??
-                `static:${district.id}:${placement.slotId}`,
-              lifecycle:
-                slotState.lifecycle === 'dormant'
+              occupancyKey: shelfOccupancyKey,
+              lifecycle: searchMaterializing
+                ? 'forming'
+                : slotState.lifecycle === 'dormant'
                   ? 'active'
                   : slotState.lifecycle,
               vitality: slotState.vitality,
@@ -1741,7 +1767,10 @@ export default function DevLibraryMap() {
     curatedLiveArticles,
     dynamicArticles,
     dynamicTitle,
+    query,
     roomWorldConfig,
+    searchGeneration,
+    searchResults,
     districtSamples,
     worldConfig.curatedArticles,
     worldConfig.slotStates,
@@ -2077,6 +2106,7 @@ export default function DevLibraryMap() {
         articles: DevArticleSummary[]
       }
       setSearchResults(payload.articles ?? [])
+      setSearchGeneration((current) => current + 1)
       setSearchOpen(true)
       setSelectedId(null)
       document.exitPointerLock?.()
