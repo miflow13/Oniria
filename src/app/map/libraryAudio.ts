@@ -38,17 +38,24 @@ const LIBRARY_MUSIC_PARTS = Array.from(
   (_, index) =>
     '/audio/oniria-library-ambient/' +
     String(index).padStart(2, '0') +
-    '.b64',
+    '.bin',
 )
 
-function decodeBase64Audio(parts: string[]) {
-  const encoded = parts.join('')
-  const binary = window.atob(encoded)
-  const bytes = new Uint8Array(binary.length)
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index)
-  }
-  return bytes.buffer
+function joinAudioParts(parts: ArrayBuffer[]) {
+  const totalBytes = parts.reduce(
+    (total, part) => total + part.byteLength,
+    0,
+  )
+  const joined = new Uint8Array(totalBytes)
+  let offset = 0
+
+  parts.forEach((part) => {
+    const bytes = new Uint8Array(part)
+    joined.set(bytes, offset)
+    offset += bytes.byteLength
+  })
+
+  return joined.buffer
 }
 
 export function createLibraryAudio(
@@ -108,16 +115,12 @@ export function createLibraryAudio(
             `Library music request failed: ${response.status} ${url}`,
           )
         }
-        return response.text()
+        return response.arrayBuffer()
       }),
     ),
   )
     .then((parts) =>
-      context.decodeAudioData(
-        decodeBase64Audio(
-          parts.map((part) => part.trim()),
-        ),
-      ),
+      context.decodeAudioData(joinAudioParts(parts)),
     )
     .then((decoded) => {
       if (disposed) return
