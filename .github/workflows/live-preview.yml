@@ -7,6 +7,9 @@ on:
       - '.github/workflows/live-preview.yml'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 concurrency:
   group: oniria-live-preview
   cancel-in-progress: true
@@ -76,6 +79,23 @@ jobs:
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "Built from commit: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
           echo "LIVE_PREVIEW_URL=$preview_url"
+
+      - name: Publish live preview URL
+        run: |
+          cat > .github/LIVE_PREVIEW.md <<EOF
+          # Oniria live preview
+
+          ${{ steps.tunnel.outputs.url }}
+
+          Built from commit: $GITHUB_SHA
+
+          This is a temporary GitHub Actions preview and remains live while the preview workflow runner is active.
+          EOF
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/LIVE_PREVIEW.md
+          git commit -m "ci: publish live preview URL [skip ci]" || exit 0
+          git push
 
       - name: Keep preview alive
         run: |
