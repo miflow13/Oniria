@@ -1525,6 +1525,33 @@ export default function DevLibraryMap() {
   const catalogShelfCount = shelves.filter(
     (shelf) => shelf.kind === 'catalog',
   ).length
+  const topicDistrictIndex = roomWorldConfig.districts.findIndex(
+    (district) =>
+      district.sourceMode === 'topics' ||
+      district.sourceMode === 'tagged',
+  )
+  const topicDistrict =
+    topicDistrictIndex >= 0
+      ? roomWorldConfig.districts[topicDistrictIndex]
+      : null
+  const topicSlotCapacity = topicDistrict
+    ? roomShelfPlacements(
+        topicDistrict,
+        topicDistrictIndex,
+      ).length
+    : 0
+  const occupiedTopicShelfCount = shelves.filter(
+    (shelf) => shelf.kind === 'topics',
+  ).length
+  const newTopicShelfCount = shelves.filter(
+    (shelf) =>
+      shelf.kind === 'topics' &&
+      shelf.lifecycle === 'forming',
+  ).length
+  const nearTopics =
+    selectedShelf?.kind === 'topics' ||
+    hoveredShelf?.kind === 'topics' ||
+    nearestShelf?.kind === 'topics'
   const lastCatalogLoadTriggerRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -1908,6 +1935,16 @@ export default function DevLibraryMap() {
                   catalog.length +
                   ' catalogue articles loaded'
                 : ' · catalogue end reached'}
+            {nearTopics && topicSlotCapacity > 0
+              ? ' · LIVING TOPICS ' +
+                occupiedTopicShelfCount +
+                '/' +
+                topicSlotCapacity +
+                ' OCCUPIED' +
+                (newTopicShelfCount > 0
+                  ? ' · ' + newTopicShelfCount + ' NEW'
+                  : ' · NO NEW CANDIDATES')
+              : ''}
           </small>
         </div>
       </header>
