@@ -842,51 +842,15 @@ export function createLibraryBuilding(
       })
     }
 
-    const district = roomDistrictBySlot.get(room.slot)
-    const accent = district?.accent ?? '#' + room.accent.toString(16)
-    const sourceMode = district?.sourceMode ?? room.sourceMode
-    const roomIntensity =
-      sourceMode === 'featured'
-        ? .26
-        : sourceMode === 'catalog'
-          ? .09
-          : sourceMode === 'creators'
-            ? .17
-            : .15
-
-    const accentLight = new THREE.PointLight(
-      new THREE.Color(accent),
-      roomIntensity,
-      10,
-      2,
-    )
-    accentLight.position.set(x, 3.05, z)
-    group.add(accentLight)
-
-    // The actual pendant mesh gets its bulb, point light, and soft downward
-    // cone once the GLB finishes loading below. Keeping light generation tied
-    // to the fixture prevents decorative lamps from drifting out of sync with
-    // their illumination.
+    // The actual pendant mesh supplies the room's practical illumination.
+    // Legacy sub-1 accent lights were removed here: in modern photometric
+    // Three.js they were visually negligible but still increased the light
+    // count compiled into every PBR material.
   }
 
-  ;[
-    {position: [-18.2, 2.8, -12] as const, intensity: .22},
-    {position: [18, 2.75, -32] as const, intensity: .17},
-    {position: [-16, 2.9, -52] as const, intensity: .24},
-  ].forEach(({position, intensity}) => {
-    const readingLight = new THREE.PointLight(
-      0xffcf9e,
-      intensity,
-      5.3,
-      2,
-    )
-    readingLight.position.set(
-      position[0],
-      position[1],
-      position[2],
-    )
-    group.add(readingLight)
-  })
+  // Reading pools are provided by the practical pendant/ceiling fixtures and
+  // the inexpensive contact-light meshes. The old sub-1 helper point lights
+  // were below visible photometric range and only increased shader light cost.
 
   addWall(-8, 9, .28, 11, 5)
   addWall(8, 9, .28, 11, 5)
@@ -1279,7 +1243,6 @@ export function createLibraryBuilding(
     id: string,
     pointIntensity: number,
     distance: number,
-    spotIntensity: number,
   ) => {
     fixture.updateMatrixWorld(true)
     const bounds = new THREE.Box3().setFromObject(fixture)
@@ -1306,20 +1269,6 @@ export function createLibraryBuilding(
     point.castShadow = false
     point.name = `library-pendant-point-${id}`
     group.add(point)
-
-    const spot = new THREE.SpotLight(
-      0xffddb2,
-      spotIntensity * .58,
-      Math.max(4.6, distance - 1.1),
-      Math.PI / 4.45,
-      .9,
-      2,
-    )
-    spot.position.copy(point.position)
-    spot.castShadow = false
-    spot.target.position.set(center.x, .55, center.z)
-    spot.name = `library-pendant-spot-${id}`
-    group.add(spot, spot.target)
 
     const pool = new THREE.Mesh(
       pendantPoolGeometry,
@@ -1402,23 +1351,21 @@ export function createLibraryBuilding(
       lens.name =
         `library-room-ceiling-lens-${room.slot}-${fixtureIndex}`
       group.add(lens)
-
-      const fill = new THREE.PointLight(
-        0xffd2a1,
-        22,
-        5.6,
-        2,
-      )
-      fill.position.set(
-        roomX,
-        4.68,
-        roomZ + zOffset,
-      )
-      fill.castShadow = false
-      fill.name =
-        `library-room-ceiling-light-${room.slot}-${fixtureIndex}`
-      group.add(fill)
     })
+
+    // One broad fill per room replaces two overlapping point lights. The two
+    // emissive fixtures remain visible, while the wider practical fill keeps
+    // shelf faces equally readable with half the dynamic-light count.
+    const fill = new THREE.PointLight(
+      0xffd2a1,
+      30,
+      8.2,
+      2,
+    )
+    fill.position.set(roomX, 4.62, roomZ)
+    fill.castShadow = false
+    fill.name = `library-room-ceiling-light-${room.slot}`
+    group.add(fill)
   })
 
   // Surveyed September 23 from the in-world layout pin tool. Keep the
@@ -2344,40 +2291,9 @@ export function createLibraryBuilding(
           yaw,
         )
 
-        const lightPosition = center
-          .clone()
-          .addScaledVector(forward, .22)
-        lightPosition.y += .03
-
-        const sconcePoint = new THREE.PointLight(
-          0xffc07a,
-          34,
-          4.6,
-          2,
-        )
-        sconcePoint.position.copy(lightPosition)
-        sconcePoint.castShadow = false
-        sconcePoint.name =
-          `library-sconce-point-${placement.id}`
-        group.add(sconcePoint)
-
-        const sconceSpot = new THREE.SpotLight(
-          0xffd3a0,
-          16,
-          4.4,
-          Math.PI / 3.15,
-          .82,
-          2,
-        )
-        sconceSpot.position.copy(lightPosition)
-        sconceSpot.castShadow = false
-        sconceSpot.target.position
-          .copy(lightPosition)
-          .addScaledVector(forward, 1.55)
-        sconceSpot.target.position.y -= .72
-        sconceSpot.name =
-          `library-sconce-spot-${placement.id}`
-        group.add(sconceSpot, sconceSpot.target)
+        // Sconces use their emissive bulb material plus a soft halo mesh.
+        // Per-sconce point + spot pairs were the largest avoidable source of
+        // forward-light shader cost in the six-room scene.
 
         const halo = new THREE.Mesh(
           sconceHaloGeometry,
@@ -2646,18 +2562,11 @@ export function createLibraryBuilding(
             : sourceMode === 'catalog'
               ? 54
               : 68
-        const spotIntensity =
-          sourceMode === 'featured'
-            ? 34
-            : sourceMode === 'catalog'
-              ? 22
-              : 28
         addPendantFixtureLight(
           fixture,
           `room-${room.slot}`,
           pointIntensity,
           7.8,
-          spotIntensity,
         )
       })
 
@@ -2675,7 +2584,6 @@ export function createLibraryBuilding(
             `hall-${index}`,
             index === 4 ? 48 : 64,
             7.8,
-            index === 4 ? 18 : 24,
           )
         },
       )
@@ -2723,16 +2631,6 @@ export function createLibraryBuilding(
     oculusGlass.position.set(0, 4.05, -74.79)
     oculusFrame.position.set(0, 4.05, -74.77)
     group.add(oculusGlass, oculusFrame)
-
-    const oculusLight = new THREE.PointLight(
-      0xffc886,
-      .18,
-      5.5,
-      2,
-    )
-    oculusLight.position.set(0, 4.05, -73.95)
-    oculusLight.castShadow = false
-    group.add(oculusLight)
 
   })().catch((error) => {
     console.warn('Library building asset pass failed', error)
