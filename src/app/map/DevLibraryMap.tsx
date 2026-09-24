@@ -2062,6 +2062,9 @@ export default function DevLibraryMap() {
     const value = query.trim()
     if (!value) return
 
+    setSearchInputFocused(false)
+    ;(document.activeElement as HTMLElement | null)?.blur()
+
     try {
       setRouteLoading(true)
       emitLibraryEvent('search_started', {query: value})
@@ -2167,6 +2170,7 @@ export default function DevLibraryMap() {
         bookIndex: location.bookIndex,
       })
       setSearchOpen(false)
+      setSearchInputFocused(false)
       setSelectedId(null)
     },
     [articleLocations, resumeFirstPersonControls],
@@ -2688,6 +2692,7 @@ export default function DevLibraryMap() {
           <button
             className={styles.close}
             onClick={() => {
+              setSearchInputFocused(false)
               resumeFirstPersonControls()
               setSearchOpen(false)
             }}
