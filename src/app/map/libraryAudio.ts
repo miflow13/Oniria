@@ -33,7 +33,8 @@ export type LibraryAudioController = {
 
 const AUDIO_ENABLE_EVENT = 'oniria:library-audio-enable'
 
-const LIBRARY_MUSIC_URL = '/api/library-music'
+const LIBRARY_MUSIC_URL =
+  '/audio/solarflex-ambient-ambient-music-569592.mp3'
 
 export function createLibraryAudio(
   listener: THREE.AudioListener,
