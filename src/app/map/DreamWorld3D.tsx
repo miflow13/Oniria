@@ -120,7 +120,7 @@ export type DreamWorldNode = {
   libraryWidthScale?: number
   librarySlotId?: string
   libraryOccupancyKey?: string
-  libraryShelfLifecycle?: 'forming' | 'active'
+  libraryShelfLifecycle?: 'forming' | 'active' | 'cooling'
   libraryShelfVitality?: number
   libraryMaterializedAt?: string
   libraryBooks?: Array<{
