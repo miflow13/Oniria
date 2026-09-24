@@ -33,30 +33,7 @@ export type LibraryAudioController = {
 
 const AUDIO_ENABLE_EVENT = 'oniria:library-audio-enable'
 
-const LIBRARY_MUSIC_PARTS = Array.from(
-  {length: 11},
-  (_, index) =>
-    '/audio/oniria-library-ambient/' +
-    String(index).padStart(2, '0') +
-    '.bin',
-)
-
-function joinAudioParts(parts: ArrayBuffer[]) {
-  const totalBytes = parts.reduce(
-    (total, part) => total + part.byteLength,
-    0,
-  )
-  const joined = new Uint8Array(totalBytes)
-  let offset = 0
-
-  parts.forEach((part) => {
-    const bytes = new Uint8Array(part)
-    joined.set(bytes, offset)
-    offset += bytes.byteLength
-  })
-
-  return joined.buffer
-}
+const LIBRARY_MUSIC_URL = '/api/library-music'
 
 export function createLibraryAudio(
   listener: THREE.AudioListener,
@@ -104,24 +81,19 @@ export function createLibraryAudio(
     source.start()
   }
 
-  void Promise.all(
-    LIBRARY_MUSIC_PARTS.map((url) =>
-      fetch(url, {
-        signal: musicLoadController.signal,
-        cache: 'force-cache',
-      }).then((response) => {
-        if (!response.ok) {
-          throw new Error(
-            `Library music request failed: ${response.status} ${url}`,
-          )
-        }
-        return response.arrayBuffer()
-      }),
-    ),
-  )
-    .then((parts) =>
-      context.decodeAudioData(joinAudioParts(parts)),
-    )
+  void fetch(LIBRARY_MUSIC_URL, {
+    signal: musicLoadController.signal,
+    cache: 'force-cache',
+  })
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error(
+          `Library music request failed: ${response.status}`,
+        )
+      }
+      return response.arrayBuffer()
+    })
+    .then((encoded) => context.decodeAudioData(encoded))
     .then((decoded) => {
       if (disposed) return
       musicBuffer = decoded
