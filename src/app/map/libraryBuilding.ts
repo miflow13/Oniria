@@ -691,23 +691,38 @@ export function createLibraryBuilding(
   backupCeiling.position.set(0, 5.03, -30.15)
   group.add(backupCeiling)
 
-  const skylightGlassMaterial =
-    new THREE.MeshPhysicalMaterial({
-      color: 0xf2fbff,
-      transmission: .96,
-      transparent: true,
-      opacity: .26,
-      roughness: .07,
-      metalness: 0,
-      ior: 1.46,
-      thickness: .025,
-      clearcoat: .32,
-      clearcoatRoughness: .045,
-      envMapIntensity: .55,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-      toneMapped: true,
-    })
+  // Full-room transmission is beautiful but costly. Medium/Low use a
+  // lightweight transparent Standard material; High/Cinematic restore
+  // physical transmission and clearcoat.
+  const skylightGlassMaterial: THREE.Material =
+    lightDetail >= 2
+      ? new THREE.MeshPhysicalMaterial({
+          color: 0xf2fbff,
+          transmission: .96,
+          transparent: true,
+          opacity: .26,
+          roughness: .07,
+          metalness: 0,
+          ior: 1.46,
+          thickness: .025,
+          clearcoat: .32,
+          clearcoatRoughness: .045,
+          envMapIntensity: .55,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+          toneMapped: true,
+        })
+      : new THREE.MeshStandardMaterial({
+          color: 0xcfe8f1,
+          transparent: true,
+          opacity: lightDetail === 0 ? .1 : .15,
+          roughness: .24,
+          metalness: .04,
+          envMapIntensity: .18,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+          toneMapped: true,
+        })
   const skyRockMaterial = new THREE.MeshStandardMaterial({
     color: 0x343536,
     roughness: .94,
@@ -769,6 +784,92 @@ export function createLibraryBuilding(
     skyDebrisGeometry,
   )
 
+  // The six side rooms have permanent full glass roofs. Build them before
+  // authored roof assets resolve so a slow/failed GLB can never temporarily
+  // cover the rooms with an opaque fallback ceiling.
+  LIBRARY_ROOMS.forEach((room) => {
+    const bounds = libraryRoomBounds(room, -.06)
+    const width = Math.max(.5, bounds.maxX - bounds.minX)
+    const depth = Math.max(.5, bounds.maxZ - bounds.minZ)
+    const centerX = (bounds.minX + bounds.maxX) / 2
+    const centerZ = (bounds.minZ + bounds.maxZ) / 2
+
+    const glassGeometry = new THREE.PlaneGeometry(width, depth)
+    localGeometries.push(glassGeometry)
+    const glass = new THREE.Mesh(
+      glassGeometry,
+      skylightGlassMaterial,
+    )
+    glass.rotation.x = Math.PI / 2
+    glass.position.set(centerX, 5.065, centerZ)
+    glass.renderOrder = 2
+    glass.castShadow = false
+    glass.receiveShadow = false
+    glass.name = `library-room-glass-roof-${room.slot}`
+    group.add(glass)
+
+    const frameThickness = .085
+    const frameHeight = .075
+    const horizontalFrameGeometry = new THREE.BoxGeometry(
+      width + frameThickness * 2,
+      frameHeight,
+      frameThickness,
+    )
+    const verticalFrameGeometry = new THREE.BoxGeometry(
+      frameThickness,
+      frameHeight,
+      depth,
+    )
+    localGeometries.push(
+      horizontalFrameGeometry,
+      verticalFrameGeometry,
+    )
+
+    ;[bounds.minZ, bounds.maxZ].forEach((frameZ, index) => {
+      const frame = new THREE.Mesh(
+        horizontalFrameGeometry,
+        roomSkylightFrameMaterial,
+      )
+      frame.position.set(centerX, 5.085, frameZ)
+      frame.name =
+        `library-room-skylight-frame-${room.slot}-z-${index}`
+      group.add(frame)
+    })
+
+    ;[bounds.minX, bounds.maxX].forEach((frameX, index) => {
+      const frame = new THREE.Mesh(
+        verticalFrameGeometry,
+        roomSkylightFrameMaterial,
+      )
+      frame.position.set(frameX, 5.085, centerZ)
+      frame.name =
+        `library-room-skylight-frame-${room.slot}-x-${index}`
+      group.add(frame)
+    })
+
+    // Two restrained ribs keep the large glazing visually architectural
+    // without rebuilding the old heavy ceiling grid.
+    ;[-1 / 3, 1 / 3].forEach((ratio, index) => {
+      const ribGeometry = new THREE.BoxGeometry(
+        frameThickness * .72,
+        frameHeight * .72,
+        depth - .12,
+      )
+      localGeometries.push(ribGeometry)
+      const rib = new THREE.Mesh(
+        ribGeometry,
+        roomSkylightFrameMaterial,
+      )
+      rib.position.set(
+        centerX + width * ratio,
+        5.082,
+        centerZ,
+      )
+      rib.name =
+        `library-room-skylight-rib-${room.slot}-${index}`
+      group.add(rib)
+    })
+  })
 
   const wallRuns: WallRun[] = [
     {
@@ -1840,11 +1941,13 @@ export function createLibraryBuilding(
           const insideRoomGlassRoof = LIBRARY_ROOMS.some(
             (room) => {
               const bounds = libraryRoomBounds(room)
+              const halfCellX = cellX * .5
+              const halfCellZ = cellZ * .5
               return (
-                x >= bounds.minX &&
-                x <= bounds.maxX &&
-                z >= bounds.minZ &&
-                z <= bounds.maxZ
+                x + halfCellX > bounds.minX &&
+                x - halfCellX < bounds.maxX &&
+                z + halfCellZ > bounds.minZ &&
+                z - halfCellZ < bounds.maxZ
               )
             },
           )
@@ -1873,122 +1976,6 @@ export function createLibraryBuilding(
       }
 
       backupCeiling.visible = false
-
-      // Each content room is now capped by one continuous glass skylight
-      // instead of opaque roof tiles. A restrained perimeter frame keeps the
-      // rooms architecturally legible while leaving the Oniria sky visible.
-      LIBRARY_ROOMS.forEach((room) => {
-        const bounds = libraryRoomBounds(room, -.06)
-        const width = Math.max(
-          .5,
-          bounds.maxX - bounds.minX,
-        )
-        const depth = Math.max(
-          .5,
-          bounds.maxZ - bounds.minZ,
-        )
-        const centerX =
-          (bounds.minX + bounds.maxX) / 2
-        const centerZ =
-          (bounds.minZ + bounds.maxZ) / 2
-
-        const glassGeometry = new THREE.PlaneGeometry(
-          width,
-          depth,
-        )
-        localGeometries.push(glassGeometry)
-        const glass = new THREE.Mesh(
-          glassGeometry,
-          skylightGlassMaterial,
-        )
-        glass.rotation.x = Math.PI / 2
-        glass.position.set(centerX, 5.065, centerZ)
-        glass.renderOrder = 2
-        glass.castShadow = false
-        glass.receiveShadow = false
-        glass.name =
-          `library-room-glass-roof-${room.slot}`
-        group.add(glass)
-
-        const frameThickness = .085
-        const frameHeight = .075
-        const horizontalFrameGeometry =
-          new THREE.BoxGeometry(
-            width + frameThickness * 2,
-            frameHeight,
-            frameThickness,
-          )
-        const verticalFrameGeometry =
-          new THREE.BoxGeometry(
-            frameThickness,
-            frameHeight,
-            depth,
-          )
-        localGeometries.push(
-          horizontalFrameGeometry,
-          verticalFrameGeometry,
-        )
-
-        ;[bounds.minZ, bounds.maxZ].forEach(
-          (frameZ, index) => {
-            const frame = new THREE.Mesh(
-              horizontalFrameGeometry,
-              roomSkylightFrameMaterial,
-            )
-            frame.position.set(
-              centerX,
-              5.085,
-              frameZ,
-            )
-            frame.name =
-              `library-room-skylight-frame-${room.slot}-z-${index}`
-            group.add(frame)
-          },
-        )
-
-        ;[bounds.minX, bounds.maxX].forEach(
-          (frameX, index) => {
-            const frame = new THREE.Mesh(
-              verticalFrameGeometry,
-              roomSkylightFrameMaterial,
-            )
-            frame.position.set(
-              frameX,
-              5.085,
-              centerZ,
-            )
-            frame.name =
-              `library-room-skylight-frame-${room.slot}-x-${index}`
-            group.add(frame)
-          },
-        )
-
-        // Two very thin ribs keep the large sheet readable as architectural
-        // glazing without turning it back into a visually heavy ceiling grid.
-        ;[-1 / 3, 1 / 3].forEach(
-          (ratio, index) => {
-            const rib = new THREE.Mesh(
-              new THREE.BoxGeometry(
-                frameThickness * .72,
-                frameHeight * .72,
-                depth - .12,
-              ),
-              roomSkylightFrameMaterial,
-            )
-            localGeometries.push(
-              rib.geometry as THREE.BufferGeometry,
-            )
-            rib.position.set(
-              centerX + width * ratio,
-              5.082,
-              centerZ,
-            )
-            rib.name =
-              `library-room-skylight-rib-${room.slot}-${index}`
-            group.add(rib)
-          },
-        )
-      })
 
       // A single suspended particle field lives above the roof. Depth testing
       // means it only becomes visible through the actual ceiling openings.
