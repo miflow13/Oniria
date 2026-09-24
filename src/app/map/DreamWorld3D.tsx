@@ -1053,8 +1053,13 @@ export default function DreamWorld3D({
     let librarySkyFill: THREE.HemisphereLight | null = null
     let libraryMoonLight: THREE.DirectionalLight | null = null
     let libraryHorizonFill: THREE.DirectionalLight | null = null
-    let violetLight: THREE.PointLight | null = null
-    let cyanLight: THREE.PointLight | null = null
+    const dreamAccentLights: {
+      violet: THREE.PointLight | null
+      cyan: THREE.PointLight | null
+    } = {
+      violet: null,
+      cyan: null,
+    }
 
     if (libraryMode) {
       // Open-air library lighting: the sky supplies the ambient fill and a
@@ -1121,23 +1126,23 @@ export default function DreamWorld3D({
       keyLight.shadow.normalBias = 0.025
       scene.add(keyLight)
 
-      violetLight = new THREE.PointLight(
+      dreamAccentLights.violet = new THREE.PointLight(
         0xb791ff,
         12,
         20,
         2,
       )
-      violetLight.position.set(-5, 1, 3)
-      scene.add(violetLight)
+      dreamAccentLights.violet.position.set(-5, 1, 3)
+      scene.add(dreamAccentLights.violet)
 
-      cyanLight = new THREE.PointLight(
+      dreamAccentLights.cyan = new THREE.PointLight(
         0x72e2df,
         11,
         20,
         2,
       )
-      cyanLight.position.set(5, -1, 2)
-      scene.add(cyanLight)
+      dreamAccentLights.cyan.position.set(5, -1, 2)
+      scene.add(dreamAccentLights.cyan)
     }
 
     const world = new THREE.Group()
@@ -7720,13 +7725,17 @@ export default function DreamWorld3D({
           libraryHorizonFill.intensity +=
             (horizonTarget - libraryHorizonFill.intensity) * .03
         }
-      } else if (violetLight && cyanLight) {
-        const violetTarget = selectedVisual ? 4.7 : 4
-        const cyanTarget = selectedVisual ? 4.3 : 3.6
-        violetLight.intensity +=
-          (violetTarget - violetLight.intensity) * .035
-        cyanLight.intensity +=
-          (cyanTarget - cyanLight.intensity) * .035
+      } else {
+        const violetLight = dreamAccentLights.violet
+        const cyanLight = dreamAccentLights.cyan
+        if (violetLight && cyanLight) {
+          const violetTarget = selectedVisual ? 4.7 : 4
+          const cyanTarget = selectedVisual ? 4.3 : 3.6
+          violetLight.intensity +=
+            (violetTarget - violetLight.intensity) * .035
+          cyanLight.intensity +=
+            (cyanTarget - cyanLight.intensity) * .035
+        }
       }
 
       if (flightActive && flightInitialized) {
