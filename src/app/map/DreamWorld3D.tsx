@@ -6405,11 +6405,14 @@ export default function DreamWorld3D({
         }
       }
 
+      // inputBlocked means "freeze first-person input", not "leave
+      // first-person mode". Keeping flightActive alive prevents the camera
+      // from falling back to the non-FPS path while opening a book/search UI.
       const flightActive =
         flightModeRef.current &&
         diveMode === 'none' &&
-        !observatoryModeRef.current &&
-        !inputBlockedRef.current
+        !observatoryModeRef.current
+      const flightInputBlocked = inputBlockedRef.current
 
       const currentRoomEntry = libraryMode
         ? nearestRoomEntry(
@@ -6435,6 +6438,17 @@ export default function DreamWorld3D({
         flightVelocity.set(0, 0, 0)
         previousFlightMode = false
         flightInitialized = false
+      }
+
+      if (flightActive && flightInputBlocked) {
+        // UI overlays and the reading handoff freeze the player's body in
+        // place. Clear held keys and residual inertia without deactivating the
+        // first-person camera, so opening a book cannot "throw" the player.
+        flightKeys.clear()
+        flightRoute = null
+        flightVelocity.set(0, 0, 0)
+        libraryWalkBobStrength = 0
+        flightPosition.copy(camera.position)
       }
 
       if (diveExitRequestRef.current !== lastDiveExitRequest) {
