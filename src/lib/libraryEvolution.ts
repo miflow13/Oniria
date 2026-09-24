@@ -11,7 +11,6 @@ import {
   type TopicSignal,
 } from './libraryTopicSignals'
 
-const MAX_DYNAMIC_OCCUPANTS = 4
 const FORMING_CONFIRMATION_CHECKS = 2
 const FORMING_DISSOLVE_CHECKS = 4
 const COOLING_TRIGGER_CHECKS = 6
@@ -344,12 +343,6 @@ export function evolveTopicSlots({
       .map((state) => state.topic)
       .filter((topic): topic is string => Boolean(topic)),
   )
-  let dynamicOccupants = states.filter(
-    (state) =>
-      !state.configured &&
-      state.lifecycle !== 'dormant' &&
-      Boolean(state.topic),
-  ).length
   const candidates = signals.filter(
     (signal) =>
       topicQualifies(signal) &&
@@ -363,10 +356,7 @@ export function evolveTopicSlots({
     .map(({index}) => index)
 
   for (const signal of candidates) {
-    if (
-      dynamicOccupants >= MAX_DYNAMIC_OCCUPANTS ||
-      dormantIndices.length === 0
-    ) {
+    if (dormantIndices.length === 0) {
       break
     }
 
@@ -408,7 +398,6 @@ export function evolveTopicSlots({
       vitality,
     })
     occupiedTopics.add(topic)
-    dynamicOccupants += 1
   }
 
   return {

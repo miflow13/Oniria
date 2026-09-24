@@ -25,7 +25,6 @@ export type LivingTopicSlot = {
   articles: DevArticleSummary[]
 }
 
-const MAX_EMERGENT_TOPIC_SHELVES = 4
 const FORMING_WINDOW_MS = DAY_MS * 7
 
 function normalizeTag(tag: string) {
@@ -62,8 +61,10 @@ export function resolveLivingTopicSlots(
         signal.articles.length >= EMERGENT_MIN_ARTICLES &&
         signal.score >= EMERGENT_MIN_SCORE,
     )
-    .slice(0, MAX_EMERGENT_TOPIC_SHELVES)
 
+  // The placement table is the capacity limit. This lets every authored
+  // latent slot become a Living Shelf when enough real DEV topics qualify,
+  // while naturally leaving the remainder dormant for sparse datasets.
   const occupants = [
     ...configured.map((tag) => ({
       tag,
