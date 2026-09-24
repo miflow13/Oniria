@@ -1,5 +1,17 @@
 export type DreamQuality = 'low' | 'medium' | 'high' | 'cinematic'
 
+export type LibraryGraphicsOptions = {
+  shadows: boolean
+  bloom: boolean
+  reducedMotion: boolean
+}
+
+export const DEFAULT_LIBRARY_GRAPHICS_OPTIONS: LibraryGraphicsOptions = {
+  shadows: false,
+  bloom: true,
+  reducedMotion: false,
+}
+
 export type DreamQualitySettings = {
   pixelRatio: number
   bloomStrength: number
@@ -18,6 +30,7 @@ export type DreamQualitySettings = {
   environmentIntensity: number
   atmosphereLayers: number
   portalBlendResolution: 0.6 | 0.75 | 1
+  libraryLightDetail: 0 | 1 | 2 | 3
 }
 
 export function getQualitySettings(quality: DreamQuality): DreamQualitySettings {
@@ -41,6 +54,7 @@ export function getQualitySettings(quality: DreamQuality): DreamQualitySettings 
         environmentIntensity: 0.55,
         atmosphereLayers: 2,
         portalBlendResolution: 0.6,
+        libraryLightDetail: 0,
       }
     case 'medium':
       return {
@@ -61,6 +75,7 @@ export function getQualitySettings(quality: DreamQuality): DreamQualitySettings 
         environmentIntensity: 0.72,
         atmosphereLayers: 3,
         portalBlendResolution: 0.75,
+        libraryLightDetail: 1,
       }
     case 'cinematic':
       return {
@@ -81,6 +96,7 @@ export function getQualitySettings(quality: DreamQuality): DreamQualitySettings 
         environmentIntensity: 1.05,
         atmosphereLayers: 6,
         portalBlendResolution: 1,
+        libraryLightDetail: 3,
       }
     case 'high':
     default:
@@ -102,6 +118,7 @@ export function getQualitySettings(quality: DreamQuality): DreamQualitySettings 
         environmentIntensity: 0.88,
         atmosphereLayers: 4,
         portalBlendResolution: 1,
+        libraryLightDetail: 2,
       }
   }
 }
