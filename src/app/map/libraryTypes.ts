@@ -62,6 +62,7 @@ export type LibraryShelfKind =
 export type LibraryShelfLifecycle =
   | 'forming'
   | 'active'
+  | 'cooling'
 
 export type LibraryShelf = {
   id: string
