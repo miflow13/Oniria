@@ -14,7 +14,11 @@ import DreamWorld3D, {
   type LibraryMovementMode,
   type LibraryReadingBook,
 } from './DreamWorld3D'
-import type {DreamQuality} from './dreamworld/quality'
+import {
+  DEFAULT_LIBRARY_GRAPHICS_OPTIONS,
+  type DreamQuality,
+  type LibraryGraphicsOptions,
+} from './dreamworld/quality'
 import {
   DEFAULT_LIBRARY_WORLD_CONFIG,
   type LibraryContentSource,
@@ -35,9 +39,11 @@ import {
   roomShelfPlacements,
   type RoomShelfPlacement,
 } from './libraryRoomLayout'
+import {resolveLivingTopicSlots} from './libraryLivingSlots'
 
 const DEFAULT_USERNAME = 'mikachu'
-const QUALITY: DreamQuality = 'cinematic'
+const DEFAULT_LIBRARY_QUALITY: DreamQuality = 'medium'
+const GRAPHICS_STORAGE_KEY = 'oniria:library-graphics-v1'
 const CATALOG_PAGE_SIZE = 100
 const CATALOG_BOOKS_PER_SHELF = 9
 const DISTRICT_RENDERED_SHELF_LIMIT =
@@ -45,6 +51,22 @@ const DISTRICT_RENDERED_SHELF_LIMIT =
 const DISTRICT_VISIBLE_ARTICLE_CAPACITY =
   DISTRICT_RENDERED_SHELF_LIMIT * CATALOG_BOOKS_PER_SHELF * 2
 const DISTRICT_SHELF_PAIR_OFFSETS = [-.68, .68] as const
+
+const QUALITY_LABELS: Record<DreamQuality, string> = {
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+  cinematic: 'Cinematic',
+}
+
+function isDreamQuality(value: unknown): value is DreamQuality {
+  return (
+    value === 'low' ||
+    value === 'medium' ||
+    value === 'high' ||
+    value === 'cinematic'
+  )
+}
 
 const SHELF_ACCENTS: Record<LibraryShelfKind, string> = {
   featured: '#8c7cff',
@@ -74,6 +96,12 @@ function makeShelf(
   kind: LibraryShelfKind,
   placement: RoomShelfPlacement,
   articles: DevArticleSummary[],
+  occupancy?: {
+    occupancyKey?: string
+    lifecycle?: LibraryShelf['lifecycle']
+    vitality?: number
+    materializedAt?: string
+  },
 ): LibraryShelf {
   return {
     id,
@@ -89,6 +117,13 @@ function makeShelf(
     pathBay: placement.pathBay,
     districtId: placement.districtId,
     widthScale: placement.widthScale,
+    slotId: placement.slotId,
+    occupancyKey:
+      occupancy?.occupancyKey ??
+      `static:${placement.districtId}:${placement.slotId}`,
+    lifecycle: occupancy?.lifecycle ?? 'active',
+    vitality: occupancy?.vitality ?? 1,
+    materializedAt: occupancy?.materializedAt,
     articles,
   }
 }
@@ -327,6 +362,15 @@ export default function DevLibraryMap() {
   const [movementMode, setMovementMode] =
     useState<LibraryMovementMode>('walk')
   const [soundEnabled, setSoundEnabled] = useState(false)
+  const [quality, setQuality] =
+    useState<DreamQuality>(DEFAULT_LIBRARY_QUALITY)
+  const [graphicsOptions, setGraphicsOptions] =
+    useState<LibraryGraphicsOptions>(
+      DEFAULT_LIBRARY_GRAPHICS_OPTIONS,
+    )
+  const [graphicsOpen, setGraphicsOpen] = useState(false)
+  const [graphicsHydrated, setGraphicsHydrated] =
+    useState(false)
   const [worldConfig, setWorldConfig] =
     useState<LibraryWorldConfig>(DEFAULT_LIBRARY_WORLD_CONFIG)
   const [worldSyncing, setWorldSyncing] = useState(false)
@@ -359,6 +403,67 @@ export default function DevLibraryMap() {
       ),
     [article?.cover_image, article?.social_image],
   )
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(
+        GRAPHICS_STORAGE_KEY,
+      )
+      if (stored) {
+        const parsed = JSON.parse(stored) as {
+          quality?: unknown
+          shadows?: unknown
+          bloom?: unknown
+          reducedMotion?: unknown
+        }
+        if (isDreamQuality(parsed.quality)) {
+          setQuality(parsed.quality)
+        }
+        setGraphicsOptions({
+          shadows:
+            typeof parsed.shadows === 'boolean'
+              ? parsed.shadows
+              : DEFAULT_LIBRARY_GRAPHICS_OPTIONS.shadows,
+          bloom:
+            typeof parsed.bloom === 'boolean'
+              ? parsed.bloom
+              : DEFAULT_LIBRARY_GRAPHICS_OPTIONS.bloom,
+          reducedMotion:
+            typeof parsed.reducedMotion === 'boolean'
+              ? parsed.reducedMotion
+              : DEFAULT_LIBRARY_GRAPHICS_OPTIONS.reducedMotion,
+        })
+      } else if (
+        window.matchMedia?.(
+          '(prefers-reduced-motion: reduce)',
+        ).matches
+      ) {
+        setGraphicsOptions((current) => ({
+          ...current,
+          reducedMotion: true,
+        }))
+      }
+    } catch {
+      // Ignore malformed local settings and keep the safe Medium defaults.
+    } finally {
+      setGraphicsHydrated(true)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!graphicsHydrated) return
+    try {
+      window.localStorage.setItem(
+        GRAPHICS_STORAGE_KEY,
+        JSON.stringify({
+          quality,
+          ...graphicsOptions,
+        }),
+      )
+    } catch {
+      // Storage can be blocked in privacy modes; graphics still work in-memory.
+    }
+  }, [graphicsHydrated, graphicsOptions, quality])
+
   const [navigation, setNavigation] = useState<{
     nearestId: string | null
     routeTargetId: string | null
@@ -897,10 +1002,23 @@ export default function DevLibraryMap() {
     async function populateDistricts() {
       const entries = await Promise.all(
         taggedDistricts.map(async (district) => {
-          // Preload the configured topic categories so each physical Topic
-          // shelf can correspond to real DEV tags instead of a cosmetic label.
-          // Keep requests modest; shelf hydration remains progressive.
-          const seedTags = district.devTags.slice(0, 6)
+          // Preload both authored tags and Sanity-persisted emergent occupants.
+          // A living shelf must keep showing its own real DEV articles even
+          // after the tag is no longer part of the original room config.
+          const persistedTags = worldConfig.slotStates
+            .filter(
+              (slot) =>
+                slot.districtId === district.id &&
+                slot.lifecycle !== 'dormant' &&
+                typeof slot.topic === 'string',
+            )
+            .map((slot) => slot.topic as string)
+          const seedTags = [
+            ...new Set([
+              ...district.devTags,
+              ...persistedTags,
+            ]),
+          ].slice(0, 12)
           if (seedTags.length === 0) {
             return [district.id, []] as const
           }
@@ -943,7 +1061,11 @@ export default function DevLibraryMap() {
     return () => {
       cancelled = true
     }
-  }, [devRefreshTick, worldConfig.districts])
+  }, [
+    devRefreshTick,
+    worldConfig.districts,
+    worldConfig.slotStates,
+  ])
 
   const resumeFirstPersonControls = useCallback(() => {
     const canvas = document.querySelector<HTMLCanvasElement>(
@@ -1201,9 +1323,81 @@ export default function DevLibraryMap() {
         )
         const source = articlesForDistrict(district)
         const kind = shelfKindForSource(district.sourceMode)
+        const persistedTopicStates =
+          worldConfig.slotStates.filter(
+            (state) => state.districtId === district.id,
+          )
+        const persistedTopicBySlot = new Map(
+          persistedTopicStates.map((state) => [
+            state.slotId,
+            state,
+          ]),
+        )
+        const hasPersistedTopicState =
+          persistedTopicStates.length > 0
+        const topicSlotState =
+          district.sourceMode === 'topics' ||
+          district.sourceMode === 'tagged'
+            ? hasPersistedTopicState
+              ? placements.map((placement) => {
+                  const persisted =
+                    persistedTopicBySlot.get(
+                      placement.slotId,
+                    )
+                  const tag = persisted?.topic ?? null
+                  return {
+                    slotId: placement.slotId,
+                    occupancyKey:
+                      persisted?.occupantKey ?? null,
+                    tag,
+                    lifecycle:
+                      persisted?.lifecycle ?? 'dormant',
+                    vitality: persisted?.vitality ?? 0,
+                    materializedAt:
+                      persisted?.materializedAt,
+                    placement,
+                    articles: tag
+                      ? source.filter((article) =>
+                          (article.tag_list ?? []).some(
+                            (articleTag) =>
+                              articleTag.toLowerCase() ===
+                              tag.toLowerCase(),
+                          ),
+                        )
+                      : [],
+                  }
+                })
+              : resolveLivingTopicSlots(
+                  placements,
+                  district.devTags,
+                  uniqueArticles(
+                    allKnownArticles,
+                    ...Object.values(districtSamples),
+                  ),
+                )
+            : null
+        const shelfSlots =
+          topicSlotState ??
+          placements.map((placement) => ({
+            slotId: placement.slotId,
+            occupancyKey:
+              `static:${district.id}:${placement.slotId}`,
+            tag: null,
+            lifecycle: 'active' as const,
+            vitality: 1,
+            materializedAt: undefined,
+            placement,
+            articles: [] as DevArticleSummary[],
+          }))
+        const occupiedShelfSlots = shelfSlots.filter(
+          (slot) =>
+            slot.lifecycle !== 'dormant' &&
+            Boolean(slot.occupancyKey),
+        )
 
         let articleOffset = 0
-        placements.forEach((placement, shelfIndex) => {
+        occupiedShelfSlots.forEach((slotState, shelfIndex) => {
+          const placement = slotState.placement
           const shelfCapacity =
             CATALOG_BOOKS_PER_SHELF *
             (placement.doubleSided ? 2 : 1)
@@ -1218,22 +1412,27 @@ export default function DevLibraryMap() {
             district.devTags.length > 0
           ) {
             const tag =
+              slotState.tag ??
               district.devTags[
                 shelfIndex % district.devTags.length
               ]
-            const tagged = source.filter((article) =>
-              (article.tag_list ?? []).some(
-                (articleTag) =>
-                  articleTag.toLowerCase() === tag.toLowerCase(),
-              ),
-            )
-            if (tagged.length > 0) {
-              shelfSource = tagged
-              sourceOffset =
-                Math.floor(
-                  shelfIndex / district.devTags.length,
-                ) * shelfCapacity
-            }
+            const tagged =
+              slotState.articles.length > 0
+                ? slotState.articles
+                : source.filter((article) =>
+                    (article.tag_list ?? []).some(
+                      (articleTag) =>
+                        articleTag.toLowerCase() ===
+                        tag.toLowerCase(),
+                    ),
+                  )
+            shelfSource = tagged
+            sourceOffset =
+              district.devTags.length > 0
+                ? Math.floor(
+                    shelfIndex / district.devTags.length,
+                  ) * shelfCapacity
+                : 0
           }
 
           const articles = shelfArticles(
@@ -1252,13 +1451,19 @@ export default function DevLibraryMap() {
             district.sourceMode === 'tagged'
           ) {
             const tag =
+              slotState.tag ??
               district.devTags[
                 shelfIndex % Math.max(1, district.devTags.length)
               ]
             title = tag
-              ? `#${tag.toUpperCase()} · ${shelfNumber}`
-              : `TOPICS · ${shelfNumber}`
-            functionLabel = 'TAG INDEX'
+              ? `#${tag.toUpperCase()} · ${placement.slotId}`
+              : `TOPICS · ${placement.slotId}`
+            functionLabel =
+              slotState.lifecycle === 'forming'
+                ? `MATERIALIZING · SLOT ${placement.slotId} · VITALITY ${Math.round(slotState.vitality * 100)}%`
+                : slotState.lifecycle === 'cooling'
+                  ? `COOLING · SLOT ${placement.slotId} · VITALITY ${Math.round(slotState.vitality * 100)}%`
+                  : `LIVE TOPIC · SLOT ${placement.slotId} · VITALITY ${Math.round(slotState.vitality * 100)}%`
           } else if (district.sourceMode === 'creators') {
             const creator = dominantCreator(articles)
             title = creator
@@ -1290,12 +1495,28 @@ export default function DevLibraryMap() {
             `${functionLabel} · ${shelfDateRange(articles)} · ${articles.length} VOLUMES`
 
           const shelf = makeShelf(
-            'shelf:room:' + district.id + ':' + shelfIndex,
+            'shelf:room:' +
+              district.id +
+              ':' +
+              placement.slotId +
+              ':' +
+              (slotState.occupancyKey ?? shelfIndex),
             title,
             subtitle,
             kind,
             placement,
             articles,
+            {
+              occupancyKey:
+                slotState.occupancyKey ??
+                `static:${district.id}:${placement.slotId}`,
+              lifecycle:
+                slotState.lifecycle === 'dormant'
+                  ? 'active'
+                  : slotState.lifecycle,
+              vitality: slotState.vitality,
+              materializedAt: slotState.materializedAt,
+            },
           )
           shelf.accent = district.accent
           result.push(shelf)
@@ -1370,6 +1591,7 @@ export default function DevLibraryMap() {
     searchResults,
     districtSamples,
     worldConfig.curatedArticles,
+    worldConfig.slotStates,
   ])
 
   const nodes = useMemo<DreamWorldNode[]>(
@@ -1400,6 +1622,11 @@ export default function DevLibraryMap() {
         libraryPathBay: shelf.pathBay,
         libraryDistrictId: shelf.districtId,
         libraryWidthScale: shelf.widthScale,
+        librarySlotId: shelf.slotId,
+        libraryOccupancyKey: shelf.occupancyKey,
+        libraryShelfLifecycle: shelf.lifecycle,
+        libraryShelfVitality: shelf.vitality,
+        libraryMaterializedAt: shelf.materializedAt,
         libraryBooks: shelf.articles
           .slice(0, shelf.doubleSided ? 18 : 9)
           .map((article) => {
@@ -1453,6 +1680,33 @@ export default function DevLibraryMap() {
   const catalogShelfCount = shelves.filter(
     (shelf) => shelf.kind === 'catalog',
   ).length
+  const topicDistrictIndex = roomWorldConfig.districts.findIndex(
+    (district) =>
+      district.sourceMode === 'topics' ||
+      district.sourceMode === 'tagged',
+  )
+  const topicDistrict =
+    topicDistrictIndex >= 0
+      ? roomWorldConfig.districts[topicDistrictIndex]
+      : null
+  const topicSlotCapacity = topicDistrict
+    ? roomShelfPlacements(
+        topicDistrict,
+        topicDistrictIndex,
+      ).length
+    : 0
+  const occupiedTopicShelfCount = shelves.filter(
+    (shelf) => shelf.kind === 'topics',
+  ).length
+  const newTopicShelfCount = shelves.filter(
+    (shelf) =>
+      shelf.kind === 'topics' &&
+      shelf.lifecycle === 'forming',
+  ).length
+  const nearTopics =
+    selectedShelf?.kind === 'topics' ||
+    hoveredShelf?.kind === 'topics' ||
+    nearestShelf?.kind === 'topics'
   const lastCatalogLoadTriggerRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -1630,7 +1884,7 @@ export default function DevLibraryMap() {
         relatedEdgeIds={relatedEdgeIds}
         zoom={1}
         pan={{x: 0, y: 0}}
-        quality={QUALITY}
+        quality={quality}
         soundEnabled={soundEnabled}
         introStage={4}
         diveExitRequest={0}
@@ -1641,6 +1895,7 @@ export default function DevLibraryMap() {
         libraryMovementMode={movementMode}
         libraryWorldConfig={roomWorldConfig}
         libraryReadingBook={readingBook}
+        libraryGraphicsOptions={graphicsOptions}
         inputBlocked={Boolean(article) || Boolean(readingBook)}
         onZoomChange={() => {}}
         onPanChange={() => {}}
@@ -1765,6 +2020,17 @@ export default function DevLibraryMap() {
           <button
             type="button"
             className={styles.soundToggle}
+            data-active={graphicsOpen ? 'true' : 'false'}
+            onClick={() => setGraphicsOpen((current) => !current)}
+            aria-expanded={graphicsOpen}
+            aria-controls="library-graphics-panel"
+            title="Graphics options"
+          >
+            ⚙ {QUALITY_LABELS[quality].toUpperCase()}
+          </button>
+          <button
+            type="button"
+            className={styles.soundToggle}
             data-active={worldConfig.source === 'sanity' ? 'true' : 'false'}
             onClick={() => void refreshWorldConfig(false)}
             disabled={worldSyncing}
@@ -1836,9 +2102,129 @@ export default function DevLibraryMap() {
                   catalog.length +
                   ' catalogue articles loaded'
                 : ' · catalogue end reached'}
+            {nearTopics && topicSlotCapacity > 0
+              ? ' · LIVING TOPICS ' +
+                occupiedTopicShelfCount +
+                '/' +
+                topicSlotCapacity +
+                ' OCCUPIED' +
+                (newTopicShelfCount > 0
+                  ? ' · ' + newTopicShelfCount + ' NEW'
+                  : ' · NO NEW CANDIDATES')
+              : ''}
           </small>
         </div>
       </header>
+
+      {graphicsOpen && (
+        <aside
+          id="library-graphics-panel"
+          className={styles.graphicsPanel}
+        >
+          <div className={styles.graphicsHeader}>
+            <div>
+              <strong>Graphics</strong>
+              <small>Changes apply immediately</small>
+            </div>
+            <button
+              type="button"
+              onClick={() => setGraphicsOpen(false)}
+              aria-label="Close graphics settings"
+            >
+              ×
+            </button>
+          </div>
+
+          <label className={styles.graphicsPreset}>
+            <span>Preset</span>
+            <select
+              value={quality}
+              onChange={(event) =>
+                setQuality(event.target.value as DreamQuality)
+              }
+            >
+              <option value="low">Low · fastest</option>
+              <option value="medium">Medium · recommended</option>
+              <option value="high">High</option>
+              <option value="cinematic">Cinematic · expensive</option>
+            </select>
+          </label>
+
+          <p className={styles.graphicsHint}>
+            {quality === 'low'
+              ? '1× render scale · minimal dynamic lighting'
+              : quality === 'medium'
+                ? '1.2× render scale · reduced dynamic lighting'
+                : quality === 'high'
+                  ? '1.5× render scale · detailed lighting'
+                  : '1.85× render scale · full lighting and effects'}
+          </p>
+
+          <label className={styles.graphicsToggleRow}>
+            <span>
+              <strong>Bloom</strong>
+              <small>Lamp glow and emissive halo pass</small>
+            </span>
+            <input
+              type="checkbox"
+              checked={graphicsOptions.bloom}
+              onChange={(event) =>
+                setGraphicsOptions((current) => ({
+                  ...current,
+                  bloom: event.target.checked,
+                }))
+              }
+            />
+          </label>
+
+          <label className={styles.graphicsToggleRow}>
+            <span>
+              <strong>Shadows</strong>
+              <small>Shadow-map rendering where supported</small>
+            </span>
+            <input
+              type="checkbox"
+              checked={graphicsOptions.shadows}
+              onChange={(event) =>
+                setGraphicsOptions((current) => ({
+                  ...current,
+                  shadows: event.target.checked,
+                }))
+              }
+            />
+          </label>
+
+          <label className={styles.graphicsToggleRow}>
+            <span>
+              <strong>Reduce motion</strong>
+              <small>Freeze ambient floating props and signs</small>
+            </span>
+            <input
+              type="checkbox"
+              checked={graphicsOptions.reducedMotion}
+              onChange={(event) =>
+                setGraphicsOptions((current) => ({
+                  ...current,
+                  reducedMotion: event.target.checked,
+                }))
+              }
+            />
+          </label>
+
+          <button
+            type="button"
+            className={styles.graphicsReset}
+            onClick={() => {
+              setQuality(DEFAULT_LIBRARY_QUALITY)
+              setGraphicsOptions(
+                DEFAULT_LIBRARY_GRAPHICS_OPTIONS,
+              )
+            }}
+          >
+            Reset to Medium
+          </button>
+        </aside>
+      )}
 
       {loading && (
         <div className={styles.loading}>

@@ -1,5 +1,17 @@
 export type DreamQuality = 'low' | 'medium' | 'high' | 'cinematic'
 
+export type LibraryGraphicsOptions = {
+  shadows: boolean
+  bloom: boolean
+  reducedMotion: boolean
+}
+
+export const DEFAULT_LIBRARY_GRAPHICS_OPTIONS: LibraryGraphicsOptions = {
+  shadows: false,
+  bloom: true,
+  reducedMotion: false,
+}
+
 export type DreamQualitySettings = {
   pixelRatio: number
   bloomStrength: number

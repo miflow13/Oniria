@@ -78,6 +78,7 @@ export async function GET(request: NextRequest) {
         configDocs?: RawDoc[]
         districtDocs?: RawDoc[]
         curatedArticleDocs?: RawDoc[]
+        slotStateDocs?: RawDoc[]
         journeyDocs?: RawDoc[]
       }
 
@@ -86,6 +87,7 @@ export async function GET(request: NextRequest) {
       const curatedDocs = preferDrafts(raw.curatedArticleDocs).filter(
         (doc) => doc.enabled !== false,
       )
+      const slotStateDocs = preferDrafts(raw.slotStateDocs)
       const journeyDocs = preferDrafts(raw.journeyDocs).filter(
         (doc) => doc.enabled !== false,
       )
@@ -128,6 +130,10 @@ export async function GET(request: NextRequest) {
                 )
               : undefined,
         })),
+        slotStates: slotStateDocs.map((doc) => ({
+          ...doc,
+          id: logicalId(doc._id),
+        })),
         journeys: journeyDocs.map((doc) => ({
           ...doc,
           stops: Array.isArray(doc.stops)
@@ -150,6 +156,7 @@ export async function GET(request: NextRequest) {
         ...configDocs,
         ...districtDocs,
         ...curatedDocs,
+        ...slotStateDocs,
         ...journeyDocs,
       ]
         .map((doc) =>

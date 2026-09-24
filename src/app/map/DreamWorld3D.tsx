@@ -16,8 +16,10 @@ import {
 } from '@/lib/libraryWorldConfig'
 import styles from './map.module.css'
 import {
+  DEFAULT_LIBRARY_GRAPHICS_OPTIONS,
   getQualitySettings,
   type DreamQuality,
+  type LibraryGraphicsOptions,
 } from './dreamworld/quality'
 import {
   createLivingOrbMaterial,
@@ -118,6 +120,11 @@ export type DreamWorldNode = {
   libraryPathBay?: number
   libraryDistrictId?: string
   libraryWidthScale?: number
+  librarySlotId?: string
+  libraryOccupancyKey?: string
+  libraryShelfLifecycle?: 'forming' | 'active' | 'cooling'
+  libraryShelfVitality?: number
+  libraryMaterializedAt?: string
   libraryBooks?: Array<{
     id: string
     title: string
@@ -176,6 +183,7 @@ type Props = {
   libraryMovementMode?: LibraryMovementMode
   libraryWorldConfig?: LibraryWorldConfig
   libraryReadingBook?: LibraryReadingBook | null
+  libraryGraphicsOptions?: LibraryGraphicsOptions
   inputBlocked?: boolean
   onZoomChange: (zoom: number) => void
   onPanChange: (pan: Pan) => void
@@ -665,6 +673,7 @@ export default function DreamWorld3D({
   libraryMovementMode = 'walk',
   libraryWorldConfig = DEFAULT_LIBRARY_WORLD_CONFIG,
   libraryReadingBook = null,
+  libraryGraphicsOptions = DEFAULT_LIBRARY_GRAPHICS_OPTIONS,
   inputBlocked = false,
   onZoomChange,
   onPanChange,
@@ -775,6 +784,11 @@ export default function DreamWorld3D({
         )
         .join('|')}`,
     [dreams, edges, nodes, quality],
+  )
+
+  const libraryGraphicsKey = useMemo(
+    () => JSON.stringify(libraryGraphicsOptions),
+    [libraryGraphicsOptions],
   )
 
   const libraryWorldKey = useMemo(
@@ -964,7 +978,7 @@ export default function DreamWorld3D({
       : null
 
     const renderer = new THREE.WebGLRenderer({
-      antialias: true,
+      antialias: qualityRef.current !== 'low',
       alpha: false,
       powerPreference: 'high-performance',
     })
@@ -974,7 +988,9 @@ export default function DreamWorld3D({
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.toneMapping = THREE.ACESFilmicToneMapping
     renderer.toneMappingExposure = libraryMode ? .51 : .94
-    renderer.shadowMap.enabled = settings.miniWorldDetail > 0
+    renderer.shadowMap.enabled =
+      settings.miniWorldDetail > 0 &&
+      (!libraryMode || libraryGraphicsOptions.shadows)
     renderer.shadowMap.type = THREE.PCFShadowMap
     renderer.domElement.className = styles.webglCanvas
     container.appendChild(renderer.domElement)
@@ -1014,10 +1030,10 @@ export default function DreamWorld3D({
       libraryMode ? .14 : settings.bloomRadius,
       libraryMode ? 1.16 : settings.bloomThreshold,
     )
-    // High-threshold library bloom is intentionally lamp-only. Pale walls and
-    // book covers sit below threshold, while the emissive bulbs pick up a
-    // restrained warm halo.
-    bloom.enabled = true
+    // High-threshold library bloom is limited to emissive accents so the
+    // open-air sky lighting stays natural and does not wash out pale surfaces.
+    bloom.enabled =
+      !libraryMode || libraryGraphicsOptions.bloom
     composer.addPass(bloom)
 
     const dreamPost = new ShaderPass(DreamPostShader)
@@ -1034,52 +1050,100 @@ export default function DreamWorld3D({
     composer.addPass(dreamPost)
     composer.addPass(new OutputPass())
 
-    if (libraryMode) {
-      // Low-level hemispheric fill preserves readable shadow detail while the
-      // authored pendant/sconce point lights provide the actual room shape.
-      scene.add(
-        new THREE.HemisphereLight(
-          0xd8c8b0,
-          0x05070b,
-          .24,
-        ),
-      )
-    } else {
-      scene.add(new THREE.AmbientLight(0x7182b6, .75))
+    let librarySkyFill: THREE.HemisphereLight | null = null
+    let libraryMoonLight: THREE.DirectionalLight | null = null
+    let libraryHorizonFill: THREE.DirectionalLight | null = null
+    const dreamAccentLights: {
+      violet: THREE.PointLight | null
+      cyan: THREE.PointLight | null
+    } = {
+      violet: null,
+      cyan: null,
     }
 
-    const keyLight = new THREE.DirectionalLight(
-      libraryMode ? 0xfff3df : 0xd4e5ff,
-      libraryMode ? .025 : 2.1,
-    )
-    keyLight.position.set(-5, 6, 8)
-    keyLight.castShadow =
-      renderer.shadowMap.enabled && !libraryMode
-    keyLight.shadow.mapSize.set(
-      qualityRef.current === 'cinematic' ? 2048 : 1024,
-      qualityRef.current === 'cinematic' ? 2048 : 1024,
-    )
-    keyLight.shadow.bias = -0.00015
-    keyLight.shadow.normalBias = 0.025
-    scene.add(keyLight)
+    if (libraryMode) {
+      // Open-air library lighting: the sky supplies the ambient fill and a
+      // broad moon/key direction supplies shape. No ceiling fixture is needed.
+      librarySkyFill = new THREE.HemisphereLight(
+        0x8fb7e8,
+        0x24180f,
+        qualityRef.current === 'low' ? .72 : .9,
+      )
+      librarySkyFill.name = 'library-sky-fill'
+      scene.add(librarySkyFill)
 
-    const violetLight = new THREE.PointLight(
-      0xb791ff,
-      libraryMode ? .075 : 12,
-      20,
-      2,
-    )
-    violetLight.position.set(-5, 1, 3)
-    scene.add(violetLight)
+      libraryMoonLight = new THREE.DirectionalLight(
+        0xc8dcff,
+        qualityRef.current === 'cinematic'
+          ? 1.2
+          : qualityRef.current === 'high'
+            ? 1.08
+            : qualityRef.current === 'medium'
+              ? .94
+              : .82,
+      )
+      libraryMoonLight.position.set(28, 42, 16)
+      libraryMoonLight.target.position.set(0, 0, -28)
+      libraryMoonLight.castShadow = renderer.shadowMap.enabled
+      libraryMoonLight.shadow.mapSize.set(
+        qualityRef.current === 'cinematic' ? 2048 : 1024,
+        qualityRef.current === 'cinematic' ? 2048 : 1024,
+      )
+      libraryMoonLight.shadow.camera.left = -30
+      libraryMoonLight.shadow.camera.right = 30
+      libraryMoonLight.shadow.camera.top = 48
+      libraryMoonLight.shadow.camera.bottom = -48
+      libraryMoonLight.shadow.camera.near = 1
+      libraryMoonLight.shadow.camera.far = 110
+      libraryMoonLight.shadow.bias = -0.00012
+      libraryMoonLight.shadow.normalBias = .03
+      libraryMoonLight.name = 'library-moon-key'
+      scene.add(libraryMoonLight, libraryMoonLight.target)
 
-    const cyanLight = new THREE.PointLight(
-      0x72e2df,
-      libraryMode ? .055 : 11,
-      20,
-      2,
-    )
-    cyanLight.position.set(5, -1, 2)
-    scene.add(cyanLight)
+      libraryHorizonFill = new THREE.DirectionalLight(
+        0xffc995,
+        qualityRef.current === 'low' ? .16 : .24,
+      )
+      libraryHorizonFill.position.set(-26, 12, -42)
+      libraryHorizonFill.target.position.set(0, 1.4, -26)
+      libraryHorizonFill.castShadow = false
+      libraryHorizonFill.name = 'library-horizon-fill'
+      scene.add(libraryHorizonFill, libraryHorizonFill.target)
+    } else {
+      scene.add(new THREE.AmbientLight(0x7182b6, .75))
+
+      const keyLight = new THREE.DirectionalLight(
+        0xd4e5ff,
+        2.1,
+      )
+      keyLight.position.set(-5, 6, 8)
+      keyLight.castShadow = renderer.shadowMap.enabled
+      keyLight.shadow.mapSize.set(
+        qualityRef.current === 'cinematic' ? 2048 : 1024,
+        qualityRef.current === 'cinematic' ? 2048 : 1024,
+      )
+      keyLight.shadow.bias = -0.00015
+      keyLight.shadow.normalBias = 0.025
+      scene.add(keyLight)
+
+      dreamAccentLights.violet = new THREE.PointLight(
+        0xb791ff,
+        12,
+        20,
+        2,
+      )
+      dreamAccentLights.violet.position.set(-5, 1, 3)
+      scene.add(dreamAccentLights.violet)
+
+      dreamAccentLights.cyan = new THREE.PointLight(
+        0x72e2df,
+        11,
+        20,
+        2,
+      )
+      dreamAccentLights.cyan.position.set(5, -1, 2)
+      scene.add(dreamAccentLights.cyan)
+    }
 
     const world = new THREE.Group()
     scene.add(world)
@@ -1087,7 +1151,7 @@ export default function DreamWorld3D({
     const farWorld = new THREE.Group()
     scene.add(farWorld)
 
-    // The DEV Library now uses the enclosed six-room building from the
+    // The DEV Library now uses an open-air six-room building from the
     // neighborhoods prototype while retaining the cinematic renderer,
     // reading ritual, audio, and Sanity-driven content model.
     const libraryFloatingProps = createFloatingPropRegistry()
@@ -2392,7 +2456,21 @@ export default function DreamWorld3D({
       const group = new THREE.Group()
       group.userData.nodeId = node._id
       group.userData.libraryKind = node.libraryKind
+      group.userData.librarySlotId = node.librarySlotId
+      group.userData.libraryOccupancyKey =
+        node.libraryOccupancyKey
+      group.userData.libraryShelfLifecycle =
+        node.libraryShelfLifecycle
       const shelfNode = node.libraryKind === 'shelf'
+      if (
+        shelfNode &&
+        node.libraryShelfLifecycle === 'forming'
+      ) {
+        // A forming shelf should be witnessed in-world, not complete its
+        // animation while the player is still walking from the entrance.
+        // Keep it latent until the camera comes close enough to its slot.
+        group.userData.libraryMaterializationArmed = true
+      }
 
       const shellMaterial = createLivingOrbMaterial(color, node.category)
       const shell = new THREE.Mesh(
@@ -2975,6 +3053,10 @@ export default function DreamWorld3D({
           node.libraryWidthScale ?? 1
         shelfContactShadow.renderOrder = 1
         shelfContactShadow.userData.libraryDecorative = true
+        shelfContactShadow.visible =
+          node.libraryShelfLifecycle !== 'forming'
+        group.userData.libraryContactShadow =
+          shelfContactShadow
         world.add(shelfContactShadow)
         shelfContactShadows.push(shelfContactShadow)
         const shelfFloatId = node.libraryFloatId ?? node._id
@@ -3059,7 +3141,12 @@ export default function DreamWorld3D({
               0.18,
               Math.max(0, node.frequency - 2) * .035,
             )
-      group.scale.setScalar(baseScale)
+      group.scale.setScalar(
+        node.libraryKind === 'shelf' &&
+          node.libraryShelfLifecycle === 'forming'
+          ? .04
+          : baseScale,
+      )
       world.add(group)
 
       nodeVisuals.set(node._id, {
@@ -5342,6 +5429,12 @@ export default function DreamWorld3D({
       for (const node of nodeRef.current) {
         const visual = nodeVisuals.get(node._id)
         if (!visual) continue
+        if (
+          visual.group.userData
+            .libraryMaterializationArmed === true
+        ) {
+          continue
+        }
         visual.group.getWorldPosition(worldPoint)
         const distance = worldPoint.distanceTo(camera.position)
         if (
@@ -7027,6 +7120,88 @@ export default function DreamWorld3D({
         }
 
         if (node.libraryKind === 'shelf') {
+          const materializationArmed =
+            visual.group.userData
+              .libraryMaterializationArmed === true
+          let materializationStartedAt =
+            visual.group.userData
+              .libraryMaterializationStartedAt as
+              | number
+              | undefined
+
+          if (
+            materializationArmed &&
+            shelfDistance < 14
+          ) {
+            materializationStartedAt = now
+            visual.group.userData
+              .libraryMaterializationStartedAt = now
+            delete visual.group.userData
+              .libraryMaterializationArmed
+            const contactShadow =
+              visual.group.userData
+                .libraryContactShadow as
+                | THREE.Object3D
+                | undefined
+            if (contactShadow) contactShadow.visible = true
+          }
+
+          if (
+            typeof materializationStartedAt === 'number'
+          ) {
+            const progress = THREE.MathUtils.clamp(
+              (now - materializationStartedAt) / 2400,
+              0,
+              1,
+            )
+            const eased =
+              progress < .82
+                ? 1 - Math.pow(1 - progress / .82, 3)
+                : 1 +
+                  Math.sin(
+                    ((progress - .82) / .18) * Math.PI,
+                  ) *
+                    .035
+            visual.group.scale.setScalar(
+              Math.min(
+                visual.baseScale * 1.035,
+                THREE.MathUtils.lerp(
+                  .035,
+                  visual.baseScale,
+                  eased,
+                ),
+              ),
+            )
+            const shelfLabelMaterial =
+              visual.label.material as THREE.SpriteMaterial
+            shelfLabelMaterial.opacity =
+              Math.max(
+                shelfLabelMaterial.opacity,
+                THREE.MathUtils.smoothstep(
+                  progress,
+                  .38,
+                  .9,
+                ) * .94,
+              )
+
+            if (progress >= 1) {
+              visual.group.scale.setScalar(
+                visual.baseScale,
+              )
+              delete visual.group.userData
+                .libraryMaterializationStartedAt
+              visual.group.userData
+                .libraryShelfLifecycle = 'active'
+            }
+          } else if (materializationArmed) {
+            // The slot exists, but its occupant has not physically manifested
+            // yet. Keeping it nearly invisible makes the empty space legible.
+            visual.group.scale.setScalar(.035)
+            const shelfLabelMaterial =
+              visual.label.material as THREE.SpriteMaterial
+            shelfLabelMaterial.opacity = 0
+          }
+
           const frameMaterial =
             visual.group.userData
               .libraryShelfFrameMaterial as
@@ -7242,7 +7417,9 @@ export default function DreamWorld3D({
         visual.core.rotation.y -= .008
       }
 
-      libraryFloatingProps.update(elapsed)
+      if (!libraryGraphicsOptions.reducedMotion) {
+        libraryFloatingProps.update(elapsed)
+      }
 
       if (libraryMode) {
         shelfBookLabelLayers.forEach(({shelfRoot, layer}) => {
@@ -7520,39 +7697,46 @@ export default function DreamWorld3D({
         atmosphereLightTarget.setHex(
           atmospherePreset.tint,
         )
-        violetLight.color.lerp(
-          atmosphereLightTarget,
-          .035,
-        )
-        cyanLight.color.lerp(
-          atmosphereLightTarget,
-          .022,
-        )
-      }
 
-      const atmosphereLightScale = libraryMode
-        ? atmospherePreset.lightStrength
-        : 1
-      const violetTarget =
-        (libraryMode
-          ? selectedVisual
-            ? .12
-            : .055
-          : selectedVisual
-            ? 4.7
-            : 4) * atmosphereLightScale
-      const cyanTarget =
-        (libraryMode
-          ? selectedVisual
-            ? .09
-            : .04
-          : selectedVisual
-            ? 4.3
-            : 3.6) * atmosphereLightScale
-      violetLight.intensity +=
-        (violetTarget - violetLight.intensity) * .035
-      cyanLight.intensity +=
-        (cyanTarget - cyanLight.intensity) * .035
+        if (librarySkyFill) {
+          librarySkyFill.color.lerp(
+            atmosphereLightTarget,
+            .018,
+          )
+          const skyTarget =
+            (qualityRef.current === 'low' ? .72 : .9) *
+            atmospherePreset.lightStrength
+          librarySkyFill.intensity +=
+            (skyTarget - librarySkyFill.intensity) * .035
+        }
+
+        if (libraryMoonLight) {
+          const moonTarget =
+            (selectedVisual ? 1.12 : .94) *
+            atmospherePreset.lightStrength
+          libraryMoonLight.intensity +=
+            (moonTarget - libraryMoonLight.intensity) * .03
+        }
+
+        if (libraryHorizonFill) {
+          const horizonTarget =
+            (selectedVisual ? .28 : .22) *
+            atmospherePreset.lightStrength
+          libraryHorizonFill.intensity +=
+            (horizonTarget - libraryHorizonFill.intensity) * .03
+        }
+      } else {
+        const violetLight = dreamAccentLights.violet
+        const cyanLight = dreamAccentLights.cyan
+        if (violetLight && cyanLight) {
+          const violetTarget = selectedVisual ? 4.7 : 4
+          const cyanTarget = selectedVisual ? 4.3 : 3.6
+          violetLight.intensity +=
+            (violetTarget - violetLight.intensity) * .035
+          cyanLight.intensity +=
+            (cyanTarget - cyanLight.intensity) * .035
+        }
+      }
 
       if (flightActive && flightInitialized) {
         const routeActive = Boolean(flightRoute)
@@ -7739,6 +7923,12 @@ export default function DreamWorld3D({
 
         if (!routeActive) {
           nodeVisuals.forEach((visual) => {
+            if (
+              visual.group.userData
+                .libraryMaterializationArmed === true
+            ) {
+              return
+            }
             visual.group.getWorldPosition(flightCollisionPoint)
             flightCollisionDelta
               .copy(flightPosition)
@@ -8198,7 +8388,7 @@ export default function DreamWorld3D({
       renderer.dispose()
       container.removeChild(renderer.domElement)
     }
-  }, [graphKey, libraryWorldKey])
+  }, [graphKey, libraryGraphicsKey, libraryWorldKey])
 
   return (
     <div

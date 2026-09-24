@@ -65,6 +65,50 @@ export type ArchiveJourneyConfig = {
   stops: ArchiveJourneyStopConfig[]
 }
 
+export type LibrarySlotLifecycle =
+  | 'dormant'
+  | 'forming'
+  | 'active'
+  | 'cooling'
+
+export type LibrarySlotHistoryEvent = {
+  event:
+    | 'seeded'
+    | 'materialized'
+    | 'activated'
+    | 'cooling'
+    | 'reactivated'
+    | 'archived'
+    | 'dissolved'
+  topic?: string
+  at: string
+  vitality?: number
+  note?: string
+}
+
+export type LibrarySlotStateConfig = {
+  id?: string
+  slotKey: string
+  districtId: string
+  roomSlot: number
+  slotId: string
+  zone?: string
+  configured: boolean
+  occupantKey?: string
+  topic?: string
+  lifecycle: LibrarySlotLifecycle
+  vitality: number
+  signalScore: number
+  articleCount: number
+  risingChecks: number
+  lowChecks: number
+  materializedAt?: string
+  lastActiveAt?: string
+  coolingStartedAt?: string
+  updatedAt?: string
+  history: LibrarySlotHistoryEvent[]
+}
+
 export type LibraryWorldConfig = {
   source: 'sanity' | 'fallback'
   syncMode?: 'drafts' | 'published' | 'local'
@@ -83,6 +127,7 @@ export type LibraryWorldConfig = {
   featuredDistrictId?: string
   districts: LibraryDistrictConfig[]
   curatedArticles: CuratedDevArticleConfig[]
+  slotStates: LibrarySlotStateConfig[]
   journeys: ArchiveJourneyConfig[]
 }
 
@@ -225,6 +270,7 @@ export const DEFAULT_LIBRARY_WORLD_CONFIG: LibraryWorldConfig = {
   featuredDistrictId: 'featured',
   districts: DEFAULT_LIBRARY_DISTRICTS,
   curatedArticles: [],
+  slotStates: [],
   journeys: [],
 }
 
@@ -258,9 +304,17 @@ export function districtForTags(
 
 
 type SanityLibraryWorldPayload = {
-  config?: Partial<Omit<LibraryWorldConfig, 'source' | 'districts' | 'curatedArticles' | 'journeys'>>
+  config?: Partial<Omit<
+    LibraryWorldConfig,
+    | 'source'
+    | 'districts'
+    | 'curatedArticles'
+    | 'slotStates'
+    | 'journeys'
+  >>
   districts?: Array<Partial<LibraryDistrictConfig>>
   curatedArticles?: Array<Partial<CuratedDevArticleConfig>>
+  slotStates?: Array<Partial<LibrarySlotStateConfig>>
   journeys?: Array<Partial<ArchiveJourneyConfig>>
 }
 
@@ -447,6 +501,103 @@ export function mergeLibraryWorldConfig(
           : undefined,
     }))
 
+  const lifecycleValues = new Set<LibrarySlotLifecycle>([
+    'dormant',
+    'forming',
+    'active',
+    'cooling',
+  ])
+
+  const slotStates = (payload.slotStates ?? [])
+    .filter(
+      (slot) =>
+        typeof slot.slotKey === 'string' &&
+        typeof slot.districtId === 'string' &&
+        typeof slot.roomSlot === 'number' &&
+        typeof slot.slotId === 'string',
+    )
+    .map((slot) => ({
+      id:
+        typeof slot.id === 'string'
+          ? slot.id
+          : undefined,
+      slotKey: slot.slotKey as string,
+      districtId: slot.districtId as string,
+      roomSlot: Math.max(
+        0,
+        Math.min(5, Math.round(slot.roomSlot as number)),
+      ),
+      slotId: slot.slotId as string,
+      zone:
+        typeof slot.zone === 'string'
+          ? slot.zone
+          : undefined,
+      configured: slot.configured === true,
+      occupantKey:
+        typeof slot.occupantKey === 'string' &&
+        slot.occupantKey.length > 0
+          ? slot.occupantKey
+          : undefined,
+      topic:
+        typeof slot.topic === 'string' &&
+        slot.topic.length > 0
+          ? slot.topic
+          : undefined,
+      lifecycle:
+        typeof slot.lifecycle === 'string' &&
+        lifecycleValues.has(slot.lifecycle as LibrarySlotLifecycle)
+          ? (slot.lifecycle as LibrarySlotLifecycle)
+          : 'dormant',
+      vitality: clamp01(slot.vitality, 0),
+      signalScore:
+        typeof slot.signalScore === 'number' &&
+        Number.isFinite(slot.signalScore)
+          ? Math.max(0, slot.signalScore)
+          : 0,
+      articleCount:
+        typeof slot.articleCount === 'number'
+          ? Math.max(0, Math.round(slot.articleCount))
+          : 0,
+      risingChecks:
+        typeof slot.risingChecks === 'number'
+          ? Math.max(0, Math.round(slot.risingChecks))
+          : 0,
+      lowChecks:
+        typeof slot.lowChecks === 'number'
+          ? Math.max(0, Math.round(slot.lowChecks))
+          : 0,
+      materializedAt:
+        typeof slot.materializedAt === 'string'
+          ? slot.materializedAt
+          : undefined,
+      lastActiveAt:
+        typeof slot.lastActiveAt === 'string'
+          ? slot.lastActiveAt
+          : undefined,
+      coolingStartedAt:
+        typeof slot.coolingStartedAt === 'string'
+          ? slot.coolingStartedAt
+          : undefined,
+      updatedAt:
+        typeof slot.updatedAt === 'string'
+          ? slot.updatedAt
+          : undefined,
+      history: Array.isArray(slot.history)
+        ? slot.history
+            .filter(
+              (
+                event,
+              ): event is LibrarySlotHistoryEvent =>
+                Boolean(
+                  event &&
+                    typeof event.event === 'string' &&
+                    typeof event.at === 'string',
+                ),
+            )
+            .slice(-40)
+        : [],
+    }))
+
   const journeys = (payload.journeys ?? [])
     .filter(
       (journey) =>
@@ -512,6 +663,7 @@ export function mergeLibraryWorldConfig(
         : DEFAULT_LIBRARY_WORLD_CONFIG.featuredDistrictId,
     districts,
     curatedArticles,
+    slotStates,
     journeys,
   }
 }
