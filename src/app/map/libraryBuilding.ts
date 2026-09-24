@@ -710,6 +710,48 @@ export function createLibraryBuilding(
     skyDebrisGeometry,
   )
 
+
+  // Infinite-horizon scrims sit just inside the physical boundary so the eye
+  // never resolves a clean terminal wall at the end of the archive. They are
+  // deliberately non-interactive and do not participate in collision.
+  const horizonScrimGeometry = new THREE.PlaneGeometry(20, 8)
+  const horizonScrimMaterial = new THREE.MeshBasicMaterial({
+    color: 0x0c2940,
+    transparent: true,
+    opacity: .075,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide,
+    fog: true,
+    toneMapped: false,
+  })
+  localGeometries.push(horizonScrimGeometry)
+  localMaterials.push(horizonScrimMaterial)
+
+  const addHorizonScrim = (
+    x: number,
+    y: number,
+    z: number,
+    yaw: number,
+    scaleX = 1,
+  ) => {
+    const scrim = new THREE.Mesh(
+      horizonScrimGeometry,
+      horizonScrimMaterial,
+    )
+    scrim.position.set(x, y, z)
+    scrim.rotation.y = yaw
+    scrim.scale.x = scaleX
+    scrim.userData.libraryDecorative = true
+    scrim.userData.libraryNonInteractive = true
+    scrim.renderOrder = -1
+    group.add(scrim)
+  }
+
+  addHorizonScrim(0, 3.8, -73.9, 0, 2.2)
+  addHorizonScrim(-23.55, 4.6, -31, Math.PI / 2, 3.4)
+  addHorizonScrim(23.55, 4.6, -31, Math.PI / 2, 3.4)
+
   const wallRuns: WallRun[] = [
     {
       x: -24.4,
