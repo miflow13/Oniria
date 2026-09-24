@@ -1149,7 +1149,6 @@ export default function DreamWorld3D({
           scene,
           activeLibraryConfig,
           libraryFloatingProps,
-          settings.libraryLightDetail,
         )
       : null
     const layoutAuthoringEnabled = libraryMode
