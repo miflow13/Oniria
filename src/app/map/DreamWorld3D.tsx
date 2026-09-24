@@ -16,8 +16,10 @@ import {
 } from '@/lib/libraryWorldConfig'
 import styles from './map.module.css'
 import {
+  DEFAULT_LIBRARY_GRAPHICS_OPTIONS,
   getQualitySettings,
   type DreamQuality,
+  type LibraryGraphicsOptions,
 } from './dreamworld/quality'
 import {
   createLivingOrbMaterial,
@@ -181,6 +183,7 @@ type Props = {
   libraryMovementMode?: LibraryMovementMode
   libraryWorldConfig?: LibraryWorldConfig
   libraryReadingBook?: LibraryReadingBook | null
+  libraryGraphicsOptions?: LibraryGraphicsOptions
   inputBlocked?: boolean
   onZoomChange: (zoom: number) => void
   onPanChange: (pan: Pan) => void
@@ -670,6 +673,7 @@ export default function DreamWorld3D({
   libraryMovementMode = 'walk',
   libraryWorldConfig = DEFAULT_LIBRARY_WORLD_CONFIG,
   libraryReadingBook = null,
+  libraryGraphicsOptions = DEFAULT_LIBRARY_GRAPHICS_OPTIONS,
   inputBlocked = false,
   onZoomChange,
   onPanChange,
@@ -780,6 +784,11 @@ export default function DreamWorld3D({
         )
         .join('|')}`,
     [dreams, edges, nodes, quality],
+  )
+
+  const libraryGraphicsKey = useMemo(
+    () => JSON.stringify(libraryGraphicsOptions),
+    [libraryGraphicsOptions],
   )
 
   const libraryWorldKey = useMemo(
@@ -969,7 +978,7 @@ export default function DreamWorld3D({
       : null
 
     const renderer = new THREE.WebGLRenderer({
-      antialias: true,
+      antialias: qualityRef.current !== 'low',
       alpha: false,
       powerPreference: 'high-performance',
     })
@@ -979,7 +988,9 @@ export default function DreamWorld3D({
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.toneMapping = THREE.ACESFilmicToneMapping
     renderer.toneMappingExposure = libraryMode ? .51 : .94
-    renderer.shadowMap.enabled = settings.miniWorldDetail > 0
+    renderer.shadowMap.enabled =
+      settings.miniWorldDetail > 0 &&
+      (!libraryMode || libraryGraphicsOptions.shadows)
     renderer.shadowMap.type = THREE.PCFShadowMap
     renderer.domElement.className = styles.webglCanvas
     container.appendChild(renderer.domElement)
@@ -1022,7 +1033,8 @@ export default function DreamWorld3D({
     // High-threshold library bloom is intentionally lamp-only. Pale walls and
     // book covers sit below threshold, while the emissive bulbs pick up a
     // restrained warm halo.
-    bloom.enabled = true
+    bloom.enabled =
+      !libraryMode || libraryGraphicsOptions.bloom
     composer.addPass(bloom)
 
     const dreamPost = new ShaderPass(DreamPostShader)
@@ -1101,6 +1113,7 @@ export default function DreamWorld3D({
           scene,
           activeLibraryConfig,
           libraryFloatingProps,
+          settings.libraryLightDetail,
         )
       : null
     const layoutAuthoringEnabled = libraryMode
@@ -7358,7 +7371,9 @@ export default function DreamWorld3D({
         visual.core.rotation.y -= .008
       }
 
-      libraryFloatingProps.update(elapsed)
+      if (!libraryGraphicsOptions.reducedMotion) {
+        libraryFloatingProps.update(elapsed)
+      }
 
       if (libraryMode) {
         shelfBookLabelLayers.forEach(({shelfRoot, layer}) => {
@@ -8320,7 +8335,7 @@ export default function DreamWorld3D({
       renderer.dispose()
       container.removeChild(renderer.domElement)
     }
-  }, [graphKey, libraryWorldKey])
+  }, [graphKey, libraryGraphicsKey, libraryWorldKey])
 
   return (
     <div
