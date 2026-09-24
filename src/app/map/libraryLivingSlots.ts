@@ -134,6 +134,15 @@ function normalizedVitality(
   return Math.max(0, Math.min(1, score / maximum))
 }
 
+function stableTagHash(value: string) {
+  let hash = 2166136261
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return hash >>> 0
+}
+
 /**
  * The coordinates belong to the slot, not the shelf.
  *
@@ -183,9 +192,49 @@ export function resolveLivingTopicSlots(
     1,
     ...occupants.map((occupant) => occupant.signal?.score ?? 1),
   )
+  const occupantBySlot = new Map<
+    number,
+    (typeof occupants)[number]
+  >()
+
+  configured.slice(0, placements.length).forEach((tag, index) => {
+    occupantBySlot.set(index, {
+      tag,
+      configured: true,
+      signal: signalByTag.get(tag),
+    })
+  })
+
+  const availableIndices = placements
+    .map((_, index) => index)
+    .filter((index) => !occupantBySlot.has(index))
+
+  emergent.forEach((signal) => {
+    if (availableIndices.length === 0) return
+    const start =
+      stableTagHash(signal.tag) % availableIndices.length
+
+    for (
+      let offset = 0;
+      offset < availableIndices.length;
+      offset += 1
+    ) {
+      const slotIndex =
+        availableIndices[
+          (start + offset) % availableIndices.length
+        ]
+      if (occupantBySlot.has(slotIndex)) continue
+      occupantBySlot.set(slotIndex, {
+        tag: signal.tag,
+        configured: false,
+        signal,
+      })
+      break
+    }
+  })
 
   return placements.map((placement, index) => {
-    const occupant = occupants[index]
+    const occupant = occupantBySlot.get(index)
     if (!occupant) {
       return {
         slotId: placement.slotId,
