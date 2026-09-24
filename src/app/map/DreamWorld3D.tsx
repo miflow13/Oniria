@@ -1030,9 +1030,8 @@ export default function DreamWorld3D({
       libraryMode ? .14 : settings.bloomRadius,
       libraryMode ? 1.16 : settings.bloomThreshold,
     )
-    // High-threshold library bloom is intentionally lamp-only. Pale walls and
-    // book covers sit below threshold, while the emissive bulbs pick up a
-    // restrained warm halo.
+    // High-threshold library bloom is limited to emissive accents so the
+    // open-air sky lighting stays natural and does not wash out pale surfaces.
     bloom.enabled =
       !libraryMode || libraryGraphicsOptions.bloom
     composer.addPass(bloom)
@@ -1052,51 +1051,88 @@ export default function DreamWorld3D({
     composer.addPass(new OutputPass())
 
     if (libraryMode) {
-      // Low-level hemispheric fill preserves readable shadow detail while the
-      // authored pendant/sconce point lights provide the actual room shape.
-      scene.add(
-        new THREE.HemisphereLight(
-          0xd8c8b0,
-          0x05070b,
-          .24,
-        ),
+      // Open-air library lighting: the sky supplies the ambient fill and a
+      // broad moon/key direction supplies shape. No ceiling fixture is needed.
+      const skyFill = new THREE.HemisphereLight(
+        0x8fb7e8,
+        0x24180f,
+        qualityRef.current === 'low' ? .72 : .9,
       )
+      skyFill.name = 'library-sky-fill'
+      scene.add(skyFill)
+
+      const moonLight = new THREE.DirectionalLight(
+        0xc8dcff,
+        qualityRef.current === 'cinematic'
+          ? 1.2
+          : qualityRef.current === 'high'
+            ? 1.08
+            : qualityRef.current === 'medium'
+              ? .94
+              : .82,
+      )
+      moonLight.position.set(28, 42, 16)
+      moonLight.target.position.set(0, 0, -28)
+      moonLight.castShadow = renderer.shadowMap.enabled
+      moonLight.shadow.mapSize.set(
+        qualityRef.current === 'cinematic' ? 2048 : 1024,
+        qualityRef.current === 'cinematic' ? 2048 : 1024,
+      )
+      moonLight.shadow.camera.left = -30
+      moonLight.shadow.camera.right = 30
+      moonLight.shadow.camera.top = 48
+      moonLight.shadow.camera.bottom = -48
+      moonLight.shadow.camera.near = 1
+      moonLight.shadow.camera.far = 110
+      moonLight.shadow.bias = -0.00012
+      moonLight.shadow.normalBias = .03
+      moonLight.name = 'library-moon-key'
+      scene.add(moonLight, moonLight.target)
+
+      const horizonFill = new THREE.DirectionalLight(
+        0xffc995,
+        qualityRef.current === 'low' ? .16 : .24,
+      )
+      horizonFill.position.set(-26, 12, -42)
+      horizonFill.target.position.set(0, 1.4, -26)
+      horizonFill.castShadow = false
+      horizonFill.name = 'library-horizon-fill'
+      scene.add(horizonFill, horizonFill.target)
     } else {
       scene.add(new THREE.AmbientLight(0x7182b6, .75))
+
+      const keyLight = new THREE.DirectionalLight(
+        0xd4e5ff,
+        2.1,
+      )
+      keyLight.position.set(-5, 6, 8)
+      keyLight.castShadow = renderer.shadowMap.enabled
+      keyLight.shadow.mapSize.set(
+        qualityRef.current === 'cinematic' ? 2048 : 1024,
+        qualityRef.current === 'cinematic' ? 2048 : 1024,
+      )
+      keyLight.shadow.bias = -0.00015
+      keyLight.shadow.normalBias = 0.025
+      scene.add(keyLight)
+
+      const violetLight = new THREE.PointLight(
+        0xb791ff,
+        12,
+        20,
+        2,
+      )
+      violetLight.position.set(-5, 1, 3)
+      scene.add(violetLight)
+
+      const cyanLight = new THREE.PointLight(
+        0x72e2df,
+        11,
+        20,
+        2,
+      )
+      cyanLight.position.set(5, -1, 2)
+      scene.add(cyanLight)
     }
-
-    const keyLight = new THREE.DirectionalLight(
-      libraryMode ? 0xfff3df : 0xd4e5ff,
-      libraryMode ? .025 : 2.1,
-    )
-    keyLight.position.set(-5, 6, 8)
-    keyLight.castShadow =
-      renderer.shadowMap.enabled && !libraryMode
-    keyLight.shadow.mapSize.set(
-      qualityRef.current === 'cinematic' ? 2048 : 1024,
-      qualityRef.current === 'cinematic' ? 2048 : 1024,
-    )
-    keyLight.shadow.bias = -0.00015
-    keyLight.shadow.normalBias = 0.025
-    scene.add(keyLight)
-
-    const violetLight = new THREE.PointLight(
-      0xb791ff,
-      libraryMode ? .075 : 12,
-      20,
-      2,
-    )
-    violetLight.position.set(-5, 1, 3)
-    scene.add(violetLight)
-
-    const cyanLight = new THREE.PointLight(
-      0x72e2df,
-      libraryMode ? .055 : 11,
-      20,
-      2,
-    )
-    cyanLight.position.set(5, -1, 2)
-    scene.add(cyanLight)
 
     const world = new THREE.Group()
     scene.add(world)
@@ -1104,7 +1140,7 @@ export default function DreamWorld3D({
     const farWorld = new THREE.Group()
     scene.add(farWorld)
 
-    // The DEV Library now uses the enclosed six-room building from the
+    // The DEV Library now uses an open-air six-room building from the
     // neighborhoods prototype while retaining the cinematic renderer,
     // reading ritual, audio, and Sanity-driven content model.
     const libraryFloatingProps = createFloatingPropRegistry()
