@@ -11,6 +11,9 @@ const DOME_MARGIN = 6
 const DOME_HEIGHT = 26
 const DOME_BASE_Y = -.35
 const CONSTELLATION_COUNT = 64
+const LIBRARY_DELIGHT_EVENT = 'oniria:library-delight'
+const LIBRARY_MOTION_EVENT =
+  'oniria:library-motion-preference'
 
 function createGridGeometry() {
   const vertices: number[] = []
@@ -322,23 +325,30 @@ export function createLibraryDome(
       uColor: {
         value: new THREE.Color(0x63c7ff),
       },
+      uTime: {value: 0},
+      uPulseStart: {value: -100},
     },
     vertexShader: `
       varying vec3 vViewNormal;
       varying vec3 vViewDirection;
+      varying vec3 vLocalPosition;
 
       void main() {
         vec4 viewPosition =
           modelViewMatrix * vec4(position, 1.0);
         vViewNormal = normalize(normalMatrix * normal);
         vViewDirection = normalize(-viewPosition.xyz);
+        vLocalPosition = position;
         gl_Position = projectionMatrix * viewPosition;
       }
     `,
     fragmentShader: `
       uniform vec3 uColor;
+      uniform float uTime;
+      uniform float uPulseStart;
       varying vec3 vViewNormal;
       varying vec3 vViewDirection;
+      varying vec3 vLocalPosition;
 
       void main() {
         float facing = abs(dot(
@@ -349,7 +359,31 @@ export function createLibraryDome(
           1.0 - clamp(facing, 0.0, 1.0),
           2.35
         );
-        float alpha = 0.028 + fresnel * 0.105;
+
+        float shimmer =
+          pow(
+            max(
+              0.0,
+              sin(uTime * 0.24 + vLocalPosition.y * 7.0)
+            ),
+            12.0
+          ) * 0.008;
+
+        float pulseAge = uTime - uPulseStart;
+        float pulseEnabled = step(0.0, pulseAge) *
+          (1.0 - step(2.5, pulseAge));
+        float pulseRadius = clamp(pulseAge / 2.2, 0.0, 1.2);
+        float radial = length(vLocalPosition.xz);
+        float pulseRing =
+          exp(-pow((radial - pulseRadius) * 10.0, 2.0)) *
+          pulseEnabled *
+          (1.0 - smoothstep(0.0, 2.5, pulseAge));
+
+        float alpha =
+          0.028 +
+          fresnel * 0.105 +
+          shimmer +
+          pulseRing * 0.045;
         gl_FragColor = vec4(uColor, alpha);
       }
     `,
@@ -375,6 +409,43 @@ export function createLibraryDome(
   dome.receiveShadow = false
   dome.userData.libraryDecorative = true
   dome.userData.libraryNonInteractive = true
+
+  let reducedMotion =
+    typeof window !== 'undefined' &&
+    window.matchMedia?.(
+      '(prefers-reduced-motion: reduce)',
+    ).matches === true
+
+  const handleMotionPreference = (event: Event) => {
+    reducedMotion = Boolean(
+      (
+        event as CustomEvent<{reducedMotion?: boolean}>
+      ).detail?.reducedMotion,
+    )
+  }
+  const handleDelight = () => {
+    if (reducedMotion) return
+    domeMaterial.uniforms.uPulseStart.value =
+      performance.now() / 1000
+  }
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener(
+      LIBRARY_MOTION_EVENT,
+      handleMotionPreference as EventListener,
+    )
+    window.addEventListener(
+      LIBRARY_DELIGHT_EVENT,
+      handleDelight,
+    )
+  }
+
+  dome.onBeforeRender = () => {
+    domeMaterial.uniforms.uTime.value = reducedMotion
+      ? 0
+      : performance.now() / 1000
+  }
+
   group.add(dome)
 
   const gridGeometry = createGridGeometry()
@@ -484,6 +555,17 @@ export function createLibraryDome(
   return {
     group,
     dispose: () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener(
+          LIBRARY_MOTION_EVENT,
+          handleMotionPreference as EventListener,
+        )
+        window.removeEventListener(
+          LIBRARY_DELIGHT_EVENT,
+          handleDelight,
+        )
+      }
+      dome.onBeforeRender = () => {}
       parent.remove(group)
       domeGeometry.dispose()
       gridGeometry.dispose()

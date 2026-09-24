@@ -159,9 +159,9 @@ export function createLibraryReadingRitual(
           shelfDistance < 15
 
         const showFullDetail =
-          shelfDistance < 27 || isOpening || isHovered
+          shelfDistance < 20 || isOpening || isHovered
         const showBookBlocks =
-          shelfDistance < 52 || isOpening || isHovered
+          shelfDistance < 42 || isOpening || isHovered
 
         bookVisual.group.visible = showBookBlocks
         bookVisual.coverHinge.visible = showFullDetail
@@ -181,11 +181,11 @@ export function createLibraryReadingRitual(
           // Give the closest shelf a little breathing room at natural
           // walking distance so covers read as individual books rather than
           // one flat wall of texture.
-          positionTarget.z += .11 * bookVisual.facing
+          positionTarget.z += .055 * bookVisual.facing
           positionTarget.x +=
-            Math.sign(bookVisual.basePosition.x) * .045
+            Math.sign(bookVisual.basePosition.x) * .02
           positionTarget.y +=
-            Math.sign(bookVisual.basePosition.y) * .022
+            Math.sign(bookVisual.basePosition.y) * .01
         }
 
         bookVisual.group.position.lerp(
@@ -211,7 +211,7 @@ export function createLibraryReadingRitual(
           : isHovered
             ? 1.07
             : isApproachedShelf
-              ? 1.03
+              ? 1.015
               : 1
 
         scaleTarget.setScalar(targetScale)
@@ -231,13 +231,19 @@ export function createLibraryReadingRitual(
                 : 0)
         const targetPitch = isOpening
           ? -.045 * ritualAmount
+          : isHovered
+            ? -.018
+            : 0
+        const targetRoll = isHovered
+          ? Math.sin((bookVisual.index + 1) * 1.7) * .012
           : 0
 
         bookVisual.group.rotation.y +=
           (targetYaw - bookVisual.group.rotation.y) * .18
         bookVisual.group.rotation.x +=
           (targetPitch - bookVisual.group.rotation.x) * .18
-        bookVisual.group.rotation.z *= .84
+        bookVisual.group.rotation.z +=
+          (targetRoll - bookVisual.group.rotation.z) * .16
 
         // The book group itself is already rotated 180° for the rear face.
         // The cover hinge therefore always opens toward local +Z with the

@@ -1203,3 +1203,102 @@
   font-size: .56rem;
   line-height: 1.4;
 }
+
+
+/* --- Library polish pass ------------------------------------------------- */
+
+.activityToast {
+  position: absolute;
+  z-index: 62;
+  left: 50%;
+  bottom: 22px;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 12px;
+  color: #b9cddd;
+  background: rgba(4, 9, 18, .82);
+  border: 1px solid rgba(141, 204, 218, .12);
+  border-radius: 999px;
+  box-shadow: 0 14px 42px rgba(0, 0, 0, .28);
+  backdrop-filter: blur(16px);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.activityToast strong {
+  font: 650 .56rem/1 ui-monospace, monospace;
+  letter-spacing: .03em;
+}
+
+.activityPulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #87dfe4;
+  box-shadow: 0 0 10px rgba(135, 223, 228, .55);
+  animation: libraryWorking 1.2s ease-in-out infinite;
+}
+
+.loading small {
+  color: #71869a;
+  font: .54rem/1.4 ui-monospace, monospace;
+}
+
+.page button:focus-visible,
+.page a:focus-visible,
+.page select:focus-visible,
+.page input:focus-visible {
+  outline: 2px solid rgba(133, 223, 230, .92);
+  outline-offset: 3px;
+}
+
+.page[data-large-text='true'] .bookPreview h2 {
+  font-size: 1.06rem;
+}
+
+.page[data-large-text='true'] .bookPreview span,
+.page[data-large-text='true'] .subtitle,
+.page[data-large-text='true'] .readerMeta {
+  font-size: .76rem;
+}
+
+.page[data-large-text='true'] .book strong,
+.page[data-large-text='true'] .searchResult strong {
+  font-size: .8rem;
+}
+
+.page[data-large-text='true'] .book small,
+.page[data-large-text='true'] .searchResult small,
+.page[data-large-text='true'] .searchResult span,
+.page[data-large-text='true'] .spatialBreadcrumb,
+.page[data-large-text='true'] .controlsHint span {
+  font-size: .62rem;
+}
+
+.page[data-large-text='true'] .articleBody {
+  font-size: .94rem;
+  line-height: 1.82;
+}
+
+.page[data-large-text='true'] .readerCard h1 {
+  font-size: clamp(1.7rem, 3.3vw, 2.8rem);
+}
+
+@keyframes libraryWorking {
+  0%, 100% {
+    opacity: .35;
+    transform: scale(.82);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.18);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .activityPulse {
+    animation: none;
+  }
+}

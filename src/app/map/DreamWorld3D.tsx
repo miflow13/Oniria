@@ -8129,8 +8129,17 @@ export default function DreamWorld3D({
             : 3.15
         const desiredVelocity =
           flightMove.multiplyScalar(movementSpeed)
+        const hasMovementInput =
+          desiredVelocity.lengthSq() > .0001
+        const responseRate = libraryWalking
+          ? hasMovementInput
+            ? 8.6
+            : 13.5
+          : hasMovementInput
+            ? 6.8
+            : 9.5
         const damping =
-          1 - Math.exp(-delta * (libraryWalking ? 10.5 : 7.5))
+          1 - Math.exp(-delta * responseRate)
 
         if (!routeActive) {
           flightVelocity.lerp(desiredVelocity, damping)
@@ -8202,6 +8211,16 @@ export default function DreamWorld3D({
             ) {
               return
             }
+            // Physical library shelves already use authored rectangular
+            // footprint colliders in clampLibraryWalkPosition(). Skipping the
+            // generic node sphere here prevents invisible "bubble" snagging
+            // at shelf corners while preserving real shelf/wall collision.
+            if (
+              libraryMode &&
+              visual.group.userData.libraryKind === 'shelf'
+            ) {
+              return
+            }
             visual.group.getWorldPosition(flightCollisionPoint)
             flightCollisionDelta
               .copy(flightPosition)
@@ -8245,14 +8264,18 @@ export default function DreamWorld3D({
                 (.45 + libraryWalkBobStrength * .55)
             }
 
+            const comfortMotion =
+              libraryGraphicsOptions.reducedMotion ? 0 : 1
             const bobY =
               Math.sin(libraryWalkBobPhase * 2) *
-              .032 *
-              libraryWalkBobStrength
+              .026 *
+              libraryWalkBobStrength *
+              comfortMotion
             const sway =
               Math.sin(libraryWalkBobPhase) *
-              .016 *
-              libraryWalkBobStrength
+              .012 *
+              libraryWalkBobStrength *
+              comfortMotion
             camera.position.y += bobY
             camera.position.addScaledVector(flightRight, sway)
           } else {
@@ -8267,8 +8290,10 @@ export default function DreamWorld3D({
 
         camera.rotation.z = THREE.MathUtils.lerp(
           camera.rotation.z,
-          -flightVelocity.dot(flightRight) *
-            (libraryWalking ? .0025 : .008),
+          libraryGraphicsOptions.reducedMotion
+            ? 0
+            : -flightVelocity.dot(flightRight) *
+              (libraryWalking ? .002 : .007),
           .08,
         )
 

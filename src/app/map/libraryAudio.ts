@@ -32,6 +32,34 @@ export type LibraryAudioController = {
 }
 
 const AUDIO_ENABLE_EVENT = 'oniria:library-audio-enable'
+const AUDIO_CUE_EVENT = 'oniria:library-audio-cue'
+
+export type LibraryAudioCue =
+  | 'room-enter'
+  | 'book-open'
+  | 'article-open'
+  | 'article-close'
+  | 'locate'
+
+export function emitLibraryAudioCue(cue: LibraryAudioCue) {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(
+    new CustomEvent(AUDIO_CUE_EVENT, {
+      detail: {cue},
+    }),
+  )
+}
+
+const ROOM_TONE_PROFILES: Record<
+  LibraryAudioProfile,
+  {frequency: number; cutoff: number; gain: number}
+> = {
+  ambient: {frequency: 108, cutoff: 620, gain: .006},
+  crystalline: {frequency: 214, cutoff: 1180, gain: .0048},
+  mechanical: {frequency: 72, cutoff: 430, gain: .0065},
+  warm: {frequency: 142, cutoff: 760, gain: .0056},
+  deep: {frequency: 54, cutoff: 310, gain: .0072},
+}
 
 const LIBRARY_MUSIC_URL =
   '/audio/solarflex-ambient-ambient-music-569592.mp3'
@@ -85,6 +113,21 @@ export function createLibraryAudio(
 
   let nextFootstepAt = 0
   let lastShelfId: string | null = null
+  let roomOscillator: OscillatorNode | null = null
+  let roomGain: GainNode | null = null
+  let roomFilter: BiquadFilterNode | null = null
+
+  const noiseBuffer = context.createBuffer(
+    1,
+    Math.max(1, Math.floor(context.sampleRate * .18)),
+    context.sampleRate,
+  )
+  const noiseChannel = noiseBuffer.getChannelData(0)
+  for (let index = 0; index < noiseChannel.length; index += 1) {
+    const envelope = 1 - index / noiseChannel.length
+    noiseChannel[index] =
+      (Math.random() * 2 - 1) * envelope
+  }
 
   const createTone = (
     frequency: number,
@@ -156,6 +199,94 @@ export function createLibraryAudio(
     )
   }
 
+  const ensureRoomTone = () => {
+    if (roomOscillator || disposed) return
+
+    roomOscillator = context.createOscillator()
+    roomGain = context.createGain()
+    roomFilter = context.createBiquadFilter()
+
+    roomOscillator.type = 'sine'
+    roomOscillator.frequency.value = 108
+    roomFilter.type = 'lowpass'
+    roomFilter.frequency.value = 620
+    roomFilter.Q.value = .55
+    roomGain.gain.value = .0001
+
+    roomOscillator.connect(roomFilter)
+    roomFilter.connect(roomGain)
+    roomGain.connect(master)
+    roomOscillator.start()
+  }
+
+  const playNoiseBurst = (
+    volume: number,
+    duration: number,
+    cutoff: number,
+  ) => {
+    if (disposed || context.state !== 'running') return
+
+    const now = context.currentTime
+    const source = context.createBufferSource()
+    const filter = context.createBiquadFilter()
+    const gain = context.createGain()
+
+    source.buffer = noiseBuffer
+    filter.type = 'lowpass'
+    filter.frequency.setValueAtTime(cutoff, now)
+    filter.Q.setValueAtTime(.45, now)
+    gain.gain.setValueAtTime(.0001, now)
+    gain.gain.exponentialRampToValueAtTime(
+      Math.max(.0002, volume),
+      now + .008,
+    )
+    gain.gain.exponentialRampToValueAtTime(
+      .0001,
+      now + duration,
+    )
+
+    source.connect(filter)
+    filter.connect(gain)
+    gain.connect(master)
+    source.start(now)
+    source.stop(now + duration + .02)
+  }
+
+  const playCue = (cue: LibraryAudioCue) => {
+    if (!soundRequested || context.state !== 'running') return
+
+    switch (cue) {
+      case 'book-open':
+        createTone(236, .014, .18, 'triangle')
+        playNoiseBurst(.009, .13, 1450)
+        break
+      case 'article-open':
+        createTone(420, .008, .2)
+        createTone(630, .0045, .27)
+        break
+      case 'article-close':
+        createTone(310, .007, .18)
+        playNoiseBurst(.0048, .1, 980)
+        break
+      case 'locate':
+        createTone(620, .006, .14)
+        createTone(880, .004, .22)
+        break
+      case 'room-enter':
+        createTone(168, .0048, .3)
+        createTone(252, .003, .42)
+        break
+    }
+  }
+
+  const handleCue = (event: Event) => {
+    const cue = (
+      event as CustomEvent<{cue?: LibraryAudioCue}>
+    ).detail?.cue
+    if (!cue) return
+    playCue(cue)
+  }
+
   const handleUnlock = () => {
     if (disposed) return
     soundRequested = true
@@ -171,6 +302,7 @@ export function createLibraryAudio(
   }
 
   window.addEventListener(AUDIO_ENABLE_EVENT, handleUnlock)
+  window.addEventListener(AUDIO_CUE_EVENT, handleCue as EventListener)
 
   return {
     update({
@@ -178,12 +310,37 @@ export function createLibraryAudio(
       movementMode,
       speed,
       elapsed,
+      activeAudioProfile = 'ambient',
     }) {
       if (disposed) return
 
       soundRequested = enabled
       const now = context.currentTime
       const audible = enabled && context.state === 'running'
+
+      if (audible) {
+        ensureRoomTone()
+      }
+
+      const roomProfile =
+        ROOM_TONE_PROFILES[activeAudioProfile]
+      if (roomOscillator && roomGain && roomFilter) {
+        roomOscillator.frequency.setTargetAtTime(
+          roomProfile.frequency,
+          now,
+          .7,
+        )
+        roomFilter.frequency.setTargetAtTime(
+          roomProfile.cutoff,
+          now,
+          .85,
+        )
+        roomGain.gain.setTargetAtTime(
+          audible ? roomProfile.gain : .0001,
+          now,
+          audible ? .9 : .16,
+        )
+      }
 
       master.gain.setTargetAtTime(
         audible ? .74 : 0,
@@ -254,10 +411,25 @@ export function createLibraryAudio(
       disposed = true
 
       window.removeEventListener(AUDIO_ENABLE_EVENT, handleUnlock)
+      window.removeEventListener(
+        AUDIO_CUE_EVENT,
+        handleCue as EventListener,
+      )
 
       musicElement.pause()
       musicElement.removeAttribute('src')
       musicElement.load()
+
+      if (roomOscillator) {
+        try {
+          roomOscillator.stop()
+        } catch {
+          // Oscillator may already be stopped during hot-reload teardown.
+        }
+        roomOscillator.disconnect()
+      }
+      roomFilter?.disconnect()
+      roomGain?.disconnect()
       master.disconnect()
     },
   }

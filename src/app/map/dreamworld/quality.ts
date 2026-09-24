@@ -4,12 +4,14 @@ export type LibraryGraphicsOptions = {
   shadows: boolean
   bloom: boolean
   reducedMotion: boolean
+  largeText: boolean
 }
 
 export const DEFAULT_LIBRARY_GRAPHICS_OPTIONS: LibraryGraphicsOptions = {
   shadows: false,
   bloom: true,
   reducedMotion: false,
+  largeText: false,
 }
 
 export type DreamQualitySettings = {

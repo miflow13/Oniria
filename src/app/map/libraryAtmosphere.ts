@@ -414,8 +414,16 @@ export function createLibraryAtmosphere({
           rise + Math.sin(elapsed * .11 + phase) * .055
       }
       dustPositionAttribute.needsUpdate = true
+      // A very occasional "library breath" keeps the room from feeling
+      // frozen without reading as an obvious scripted effect.
+      const rarePulse = Math.pow(
+        Math.max(0, Math.sin(elapsed * .085 - 1.4)),
+        18,
+      )
       dustMaterial.opacity =
-        .25 + Math.sin(elapsed * .17) * .03
+        .25 +
+        Math.sin(elapsed * .17) * .03 +
+        rarePulse * .07
 
       hazePlanes.forEach((plane, index) => {
         const material =
@@ -470,8 +478,9 @@ export function createLibraryAtmosphere({
           (.24 + clearance * .76)
       })
 
-      if (localHaze.length === 0) return
-
+      // Do not return when local haze is disabled. The enclosed-library
+      // build intentionally has no haze sprites, but room tint lighting and
+      // atmosphere identity still need to update below.
       const cameraBay = archiveBayFromWorldZ(
         camera.position.z,
       )
@@ -546,7 +555,8 @@ export function createLibraryAtmosphere({
           )
 
         const targetLight =
-          visualPreset.lightStrength
+          visualPreset.lightStrength *
+          (1 + rarePulse * .08)
 
         districtLight.intensity +=
           (

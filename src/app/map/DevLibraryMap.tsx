@@ -48,11 +48,27 @@ import type {
   LibrarySpatialContext,
 } from './libraryExperience'
 import {emitLibraryEvent} from './libraryAnalytics'
+import {emitLibraryAudioCue} from './libraryAudio'
 
 const DEFAULT_USERNAME = 'mikachu'
 const DEFAULT_LIBRARY_QUALITY: DreamQuality = 'medium'
 const GRAPHICS_STORAGE_KEY = 'oniria:library-graphics-v1'
 const CONTROLS_STORAGE_KEY = 'oniria:library-controls-seen-v1'
+const LIBRARY_DELIGHT_EVENT = 'oniria:library-delight'
+const LIBRARY_MOTION_EVENT =
+  'oniria:library-motion-preference'
+
+function emitLibraryDelight(
+  type: 'room-enter' | 'article-open',
+) {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(
+    new CustomEvent(LIBRARY_DELIGHT_EVENT, {
+      detail: {type},
+    }),
+  )
+}
+
 const CATALOG_PAGE_SIZE = 100
 const CATALOG_BOOKS_PER_SHELF = 9
 const DISTRICT_RENDERED_SHELF_LIMIT =
@@ -445,6 +461,7 @@ export default function DevLibraryMap() {
           shadows?: unknown
           bloom?: unknown
           reducedMotion?: unknown
+          largeText?: unknown
         }
         if (isDreamQuality(parsed.quality)) {
           setQuality(parsed.quality)
@@ -462,6 +479,10 @@ export default function DevLibraryMap() {
             typeof parsed.reducedMotion === 'boolean'
               ? parsed.reducedMotion
               : DEFAULT_LIBRARY_GRAPHICS_OPTIONS.reducedMotion,
+          largeText:
+            typeof parsed.largeText === 'boolean'
+              ? parsed.largeText
+              : DEFAULT_LIBRARY_GRAPHICS_OPTIONS.largeText,
         })
       } else if (
         window.matchMedia?.(
@@ -494,6 +515,16 @@ export default function DevLibraryMap() {
       // Storage can be blocked in privacy modes; graphics still work in-memory.
     }
   }, [graphicsHydrated, graphicsOptions, quality])
+
+  useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent(LIBRARY_MOTION_EVENT, {
+        detail: {
+          reducedMotion: graphicsOptions.reducedMotion,
+        },
+      }),
+    )
+  }, [graphicsOptions.reducedMotion])
 
   useEffect(() => {
     let seen = false
@@ -1190,6 +1221,7 @@ export default function DevLibraryMap() {
       articleId: article?.id,
       bookId: libraryReturnState?.bookId,
     })
+    emitLibraryAudioCue('article-close')
     if (libraryReturnState) {
       navigationRequestIdRef.current += 1
       setNavigationRequest({
@@ -1959,6 +1991,8 @@ export default function DevLibraryMap() {
       const payload = (await response.json()) as {article: DevArticle}
       setArticle(payload.article)
       readerProgressRef.current = {half: false, complete: false}
+      emitLibraryAudioCue('article-open')
+      emitLibraryDelight('article-open')
       emitLibraryEvent('article_open', {
         articleId: summary.id,
         shelfId: returnState?.shelfId,
@@ -2086,6 +2120,8 @@ export default function DevLibraryMap() {
           () => setRoomAnnouncement(null),
           1_800,
         )
+        emitLibraryAudioCue('room-enter')
+        emitLibraryDelight('room-enter')
         emitLibraryEvent('room_enter', {
           roomId: context.roomId,
           label,
@@ -2120,6 +2156,7 @@ export default function DevLibraryMap() {
         return
       }
 
+      emitLibraryAudioCue('locate')
       resumeFirstPersonControls()
       navigationRequestIdRef.current += 1
       setNavigationRequest({
@@ -2166,7 +2203,13 @@ export default function DevLibraryMap() {
   )
 
   return (
-    <main className={styles.page}>
+    <main
+      className={styles.page}
+      data-large-text={
+        graphicsOptions.largeText ? 'true' : 'false'
+      }
+      aria-busy={loading || routeLoading}
+    >
       <DreamWorld3D
         nodes={nodes}
         edges={edges}
@@ -2207,6 +2250,7 @@ export default function DevLibraryMap() {
           const selectedBook = shelf?.articles[bookIndex]
           if (selectedBook) {
             setReadingBook({nodeId, index: bookIndex})
+            emitLibraryAudioCue('book-open')
             emitLibraryEvent('book_open', {
               shelfId: nodeId,
               bookId: returnState.bookId,
@@ -2551,7 +2595,7 @@ export default function DevLibraryMap() {
           <label className={styles.graphicsToggleRow}>
             <span>
               <strong>Reduce motion</strong>
-              <small>Freeze ambient floating props and signs</small>
+              <small>Freeze ambient floating props, bob, and shimmer</small>
             </span>
             <input
               type="checkbox"
@@ -2560,6 +2604,23 @@ export default function DevLibraryMap() {
                 setGraphicsOptions((current) => ({
                   ...current,
                   reducedMotion: event.target.checked,
+                }))
+              }
+            />
+          </label>
+
+          <label className={styles.graphicsToggleRow}>
+            <span>
+              <strong>Larger text</strong>
+              <small>Increase reader and interaction text size</small>
+            </span>
+            <input
+              type="checkbox"
+              checked={graphicsOptions.largeText}
+              onChange={(event) =>
+                setGraphicsOptions((current) => ({
+                  ...current,
+                  largeText: event.target.checked,
                 }))
               }
             />
@@ -2581,9 +2642,25 @@ export default function DevLibraryMap() {
       )}
 
       {loading && (
-        <div className={styles.loading}>
+        <div
+          className={styles.loading}
+          role="status"
+          aria-live="polite"
+        >
           <span>✦</span>
           <strong>Opening the DEV Library…</strong>
+          <small>Mapping rooms, shelves, and live DEV articles</small>
+        </div>
+      )}
+
+      {routeLoading && !loading && !article && (
+        <div
+          className={styles.activityToast}
+          role="status"
+          aria-live="polite"
+        >
+          <span className={styles.activityPulse} />
+          <strong>Fetching from DEV…</strong>
         </div>
       )}
 
@@ -2591,6 +2668,7 @@ export default function DevLibraryMap() {
         <button
           className={styles.error}
           onClick={() => setError(null)}
+          role="alert"
         >
           {error} · dismiss
         </button>
@@ -2634,7 +2712,7 @@ export default function DevLibraryMap() {
                       <span>
                         {location
                           ? `Located in: ${location.roomLabel} → ${location.shelf.title} → ${location.shelf.slotId}`
-                          : 'No physical shelf mapping yet'}
+                          : 'Not shelved yet — opens directly in the reader'}
                       </span>
                     </div>
                     <button
@@ -2706,7 +2784,7 @@ export default function DevLibraryMap() {
                   ? 'Choose a tag to populate this shelf.'
                   : selectedShelf.kind === 'creators'
                     ? 'Choose a creator to populate this shelf.'
-                    : 'This shelf is empty.'}
+                    : 'This shelf is resting while the catalogue catches up.'}
               </p>
             ) : (
               selectedShelf.articles.map((item) => (
@@ -2773,6 +2851,9 @@ export default function DevLibraryMap() {
                 alt=""
                 loading="eager"
                 decoding="async"
+                onError={(event) => {
+                  event.currentTarget.hidden = true
+                }}
               />
             )}
             {sanitizedArticleHtml ? (
