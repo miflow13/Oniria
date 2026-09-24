@@ -118,6 +118,11 @@ export type DreamWorldNode = {
   libraryPathBay?: number
   libraryDistrictId?: string
   libraryWidthScale?: number
+  librarySlotId?: string
+  libraryOccupancyKey?: string
+  libraryShelfLifecycle?: 'forming' | 'active'
+  libraryShelfVitality?: number
+  libraryMaterializedAt?: string
   libraryBooks?: Array<{
     id: string
     title: string
@@ -2392,7 +2397,19 @@ export default function DreamWorld3D({
       const group = new THREE.Group()
       group.userData.nodeId = node._id
       group.userData.libraryKind = node.libraryKind
+      group.userData.librarySlotId = node.librarySlotId
+      group.userData.libraryOccupancyKey =
+        node.libraryOccupancyKey
+      group.userData.libraryShelfLifecycle =
+        node.libraryShelfLifecycle
       const shelfNode = node.libraryKind === 'shelf'
+      if (
+        shelfNode &&
+        node.libraryShelfLifecycle === 'forming'
+      ) {
+        group.userData.libraryMaterializationStartedAt =
+          performance.now()
+      }
 
       const shellMaterial = createLivingOrbMaterial(color, node.category)
       const shell = new THREE.Mesh(
@@ -3059,7 +3076,12 @@ export default function DreamWorld3D({
               0.18,
               Math.max(0, node.frequency - 2) * .035,
             )
-      group.scale.setScalar(baseScale)
+      group.scale.setScalar(
+        node.libraryKind === 'shelf' &&
+          node.libraryShelfLifecycle === 'forming'
+          ? .04
+          : baseScale,
+      )
       world.add(group)
 
       nodeVisuals.set(node._id, {
@@ -7027,6 +7049,32 @@ export default function DreamWorld3D({
         }
 
         if (node.libraryKind === 'shelf') {
+          const materializationStartedAt =
+            visual.group.userData
+              .libraryMaterializationStartedAt
+          if (
+            typeof materializationStartedAt === 'number'
+          ) {
+            const progress = THREE.MathUtils.clamp(
+              (now - materializationStartedAt) / 2200,
+              0,
+              1,
+            )
+            const eased =
+              1 - Math.pow(1 - progress, 3)
+            visual.group.scale.setScalar(
+              THREE.MathUtils.lerp(
+                .04,
+                visual.baseScale,
+                eased,
+              ),
+            )
+            if (progress >= 1) {
+              delete visual.group.userData
+                .libraryMaterializationStartedAt
+            }
+          }
+
           const frameMaterial =
             visual.group.userData
               .libraryShelfFrameMaterial as
