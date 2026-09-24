@@ -34,7 +34,7 @@ export type LibraryAudioController = {
 const AUDIO_ENABLE_EVENT = 'oniria:library-audio-enable'
 
 const LIBRARY_MUSIC_PARTS = Array.from(
-  {length: 14},
+  {length: 11},
   (_, index) =>
     '/audio/oniria-library-ambient/' +
     String(index).padStart(2, '0') +
