@@ -3,10 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "audio:prepare": "node scripts/prepare-library-audio.mjs",
-    "predev": "npm run audio:prepare",
     "dev": "next dev",
-    "prebuild": "npm run audio:prepare",
     "build": "next build",
     "typecheck": "tsc --noEmit",
     "start": "next start",
