@@ -1419,7 +1419,10 @@ export default function DevLibraryMap() {
               occupancyKey:
                 slotState.occupancyKey ??
                 `static:${district.id}:${placement.slotId}`,
-              lifecycle: slotState.lifecycle,
+              lifecycle:
+                slotState.lifecycle === 'dormant'
+                  ? 'active'
+                  : slotState.lifecycle,
               vitality: slotState.vitality,
               materializedAt: slotState.materializedAt,
             },
