@@ -281,6 +281,148 @@ function createConstellationGeometry() {
   return geometry
 }
 
+
+function createInfiniteHorizonSilhouettes(
+  centerX: number,
+  centerZ: number,
+  domeRadius: number,
+) {
+  const group = new THREE.Group()
+  group.name = 'library-infinite-horizon'
+  group.userData.libraryDecorative = true
+  group.userData.libraryNonInteractive = true
+
+  const geometries: THREE.BufferGeometry[] = []
+  const materials: THREE.Material[] = []
+
+  const shelfGeometry = new THREE.BoxGeometry(1, 1, 1)
+  const railGeometry = new THREE.BoxGeometry(1, 1, 1)
+  geometries.push(shelfGeometry, railGeometry)
+
+  const shelfMaterial = new THREE.MeshBasicMaterial({
+    color: 0x173349,
+    transparent: true,
+    opacity: .14,
+    depthWrite: false,
+    fog: true,
+    toneMapped: false,
+  })
+  const shelfGlowMaterial = new THREE.MeshBasicMaterial({
+    color: 0x5bc8ff,
+    transparent: true,
+    opacity: .055,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    fog: true,
+    toneMapped: false,
+  })
+  const railMaterial = new THREE.MeshBasicMaterial({
+    color: 0x8ccfff,
+    transparent: true,
+    opacity: .07,
+    depthWrite: false,
+    fog: true,
+    toneMapped: false,
+  })
+  materials.push(
+    shelfMaterial,
+    shelfGlowMaterial,
+    railMaterial,
+  )
+
+  const directions = [
+    {x: 0, z: -1, yaw: 0},
+    {x: 1, z: -.36, yaw: Math.PI / 2},
+    {x: -1, z: -.36, yaw: Math.PI / 2},
+  ] as const
+
+  directions.forEach((direction, directionIndex) => {
+    for (let depthIndex = 0; depthIndex < 6; depthIndex += 1) {
+      const distance =
+        domeRadius * (.67 + depthIndex * .075)
+      const baseX = centerX + direction.x * distance
+      const baseZ = centerZ + direction.z * distance
+      const spread = 8 + depthIndex * 2.8
+
+      for (let rowIndex = -4; rowIndex <= 4; rowIndex += 1) {
+        const verticalTier =
+          (Math.abs(rowIndex + directionIndex) + depthIndex) % 3
+        const height = 3.8 + verticalTier * 1.55
+        const width = 2.8 + ((rowIndex + 5) % 3) * .65
+        const depth = .5
+        const offset = rowIndex * spread
+
+        const shelf = new THREE.Mesh(
+          shelfGeometry,
+          shelfMaterial,
+        )
+        shelf.position.set(
+          baseX +
+            (direction.z !== 0 ? offset : direction.x * depthIndex),
+          1.6 + verticalTier * 1.25,
+          baseZ +
+            (direction.x !== 0 ? offset : direction.z * depthIndex),
+        )
+        shelf.scale.set(width, height, depth)
+        shelf.rotation.y = direction.yaw
+        shelf.userData.libraryDecorative = true
+        shelf.userData.libraryNonInteractive = true
+        group.add(shelf)
+
+        const glow = new THREE.Mesh(
+          shelfGeometry,
+          shelfGlowMaterial,
+        )
+        glow.position.copy(shelf.position)
+        glow.position.y += .18
+        glow.scale.set(width * .82, .08, depth * 1.08)
+        glow.rotation.y = direction.yaw
+        glow.userData.libraryDecorative = true
+        glow.userData.libraryNonInteractive = true
+        group.add(glow)
+      }
+    }
+  })
+
+  ;[
+    {y: 7.2, radius: domeRadius * .72, opacity: .08},
+    {y: 10.4, radius: domeRadius * .81, opacity: .055},
+  ].forEach(({y, radius, opacity}, ringIndex) => {
+    const ringMaterial = railMaterial.clone()
+    ringMaterial.opacity = opacity
+    materials.push(ringMaterial)
+
+    const segmentCount = 48
+    for (let index = 0; index < segmentCount; index += 1) {
+      const angle = (index / segmentCount) * Math.PI * 2
+      const segment = new THREE.Mesh(
+        railGeometry,
+        ringMaterial,
+      )
+      segment.position.set(
+        centerX + Math.cos(angle) * radius,
+        y,
+        centerZ + Math.sin(angle) * radius,
+      )
+      segment.scale.set(2.1, .06, .08)
+      segment.rotation.y = -angle
+      segment.userData.libraryDecorative = true
+      segment.userData.libraryNonInteractive = true
+      group.add(segment)
+    }
+
+    group.userData[`horizonRing${ringIndex}`] = true
+  })
+
+  return {
+    group,
+    dispose: () => {
+      geometries.forEach((geometry) => geometry.dispose())
+      materials.forEach((material) => material.dispose())
+    },
+  }
+}
+
 export function createLibraryDome(
   parent: THREE.Object3D,
   floatingProps: FloatingPropRegistry,
@@ -510,6 +652,15 @@ export function createLibraryDome(
   constellationDrift.add(constellationField)
   group.add(constellationDrift)
 
+  constellationDrift.onBeforeRender = () => {
+    if (reducedMotion) {
+      constellationDrift.rotation.y = 0
+      return
+    }
+    constellationDrift.rotation.y =
+      performance.now() / 1000 * .006
+  }
+
   floatingProps.register(constellationDrift, {
     phase: floatingPhase(constellationDrift.name),
     hoverAmplitude: .12,
@@ -527,6 +678,13 @@ export function createLibraryDome(
   // transmitted dome light: one cheap sky/ground contribution keeps the
   // existing warm fixtures dominant while allowing upper-facing materials
   // to pick up a faint cyan cast.
+  const infiniteHorizon = createInfiniteHorizonSilhouettes(
+    centerX,
+    centerZ,
+    domeRadius,
+  )
+  group.add(infiniteHorizon.group)
+
   const domeLight = new THREE.HemisphereLight(
     0x78c9ff,
     0x241c23,
@@ -566,6 +724,7 @@ export function createLibraryDome(
         )
       }
       dome.onBeforeRender = () => {}
+      constellationDrift.onBeforeRender = () => {}
       parent.remove(group)
       domeGeometry.dispose()
       gridGeometry.dispose()
@@ -574,6 +733,7 @@ export function createLibraryDome(
       gridMaterial.dispose()
       constellationMaterial.dispose()
       devLogo.dispose()
+      infiniteHorizon.dispose()
     },
   }
 }
