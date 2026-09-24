@@ -819,57 +819,8 @@ export function createLibraryBuilding(
       })
     }
 
-    const district = roomDistrictBySlot.get(room.slot)
-    const accent = district?.accent ?? '#' + room.accent.toString(16)
-    const sourceMode = district?.sourceMode ?? room.sourceMode
-    const roomIntensity =
-      sourceMode === 'featured'
-        ? .26
-        : sourceMode === 'catalog'
-          ? .09
-          : sourceMode === 'creators'
-            ? .17
-            : .15
-
-    if (
-      lightDetail >= 2 ||
-      (lightDetail === 1 && room.slot % 2 === 0)
-    ) {
-      const accentLight = new THREE.PointLight(
-        new THREE.Color(accent),
-        roomIntensity,
-        10,
-        2,
-      )
-      accentLight.position.set(x, 3.05, z)
-      group.add(accentLight)
-    }
-
-    // The actual pendant mesh gets its bulb, point light, and soft downward
-    // cone once the GLB finishes loading below. Keeping light generation tied
-    // to the fixture prevents decorative lamps from drifting out of sync with
-    // their illumination.
-  }
-
-  if (lightDetail >= 2) {
-    ;[
-      {position: [-18.2, 2.8, -12] as const, intensity: .22},
-      {position: [18, 2.75, -32] as const, intensity: .17},
-      {position: [-16, 2.9, -52] as const, intensity: .24},
-    ].forEach(({position, intensity}) => {
-      const readingLight = new THREE.PointLight(
-        0xffcf9e,
-        intensity,
-        5.3,
-        2,
-      )
-      readingLight.position.set(
-        position[0],
-        position[1],
-        position[2],
-      )
-      group.add(readingLight)
-    })
+    // Room color now comes from materials/signage only. Real illumination is
+    // supplied globally by the open-sky lighting rig in DreamWorld3D.
   }
 
   addWall(-8, 9, .28, 11, 5)
