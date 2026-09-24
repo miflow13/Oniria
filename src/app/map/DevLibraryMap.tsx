@@ -911,10 +911,23 @@ export default function DevLibraryMap() {
     async function populateDistricts() {
       const entries = await Promise.all(
         taggedDistricts.map(async (district) => {
-          // Preload the configured topic categories so each physical Topic
-          // shelf can correspond to real DEV tags instead of a cosmetic label.
-          // Keep requests modest; shelf hydration remains progressive.
-          const seedTags = district.devTags.slice(0, 6)
+          // Preload both authored tags and Sanity-persisted emergent occupants.
+          // A living shelf must keep showing its own real DEV articles even
+          // after the tag is no longer part of the original room config.
+          const persistedTags = worldConfig.slotStates
+            .filter(
+              (slot) =>
+                slot.districtId === district.id &&
+                slot.lifecycle !== 'dormant' &&
+                typeof slot.topic === 'string',
+            )
+            .map((slot) => slot.topic as string)
+          const seedTags = [
+            ...new Set([
+              ...district.devTags,
+              ...persistedTags,
+            ]),
+          ].slice(0, 12)
           if (seedTags.length === 0) {
             return [district.id, []] as const
           }
@@ -957,7 +970,11 @@ export default function DevLibraryMap() {
     return () => {
       cancelled = true
     }
-  }, [devRefreshTick, worldConfig.districts])
+  }, [
+    devRefreshTick,
+    worldConfig.districts,
+    worldConfig.slotStates,
+  ])
 
   const resumeFirstPersonControls = useCallback(() => {
     const canvas = document.querySelector<HTMLCanvasElement>(
@@ -1215,17 +1232,58 @@ export default function DevLibraryMap() {
         )
         const source = articlesForDistrict(district)
         const kind = shelfKindForSource(district.sourceMode)
+        const persistedTopicStates =
+          worldConfig.slotStates.filter(
+            (state) => state.districtId === district.id,
+          )
+        const persistedTopicBySlot = new Map(
+          persistedTopicStates.map((state) => [
+            state.slotId,
+            state,
+          ]),
+        )
+        const hasPersistedTopicState =
+          persistedTopicStates.length > 0
         const topicSlotState =
           district.sourceMode === 'topics' ||
           district.sourceMode === 'tagged'
-            ? resolveLivingTopicSlots(
-                placements,
-                district.devTags,
-                uniqueArticles(
-                  allKnownArticles,
-                  ...Object.values(districtSamples),
-                ),
-              )
+            ? hasPersistedTopicState
+              ? placements.map((placement) => {
+                  const persisted =
+                    persistedTopicBySlot.get(
+                      placement.slotId,
+                    )
+                  const tag = persisted?.topic ?? null
+                  return {
+                    slotId: placement.slotId,
+                    occupancyKey:
+                      persisted?.occupantKey ?? null,
+                    tag,
+                    lifecycle:
+                      persisted?.lifecycle ?? 'dormant',
+                    vitality: persisted?.vitality ?? 0,
+                    materializedAt:
+                      persisted?.materializedAt,
+                    placement,
+                    articles: tag
+                      ? source.filter((article) =>
+                          (article.tag_list ?? []).some(
+                            (articleTag) =>
+                              articleTag.toLowerCase() ===
+                              tag.toLowerCase(),
+                          ),
+                        )
+                      : [],
+                  }
+                })
+              : resolveLivingTopicSlots(
+                  placements,
+                  district.devTags,
+                  uniqueArticles(
+                    allKnownArticles,
+                    ...Object.values(districtSamples),
+                  ),
+                )
             : null
         const shelfSlots =
           topicSlotState ??
@@ -1277,13 +1335,13 @@ export default function DevLibraryMap() {
                         tag.toLowerCase(),
                     ),
                   )
-            if (tagged.length > 0) {
-              shelfSource = tagged
-              sourceOffset =
-                Math.floor(
-                  shelfIndex / district.devTags.length,
-                ) * shelfCapacity
-            }
+            shelfSource = tagged
+            sourceOffset =
+              district.devTags.length > 0
+                ? Math.floor(
+                    shelfIndex / district.devTags.length,
+                  ) * shelfCapacity
+                : 0
           }
 
           const articles = shelfArticles(
@@ -1312,7 +1370,9 @@ export default function DevLibraryMap() {
             functionLabel =
               slotState.lifecycle === 'forming'
                 ? `MATERIALIZING · SLOT ${placement.slotId} · VITALITY ${Math.round(slotState.vitality * 100)}%`
-                : `LIVE TOPIC · SLOT ${placement.slotId} · VITALITY ${Math.round(slotState.vitality * 100)}%`
+                : slotState.lifecycle === 'cooling'
+                  ? `COOLING · SLOT ${placement.slotId} · VITALITY ${Math.round(slotState.vitality * 100)}%`
+                  : `LIVE TOPIC · SLOT ${placement.slotId} · VITALITY ${Math.round(slotState.vitality * 100)}%`
           } else if (district.sourceMode === 'creators') {
             const creator = dominantCreator(articles)
             title = creator
@@ -1437,6 +1497,7 @@ export default function DevLibraryMap() {
     searchResults,
     districtSamples,
     worldConfig.curatedArticles,
+    worldConfig.slotStates,
   ])
 
   const nodes = useMemo<DreamWorldNode[]>(
