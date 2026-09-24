@@ -566,7 +566,7 @@ export function createLibraryBuilding(
     'ROOM DIRECTORY · ' + headerDate + '\n' +
       (directoryLine || 'Featured ← · New Arrivals → · Topics ← · Creators → · Search ← · Archive →'),
     '#53d3ff',
-    [0, 3.45, 10.55],
+    [0, 3.72, 10.72],
     [7.2, 1.5],
   )
 
@@ -574,14 +574,14 @@ export function createLibraryBuilding(
     'WELCOME TO ONIRIA',
     'SANITY-POWERED DEV ARCHIVE · ' + headerDate + '\nLive articles become books you can physically browse.',
     '#f1b76f',
-    [0, 2.68, 5.5],
+    [0, 3.08, 5.38],
     [5.4, 1.12],
   )
   addSign(
     'HOW TO EXPLORE',
     'READING ROOM ETIQUETTE\nWASD move · choose a shelf · click a book · ESC returns',
     '#8fdcf4',
-    [0, 1.92, 5.55],
+    [0, 1.74, 5.72],
     [4.8, .78],
   )
 
