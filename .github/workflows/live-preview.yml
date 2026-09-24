@@ -1,4 +1,4 @@
-name: Oniria live preview
+# Temporary public preview runner for hackathon QA/demo.\nname: Oniria live preview
 
 on:
   push:
