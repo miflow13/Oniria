@@ -152,6 +152,11 @@ export type LibraryReadingBook = {
   index: number
 }
 
+export type LibrarySearchRestockTransition = {
+  id: number
+  query: string
+  resultCount: number
+}
 
 type Props = {
   nodes: DreamWorldNode[]
@@ -176,6 +181,7 @@ type Props = {
   libraryMovementMode?: LibraryMovementMode
   libraryWorldConfig?: LibraryWorldConfig
   libraryReadingBook?: LibraryReadingBook | null
+  librarySearchRestock?: LibrarySearchRestockTransition | null
   inputBlocked?: boolean
   onZoomChange: (zoom: number) => void
   onPanChange: (pan: Pan) => void
@@ -665,6 +671,7 @@ export default function DreamWorld3D({
   libraryMovementMode = 'walk',
   libraryWorldConfig = DEFAULT_LIBRARY_WORLD_CONFIG,
   libraryReadingBook = null,
+  librarySearchRestock = null,
   inputBlocked = false,
   onZoomChange,
   onPanChange,
@@ -710,6 +717,10 @@ export default function DreamWorld3D({
     useRef<LibraryMovementMode>(libraryMovementMode)
   const libraryReadingBookRef =
     useRef<LibraryReadingBook | null>(libraryReadingBook)
+  const librarySearchRestockRef =
+    useRef<LibrarySearchRestockTransition | null>(
+      librarySearchRestock,
+    )
   const inputBlockedRef = useRef(inputBlocked)
   const libraryFlightStateRef = useRef<{
     position: [number, number, number]
@@ -750,6 +761,7 @@ export default function DreamWorld3D({
   flightModeRef.current = flightMode
   libraryMovementModeRef.current = libraryMovementMode
   libraryReadingBookRef.current = libraryReadingBook
+  librarySearchRestockRef.current = librarySearchRestock
   inputBlockedRef.current = inputBlocked
   onDiveStateChangeRef.current = onDiveStateChange
   onDiveDreamChangeRef.current = onDiveDreamChange
@@ -773,8 +785,8 @@ export default function DreamWorld3D({
               .map((symbol) => symbol._id)
               .join(',')}`,
         )
-        .join('|')}`,
-    [dreams, edges, nodes, quality],
+        .join('|')}::restock:${librarySearchRestock?.id ?? 0}`,
+    [dreams, edges, librarySearchRestock?.id, nodes, quality],
   )
 
   const libraryWorldKey = useMemo(
@@ -3089,6 +3101,210 @@ export default function DreamWorld3D({
         phase: seededUnit(seed, 31) * Math.PI * 2,
         z: start.z,
       })
+    }
+
+    const searchRestockFlights: Array<{
+      mesh: THREE.Mesh
+      target: LibraryBookVisual
+      curve: THREE.CubicBezierCurve3
+      delay: number
+      duration: number
+      spinX: number
+      spinY: number
+      spinZ: number
+      landed: boolean
+    }> = []
+    let searchRestockMaterial: THREE.MeshStandardMaterial | null = null
+    let searchRestockPulseGeometry: THREE.TorusGeometry | null = null
+    let searchRestockPulseMaterial: THREE.MeshBasicMaterial | null = null
+    let searchRestockPulse: THREE.Mesh | null = null
+    let searchRestockDuration = 0
+
+    const activeSearchRestock = librarySearchRestockRef.current
+    const searchDistrict = activeDistricts.find(
+      (district) => district.enabled && district.sourceMode === 'search',
+    )
+    const reduceSearchMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+
+    if (
+      libraryMode &&
+      activeSearchRestock &&
+      activeSearchRestock.resultCount > 0 &&
+      searchDistrict
+    ) {
+      const searchShelfIds = new Set(
+        nodeRef.current
+          .filter(
+            (node) =>
+              node.libraryKind === 'shelf' &&
+              node.libraryDistrictId === searchDistrict.id,
+          )
+          .map((node) => node._id),
+      )
+
+      // Search is an intentional interaction, so hydrate its destination
+      // shelves immediately. This keeps the visual restock sequence tied to
+      // the actual books that remain after the animation.
+      searchShelfIds.forEach((nodeId) => {
+        pendingShelfHydrators.get(nodeId)?.()
+      })
+
+      const searchBooks = libraryBookVisuals
+        .filter((book) => searchShelfIds.has(book.nodeId))
+        .slice(
+          0,
+          Math.min(
+            18,
+            activeSearchRestock.resultCount,
+          ),
+        )
+
+      const searchRoomIndex = Math.max(
+        0,
+        activeDistricts.findIndex(
+          (district) => district.id === searchDistrict.id,
+        ),
+      )
+      const searchRoom = roomForDistrict(
+        searchDistrict,
+        searchRoomIndex,
+      )
+      const source = new THREE.Vector3(
+        searchRoom.center[0],
+        1.55,
+        searchRoom.center[1],
+      )
+
+      world.updateMatrixWorld(true)
+
+      if (reduceSearchMotion) {
+        searchBooks.forEach((book) => {
+          book.group.visible = true
+          book.coverMaterial.emissive.set(searchDistrict.accent)
+          book.coverMaterial.emissiveIntensity = 1.25
+        })
+      } else if (searchBooks.length > 0) {
+        searchRestockMaterial = new THREE.MeshStandardMaterial({
+          color: new THREE.Color(searchDistrict.accent)
+            .lerp(new THREE.Color(0xf7f3ea), .28),
+          emissive: new THREE.Color(searchDistrict.accent),
+          emissiveIntensity: 1.85,
+          roughness: .48,
+          metalness: .08,
+          transparent: true,
+          opacity: .96,
+          toneMapped: true,
+        })
+
+        searchRestockPulseGeometry = new THREE.TorusGeometry(
+          .72,
+          .025,
+          6,
+          48,
+        )
+        searchRestockPulseMaterial = new THREE.MeshBasicMaterial({
+          color: searchDistrict.accent,
+          transparent: true,
+          opacity: .46,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          toneMapped: false,
+        })
+        searchRestockPulse = new THREE.Mesh(
+          searchRestockPulseGeometry,
+          searchRestockPulseMaterial,
+        )
+        searchRestockPulse.position.copy(source)
+        searchRestockPulse.position.y -= .48
+        searchRestockPulse.rotation.x = Math.PI / 2
+        searchRestockPulse.renderOrder = 9
+        searchRestockPulse.userData.libraryDecorative = true
+        world.add(searchRestockPulse)
+
+        searchBooks.forEach((book, index) => {
+          book.group.visible = false
+
+          const targetWorld = new THREE.Vector3()
+          book.group.getWorldPosition(targetWorld)
+          const target = world.worldToLocal(targetWorld.clone())
+
+          const flightSeed = hashString(
+            activeSearchRestock.query +
+              ':' +
+              book.nodeId +
+              ':' +
+              book.index,
+          )
+          const start = source.clone()
+          start.x +=
+            (seededUnit(flightSeed, 1) - .5) * .7
+          start.y +=
+            (seededUnit(flightSeed, 2) - .5) * .42
+          start.z +=
+            (seededUnit(flightSeed, 3) - .5) * .7
+
+          const control1 = start.clone()
+          control1.x +=
+            (seededUnit(flightSeed, 4) - .5) * 4.8
+          control1.y +=
+            2.1 + seededUnit(flightSeed, 5) * 1.35
+          control1.z +=
+            (seededUnit(flightSeed, 6) - .5) * 4.8
+
+          const control2 = target.clone()
+          control2.x +=
+            (seededUnit(flightSeed, 7) - .5) * 2.4
+          control2.y +=
+            1.05 + seededUnit(flightSeed, 8) * 1.05
+          control2.z +=
+            (seededUnit(flightSeed, 9) - .5) * 2.4
+
+          const mesh = new THREE.Mesh(
+            shelfBookGeometry,
+            searchRestockMaterial as THREE.MeshStandardMaterial,
+          )
+          mesh.position.copy(start)
+          mesh.scale.set(.88, 1.06, .92)
+          mesh.visible = false
+          mesh.renderOrder = 10
+          mesh.userData.libraryDecorative = true
+          world.add(mesh)
+
+          const delay =
+            .16 + index * .072 +
+            seededUnit(flightSeed, 10) * .055
+          const duration =
+            .78 + seededUnit(flightSeed, 11) * .42
+
+          searchRestockFlights.push({
+            mesh,
+            target: book,
+            curve: new THREE.CubicBezierCurve3(
+              start,
+              control1,
+              control2,
+              target,
+            ),
+            delay,
+            duration,
+            spinX:
+              (seededUnit(flightSeed, 12) - .5) * 2.8,
+            spinY:
+              2.2 +
+              seededUnit(flightSeed, 13) * 3.8,
+            spinZ:
+              (seededUnit(flightSeed, 14) - .5) * 3.2,
+            landed: false,
+          })
+
+          searchRestockDuration = Math.max(
+            searchRestockDuration,
+            delay + duration,
+          )
+        })
+      }
     }
 
     let libraryWalkwayGeometry: THREE.BufferGeometry | null = null
@@ -5994,6 +6210,77 @@ export default function DreamWorld3D({
           )
         : null
 
+      if (searchRestockFlights.length > 0) {
+        for (const flight of searchRestockFlights) {
+          const localTime = elapsed - flight.delay
+          if (localTime < 0) {
+            flight.mesh.visible = false
+            continue
+          }
+
+          const rawProgress = THREE.MathUtils.clamp(
+            localTime / flight.duration,
+            0,
+            1,
+          )
+
+          if (rawProgress >= 1) {
+            if (!flight.landed) {
+              flight.landed = true
+              flight.mesh.visible = false
+              flight.target.group.visible = true
+              if (searchDistrict) {
+                flight.target.coverMaterial.emissive.set(
+                  searchDistrict.accent,
+                )
+              }
+              flight.target.coverMaterial.emissiveIntensity = 2.4
+            }
+            continue
+          }
+
+          flight.mesh.visible = true
+          const eased =
+            rawProgress * rawProgress * (3 - 2 * rawProgress)
+          flight.curve.getPoint(eased, flight.mesh.position)
+
+          const settle = 1 - eased
+          flight.mesh.rotation.set(
+            flight.spinX * eased * settle,
+            flight.spinY * eased,
+            flight.spinZ * eased * settle,
+          )
+          const scale =
+            .78 +
+            THREE.MathUtils.smoothstep(rawProgress, .55, 1) *
+              .22
+          flight.mesh.scale.set(
+            .88 * scale,
+            1.06 * scale,
+            .92 * scale,
+          )
+        }
+
+        if (
+          searchRestockPulse &&
+          searchRestockPulseMaterial
+        ) {
+          const active =
+            elapsed < searchRestockDuration + .24
+          searchRestockPulse.visible = active
+          if (active) {
+            const pulse =
+              .5 + .5 * Math.sin(elapsed * 10.5)
+            searchRestockPulse.rotation.z += delta * .9
+            searchRestockPulse.scale.setScalar(
+              1 + pulse * .28,
+            )
+            searchRestockPulseMaterial.opacity =
+              .18 + pulse * .34
+          }
+        }
+      }
+
       if (flightActive && !previousFlightMode) {
         flightPosition.copy(camera.position)
         flightEuler.setFromQuaternion(camera.quaternion, 'YXZ')
@@ -8023,6 +8310,15 @@ export default function DreamWorld3D({
       libraryBuilding?.dispose()
       libraryLayoutAuthoring?.dispose()
       libraryFloatingProps.clear()
+      searchRestockFlights.forEach((flight) => {
+        world.remove(flight.mesh)
+      })
+      if (searchRestockPulse) {
+        world.remove(searchRestockPulse)
+      }
+      searchRestockMaterial?.dispose()
+      searchRestockPulseGeometry?.dispose()
+      searchRestockPulseMaterial?.dispose()
 
       camera.remove(listener)
 

@@ -13,6 +13,7 @@ import DreamWorld3D, {
   type DreamWorldNode,
   type LibraryMovementMode,
   type LibraryReadingBook,
+  type LibrarySearchRestockTransition,
 } from './DreamWorld3D'
 import type {DreamQuality} from './dreamworld/quality'
 import {
@@ -319,6 +320,9 @@ export default function DevLibraryMap() {
   const [routeLoading, setRouteLoading] = useState(false)
   const [query, setQuery] = useState('')
   const [searchResults, setSearchResults] = useState<DevArticleSummary[]>([])
+  const [searchRestockTransition, setSearchRestockTransition] =
+    useState<LibrarySearchRestockTransition | null>(null)
+  const searchRestockSequenceRef = useRef(0)
   const [dynamicArticles, setDynamicArticles] = useState<DevArticleSummary[]>([])
   const [dynamicTitle, setDynamicTitle] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -1598,7 +1602,14 @@ export default function DevLibraryMap() {
       const payload = (await response.json()) as {
         articles: DevArticleSummary[]
       }
-      setSearchResults(payload.articles ?? [])
+      const results = payload.articles ?? []
+      searchRestockSequenceRef.current += 1
+      setSearchResults(results)
+      setSearchRestockTransition({
+        id: searchRestockSequenceRef.current,
+        query: value,
+        resultCount: results.length,
+      })
       setSelectedId(
         shelves.find((shelf) => shelf.kind === 'search')?.id ?? null,
       )
@@ -1641,6 +1652,7 @@ export default function DevLibraryMap() {
         libraryMovementMode={movementMode}
         libraryWorldConfig={roomWorldConfig}
         libraryReadingBook={readingBook}
+        librarySearchRestock={searchRestockTransition}
         inputBlocked={Boolean(article) || Boolean(readingBook)}
         onZoomChange={() => {}}
         onPanChange={() => {}}
@@ -1757,7 +1769,7 @@ export default function DevLibraryMap() {
             aria-label="Search DEV articles"
           />
           <button type="submit" disabled={routeLoading}>
-            Search
+            {routeLoading ? 'Searching…' : 'Search'}
           </button>
         </form>
 
