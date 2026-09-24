@@ -35,6 +35,7 @@ import {
   roomShelfPlacements,
   type RoomShelfPlacement,
 } from './libraryRoomLayout'
+import {resolveLivingTopicSlots} from './libraryLivingSlots'
 
 const DEFAULT_USERNAME = 'mikachu'
 const QUALITY: DreamQuality = 'cinematic'
@@ -74,6 +75,12 @@ function makeShelf(
   kind: LibraryShelfKind,
   placement: RoomShelfPlacement,
   articles: DevArticleSummary[],
+  occupancy?: {
+    occupancyKey?: string
+    lifecycle?: LibraryShelf['lifecycle']
+    vitality?: number
+    materializedAt?: string
+  },
 ): LibraryShelf {
   return {
     id,
@@ -89,6 +96,13 @@ function makeShelf(
     pathBay: placement.pathBay,
     districtId: placement.districtId,
     widthScale: placement.widthScale,
+    slotId: placement.slotId,
+    occupancyKey:
+      occupancy?.occupancyKey ??
+      `static:${placement.districtId}:${placement.slotId}`,
+    lifecycle: occupancy?.lifecycle ?? 'active',
+    vitality: occupancy?.vitality ?? 1,
+    materializedAt: occupancy?.materializedAt,
     articles,
   }
 }
@@ -1201,9 +1215,40 @@ export default function DevLibraryMap() {
         )
         const source = articlesForDistrict(district)
         const kind = shelfKindForSource(district.sourceMode)
+        const topicSlotState =
+          district.sourceMode === 'topics' ||
+          district.sourceMode === 'tagged'
+            ? resolveLivingTopicSlots(
+                placements,
+                district.devTags,
+                uniqueArticles(
+                  allKnownArticles,
+                  ...Object.values(districtSamples),
+                ),
+              )
+            : null
+        const shelfSlots =
+          topicSlotState ??
+          placements.map((placement) => ({
+            slotId: placement.slotId,
+            occupancyKey:
+              `static:${district.id}:${placement.slotId}`,
+            tag: null,
+            lifecycle: 'active' as const,
+            vitality: 1,
+            materializedAt: undefined,
+            placement,
+            articles: [] as DevArticleSummary[],
+          }))
+        const occupiedShelfSlots = shelfSlots.filter(
+          (slot) =>
+            slot.lifecycle !== 'dormant' &&
+            Boolean(slot.occupancyKey),
+        )
 
         let articleOffset = 0
-        placements.forEach((placement, shelfIndex) => {
+        occupiedShelfSlots.forEach((slotState, shelfIndex) => {
+          const placement = slotState.placement
           const shelfCapacity =
             CATALOG_BOOKS_PER_SHELF *
             (placement.doubleSided ? 2 : 1)
@@ -1218,15 +1263,20 @@ export default function DevLibraryMap() {
             district.devTags.length > 0
           ) {
             const tag =
+              slotState.tag ??
               district.devTags[
                 shelfIndex % district.devTags.length
               ]
-            const tagged = source.filter((article) =>
-              (article.tag_list ?? []).some(
-                (articleTag) =>
-                  articleTag.toLowerCase() === tag.toLowerCase(),
-              ),
-            )
+            const tagged =
+              slotState.articles.length > 0
+                ? slotState.articles
+                : source.filter((article) =>
+                    (article.tag_list ?? []).some(
+                      (articleTag) =>
+                        articleTag.toLowerCase() ===
+                        tag.toLowerCase(),
+                    ),
+                  )
             if (tagged.length > 0) {
               shelfSource = tagged
               sourceOffset =
@@ -1252,13 +1302,17 @@ export default function DevLibraryMap() {
             district.sourceMode === 'tagged'
           ) {
             const tag =
+              slotState.tag ??
               district.devTags[
                 shelfIndex % Math.max(1, district.devTags.length)
               ]
             title = tag
-              ? `#${tag.toUpperCase()} · ${shelfNumber}`
-              : `TOPICS · ${shelfNumber}`
-            functionLabel = 'TAG INDEX'
+              ? `#${tag.toUpperCase()} · ${placement.slotId}`
+              : `TOPICS · ${placement.slotId}`
+            functionLabel =
+              slotState.lifecycle === 'forming'
+                ? `MATERIALIZING · SLOT ${placement.slotId} · VITALITY ${Math.round(slotState.vitality * 100)}%`
+                : `LIVE TOPIC · SLOT ${placement.slotId} · VITALITY ${Math.round(slotState.vitality * 100)}%`
           } else if (district.sourceMode === 'creators') {
             const creator = dominantCreator(articles)
             title = creator
@@ -1290,12 +1344,25 @@ export default function DevLibraryMap() {
             `${functionLabel} · ${shelfDateRange(articles)} · ${articles.length} VOLUMES`
 
           const shelf = makeShelf(
-            'shelf:room:' + district.id + ':' + shelfIndex,
+            'shelf:room:' +
+              district.id +
+              ':' +
+              placement.slotId +
+              ':' +
+              (slotState.occupancyKey ?? shelfIndex),
             title,
             subtitle,
             kind,
             placement,
             articles,
+            {
+              occupancyKey:
+                slotState.occupancyKey ??
+                `static:${district.id}:${placement.slotId}`,
+              lifecycle: slotState.lifecycle,
+              vitality: slotState.vitality,
+              materializedAt: slotState.materializedAt,
+            },
           )
           shelf.accent = district.accent
           result.push(shelf)
@@ -1400,6 +1467,11 @@ export default function DevLibraryMap() {
         libraryPathBay: shelf.pathBay,
         libraryDistrictId: shelf.districtId,
         libraryWidthScale: shelf.widthScale,
+        librarySlotId: shelf.slotId,
+        libraryOccupancyKey: shelf.occupancyKey,
+        libraryShelfLifecycle: shelf.lifecycle,
+        libraryShelfVitality: shelf.vitality,
+        libraryMaterializedAt: shelf.materializedAt,
         libraryBooks: shelf.articles
           .slice(0, shelf.doubleSided ? 18 : 9)
           .map((article) => {
