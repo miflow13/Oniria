@@ -29,8 +29,8 @@ type TopicSignal = {
 const DAY_MS = 86_400_000
 const MAX_EMERGENT_TOPIC_SHELVES = 4
 const EMERGENT_MIN_ARTICLES = 2
-const EMERGENT_MIN_SCORE = 7.5
-const FORMING_WINDOW_MS = DAY_MS * 2
+const EMERGENT_MIN_SCORE = 5.5
+const FORMING_WINDOW_MS = DAY_MS * 7
 
 function normalizeTag(tag: string) {
   return tag.trim().toLowerCase().replace(/^#/, '')
