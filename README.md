@@ -159,7 +159,7 @@ The scheduled **/api/library-evolution** route:
 5. persists the resulting state to Sanity
 6. lets every visitor render the same shared world state
 
-Vercel runs the evolution endpoint every 30 minutes.
+The repository configures Vercel to run the evolution endpoint every 30 minutes. This requires Pro or Enterprise; Hobby supports daily cron jobs. Scheduling is active only after a successful deployment with the required server credentials.
 
 The important distinction is that **the shelf position is persistent while the occupant can change**.
 
@@ -281,13 +281,13 @@ SANITY_API_READ_TOKEN=
 SANITY_API_WRITE_TOKEN=
 ~~~
 
-The read token enables live draft preview.
+The read token enables server-side reads of restricted published content and local draft preview. Public deployments always serve published world configuration.
 
 The write token is required for operations that persist or evolve world state, including the library seed script and living shelf updates.
 
 ### Layout authoring
 
-For protected deployed layout authoring:
+All deployed builds, including previews, require a key for layout writes. For protected deployed layout authoring:
 
 ~~~env
 LIBRARY_LAYOUT_AUTHORING_KEY=
@@ -443,3 +443,9 @@ Current priorities:
 - Sanity project details
 - asset/license review
 - final DEV Community submission
+
+## Submission verification and deployment
+
+See [the readiness checklist](docs/SUBMISSION_READINESS.md) for verified evidence, deployment settings, remaining submission edits, and a demo recording sequence.
+
+Run `npm test`, `npm run typecheck`, and `npm run build` before deploying.

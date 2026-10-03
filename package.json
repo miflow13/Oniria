@@ -8,7 +8,8 @@
     "typecheck": "tsc --noEmit",
     "start": "next start",
     "sanity": "sanity",
-    "seed:library": "node --env-file=.env.local scripts/seed-library-world.mjs"
+    "seed:library": "node --env-file=.env.local scripts/seed-library-world.mjs",
+    "test": "node --test tests/*.test.cjs"
   },
   "dependencies": {
     "next": "^16.3.5",
