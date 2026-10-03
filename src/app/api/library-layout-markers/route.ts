@@ -44,10 +44,10 @@ function authorizeWrite(request: NextRequest) {
     return false
   }
 
-  // A production deployment without an explicit authoring key remains
-  // read-only even if a Sanity write token is present.
+  // Every deployed build remains read-only without an explicit authoring
+  // key, including previews and production servers outside Vercel.
   if (
-    process.env.VERCEL_ENV === 'production' &&
+    (process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV) &&
     !configuredKey
   ) {
     return false

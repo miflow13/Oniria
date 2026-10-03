@@ -2733,7 +2733,7 @@ export default function DevLibraryMap() {
           <p className={styles.eyebrow}>Physical catalogue search</p>
           <h1>{query.trim() || 'Search results'}</h1>
           <p className={styles.subtitle}>
-            Choose a result to travel to its book in the library.
+            Matches from recent DEV articles and tag collections. Choose a result to travel to its book.
           </p>
           <div className={styles.searchResultList}>
             {searchResults.length === 0 ? (

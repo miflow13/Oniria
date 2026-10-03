@@ -428,12 +428,31 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({error: 'Missing query'}, {status: 400})
       }
 
-      const articles = await devFetch(
-        `/articles/search?q=${encodeURIComponent(query)}&per_page=100`,
-      )
+      // Forem's public article API supports tag filtering, not a full-text
+      // /articles/search endpoint. Match keywords against a bounded live sample.
+      const terms = query.toLowerCase().replace(/^#/, '').split(/\s+/)
+      const paths = ['/articles?per_page=100&page=1']
+      if (terms.length === 1 && /^[a-z0-9_-]+$/.test(terms[0])) {
+        paths.unshift(`/articles?tag=${encodeURIComponent(terms[0])}&per_page=100`)
+      }
+      const pages = await Promise.all(paths.map((path) => devFetch(path)))
+      const seen = new Set<number>()
+      const articles = pages.flatMap(normalizeArticles).filter((value) => {
+        if (!value || typeof value !== 'object') return false
+        const article = value as Record<string, unknown>
+        const id = Number(article.id)
+        const user = article.user as Record<string, unknown> | undefined
+        const text = [article.title, article.description, article.tags,
+          ...(Array.isArray(article.tag_list) ? article.tag_list : []),
+          user?.name, user?.username].join(' ').toLowerCase()
+        if (!Number.isFinite(id) || seen.has(id) || !terms.every((term) => text.includes(term))) return false
+        seen.add(id)
+        return true
+      })
       return NextResponse.json({
         query,
-        articles: normalizeArticles(articles),
+        articles,
+        scope: 'recent-and-tagged-articles',
       })
     }
 

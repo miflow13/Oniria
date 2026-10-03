@@ -51,7 +51,9 @@ export async function GET(request: NextRequest) {
     ])
 
     const previewRequested =
-      request.nextUrl.searchParams.get('preview') === '1'
+      request.nextUrl.searchParams.get('preview') === '1' &&
+      process.env.NODE_ENV !== 'production' &&
+      !process.env.VERCEL_ENV
     const previewToken =
       process.env.SANITY_API_READ_TOKEN ??
       process.env.SANITY_API_WRITE_TOKEN
@@ -174,6 +176,7 @@ export async function GET(request: NextRequest) {
         .withConfig({
           useCdn: false,
           perspective: 'published',
+          token: previewToken,
         })
         .fetch(
           queries.LIBRARY_WORLD_QUERY,
@@ -195,13 +198,12 @@ export async function GET(request: NextRequest) {
     )
     world.syncMode = syncMode
     world.sanityRevision = revision
-    world.sanityPreviewAvailable = Boolean(previewToken)
+    world.sanityPreviewAvailable = Boolean(previewToken) &&
+      process.env.NODE_ENV !== 'production' && !process.env.VERCEL_ENV
     if (previewRequested && !previewToken) {
       world.sanitySyncIssue = 'missing-preview-token'
     } else if (previewRequested && previewToken) {
-      // Vercel preview/production builds also run with NODE_ENV=production.
-      // A valid server-side Sanity token is the authority for draft preview;
-      // NODE_ENV must not silently downgrade the browser to published data.
+      // Draft preview is confined to the local authoring server.
       world.sanitySyncIssue = undefined
     }
 
